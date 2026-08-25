@@ -50,6 +50,14 @@ jobs:
         working-directory: infra/bootstrap
         run: terraform validate
 
+      - name: Terraform Cloudflare DNS Init
+        working-directory: infra/cloudflare-dns
+        run: terraform init -backend=false
+
+      - name: Terraform Cloudflare DNS Validate
+        working-directory: infra/cloudflare-dns
+        run: terraform validate
+
   frontend-checks:
     name: Frontend
     runs-on: ubuntu-latest

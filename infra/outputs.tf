@@ -72,8 +72,3 @@ output "identity_platform_config_name" {
   value       = google_identity_platform_config.default.name
   description = "The resource name of the Identity Platform configuration."
 }
-
-output "cloudflare_zone_id" {
-  value       = data.cloudflare_zone.croviq.id
-  description = "The Cloudflare zone ID resolved from the zone name."
-}

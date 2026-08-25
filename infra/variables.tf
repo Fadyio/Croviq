@@ -84,9 +84,3 @@ variable "firestore_location" {
   description = "The location ID for the Firestore database (e.g. us-central1)."
   default     = "us-central1"
 }
-
-variable "cloudflare_zone_name" {
-  type        = string
-  description = "The Cloudflare zone domain name."
-  default     = "croviq.app"
-}

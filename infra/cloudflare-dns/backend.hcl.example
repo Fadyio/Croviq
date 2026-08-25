@@ -1,0 +1,2 @@
+bucket = "croviq-506602-croviq-tfstate"
+prefix = "croviq/cloudflare-dns"
