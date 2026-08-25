@@ -65,7 +65,7 @@ terraform apply
 
 ## Directory Structure
 
-- `infra/`: Main infrastructure stack (Google Cloud APIs, Artifact Registry, IAM service accounts, WIF pool/provider).
+- `infra/`: Main infrastructure stack (Google Cloud APIs, Artifact Registry, IAM service accounts, WIF pool/provider, Identity Platform base configuration, Firestore in Native mode).
   - `backend.hcl.example`: Template for main remote state backend configuration.
   - `terraform.tfvars.example`: Example variable definitions.
 - `infra/bootstrap/`: Dedicated bootstrap stack to provision and manage the remote GCS state bucket.
@@ -91,6 +91,7 @@ terraform apply
 | `github_repository_name` | `string` | `"Croviq"` | GitHub repository name |
 | `api_image` | `string` | *(required)* | Immutable container image reference with `@sha256:` digest for Cloud Run |
 | `git_sha` | `string` | `""` | Git commit SHA deployed to Cloud Run |
+| `firestore_location` | `string` | `"us-central1"` | Location ID for the default Firestore database |
 
 ## Outputs (Main Stack)
 
@@ -104,3 +105,6 @@ terraform apply
 | `cloud_run_service_name` | Name of the Cloud Run API service |
 | `cloud_run_url` | Live HTTPS URL of the deployed Cloud Run API service |
 | `cloud_run_latest_revision` | Latest created revision identifier of the Cloud Run API service |
+| `firestore_database_name` | Database ID of the default Firestore database instance |
+| `firestore_database_location` | Location ID of the default Firestore database instance |
+| `identity_platform_config_name` | Resource name of the Identity Platform configuration |

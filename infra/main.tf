@@ -13,6 +13,8 @@ locals {
     "iamcredentials.googleapis.com",
     "sts.googleapis.com",
     "serviceusage.googleapis.com",
+    "identitytoolkit.googleapis.com",
+    "firestore.googleapis.com",
   ]
 }
 
@@ -262,4 +264,47 @@ resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
   name     = google_cloud_run_v2_service.api.name
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# -----------------------------------------------------------------------------
+# 7. Least-Privilege IAM Bindings for API Runtime Service Account
+# -----------------------------------------------------------------------------
+
+# Allow API runtime service account to access Firestore documents (least privilege)
+resource "google_project_iam_member" "api_runtime_firestore_user" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
+# -----------------------------------------------------------------------------
+# 8. Identity Platform Base Configuration
+# -----------------------------------------------------------------------------
+
+# Project-level Identity Platform base configuration
+resource "google_identity_platform_config" "default" {
+  project                    = var.project_id
+  autodelete_anonymous_users = false
+
+  multi_tenant {
+    allow_tenants = false
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 9. Firestore Database (Native Mode)
+# -----------------------------------------------------------------------------
+
+# Default Cloud Firestore database in Native mode
+resource "google_firestore_database" "default" {
+  project                 = var.project_id
+  name                    = "(default)"
+  location_id             = var.firestore_location
+  type                    = "FIRESTORE_NATIVE"
+  delete_protection_state = "DELETE_PROTECTION_ENABLED"
+  deletion_policy         = "DELETE"
+
+  depends_on = [google_project_service.required_services]
 }

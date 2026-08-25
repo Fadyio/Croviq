@@ -78,3 +78,9 @@ variable "git_sha" {
   description = "The Git commit SHA associated with the deployed revision."
   default     = ""
 }
+
+variable "firestore_location" {
+  type        = string
+  description = "The location ID for the Firestore database (e.g. us-central1)."
+  default     = "us-central1"
+}
