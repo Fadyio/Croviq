@@ -41,9 +41,9 @@ jobs:
       - name: Discover Current Production State Variables
         id: prod_state
         run: |
-          IMAGE_URI=$(gcloud run services describe croviq-api --project=croviq-506602 --region=us-central1 --format='value(spec.template.spec.containers[0].image)')
-          GIT_SHA=$(gcloud run services describe croviq-api --project=croviq-506602 --region=us-central1 --format='value(spec.template.spec.containers[0].env.filter(name:GIT_SHA).value)')
-
+          SERVICE_JSON=$(gcloud run services describe croviq-api --project=croviq-506602 --region=us-central1 --format=json)
+          IMAGE_URI=$(echo "$SERVICE_JSON" | jq -r '.spec.template.spec.containers[0].image // empty')
+          GIT_SHA=$(echo "$SERVICE_JSON" | jq -r '(.spec.template.spec.containers[0].env[] | select(.name=="GIT_SHA") | .value) // empty')
           if [ -z "$IMAGE_URI" ]; then
             IMAGE_URI="us-central1-docker.pkg.dev/croviq-506602/croviq-api/croviq-api@sha256:b3767453fd25e10d59168b9829b1ca21eba6ec43567bb7b30ff94c908197c729"
           fi
