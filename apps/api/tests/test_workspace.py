@@ -131,14 +131,15 @@ def test_get_workspace_first_request_provisions_default_workspace(
     # Verify structured logging for workspace.created
     captured = capsys.readouterr()
     ws_logs = extract_workspace_logs(captured.out, req_id)
-    assert len(ws_logs) == 1
-    log = ws_logs[0]
-    assert log["event_type"] == "workspace.created"
-    assert log["status"] == 200
-    assert log["user_id"] == user_uid
-    assert log["workspace_id"] == data["workspace_id"]
-    assert log["request_id"] == req_id
-
+    assert len(ws_logs) == 2
+    assert ws_logs[0]["event_type"] == "workspace.created"
+    assert ws_logs[0]["status"] == 200
+    assert ws_logs[0]["user_id"] == user_uid
+    assert ws_logs[0]["workspace_id"] == data["workspace_id"]
+    assert ws_logs[1]["event_type"] == "workspace.loaded"
+    assert ws_logs[1]["status"] == 200
+    assert ws_logs[1]["user_id"] == user_uid
+    assert ws_logs[1]["workspace_id"] == data["workspace_id"]
     # Verify no secret leakage
     assert token not in captured.out
 

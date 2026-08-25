@@ -24,6 +24,13 @@ export interface paths {
       };
     };
   };
+  "/api/auth/logout": {
+    post: {
+      responses: {
+        200: unknown;
+      };
+    };
+  };
   "/api/workspace": {
     get: {
       responses: {
