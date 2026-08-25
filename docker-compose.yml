@@ -1,0 +1,21 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: croviq-web
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/apps/api/node_modules
+      - /app/packages/domain/node_modules
+      - /app/packages/observability/node_modules
+      - /app/packages/engine/node_modules
+      - /app/packages/agents/node_modules
+      - /app/packages/media/node_modules
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped
