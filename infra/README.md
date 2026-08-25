@@ -2,15 +2,23 @@
 
 This directory contains the canonical Terraform configuration for provisioning Croviq's Google Cloud infrastructure and remote state backend.
 
+## Architecture & Ownership
+
+- **Cloudflare**:
+  Authoritative DNS only. Cloudflare hosts DNS zone records for `croviq.app` and does not run Workers, Pages, KV, or R2 in the locked architecture.
+- **Terraform**:
+  Owns Cloudflare DNS records and all Google Cloud infrastructure definitions declaratively.
+- **Google Cloud**:
+  Owns all application runtime, TLS, Load Balancer, Cloud Run, and logging.
+
 ## Design & Portability
 
 - **No Hardcoded Project IDs**: All configurations are parameterized via variables.
 - **Judge & Developer Reproducibility**: Evaluators can deploy a complete Croviq stack into their own Google Cloud project.
 - **Remote State Management**: Terraform state is securely stored in a private, versioned Google Cloud Storage bucket with uniform bucket-level access and deletion protection.
 - **Decoupled Architecture**: Infrastructure foundation (APIs, Artifact Registry, IAM, Workload Identity Federation, Global External Application Load Balancer with Serverless NEGs) is managed cleanly via Terraform. Both `croviq-web` (React/Vite) and `croviq-api` (Python/FastAPI) are deployed to Cloud Run behind a single HTTPS origin (`https://app.croviq.app`) via path-based routing (`/*` and `/api/*`).
-- **DNS Only on Cloudflare**: Cloudflare provides authoritative DNS only. All runtime execution, TLS certificates, load balancing, and application services run entirely on Google Cloud (ADR-0013).
 - **Keyless Authentication**: Workload Identity Federation (WIF) eliminates long-lived service account JSON keys for CI/CD.
-
+- **Secure Credentials**: Cloudflare API token (`CLOUDFLARE_API_TOKEN`) is provided exclusively via environment variable / CI secret. It is never stored in Terraform variables, tfvars, backend configuration, Git, or Terraform state. GitHub Actions will receive `CLOUDFLARE_API_TOKEN` as a repository/environment secret for Terraform execution (with minimum permissions: Zone → DNS → Edit, Zone → Zone → Read, scoped strictly to `croviq.app`).
 ## Reproducible Fresh-Project Deployment
 
 Follow this exact sequence to deploy Croviq infrastructure into a fresh Google Cloud project:
@@ -93,6 +101,7 @@ terraform apply
 | `api_image` | `string` | *(required)* | Immutable container image reference with `@sha256:` digest for Cloud Run |
 | `git_sha` | `string` | `""` | Git commit SHA deployed to Cloud Run |
 | `firestore_location` | `string` | `"us-central1"` | Location ID for the default Firestore database |
+| `cloudflare_zone_name` | `string` | `"croviq.app"` | Cloudflare zone domain name for authoritative DNS |
 
 ## Outputs (Main Stack)
 
@@ -109,3 +118,4 @@ terraform apply
 | `firestore_database_name` | Database ID of the default Firestore database instance |
 | `firestore_database_location` | Location ID of the default Firestore database instance |
 | `identity_platform_config_name` | Resource name of the Identity Platform configuration |
+| `cloudflare_zone_id` | Cloudflare zone ID resolved from the zone name |

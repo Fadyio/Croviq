@@ -322,3 +322,13 @@ resource "google_firestore_database" "default" {
 
   depends_on = [google_project_service.required_services]
 }
+
+# -----------------------------------------------------------------------------
+# 10. Cloudflare Zone Data Source (Authoritative DNS Foundation Only)
+# -----------------------------------------------------------------------------
+
+# Read-only zone lookup to resolve zone ID for future DNS record management.
+# Cloudflare is authoritative DNS only; all runtime and routing live on Google Cloud.
+data "cloudflare_zone" "croviq" {
+  name = var.cloudflare_zone_name
+}
