@@ -1,116 +1,135 @@
-# Croviq
+# Croviq Domain Model
 
-CI/CD for video creators: an autonomous, visible, and auditable production workflow that transforms raw footage into release-ready video.
+DevOps for YouTube creators: an autonomous, visible production team that learns the channel, transforms raw footage into a release, validates the work, learns from performance, and feeds those lessons into the next production.
 
-## Language
+## Core Language
+
+### Studio & Tenancy
 
 **Workspace**:
-The top-level tenant container representing a creator or production team, encapsulating brand kit, channel connections, persistent memory, and missions.
+The top-level tenant container representing a creator studio, encapsulating channel connections, brand preferences, persistent channel memory, and productions.
 _Avoid_: Organization, Channel, Account, Tenant
 
-**Mission**:
-A single content production objective with creative intent and deliverables (e.g., turning raw recording into a release-ready YouTube video and derived assets).
-_Avoid_: Project, Video, Episode, Campaign
+**Production**:
+A single end-to-end content production lifecycle starting from raw footage to master release and derived assets. User-facing creator term.
+_Avoid_: Mission, Project, Video, Episode, Campaign
 
-**Workflow**:
-A defined, reusable graph of jobs that orchestrates the transformation from raw input footage to verified release deliverables.
-_Avoid_: Pipeline, DAG, Playbook, Recipe
+**Mission**:
+Internal engine representation of a production objective and workflow execution graph.
+_Avoid_: Task, Ticket, Pipeline
 
 **Run**:
-A single, immutable execution instance of a Workflow for a Mission, producing an auditable sequence of job states, events, logs, and artifacts.
+An immutable, auditable execution instance of an engine workflow for a Production, recording state transitions, agent events, logs, and artifacts.
 _Avoid_: Execution, Build, Job Run, Attempt
 
-**Workflow Engine**:
-The deterministic state machine that enforces job dependencies, state transitions, retry policies, idempotency, and approval gates.
-_Avoid_: Orchestrator, Scheduler, Runner
+---
 
-**Director**:
-The top-level coordinator agent that interprets creator intent, parameterizes department jobs, and routes context across the workflow within engine constraints.
+### Visible Production Team (Agents)
+
+**Director (Maya)**:
+The senior production lead agent who interprets creator intent, reads Channel Memory, inspects raw footage, sets editorial strategy, delegates dialogue passes to Leo, reviews batches, requests corrections, and approves masters.
 _Avoid_: Master Agent, Manager, Orchestrator, Supervisor
 
-**Department**:
-A durable operational domain of responsibility within the creator studio with specialized agents, tools, and objectives.
-_Avoid_: Module, Subsystem, Service, Plugin
-
-**Editor**:
-The department responsible for media analysis, timeline construction, video/audio transformations, silence removal, and cut decisions.
+**Editor (Leo)**:
+The dialogue and narrative editing agent who performs semantic dialogue passes, cleans transcript/timeline segments, eliminates filler/dead air/redundancy, applies natural cut safety, reports batch edits, and renders the master and one Short.
 _Avoid_: Post-Production, Cutter, Video Processor
 
-**Packaging**:
-The department responsible for audience-facing presentation assets including title candidates, thumbnail concepts/generation, chapters, descriptions, and metadata.
-_Avoid_: Marketing, Publisher, Metadata Generator
+**Data Scientist (Alex)**:
+The statistical intelligence agent who evaluates channel baselines, detects retention change points, analyzes CTR/traffic, designs experiments, and writes evidence-backed lessons into Channel Memory.
+_Avoid_: Analytics Narrator, Reporting Bot, Dashboard Summarizer
 
-**QA**:
-The department responsible for verifying release truthfulness, claim validation, technical integrity, caption synchronization, and compliance before human sign-off.
+**Packaging (Nina)**:
+The audience-facing packaging agent responsible for title candidates, thumbnail concepts, descriptions, chapters, and metadata consistency.
+_Avoid_: Marketing Bot, Metadata Generator, Copywriter
+
+**Quality Assurance / QA (Iris)**:
+The independent verification agent responsible for factual consistency, citation verification, caption accuracy, timestamp alignment, and publishing readiness.
 _Avoid_: Reviewer, Linter, Inspector, Fact Checker
 
-**Research**:
-The department responsible for pre-production topic discovery, audience demand signals, competitor benchmarking, and mission ideation.
-_Avoid_: Ideation, Brainstorming, Search Agent
+---
 
-**Data Science / Growth**:
-The department responsible for post-release performance analytics, retention curve diagnostics, CTR/traffic analysis, and updating Creator Memory with falsifiable production lessons.
-_Avoid_: Analytics, Growth Hacking, Reporting
+### Channel Intelligence & Memory
+
+**Channel Memory**:
+Persistent long-term channel intelligence, creator preferences, and performance-derived lessons stored in Google Agent Platform Memory Bank and queried by production agents.
+_Avoid_: Creator Memory, Context Window, Session State
+
+**Channel Profile**:
+Structured memory model capturing inferred channel niche, topics, audience characteristics, historical performance baselines, recurring retention patterns, and content pillars.
+_Avoid_: Brand Summary, Channel Settings, Creator Bio
+
+**Channel Lesson**:
+An evidence-backed, falsifiable production directive stored in Channel Memory with an assigned target agent and confidence score.
+_Avoid_: Rule, Guideline, Recommendation, Insight
+
+**Channel Experiment**:
+A structured hypothesis, treatment, baseline, and evaluation metric designed by Alex to test production variants and learn new lessons.
+_Avoid_: A/B Test, Trial, Guess
+
+**Evidence**:
+Quantitative analytics (e.g. 30s retention %, CTR vs baseline) or factual media observations grounding a Lesson or QA finding.
+_Avoid_: Metric, Data Point, Proof, Telemetry
+
+**Channel Data Provider**:
+The unified interface boundary for channel data, implemented via `YouTubeChannelDataProvider` (real Google YouTube APIs) and `SampleChannelDataProvider` (deterministic synthetic AI engineering dataset).
+_Avoid_: Mock Data, Fake Provider, Hardcoded Fixtures
+
+---
+
+### Media, Timeline & Editing
+
+**Timeline**:
+The interactive multi-track representation in the browser (powered by Twick) visualizing video, audio tracks, cut intervals, playhead, and live agent annotations.
+_Avoid_: Sequence, Composition, Track Layout
+
+**Transcript**:
+A word-level timestamped text representation of spoken dialogue synchronized with the video player and timeline, displaying real-time agent edit states (strike-through removals, review amber, preserved green).
+_Avoid_: Subtitles, Script, Audio Text
+
+**Edit Decision List (EDL)**:
+The canonical, typed JSON specification defining cut intervals, actions (remove, preserve, reorder, cover), transitions, and media sources.
+_Avoid_: Cut List, Project File, Render Manifest
+
+**Dialogue Edit**:
+A structured pass removing filler words, false starts, excessive pauses, repeated explanations, and weak preamble while preserving natural speech cadence.
+_Avoid_: Silence Trimming, Auto-Cut, Speech Cleaning
+
+**Natural Cut Safety**:
+The deterministic verification pipeline ensuring audio cutpoints fall on natural speech boundaries, applying micro-crossfades, room-tone bridges, and visual screen coverage to prevent jarring jump cuts.
+_Avoid_: Hard Cut, Blind Slice, Frame Chop
+
+**Transition Strategy**:
+The specific technique applied to smooth a cut (clean dialogue boundary, audio crossfade, room-tone bridge, J/L cut, screen B-roll coverage).
+_Avoid_: Blend, Fade Effect
+
+**Master**:
+The full-length, high-resolution rendered video output produced deterministically by FFmpeg from the approved EDL.
+_Avoid_: Final Video, Export, Rendered File
+
+**Short**:
+A standalone vertical (9:16) excerpt (20–60s) extracted from the production with synchronized burned-in captions.
+_Avoid_: Clip, Reel, Snippet, Highlight
+
+---
+
+### Deterministic Engine & Governance
 
 **Job**:
-A bounded, executable unit of work inside a Run owned by a Department or the Workflow Engine (e.g. `understand_video`, `remove_excessive_silence`, `generate_titles`).
+A bounded, executable unit of work within a Run owned by an Agent or the deterministic engine.
 _Avoid_: Task, Step, Stage, Action
 
 **Artifact**:
-An immutable, versioned digital asset produced or consumed during a Run (e.g. source video, edit decision list, rendered master, thumbnail image, QA report).
+An immutable, versioned digital asset produced or consumed during a Run (source video, EDL, master render, Short, thumbnail concept, QA report).
 _Avoid_: Output, File, Result, Asset
 
 **Approval Gate**:
-A deterministic pause in a Run where the Workflow Engine requires explicit human sign-off before proceeding to external side effects.
+A deterministic pause in a Run where the engine requires explicit creator confirmation before executing external side effects (e.g. YouTube release).
 _Avoid_: Checkpoint, Human Review, Pause Step
 
 **Publisher**:
-A deterministic side-effect service managed by the Workflow Engine that executes authorized external mutations (e.g. YouTube upload) once QA passes and approval is given.
+A deterministic service managed by the engine that executes authorized external mutations (such as uploading private YouTube releases) once QA passes and human approval is given.
 _Avoid_: Publishing Agent, Uploader, Distribution Service
 
-**Creator Memory**:
-Persistent cross-Mission intelligence, brand preferences, and performance-derived lessons stored at the Workspace level and applied to future Runs.
-_Avoid_: Context Window, Long-term History, Session State
-
-
-**Lesson**:
-A structured, falsifiable production directive stored in Creator Memory (e.g. intro pacing, title framing) with an assigned target department and confidence score.
-_Avoid_: Rule, Guideline, Recommendation, Insight
-
-**Evidence**:
-Quantitative analytics or factual media observations (e.g. retention percentage vs baseline, audio SNR) grounding a Lesson or QA verification.
-_Avoid_: Metric, Data Point, Proof, Telemetry
-
-
-**Timeline**:
-The visual multi-track presentation in the browser representing media segments, audio tracks, cuts, captions, and agent annotations across playback time.
-_Avoid_: Sequence, Composition, Track Layout
-
-**Edit Decision List (EDL)**:
-The canonical, typed JSON schema specifying media sources, cut intervals, transitions, caption alignments, and track operations.
-_Avoid_: Cut List, Project File, Render Manifest
-
-**Renderer**:
-The deterministic backend engine (FFmpeg on Cloud Run) that executes an EDL against source media to generate output video/audio artifacts.
-_Avoid_: Exporter, Compiler, Transcoder, Video Builder
-
-
-**Transcript**:
-A word-level timestamped text representation of the spoken dialogue in a Mission's video footage, synchronized with the Timeline.
-_Avoid_: Subtitles, Script, Audio Text
-
-**Dialogue Edit**:
-A structured transformation removing fillers, false starts, excessive silence, and redundant takes while preserving natural speech cadence.
-_Avoid_: Silence Trimming, Auto-Cut, Speech Cleaning
-
-**Short**:
-A standalone vertical (9:16) excerpt extracted from a Mission's primary video, packaged with burned-in captions for mobile viewing.
-_Avoid_: Clip, Reel, Snippet, Highlight
-
-
 **QA Report**:
-An immutable structured assessment generated by QA verifying factual truthfulness, metadata alignment, timestamps, and compliance across Run artifacts.
+An immutable structured evaluation generated by Iris with one of four states: `PASS`, `REVISE`, `CREATOR_REQUIRED`, or `FAIL`.
 _Avoid_: Test Result, Audit Log, Linter Output
-
-
-
