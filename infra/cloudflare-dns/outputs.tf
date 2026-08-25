@@ -17,3 +17,13 @@ output "certificate_dns_authorization_record_hostname" {
   value       = cloudflare_record.app_cert_dns_authorization.hostname
   description = "The FQDN of the certificate authorization record."
 }
+
+output "app_record_id" {
+  value       = cloudflare_record.app.id
+  description = "The Cloudflare DNS record ID for app.croviq.app."
+}
+
+output "app_record_hostname" {
+  value       = cloudflare_record.app.hostname
+  description = "The FQDN of the app A record."
+}

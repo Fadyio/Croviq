@@ -26,3 +26,19 @@ resource "cloudflare_record" "app_cert_dns_authorization" {
   ttl     = 1
   comment = "Google Certificate Manager DNS authorization for app.croviq.app"
 }
+
+# -----------------------------------------------------------------------------
+# 3. Application A Record (app.croviq.app)
+# -----------------------------------------------------------------------------
+
+# Primary application routing A record pointing app.croviq.app to Google Cloud Load Balancer.
+# Must be DNS-only (proxied = false) to ensure direct TLS termination and routing by GCP GCLB.
+resource "cloudflare_record" "app" {
+  zone_id = data.cloudflare_zone.croviq.id
+  name    = "app"
+  type    = "A"
+  value   = var.app_ipv4_address
+  proxied = false
+  ttl     = 1
+  comment = "Direct routing for app.croviq.app to Google Cloud Load Balancer"
+}
