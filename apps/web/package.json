@@ -4,14 +4,26 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit",
+    "dev": "vite",
+    "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "echo '@croviq/web: ok'"
+    "lint": "echo '@croviq/web: ok'",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@croviq/domain": "workspace:*"
+    "@croviq/domain": "workspace:*",
+    "lucide-react": "^1.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.2"
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0"
   }
 }

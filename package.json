@@ -9,6 +9,7 @@
   },
   "packageManager": "pnpm@11.23.0",
   "scripts": {
+    "dev": "pnpm --filter @croviq/web dev",
     "build": "pnpm -r --if-present run build",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r --if-present run lint",
