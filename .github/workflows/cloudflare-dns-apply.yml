@@ -1,20 +1,40 @@
-name: Cloudflare Terraform Auth Verification
+name: Cloudflare DNS Apply
 
 on:
   workflow_dispatch:
+    inputs:
+      git_sha:
+        description: "Git commit SHA to apply (defaults to HEAD)"
+        required: false
+        type: string
 
 permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: cloudflare-dns-production
+  cancel-in-progress: false
+
 jobs:
-  cloudflare-dns-verify:
-    name: Cloudflare Terraform Plan (Read-Only)
+  cloudflare-dns-apply:
+    name: Cloudflare DNS Terraform Apply
     runs-on: ubuntu-latest
 
     steps:
+      - name: Resolve Target Commit SHA
+        id: resolve-commit
+        run: |
+          if [ -n "${{ github.event.inputs.git_sha }}" ]; then
+            echo "sha=${{ github.event.inputs.git_sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve-commit.outputs.sha }}
 
       - name: Check GitHub Secret Availability
         run: |
@@ -49,13 +69,31 @@ jobs:
         working-directory: infra/cloudflare-dns
         run: terraform validate
 
-      - name: Terraform Cloudflare DNS Plan (Read-Only)
+      - name: Terraform Cloudflare DNS Plan
         id: tf_plan
         working-directory: infra/cloudflare-dns
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           echo "=========================================="
-          echo "Running read-only terraform plan for infra/cloudflare-dns..."
+          echo "Generating Terraform execution plan for infra/cloudflare-dns..."
           echo "=========================================="
-          terraform plan -no-color
+          terraform plan -no-color -out=tfplan
+
+      - name: Terraform Cloudflare DNS Show Plan
+        working-directory: infra/cloudflare-dns
+        run: |
+          echo "=========================================="
+          echo "Inspecting planned changes for infra/cloudflare-dns..."
+          echo "=========================================="
+          terraform show -no-color tfplan
+
+      - name: Terraform Cloudflare DNS Apply
+        working-directory: infra/cloudflare-dns
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "=========================================="
+          echo "Applying Terraform plan for infra/cloudflare-dns..."
+          echo "=========================================="
+          terraform apply -no-color -auto-approve tfplan
