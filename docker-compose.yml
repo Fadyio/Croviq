@@ -13,3 +13,18 @@ services:
     environment:
       - NODE_ENV=development
     restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api.dev
+    container_name: croviq-api
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./apps/api:/app/apps/api
+      - /app/apps/api/.venv
+    environment:
+      - ENVIRONMENT=development
+      - PORT=8080
+    restart: unless-stopped
