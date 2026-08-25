@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Croviq — Design System Visual Reference (Neutral Graphite)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Locked Neutral Graphite Tokens */
+      --bg: #101214;
+      --s1: #16191C;
+      --s2: #1C2024;
+      --s3: #23282D;
+      --elevated: #2A3036;
+      
+      --border: #2D3339;
+      --border-strong: #3B434B;
+      
+      --text-pri: #F2F4F5;
+      --text-sec: #B0B7BE;
+      --text-mut: #78828C;
+      
+      --primary: #2355C5;
+      
+      /* Restrained Muted Semantic Tokens */
+      --success: #3E8063;
+      --warning: #A77A32;
+      --danger: #B85454;
+      --info: #5279B8;
+      
+      /* Editor Semantics */
+      --cut-removed: #B85454;
+      --cut-suggested: #A77A32;
+      --cut-preserved: #4F7F65;
+      --cut-processing: #5279B8;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text-pri);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 36px 40px;
+      line-height: 1.5;
+    }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    
+    h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.02em; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 32px;
+    }
+    
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .badge-primary { background: var(--primary); color: #FFFFFF; }
+    .badge-neutral { background: var(--s3); color: var(--text-sec); border: 1px solid var(--border); }
+    .badge-success { background: rgba(62, 128, 99, 0.2); color: #7DBE9F; border: 1px solid rgba(62, 128, 99, 0.4); }
+    .badge-warning { background: rgba(167, 122, 50, 0.2); color: #D1A866; border: 1px solid rgba(167, 122, 50, 0.4); }
+    .badge-danger { background: rgba(184, 84, 84, 0.2); color: #D88B8B; border: 1px solid rgba(184, 84, 84, 0.4); }
+    
+    .grid { display: grid; grid-template-columns: 320px 320px 1fr; gap: 24px; margin-bottom: 32px; }
+    .card {
+      background: var(--s1);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-sec);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    /* Logo display */
+    .logo-box-light {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+      min-height: 70px;
+    }
+    .logo-box-dark {
+      background: var(--s2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 64px;
+    }
+    
+    /* Swatches */
+    .swatch-group { display: flex; flex-direction: column; gap: 5px; }
+    .swatch {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .swatch-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      margin-right: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    /* Button Specimens */
+    .btn-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 120ms ease;
+    }
+    .btn-primary { background: var(--primary); color: #FFFFFF; }
+    .btn-secondary { background: var(--s3); color: var(--text-pri); border-color: var(--border); }
+    .btn-danger { background: rgba(184, 84, 84, 0.15); color: #D88B8B; border-color: rgba(184, 84, 84, 0.35); }
+    
+    /* Editor Semantics Preview */
+    .editor-mockup {
+      background: var(--s1);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 16px;
+    }
+    .mockup-topbar {
+      background: var(--s2);
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .mockup-body {
+      display: grid;
+      grid-template-columns: 220px 1fr 260px;
+      min-height: 250px;
+      border-bottom: 1px solid var(--border);
+    }
+    .pane { padding: 14px; border-right: 1px solid var(--border); }
+    .pane:last-child { border-right: none; }
+    
+    /* Transcript styles */
+    .transcript-box {
+      background: var(--s2);
+      border-radius: 4px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.8;
+      border: 1px solid var(--border);
+    }
+    .cut-removed {
+      color: #D88B8B;
+      text-decoration: line-through;
+      background: rgba(184, 84, 84, 0.15);
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin: 0 2px;
+    }
+    .cut-suggested {
+      color: #D1A866;
+      background: rgba(167, 122, 50, 0.15);
+      border-bottom: 1px dashed var(--warning);
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin: 0 2px;
+    }
+    .cut-preserved {
+      color: #82B399;
+      background: rgba(79, 127, 101, 0.15);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 500;
+      margin: 0 2px;
+    }
+    
+    /* Timeline styles */
+    .timeline-mockup {
+      background: var(--bg);
+      padding: 14px 18px;
+    }
+    .track {
+      display: flex;
+      align-items: center;
+      height: 28px;
+      background: var(--s2);
+      border-radius: 3px;
+      margin-bottom: 6px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .track-label {
+      width: 44px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-mut);
+      padding-left: 8px;
+      border-right: 1px solid var(--border);
+    }
+    .track-segment {
+      height: 100%;
+      background: var(--s3);
+      margin-right: 2px;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 10px;
+      color: var(--text-sec);
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+    .segment-cut {
+      background: repeating-linear-gradient(45deg, rgba(184,84,84,0.15), rgba(184,84,84,0.15) 6px, rgba(184,84,84,0.25) 6px, rgba(184,84,84,0.25) 12px);
+      border: 1px dashed rgba(184,84,84,0.6);
+      color: #D88B8B;
+    }
+    .segment-preserved {
+      background: rgba(79,127,101,0.2);
+      border: 1px solid rgba(79,127,101,0.45);
+      color: #9EC4B0;
+    }
+    .playhead {
+      position: absolute;
+      left: 360px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--text-pri);
+      z-index: 10;
+    }
+    .playhead::before {
+      content: '';
+      position: absolute;
+      top: -4px;
+      left: -5px;
+      width: 12px;
+      height: 8px;
+      background: var(--primary);
+      clip-path: polygon(0 0, 100% 0, 50% 100%);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 4px;">
+        <img src="../../brandkit/croviq-symbol.svg" width="28" height="28" alt="Croviq Symbol" />
+        <h1 style="font-size: 18px;">Croviq Design System &middot; Neutral Graphite</h1>
+      </div>
+      <p style="font-size: 12px; color: var(--text-sec);">Professional Creative Workspace &middot; 90% Neutral Graphite &middot; Single Primary Interaction Blue</p>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <span class="badge badge-primary">Locked Palette</span>
+      <span class="badge badge-neutral">Adobe / Carbon Pattern</span>
+    </div>
+  </div>
+
+  <!-- Row 1: Brand & Palette -->
+  <div class="grid">
+    <!-- Brand Logos -->
+    <div class="card">
+      <div class="card-title">
+        <span>Brand Identity Marks</span>
+        <span class="badge badge-neutral">brandkit/</span>
+      </div>
+      <div class="logo-box-light">
+        <img src="../../brandkit/croviq-logo-horizontal.svg" style="max-height: 38px; width: auto;" alt="Horizontal Logo" />
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div class="logo-box-dark">
+          <img src="../../brandkit/croviq-symbol.svg" style="max-height: 36px; width: auto;" alt="Symbol" />
+        </div>
+        <div class="logo-box-dark" style="background: #22242B;">
+          <img src="../../brandkit/croviq-symbol-white.svg" style="max-height: 36px; width: auto;" alt="White Symbol" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Application Surfaces -->
+    <div class="card">
+      <div class="card-title">
+        <span>Neutral Graphite Theme</span>
+        <span class="mono" style="font-size: 11px;">Surfaces</span>
+      </div>
+      <div class="swatch-group">
+        <div class="swatch" style="background: var(--bg); border: 1px solid var(--border);">
+          <div style="display: flex; align-items: center;"><div class="swatch-color" style="background: var(--bg);"></div><span>background</span></div>
+          <span class="mono text-muted" style="font-size: 11px; color: var(--text-mut);">#101214</span>
+        </div>
+        <div class="swatch" style="background: var(--s1); border: 1px solid var(--border);">
+          <div style="display: flex; align-items: center;"><div class="swatch-color" style="background: var(--s1);"></div><span>surface-1</span></div>
+          <span class="mono text-muted" style="font-size: 11px; color: var(--text-mut);">#16191C</span>
+        </div>
+        <div class="swatch" style="background: var(--s2); border: 1px solid var(--border);">
+          <div style="display: flex; align-items: center;"><div class="swatch-color" style="background: var(--s2);"></div><span>surface-2</span></div>
+          <span class="mono text-muted" style="font-size: 11px; color: var(--text-mut);">#1C2024</span>
+        </div>
+        <div class="swatch" style="background: var(--s3); border: 1px solid var(--border);">
+          <div style="display: flex; align-items: center;"><div class="swatch-color" style="background: var(--s3);"></div><span>surface-3</span></div>
+          <span class="mono text-muted" style="font-size: 11px; color: var(--text-mut);">#23282D</span>
+        </div>
+        <div class="swatch" style="background: var(--elevated); border: 1px solid var(--border);">
+          <div style="display: flex; align-items: center;"><div class="swatch-color" style="background: var(--elevated);"></div><span>elevated</span></div>
+          <span class="mono text-muted" style="font-size: 11px; color: var(--text-mut);">#2A3036</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Typography & Controls -->
+    <div class="card">
+      <div class="card-title">
+        <span>Typography & Controls</span>
+        <span class="mono" style="font-size: 11px;">Primary #2355C5</span>
+      </div>
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 2px;">Inter UI &middot; JetBrains Mono Data</div>
+        <div class="mono" style="font-size: 11px; color: var(--text-mut);">00:04:12.18 · run_a8f9c2 · 1,420 tokens</div>
+      </div>
+      <div style="border-top: 1px solid var(--border); padding-top: 10px;">
+        <div style="font-size: 11px; text-transform: uppercase; color: var(--text-mut); margin-bottom: 6px;">Action Controls</div>
+        <div class="btn-group">
+          <button class="btn btn-primary">Start Run</button>
+          <button class="btn btn-secondary">Approve Release</button>
+          <button class="btn btn-danger">Reject Cut</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Editor Semantics & Timeline Preview -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-title">
+      <span>Editor Workspace Visual Semantics (AI Dialogue & Narrative Editing)</span>
+      <div style="display: flex; gap: 8px;">
+        <span class="badge badge-danger">Removed #B85454</span>
+        <span class="badge badge-warning">Suggested #A77A32</span>
+        <span class="badge badge-success">Preserved #4F7F65</span>
+      </div>
+    </div>
+
+    <div class="editor-mockup">
+      <div class="mockup-topbar">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 12px; font-weight: 600;">Mission: Kubernetes Deployment Deep Dive</span>
+          <span class="badge badge-neutral mono" style="font-size: 10px;">Run #1</span>
+        </div>
+        <div style="display: flex; gap: 16px; font-size: 11px; align-items: center;">
+          <span style="color: var(--text-sec);">Director: <b style="color: var(--text-pri); font-weight: 500;">Active</b></span>
+          <span style="color: var(--text-sec);">QA: <b style="color: #7DBE9F; font-weight: 500;">PASS</b></span>
+          <span class="badge badge-success">Approval Ready</span>
+        </div>
+      </div>
+
+      <div class="mockup-body">
+        <!-- Assets Pane -->
+        <div class="pane" style="font-size: 11px;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: var(--text-mut);">PROJECT ASSETS</div>
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="padding: 5px 8px; background: var(--s2); border-radius: 4px; border: 1px solid var(--border);">📹 raw_recording_01.mp4</div>
+            <div style="padding: 5px 8px; background: var(--s2); border-radius: 4px; border: 1px solid var(--border);">✂️ dialogue_cut_master.mp4</div>
+            <div style="padding: 5px 8px; background: var(--s2); border-radius: 4px; border: 1px solid var(--border);">📱 short_teaser_01.mp4</div>
+            <div style="padding: 5px 8px; background: var(--s2); border-radius: 4px; border: 1px solid var(--border);">🖼️ thumbnail_concept_v1.png</div>
+          </div>
+        </div>
+
+        <!-- Center Player & Transcript -->
+        <div class="pane">
+          <div style="background: #000; height: 110px; border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; border: 1px solid var(--border);">
+            <span style="font-size: 11px; color: var(--text-mut);">[ Video Player Preview Canvas ]</span>
+          </div>
+          <div class="transcript-box">
+            <div style="font-size: 10px; text-transform: uppercase; color: var(--text-mut); margin-bottom: 4px; font-weight: 600;">Synchronized Transcript</div>
+            In this video, <span class="cut-removed">[um]</span> I wanted to show you how to configure Cloud Run.
+            <span class="cut-removed">~~Let me start over because that was a bad take.~~</span>
+            <span class="cut-preserved">Here is the exact production architecture</span> deployed on Google Cloud.
+            <span class="cut-suggested">You might also want to check the logs</span> before deploying.
+          </div>
+        </div>
+
+        <!-- Inspector Pane -->
+        <div class="pane" style="font-size: 11px;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: var(--text-mut);">DIRECTOR INSPECTOR</div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="background: var(--s2); padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
+              <div style="color: var(--text-mut); font-size: 10px;">Identified Fillers</div>
+              <div style="font-weight: 500; color: #D88B8B;">4 pauses removed (1.8s saved)</div>
+            </div>
+            <div style="background: var(--s2); padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
+              <div style="color: var(--text-mut); font-size: 10px;">Pacing Recommendation</div>
+              <div style="font-weight: 500; color: #D1A866;">Trim 4s preamble before demo</div>
+            </div>
+            <div style="background: var(--s2); padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
+              <div style="color: var(--text-mut); font-size: 10px;">Derived Shorts</div>
+              <div style="font-weight: 500; color: #7DBE9F;">1 candidate extracted (00:42-01:14)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Twick Timeline Mockup -->
+      <div class="timeline-mockup">
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-mut); margin-bottom: 6px;">
+          <span>TWICK MULTI-TRACK TIMELINE</span>
+          <span class="mono">00:01:24.08 / 00:12:45.00</span>
+        </div>
+        <div style="position: relative;">
+          <div class="playhead"></div>
+          <div class="track">
+            <div class="track-label">V1</div>
+            <div class="track-segment" style="width: 140px;">Intro Take 1</div>
+            <div class="track-segment segment-cut" style="width: 60px;">Cut Gap</div>
+            <div class="track-segment segment-preserved" style="width: 220px;">Architecture Demo</div>
+            <div class="track-segment" style="width: 180px;">Cloud Run Setup</div>
+          </div>
+          <div class="track">
+            <div class="track-label">A1</div>
+            <div class="track-segment" style="width: 140px;">Audio Track (Cleaned)</div>
+            <div class="track-segment segment-cut" style="width: 60px;">Silence</div>
+            <div class="track-segment segment-preserved" style="width: 220px;">Speech: Demo</div>
+            <div class="track-segment" style="width: 180px;">Speech: Setup</div>
+          </div>
+          <div class="track" style="margin-bottom: 0;">
+            <div class="track-label">TX</div>
+            <div class="track-segment" style="width: 140px;">Captions: Sync</div>
+            <div class="track-segment" style="width: 60px; opacity: 0.2;">--</div>
+            <div class="track-segment segment-preserved" style="width: 220px;">Captions: "Here is the exact..."</div>
+            <div class="track-segment" style="width: 180px;">Captions: "Cloud Run..."</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
