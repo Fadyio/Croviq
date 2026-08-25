@@ -9,3 +9,6 @@ docs
 brandkit
 infra
 *.md
+.venv
+__pycache__
+.pytest_cache

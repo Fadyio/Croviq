@@ -12,3 +12,5 @@ build/
 *.tfstate.*
 .vscode/
 .idea/
+.pytest_cache/
+*.egg-info/
