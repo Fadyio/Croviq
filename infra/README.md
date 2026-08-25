@@ -1,15 +1,80 @@
 # Croviq Infrastructure (Terraform)
 
-This directory contains the canonical Terraform configuration for provisioning Croviq's Google Cloud infrastructure.
+This directory contains the canonical Terraform configuration for provisioning Croviq's Google Cloud infrastructure and remote state backend.
 
 ## Design & Portability
 
 - **No Hardcoded Project IDs**: All configurations are parameterized via variables.
 - **Judge & Developer Reproducibility**: Evaluators can deploy a complete Croviq stack into their own Google Cloud project.
+- **Remote State Management**: Terraform state is securely stored in a private, versioned Google Cloud Storage bucket with uniform bucket-level access and deletion protection.
 - **Decoupled Architecture**: Infrastructure foundation (APIs, Artifact Registry, IAM, Workload Identity Federation) is managed without deploying placeholder images. Cloud Run services are deployed using immutable container image digests.
 - **Keyless Authentication**: Workload Identity Federation (WIF) eliminates long-lived service account JSON keys for CI/CD.
 
-## Variables
+## Reproducible Fresh-Project Deployment
+
+Follow this exact sequence to deploy Croviq infrastructure into a fresh Google Cloud project:
+
+### 1. Authenticate to your own Google Cloud project
+```bash
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project YOUR_PROJECT_ID
+gcloud auth application-default set-quota-project YOUR_PROJECT_ID
+```
+
+### 2. Bootstrap the Remote State Bucket
+```bash
+cd infra/bootstrap
+
+# Copy example variables and configure your project ID
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars and set project_id = "YOUR_PROJECT_ID"
+
+# Initialize and create the GCS state bucket (${project_id}-croviq-tfstate)
+terraform init
+terraform plan
+terraform apply
+
+# Migrate bootstrap stack state to the newly created GCS bucket
+cp backend.hcl.example backend.hcl
+# Edit backend.hcl with bucket = "YOUR_PROJECT_ID-croviq-tfstate"
+terraform init -migrate-state -backend-config=backend.hcl
+```
+
+### 3. Initialize & Deploy Main Infrastructure
+```bash
+cd ../
+
+# Configure main remote backend
+cp backend.hcl.example backend.hcl
+# Edit backend.hcl with bucket = "YOUR_PROJECT_ID-croviq-tfstate" and prefix = "croviq/main"
+
+# Configure main variables
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with project_id = "YOUR_PROJECT_ID"
+
+# Initialize with remote backend
+terraform init -backend-config=backend.hcl
+
+# Plan and apply
+terraform plan
+terraform apply
+```
+
+---
+
+## Directory Structure
+
+- `infra/`: Main infrastructure stack (Google Cloud APIs, Artifact Registry, IAM service accounts, WIF pool/provider).
+  - `backend.hcl.example`: Template for main remote state backend configuration.
+  - `terraform.tfvars.example`: Example variable definitions.
+- `infra/bootstrap/`: Dedicated bootstrap stack to provision and manage the remote GCS state bucket.
+  - `backend.hcl.example`: Template for bootstrap remote state backend configuration.
+  - `terraform.tfvars.example`: Example variable definitions.
+
+---
+
+## Variables (Main Stack)
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
@@ -25,7 +90,7 @@ This directory contains the canonical Terraform configuration for provisioning C
 | `github_repository_owner` | `string` | `"Fadyio"` | GitHub repository owner (org/user) |
 | `github_repository_name` | `string` | `"Croviq"` | GitHub repository name |
 
-## Outputs
+## Outputs (Main Stack)
 
 | Output | Description |
 |---|---|
@@ -34,20 +99,3 @@ This directory contains the canonical Terraform configuration for provisioning C
 | `runtime_service_account_email` | Email of the Cloud Run API runtime service account |
 | `deploy_service_account_email` | Email of the GitHub Actions deployment service account |
 | `workload_identity_provider` | Full identifier of the Workload Identity Provider for GitHub Actions OIDC |
-
-## Quickstart (Local Validation)
-
-1. Copy the example variables file:
-   ```bash
-   cp terraform.tfvars.example terraform.tfvars
-   ```
-2. Edit `terraform.tfvars` with your Google Cloud project ID.
-3. Initialize and validate Terraform:
-   ```bash
-   terraform init
-   terraform validate
-   ```
-4. Format check:
-   ```bash
-   terraform fmt -check -recursive
-   ```
