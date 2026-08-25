@@ -113,12 +113,6 @@ resource "google_project_iam_member" "deployer_wif_viewer" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
-# Allow deployment service account to read project IAM policy for Terraform state refresh
-resource "google_project_iam_member" "deployer_project_iam_viewer" {
-  project = var.project_id
-  role    = "roles/resourcemanager.projectIamViewer"
-  member  = "serviceAccount:${google_service_account.github_deployer.email}"
-}
 
 
 # -----------------------------------------------------------------------------
