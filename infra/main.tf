@@ -213,10 +213,6 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.git_sha
       }
 
-      env {
-        name  = "PORT"
-        value = "8080"
-      }
 
       startup_probe {
         http_get {
