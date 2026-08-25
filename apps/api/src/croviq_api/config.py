@@ -27,7 +27,12 @@ class Settings:
         self.service_name: str = "croviq-api"
         self.environment: str = os.getenv("CROVIQ_ENV") or os.getenv("ENVIRONMENT", "development")
         self.git_sha: str = resolve_git_sha()
-
+        self.gcp_project_id: str | None = (
+            os.getenv("GCP_PROJECT_ID")
+            or os.getenv("GOOGLE_CLOUD_PROJECT")
+            or os.getenv("GCLOUD_PROJECT")
+            or os.getenv("PROJECT_ID")
+        )
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

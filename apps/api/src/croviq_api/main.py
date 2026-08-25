@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from croviq_api.auth import auth_router
 from croviq_api.config import get_settings
 from croviq_api.logging import StructuredLoggingMiddleware
 from croviq_api.schemas import HealthResponse
@@ -44,6 +45,8 @@ def create_app() -> FastAPI:
             git_sha=settings.git_sha,
         )
 
+
+    app.include_router(auth_router)
     return app
 
 

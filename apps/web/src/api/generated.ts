@@ -17,6 +17,13 @@ export interface paths {
       };
     };
   };
+  "/auth/me": {
+    get: {
+      responses: {
+        200: components["schemas"]["User"];
+      };
+    };
+  };
 }
 
 export interface components {
@@ -28,6 +35,20 @@ export interface components {
       service?: string;
       /** Current git commit SHA or environment identifier */
       git_sha: string;
+    };
+    User: {
+      /** Unique user identifier (e.g. Firebase UID / Google sub) */
+      user_id: string;
+      /** Canonical user email address */
+      email: string;
+      /** User display name */
+      display_name: string;
+      /** Profile avatar image URL */
+      avatar_url?: string | null;
+      /** Timestamp when the user was created (UTC) */
+      created_at: string;
+      /** Timestamp when the user was last updated (UTC) */
+      updated_at: string;
     };
   };
 }
