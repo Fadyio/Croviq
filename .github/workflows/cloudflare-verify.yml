@@ -1,15 +1,23 @@
-name: Cloudflare Terraform Auth Verification
+name: Cloudflare Terraform
 
 on:
   workflow_dispatch:
-
+    inputs:
+      action:
+        description: "Action to perform (plan or apply)"
+        required: true
+        default: "plan"
+        type: choice
+        options:
+          - plan
+          - apply
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  verify-cloudflare-auth:
-    name: Verify Cloudflare Terraform Auth
+  cloudflare-dns:
+    name: Cloudflare Terraform ${{ inputs.action || 'plan' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -51,29 +59,27 @@ jobs:
         working-directory: infra/cloudflare-dns
         run: terraform validate
 
-      - name: Terraform Cloudflare DNS Plan (Read-Only Verification)
+      - name: Terraform Cloudflare DNS Plan
         id: tf_plan
         working-directory: infra/cloudflare-dns
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
+          echo "=========================================="
           echo "Running terraform plan for infra/cloudflare-dns..."
-          terraform plan \
-            -detailed-exitcode \
-            -no-color \
-            -out=tfplan || PLAN_EXIT=$?
+          echo "=========================================="
+          terraform plan -no-color -out=tfplan
 
-          EXIT_CODE=${PLAN_EXIT:-0}
-          echo "PLAN_EXIT_CODE=${EXIT_CODE}" >> $GITHUB_ENV
-          if [ "$EXIT_CODE" -eq 1 ]; then
-            echo "::error::Terraform plan failed with an error."
-            exit 1
-          elif [ "$EXIT_CODE" -eq 2 ]; then
-            echo "::warning::Terraform plan detected differences/changes (exit code 2)."
-          else
-            echo "Terraform plan succeeded with 0 changes (exit code 0)."
-          fi
-
+      - name: Terraform Cloudflare DNS Apply
+        if: ${{ github.event.inputs.action == 'apply' }}
+        working-directory: infra/cloudflare-dns
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "=========================================="
+          echo "Applying terraform plan for infra/cloudflare-dns..."
+          echo "=========================================="
+          terraform apply -no-color -auto-approve tfplan
       - name: Verify Token Scope and Read DNS Records
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -108,8 +114,19 @@ jobs:
           RECORD_COUNT=$(echo "$DNS_RESP" | jq -r '.result | length')
           echo "Found ${RECORD_COUNT} DNS record(s) for app.croviq.app:"
           echo "$DNS_RESP" | jq -r '.result[] | " - \(.type) \(.name) -> \(.content) (proxied: \(.proxied), ttl: \(.ttl), id: \(.id))"'
+          echo "3. Querying DNS Records for '_acme-challenge.app.croviq.app'..."
+          ACME_DNS_RESP=$(curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=_acme-challenge.app.croviq.app")
+          ACME_DNS_SUCCESS=$(echo "$ACME_DNS_RESP" | jq -r '.success')
+          if [ "$ACME_DNS_SUCCESS" != "true" ]; then
+            echo "::warning::Querying _acme-challenge DNS record failed: $ACME_DNS_RESP"
+          else
+            ACME_RECORD_COUNT=$(echo "$ACME_DNS_RESP" | jq -r '.result | length')
+            echo "Found ${ACME_RECORD_COUNT} DNS record(s) for _acme-challenge.app.croviq.app:"
+            echo "$ACME_DNS_RESP" | jq -r '.result[] | " - \(.type) \(.name) -> \(.content) (proxied: \(.proxied), ttl: \(.ttl), id: \(.id))"'
+          fi
 
-          echo "3. Querying All Zone DNS Records (Read Scope Verification)..."
+
+          echo "4. Querying All Zone DNS Records (Read Scope Verification)..."
           ALL_DNS_RESP=$(curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?per_page=50")
           ALL_DNS_COUNT=$(echo "$ALL_DNS_RESP" | jq -r '.result | length')
           echo "Total DNS records readable in zone: ${ALL_DNS_COUNT}"

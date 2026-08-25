@@ -1,1 +1,4 @@
 cloudflare_zone_name = "croviq.app"
+certificate_dns_authorization_name  = "_acme-challenge.app.croviq.app."
+certificate_dns_authorization_type  = "CNAME"
+certificate_dns_authorization_value = "37a12037-33a6-40bc-9905-b7e8d0287946.12.authorize.certificatemanager.goog."

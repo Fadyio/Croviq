@@ -35,3 +35,23 @@ terraform init -backend-config=backend.hcl
 terraform validate
 terraform plan
 ```
+
+---
+
+## Variables
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `cloudflare_zone_name` | `string` | `"croviq.app"` | The Cloudflare zone domain name |
+| `certificate_dns_authorization_name` | `string` | `"_acme-challenge.app.croviq.app."` | DNS Resource Record Name for Google Certificate Manager DNS authorization |
+| `certificate_dns_authorization_type` | `string` | `"CNAME"` | DNS Resource Record Type for Google Certificate Manager DNS authorization |
+| `certificate_dns_authorization_value` | `string` | `"37a12037-33a6-40bc-9905-b7e8d0287946.12.authorize.certificatemanager.goog."` | DNS Resource Record Value for Google Certificate Manager DNS authorization |
+
+## Outputs
+
+| Output | Description |
+|---|---|
+| `cloudflare_zone_id` | The Cloudflare zone ID resolved from the zone name |
+| `cloudflare_zone_name` | The Cloudflare zone name |
+| `certificate_dns_authorization_record_id` | The Cloudflare DNS record ID for the certificate authorization record |
+| `certificate_dns_authorization_record_hostname` | The FQDN of the certificate authorization record |

@@ -167,6 +167,9 @@ terraform apply
 | `dns_authorization_record_name` | DNS Resource Record Name for Certificate Manager DNS authorization |
 | `dns_authorization_record_type` | DNS Resource Record Type for Certificate Manager DNS authorization |
 | `dns_authorization_record_value` | DNS Resource Record Value for Certificate Manager DNS authorization |
+| `certificate_dns_authorization_name` | Canonical alias: DNS Resource Record Name for Certificate Manager DNS authorization |
+| `certificate_dns_authorization_type` | Canonical alias: DNS Resource Record Type for Certificate Manager DNS authorization |
+| `certificate_dns_authorization_value` | Canonical alias: DNS Resource Record Value for Certificate Manager DNS authorization |
 | `web_neg_name` | Name of the Serverless NEG for croviq-web |
 | `api_neg_name` | Name of the Serverless NEG for croviq-api |
 | `web_backend_service_name` | Name of the backend service for croviq-web |

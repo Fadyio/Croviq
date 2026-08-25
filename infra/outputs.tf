@@ -118,6 +118,21 @@ output "dns_authorization_record_value" {
   description = "The DNS Resource Record Value (data) for Google Certificate Manager DNS authorization."
 }
 
+output "certificate_dns_authorization_name" {
+  value       = google_certificate_manager_dns_authorization.app_dns_auth.dns_resource_record[0].name
+  description = "The DNS Resource Record Name for Google Certificate Manager DNS authorization."
+}
+
+output "certificate_dns_authorization_type" {
+  value       = google_certificate_manager_dns_authorization.app_dns_auth.dns_resource_record[0].type
+  description = "The DNS Resource Record Type for Google Certificate Manager DNS authorization."
+}
+
+output "certificate_dns_authorization_value" {
+  value       = google_certificate_manager_dns_authorization.app_dns_auth.dns_resource_record[0].data
+  description = "The DNS Resource Record Value (data) for Google Certificate Manager DNS authorization."
+}
+
 output "web_neg_name" {
   value       = google_compute_region_network_endpoint_group.web_neg.name
   description = "The name of the Serverless NEG for croviq-web."
