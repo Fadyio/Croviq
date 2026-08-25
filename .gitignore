@@ -17,3 +17,11 @@ build/
 test-results/
 playwright-report/
 blob-report/
+backend.hcl
+*.backend.hcl
+!backend.hcl.example
+!*.backend.hcl.example
+terraform.tfvars
+*.auto.tfvars
+!terraform.tfvars.example
+!*.auto.tfvars.example
