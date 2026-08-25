@@ -1,4 +1,3 @@
-import { DOMAIN_PACKAGE } from "@croviq/domain";
-
+export { App } from "./App";
+export { CroviqLogo } from "./components/CroviqLogo";
 export const WEB_APP = "@croviq/web";
-export const WEB_DEPS = [DOMAIN_PACKAGE] as const;
