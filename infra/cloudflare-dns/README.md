@@ -46,6 +46,10 @@ terraform plan
 | `certificate_dns_authorization_name` | `string` | `"_acme-challenge.app.croviq.app."` | DNS Resource Record Name for Google Certificate Manager DNS authorization |
 | `certificate_dns_authorization_type` | `string` | `"CNAME"` | DNS Resource Record Type for Google Certificate Manager DNS authorization |
 | `certificate_dns_authorization_value` | `string` | `"37a12037-33a6-40bc-9905-b7e8d0287946.12.authorize.certificatemanager.goog."` | DNS Resource Record Value for Google Certificate Manager DNS authorization |
+| `certificate_root_dns_authorization_name` | `string` | *(required)* | DNS Resource Record Name for Google Certificate Manager root domain DNS authorization |
+| `certificate_root_dns_authorization_type` | `string` | *(required)* | DNS Resource Record Type for Google Certificate Manager root domain DNS authorization |
+| `certificate_root_dns_authorization_value` | `string` | *(required)* | DNS Resource Record Value for Google Certificate Manager root domain DNS authorization |
+| `app_ipv4_address` | `string` | `"8.233.204.233"` | The IPv4 address of the Google Cloud Load Balancer for app.croviq.app |
 
 ## Outputs
 
@@ -55,3 +59,7 @@ terraform plan
 | `cloudflare_zone_name` | The Cloudflare zone name |
 | `certificate_dns_authorization_record_id` | The Cloudflare DNS record ID for the certificate authorization record |
 | `certificate_dns_authorization_record_hostname` | The FQDN of the certificate authorization record |
+| `app_record_id` | The Cloudflare DNS record ID for app.croviq.app |
+| `app_record_hostname` | The FQDN of the app A record |
+| `root_certificate_dns_authorization_record_id` | The Cloudflare DNS record ID for the root certificate authorization record |
+| `root_certificate_dns_authorization_record_hostname` | The FQDN of the root certificate authorization record |
