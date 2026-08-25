@@ -6,7 +6,8 @@ This directory contains the canonical Terraform configuration for provisioning C
 
 - **No Hardcoded Project IDs**: All configurations are parameterized via variables.
 - **Judge & Developer Reproducibility**: Evaluators can deploy a complete Croviq stack into their own Google Cloud project.
-- **State**: Backend state is currently configured locally for development. Remote state and Workload Identity Federation are introduced during CI/CD promotion setup.
+- **Decoupled Architecture**: Infrastructure foundation (APIs, Artifact Registry, IAM, Workload Identity Federation) is managed without deploying placeholder images. Cloud Run services are deployed using immutable container image digests.
+- **Keyless Authentication**: Workload Identity Federation (WIF) eliminates long-lived service account JSON keys for CI/CD.
 
 ## Variables
 
@@ -16,6 +17,23 @@ This directory contains the canonical Terraform configuration for provisioning C
 | `region` | `string` | `"us-central1"` | Primary Google Cloud region |
 | `environment` | `string` | `"dev"` | Environment tag (`dev`, `staging`, `prod`) |
 | `app_domain` | `string` | `"app.croviq.app"` | Application hostname |
+| `artifact_registry_repository_id` | `string` | `"croviq-api"` | Artifact Registry repository ID for API container images |
+| `api_runtime_service_account_id` | `string` | `"croviq-api-runtime"` | Service account ID for the Cloud Run API runtime |
+| `github_deployer_service_account_id` | `string` | `"croviq-github-deployer"` | Service account ID for GitHub Actions deployment |
+| `workload_identity_pool_id` | `string` | `"github-actions-pool"` | Workload Identity Pool ID for GitHub Actions |
+| `workload_identity_pool_provider_id` | `string` | `"github-actions-provider"` | Workload Identity Provider ID for GitHub Actions |
+| `github_repository_owner` | `string` | `"Fadyio"` | GitHub repository owner (org/user) |
+| `github_repository_name` | `string` | `"Croviq"` | GitHub repository name |
+
+## Outputs
+
+| Output | Description |
+|---|---|
+| `artifact_registry_repository` | Fully qualified Artifact Registry repository resource name |
+| `artifact_registry_location` | Artifact Registry repository location |
+| `runtime_service_account_email` | Email of the Cloud Run API runtime service account |
+| `deploy_service_account_email` | Email of the GitHub Actions deployment service account |
+| `workload_identity_provider` | Full identifier of the Workload Identity Provider for GitHub Actions OIDC |
 
 ## Quickstart (Local Validation)
 
