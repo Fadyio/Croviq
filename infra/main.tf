@@ -69,12 +69,12 @@ resource "google_service_account" "github_deployer" {
 # 4. Least-Privilege IAM Bindings for Deployment Service Account
 # -----------------------------------------------------------------------------
 
-# Allow deployment service account to push/pull container images
+# Allow deployment service account to administer and push/pull container images
 resource "google_artifact_registry_repository_iam_member" "deployer_ar_writer" {
   project    = var.project_id
   location   = google_artifact_registry_repository.api_repo.location
   repository = google_artifact_registry_repository.api_repo.name
-  role       = "roles/artifactregistry.writer"
+  role       = "roles/artifactregistry.admin"
   member     = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
@@ -110,6 +110,13 @@ resource "google_project_iam_member" "deployer_iam_viewer" {
 resource "google_project_iam_member" "deployer_wif_viewer" {
   project = var.project_id
   role    = "roles/iam.workloadIdentityPoolViewer"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Allow deployment service account to review IAM policies for Terraform state refresh
+resource "google_project_iam_member" "deployer_security_reviewer" {
+  project = var.project_id
+  role    = "roles/iam.securityReviewer"
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
