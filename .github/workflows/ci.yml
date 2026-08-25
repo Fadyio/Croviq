@@ -160,14 +160,14 @@ jobs:
 
       - name: Wait for services to be ready
         run: |
-          echo "Waiting for http://localhost:5173 and http://localhost:8080/health..."
+          echo "Waiting for http://localhost:5173 and http://localhost:8080/api/health..."
           for i in {1..60}; do
             web_ok=0
             api_ok=0
             if curl -sf http://localhost:5173 > /dev/null 2>&1; then
               web_ok=1
             fi
-            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+            if curl -sf http://localhost:8080/api/health > /dev/null 2>&1; then
               api_ok=1
             fi
             if [ "$web_ok" -eq 1 ] && [ "$api_ok" -eq 1 ]; then

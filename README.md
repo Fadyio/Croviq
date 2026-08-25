@@ -31,7 +31,7 @@ docker compose up --build
 ```
 
 - **Frontend**: http://localhost:5173
-- **API**: http://localhost:8080/health
+- **API**: http://localhost:8080/api/health
 
 ### Logs
 ```bash

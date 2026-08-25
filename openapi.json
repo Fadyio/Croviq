@@ -5,11 +5,11 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/health": {
+    "/api/health": {
       "get": {
         "tags": ["Health"],
         "summary": "Service Health Check",
-        "operationId": "health_check_health_get",
+        "operationId": "health_check_api_health_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -24,12 +24,12 @@
         }
       }
     },
-    "/auth/me": {
+    "/api/auth/me": {
       "get": {
         "tags": ["Auth"],
         "summary": "Get Current Authenticated User",
         "description": "Retrieve the canonical User profile derived from verified identity.",
-        "operationId": "get_me_auth_me_get",
+        "operationId": "get_me_api_auth_me_get",
         "responses": {
           "200": {
             "description": "Successful Response",
