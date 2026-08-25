@@ -91,6 +91,8 @@ export interface paths {
             return "number"
         if prop_type == "boolean":
             return "boolean"
+        if prop_type == "null":
+            return "null"
         if prop_type == "array":
             items = prop_schema.get("items", {})
             return f"{json_schema_to_ts(items)}[]"
@@ -100,7 +102,6 @@ export interface paths {
             types = [json_schema_to_ts(s) for s in prop_schema["anyOf"]]
             return " | ".join(types)
         return "unknown"
-
     for schema_name, schema_data in schemas.items():
         properties = schema_data.get("properties", {})
         required = set(schema_data.get("required", []))
@@ -110,8 +111,8 @@ export interface paths {
             opt_marker = "" if is_req else "?"
             ts_type = json_schema_to_ts(prop_val)
             doc = prop_val.get("description")
-            doc_str = f"    /** {doc} */\n" if doc else ""
-            prop_lines.append(f"{doc_str}    {prop_name}{opt_marker}: {ts_type};")
+            doc_str = f"      /** {doc} */\n" if doc else ""
+            prop_lines.append(f"{doc_str}      {prop_name}{opt_marker}: {ts_type};")
         body = "\n".join(prop_lines)
         schema_entries.append(f"    {schema_name}: {{\n{body}\n    }};")
 

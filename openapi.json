@@ -23,6 +23,31 @@
           }
         }
       }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get Current Authenticated User",
+        "description": "Retrieve the canonical User profile derived from verified identity.",
+        "operationId": "get_me_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -50,6 +75,64 @@
         "type": "object",
         "required": ["git_sha"],
         "title": "HealthResponse"
+      },
+      "User": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "User Id",
+            "description": "Unique user identifier (e.g. Firebase UID / Google sub)"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "description": "Canonical user email address"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Display Name",
+            "description": "User display name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url",
+            "description": "Profile avatar image URL"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the user was created (UTC)"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp when the user was last updated (UTC)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["user_id", "email", "display_name", "created_at", "updated_at"],
+        "title": "User",
+        "description": "Canonical User identity model for Croviq."
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Identity Platform / Firebase ID Token: 'Bearer <TOKEN>'",
+        "scheme": "bearer"
       }
     }
   }
