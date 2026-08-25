@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.venv/
+__pycache__/
+dist/
+build/
+.DS_Store
+.terraform/
+*.tfstate
+*.tfstate.*
+.vscode/
+.idea/
