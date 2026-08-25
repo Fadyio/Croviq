@@ -78,7 +78,11 @@ jobs:
           echo "=========================================="
           echo "Generating Terraform execution plan for infra/cloudflare-dns..."
           echo "=========================================="
-          terraform plan -no-color -out=tfplan
+          terraform plan -no-color \
+            -var="certificate_root_dns_authorization_name=_acme-challenge.croviq.app." \
+            -var="certificate_root_dns_authorization_type=CNAME" \
+            -var="certificate_root_dns_authorization_value=d042208d-d501-43cd-90bb-1aa6ca6d0cb0.10.authorize.certificatemanager.goog." \
+            -out=tfplan
 
       - name: Terraform Cloudflare DNS Show Plan
         working-directory: infra/cloudflare-dns

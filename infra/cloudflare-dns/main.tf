@@ -42,3 +42,19 @@ resource "cloudflare_record" "app" {
   ttl     = 1
   comment = "Direct routing for app.croviq.app to Google Cloud Load Balancer"
 }
+
+# -----------------------------------------------------------------------------
+# 4. Google Certificate Manager Root Domain DNS Authorization Record
+# -----------------------------------------------------------------------------
+
+# DNS CNAME validation record for Google Certificate Manager (croviq-root-cert).
+# Must be DNS-only (proxied = false) so Google's ACME challenge validation can resolve the CNAME.
+resource "cloudflare_record" "root_cert_dns_authorization" {
+  zone_id = data.cloudflare_zone.croviq.id
+  name    = var.certificate_root_dns_authorization_name
+  type    = var.certificate_root_dns_authorization_type
+  value   = var.certificate_root_dns_authorization_value
+  proxied = false
+  ttl     = 1
+  comment = "Google Certificate Manager DNS authorization for croviq.app"
+}
