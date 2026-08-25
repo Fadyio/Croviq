@@ -5,7 +5,7 @@ Croviq encompasses client-side video editing interfaces, deterministic workflow 
 
 ## Decision
 We adopt a modular monorepo structure with explicit boundaries:
-```
+```text
 apps/
   web/              # React + Vite + TypeScript frontend containerized for Cloud Run (pnpm)
   api/              # Python 3.12 + FastAPI backend Cloud Run service (uv)
@@ -13,15 +13,15 @@ apps/
 packages/
   domain/           # Python / Pydantic models (canonical backend/domain contracts)
   engine/           # Python (deterministic workflow engine state machine and approval gate)
-  agents/           # Python (department agents via Google ADK / Gemini 3.7 Flash)
+  agents/           # Python (department agents via Google GenAI SDK / Gemini 3.7 Flash)
   media/            # Python (deterministic FFmpeg execution, word alignment, and EDL processing)
-  observability/   # Python (Cloud Logging structured loggers and Cloud Trace correlation)
+  observability/   # Python (Cloud Logging structured loggers and request correlation)
 ```
 
 Each package has strict dependencies:
 - `packages/domain` has zero internal dependencies and is consumed by all backend packages; frontend TypeScript types/client are generated from FastAPI's OpenAPI schema.
 - `packages/engine` depends only on `domain` and `observability`.
-- `packages/agents` depends on `domain`, `observability`, and Google ADK / Vertex AI SDKs.
+- `packages/agents` depends on `domain`, `observability`, and the Google GenAI SDK (`google-genai`).
 - `packages/media` depends on `domain`, `observability`, and local FFmpeg/GCS utilities.
 - `apps/web` consumes generated OpenAPI types/client and client-side UI libraries.
 - `apps/api` orchestrates `engine`, `agents`, and `media`.

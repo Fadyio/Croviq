@@ -1,21 +1,40 @@
-# 0004: AI Dialogue and Narrative Editing Architecture
+# 0004: AI Dialogue Editing, Director/Editor Batch Review, and Natural Cut Safety
 
 ## Context
-Video editing requires both high-level semantic understanding (identifying rambling, false starts, repetitive ideas, filler words, pacing) and sample/frame-accurate cut execution. Relying purely on LLM-generated timestamp estimates can cause jarring audio cutoffs or clipped words. Conversely, basic audio-amplitude silence removal lacks editorial intelligence and cannot understand semantic redundancy or narrative structure.
+Video editing requires both high-level semantic understanding (identifying rambling, false starts, repetitive explanations, filler words, narrative pacing) and frame/sample-accurate cut execution. Relying purely on raw multimodal LLM timestamp estimates causes jarring audio cutoffs, clipped words, and unnatural visual jump cuts. Conversely, asking creators to approve every single filler word removal creates overwhelming friction and defeats the autonomous production vision.
 
 ## Decision
-We implement a hybrid AI Dialogue & Narrative Editing architecture:
-1. **Semantic Video Understanding (Gemini 3.7 Flash)**: The model processes native video and audio to identify editorial improvements: excessive silence, filler words (`um`, `uh`, `you know`), false starts/bad takes, repeated sentences/ideas, rambling or low-value dialogue, awkward pauses, weak intros, and candidate ranges for Shorts.
-2. **Deterministic Alignment**: Word and timestamp boundaries from word-level audio alignment anchor Gemini's semantic decisions into frame-accurate cut intervals within a canonical Edit Decision List (EDL).
-3. **Interactive Visual Feedback**: The browser UI synchronizes a text transcript alongside the Twick timeline and video player. Cuts and proposals are visually color-coded:
-   - Red strikethrough: removed segments
-   - Amber: suggested removals / review items
-   - Green: preserved key moments / highlights
-   Clicking transcript phrases jumps the timeline playhead, and timeline gaps close dynamically as cuts are applied.
-4. **Deterministic Rendering**: FFmpeg on Cloud Run renders the final cut master, generates synchronized captions, and extracts the designated Short from the EDL.
-5. **Scope Boundary**: Generative B-roll, AI music generation (Lyria), and automated dubbing are explicitly deferred to post-MVP.
+We implement a hybrid AI Dialogue Editing and Batch Review architecture:
+
+1. **Role Division (Maya & Leo)**:
+   - **Maya (Director)**: Senior production lead agent who inspects raw video footage, queries long-term Channel Memory in Memory Bank, sets creative/editorial strategy, delegates the dialogue pass to Leo, reviews the complete edited candidate, requests corrections, and approves the master render.
+   - **Leo (Editor)**: Narrative and dialogue editing agent who performs a comprehensive dialogue pass across the transcript and timeline, eliminating filler words (`um`, `uh`), false starts, repeated explanations, and dead air, while extracting one compelling vertical Short (9:16).
+
+2. **Batch Review Workflow**:
+   - Leo executes the entire dialogue pass autonomously across the timeline/transcript.
+   - Leo generates a batch report summarizing total cuts, duration changes, and potential visual jump cuts covered.
+   - Maya reviews the entire batch against Channel Memory and narrative coherence, issuing structured adjustments (e.g. "restore line at 01:34 to preserve premise") before approving the final render.
+   - Rendering executes automatically upon Maya's approval without requiring creator micromanagement.
+
+3. **Natural Cut Safety Pipeline**:
+   ```text
+   Semantic Edit Decision (Gemini 3.7 Flash)
+     -> Word/Sentence Alignment (Phonetic/Word Timestamps)
+     -> Natural Speech Boundary Detection
+     -> Cut Safety & Discontinuity Inspection
+     -> Transition Strategy Selection (Crossfade, Room Tone, Screen B-Roll Cover)
+     -> Canonical Edit Decision List (EDL)
+     -> Deterministic Cloud Run FFmpeg Rendering
+   ```
+
+4. **Live Workspace Synchronization**:
+   - Left ~80%: Twick multi-track timeline and video player visualizing cut intervals and animated gap closure.
+   - Right ~20%: Active agent summary card (top) and synchronized transcript (bottom) with color-coded edit states (removed `#B85454`, suggested `#A77A32`, preserved `#4F7F65`, processing `#5279B8`).
+
+5. **Automatic One-Short Render**:
+   - Following the master edit, Leo extracts the strongest self-contained 20–60s highlight, formats it as 9:16 vertical video with burned-in synchronized captions, and registers it as a standalone artifact.
 
 ## Consequences
-- Produces professional-grade dialogue cuts that respect narrative context without clipping words.
-- Provides an undeniable visual demo where the creator watches the agent reason and edit the timeline.
-- Decouples semantic editorial reasoning from media processing.
+- Eliminates mechanical word clipping and jarring jump cuts through deterministic safety boundaries and screen B-roll coverage.
+- Provides a judge-visible agent collaboration moment where Maya and Leo interact credibly in front of the creator.
+- Protects the creator from approving micro-cuts while keeping the master render fully automated and verifiable.

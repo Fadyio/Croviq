@@ -1,15 +1,34 @@
-# 0010: Authentication and Incremental YouTube OAuth Authorization
+# 0010: Authentication, Demo Allowlist, and Incremental YouTube OAuth
 
 ## Context
-Croviq requires user authentication to secure Workspace data and authorization to interact with YouTube APIs (for uploading videos, syncing metadata, and reading analytics). Requesting extensive YouTube write permissions upfront during initial account sign-up increases user friction and violates the principle of least privilege.
+Croviq requires user authentication to secure Workspace data and authorization to interact with YouTube APIs (for reading analytics, syncing metadata, and uploading videos). For the hackathon evaluation, public end-user signups and unconstrained OAuth flows introduce security vulnerabilities and configuration complexity. Furthermore, evaluators need a reliable, pre-configured access path without manual account approval steps.
 
 ## Decision
-We decouple authentication from external platform authorization:
-1. **User Identity & Session (Firebase Auth)**: Firebase Authentication with Google Sign-In provides user authentication, session tokens, and native integration with Google Cloud Firestore security rules.
-2. **Incremental YouTube OAuth**: YouTube channel integration is an explicit, secondary "Connect Channel" action within the Workspace settings. The creator grants YouTube Data API OAuth scopes only when enabling automated publishing or analytics syncing.
-3. **Token Management**: YouTube OAuth refresh tokens and credentials are securely encrypted and stored per Workspace in Google Secret Manager / Firestore private credentials subcollections, isolated from general application logs and client payloads.
+We establish a secure, allowlist-backed authentication model decoupled from external platform authorization:
+
+1. **Hackathon Authentication Model (Identity Platform Email/Password)**:
+   - Google Cloud Identity Platform powers email/password authentication.
+   - Judge/Demo account: `demo@croviq.app`.
+   - Public end-user signups and anonymous authentication are disabled in Identity Platform.
+   - Password reset flows and Google Sign-In buttons in the Croviq UI are omitted for hackathon simplicity.
+   - Backend authorization is authoritative:
+     ```text
+     Valid Identity Platform ID Token
+     + Email exists
+     + Normalized email in CROVIQ_ALLOWED_EMAILS
+     + Account enabled
+     -> ALLOW (HTTP 200)
+     ```
+   - `email_verified` is not enforced for the pre-provisioned demo account.
+
+2. **First-Use Channel Selection**:
+   - **Connect YouTube Channel**: Incremental YouTube OAuth flow for real creator channels. Requests read-only scopes first (analytics/channel), deferring upload/publishing scopes until publishing is required.
+   - **Use Sample Channel**: Instant activation of the deterministic sample AI engineering channel (~50,000 subscribers, 100 historical videos), enabling full feature testing without external OAuth credentials.
+
+3. **Mandatory Stop-and-Ask on OAuth Provisioning**:
+   - When implementation reaches OAuth client ID/secret creation or external provider configuration, the agent must stop and ask the owner. The agent must never create external credentials or OAuth clients silently.
 
 ## Consequences
-- Frictionless, trustworthy onboarding for new creators.
-- Adheres to least privilege security practices.
-- Seamless IAM and security rule integration between Firebase Auth and Firestore.
+- Zero friction for hackathon evaluators using `demo@croviq.app`.
+- Strict multi-tenant security and zero anonymous data leakage.
+- Clean separation between identity authentication and external platform authorization.

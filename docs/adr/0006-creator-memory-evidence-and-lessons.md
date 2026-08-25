@@ -1,21 +1,32 @@
-# 0006: Creator Memory: Evidence-Backed Structured Lessons
+# 0006: Channel Memory via Google Agent Platform Memory Bank
 
 ## Context
-Croviq's Data Science / Growth department evaluates post-release YouTube metrics (retention curves, CTR, traffic sources, watch time) to improve subsequent Missions. If memory is stored merely as unstructured conversational summaries, it quickly degrades into vague, untestable AI advice ("make videos more engaging"). Conversely, storing only raw numbers forces every subsequent agent run to perform complex retrospective data analysis from scratch.
+Croviq's production team (Maya, Leo, Alex, Nina, Iris) requires persistent, shared long-term memory across productions to learn from past channel performance, audience retention curves, packaging CTRs, and editorial guidelines. Storing memory as unstructured conversational chat dumps leads to hallucinated, untestable advice. Conversely, deploying external vector databases (Pinecone, Weaviate, pgvector) introduces unnecessary operational complexity, separate infrastructure failure modes, and cost overhead.
 
 ## Decision
-We separate performance memory into two distinct layers:
-1. **Raw Metrics as Immutable Evidence**: Historical performance snapshots (e.g. 30-second retention percentage, CTR baseline comparisons, traffic breakdown) are stored as verifiable evidence records.
-2. **Structured Lessons as Active Memory**: The Data Science agent distills evidence into structured, falsifiable `Lesson` records stored at the Workspace level. Each Lesson schema includes:
-   - `directive`: A clear, actionable production instruction (e.g. "Show the final working demo within the first 12 seconds").
-   - `target_department`: The specific department responsible for applying the lesson (`Director`, `Editor`, `Packaging`, or `Research`).
-   - `evidence_summary`: Concrete quantitative metrics grounding the rule (e.g. "30s retention = 71% vs channel baseline = 56%").
-   - `confidence`: A statistical or heuristic confidence score (0.0 to 1.0).
-   - `status`: Lifecycle state (`ACTIVE`, `TESTING`, `RETIRED`).
+We implement Channel Memory using Google Agent Platform Memory Bank directly from FastAPI:
 
-When a new Run starts, the Director queries active Lessons matching target departments and injects them as structured constraints.
+1. **Shared Long-Term Memory (Google Agent Platform Memory Bank)**:
+   - Memory Bank is the centralized long-term memory store accessible to all production agents.
+   - Eliminates all external vector databases, embedding infrastructure, and ADK runtime lock-in.
+   - Operational application data remains in Google Cloud Firestore Native Mode; Memory Bank serves strictly as shared long-term agent memory.
+
+2. **Core Memory Profiles**:
+   - **`ChannelProfile`**: Structured profile capturing inferred channel niche, topics, primary audience geographies, content pillars, baseline performance metrics, and recurring retention patterns.
+   - **`ChannelLesson`**: Actionable, evidence-backed rules (`lesson_id`, `observation`, `evidence`, `confidence`, `recommended_action`, `applies_to`, `source_runs`).
+   - **`ChannelExperiment`**: Structured hypotheses, treatments, baselines, and evaluation metrics designed by Alex (Data Scientist) to validate production optimizations.
+
+3. **Feedback Loop (DevOps for Creators)**:
+   ```text
+   Alex Analyzes Channel Analytics & Baselines
+     -> Writes Falsifiable Lessons to Memory Bank
+     -> Maya Reads Relevant Lessons on Raw Ingest
+     -> Leo Applies Narrative Constraints
+     -> Master Published & Measured
+     -> Memory Bank Updated with New Evidence
+   ```
 
 ## Consequences
-- Every creative constraint is grounded in demonstrable historical evidence.
-- Lessons are modular, queryable by department, and can be activated or retired based on ongoing performance.
-- Eliminates context drift and vague advisory summaries.
+- Shared, consistent channel intelligence without managing custom vector stores or embeddings.
+- Production rules are falsifiable and grounded in measurable YouTube performance evidence.
+- Seamless memory access directly from FastAPI via Google Cloud client libraries.
