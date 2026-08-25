@@ -100,6 +100,10 @@ jobs:
         working-directory: apps/api
         run: uv sync --frozen
 
+      - name: Run domain pytest
+        working-directory: packages/domain
+        run: uv run pytest
+
       - name: Run backend pytest
         working-directory: apps/api
         run: uv run pytest

@@ -15,6 +15,7 @@
     "lint": "pnpm -r --if-present run lint",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
+    "export:openapi": "uv run --directory apps/api python ../../scripts/export_openapi.py",
     "e2e": "pnpm --filter @croviq/web e2e",
     "test:e2e": "pnpm --filter @croviq/web test:e2e",
     "docker:up": "docker compose up --build",

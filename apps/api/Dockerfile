@@ -12,13 +12,16 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Copy dependency specifications first for layer caching
-COPY pyproject.toml uv.lock ./
+COPY packages/domain/ /app/packages/domain/
+COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/
+
+WORKDIR /app/apps/api
 
 # Install production dependencies only using frozen lockfile
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application source
-COPY src/ ./src/
+COPY apps/api/src/ /app/apps/api/src/
 
 # Install the application package into the virtual environment
 RUN uv sync --frozen --no-dev
@@ -32,13 +35,14 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
 ENV CROVIQ_ENV=production
 ENV ENVIRONMENT=production
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/apps/api/.venv/bin:$PATH"
 
-WORKDIR /app
+WORKDIR /app/apps/api
 
 # Copy virtual environment and application code from builder
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
+COPY --from=builder /app/apps/api/.venv /app/apps/api/.venv
+COPY --from=builder /app/apps/api/src /app/apps/api/src
+COPY --from=builder /app/packages/domain /app/packages/domain
 
 # Create non-root user
 RUN useradd -u 1000 -U -m -s /bin/bash appuser && \
