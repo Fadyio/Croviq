@@ -25,3 +25,5 @@ terraform.tfvars
 *.auto.tfvars
 !terraform.tfvars.example
 !*.auto.tfvars.example
+*tfplan*
+*.tfplan
