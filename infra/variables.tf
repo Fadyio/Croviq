@@ -21,6 +21,12 @@ variable "app_domain" {
   default     = "app.croviq.app"
 }
 
+variable "root_domain" {
+  type        = string
+  description = "The root domain hostname (e.g. croviq.app)."
+  default     = "croviq.app"
+}
+
 variable "artifact_registry_repository_id" {
   type        = string
   description = "The Artifact Registry repository ID for API container images."

@@ -565,7 +565,7 @@ resource "google_compute_backend_service" "api" {
 resource "google_compute_url_map" "app" {
   project         = var.project_id
   name            = "croviq-app-url-map"
-  description     = "URL Map for ${var.app_domain} routing /* to croviq-web and /api/* to croviq-api"
+  description     = "URL Map for ${var.app_domain} routing and ${var.root_domain} permanent redirect"
   default_service = google_compute_backend_service.web.id
 
   host_rule {
@@ -573,6 +573,10 @@ resource "google_compute_url_map" "app" {
     path_matcher = "croviq-app-routes"
   }
 
+  host_rule {
+    hosts        = [var.root_domain]
+    path_matcher = "croviq-root-redirect"
+  }
   path_matcher {
     name            = "croviq-app-routes"
     default_service = google_compute_backend_service.web.id
@@ -580,6 +584,16 @@ resource "google_compute_url_map" "app" {
     path_rule {
       paths   = ["/api", "/api/*"]
       service = google_compute_backend_service.api.id
+    }
+  }
+
+  path_matcher {
+    name = "croviq-root-redirect"
+    default_url_redirect {
+      host_redirect          = var.app_domain
+      https_redirect         = true
+      redirect_response_code = "PERMANENT_REDIRECT"
+      strip_query            = false
     }
   }
 
@@ -602,6 +616,22 @@ resource "google_compute_url_map" "app" {
     host        = var.app_domain
     path        = "/api/health"
     description = "/api/* routes to croviq-api"
+  }
+
+  test {
+    host                            = var.root_domain
+    path                            = "/"
+    expected_output_url             = "https://${var.app_domain}/"
+    expected_redirect_response_code = 308
+    description                     = "Root domain root path redirects to app domain with 308"
+  }
+
+  test {
+    host                            = var.root_domain
+    path                            = "/foo?x=1"
+    expected_output_url             = "https://${var.app_domain}/foo?x=1"
+    expected_redirect_response_code = 308
+    description                     = "Root domain subpath and query redirects to app domain with 308"
   }
 
   depends_on = [google_project_service.required_services]
@@ -653,6 +683,44 @@ resource "google_certificate_manager_certificate_map_entry" "app_cert_map_entry"
   map          = google_certificate_manager_certificate_map.app_cert_map.name
   hostname     = var.app_domain
   certificates = [google_certificate_manager_certificate.app_cert.id]
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_certificate_manager_dns_authorization" "root_dns_auth" {
+  project     = var.project_id
+  name        = "croviq-root-dns-auth"
+  location    = "global"
+  description = "DNS authorization for ${var.root_domain}"
+  domain      = var.root_domain
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_certificate_manager_certificate" "root_cert" {
+  project     = var.project_id
+  name        = "croviq-root-cert"
+  location    = "global"
+  description = "Google-managed SSL certificate for ${var.root_domain}"
+  scope       = "DEFAULT"
+
+  managed {
+    domains = [var.root_domain]
+    dns_authorizations = [
+      google_certificate_manager_dns_authorization.root_dns_auth.id
+    ]
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_certificate_manager_certificate_map_entry" "root_cert_map_entry" {
+  project      = var.project_id
+  name         = "croviq-root-cert-map-entry"
+  description  = "Certificate map entry for ${var.root_domain}"
+  map          = google_certificate_manager_certificate_map.app_cert_map.name
+  hostname     = var.root_domain
+  certificates = [google_certificate_manager_certificate.root_cert.id]
 
   depends_on = [google_project_service.required_services]
 }

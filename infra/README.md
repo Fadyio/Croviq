@@ -129,6 +129,7 @@ terraform apply
 | `region` | `string` | `"us-central1"` | Primary Google Cloud region |
 | `environment` | `string` | `"dev"` | Environment tag (`dev`, `staging`, `prod`) |
 | `app_domain` | `string` | `"app.croviq.app"` | Application hostname |
+| `root_domain` | `string` | `"croviq.app"` | Root domain hostname for 308 redirection |
 | `artifact_registry_repository_id` | `string` | `"croviq-api"` | Artifact Registry repository ID for API container images |
 | `artifact_registry_web_repository_id` | `string` | `"croviq-web"` | Artifact Registry repository ID for web container images |
 | `web_runtime_service_account_id` | `string` | `"croviq-web-runtime"` | Service account ID for the Cloud Run web runtime |
@@ -170,6 +171,13 @@ terraform apply
 | `certificate_dns_authorization_name` | Canonical alias: DNS Resource Record Name for Certificate Manager DNS authorization |
 | `certificate_dns_authorization_type` | Canonical alias: DNS Resource Record Type for Certificate Manager DNS authorization |
 | `certificate_dns_authorization_value` | Canonical alias: DNS Resource Record Value for Certificate Manager DNS authorization |
+| `root_domain` | Configured root domain hostname |
+| `root_dns_authorization_record_name` | DNS Resource Record Name for root domain Certificate Manager DNS authorization |
+| `root_dns_authorization_record_type` | DNS Resource Record Type for root domain Certificate Manager DNS authorization |
+| `root_dns_authorization_record_value` | DNS Resource Record Value for root domain Certificate Manager DNS authorization |
+| `root_certificate_dns_authorization_name` | Canonical alias: DNS Resource Record Name for root domain Certificate Manager DNS authorization |
+| `root_certificate_dns_authorization_type` | Canonical alias: DNS Resource Record Type for root domain Certificate Manager DNS authorization |
+| `root_certificate_dns_authorization_value` | Canonical alias: DNS Resource Record Value for root domain Certificate Manager DNS authorization |
 | `web_neg_name` | Name of the Serverless NEG for croviq-web |
 | `api_neg_name` | Name of the Serverless NEG for croviq-api |
 | `web_backend_service_name` | Name of the backend service for croviq-web |
@@ -177,3 +185,5 @@ terraform apply
 | `url_map_name` | Name of the URL map for single-origin routing |
 | `certificate_manager_certificate_name` | Name of the Google Certificate Manager managed certificate |
 | `certificate_map_name` | Name of the Google Certificate Manager certificate map |
+| `root_certificate_manager_certificate_name` | Name of the Google Certificate Manager managed certificate for the root domain |
+| `root_certificate_map_entry_name` | Name of the Google Certificate Manager certificate map entry for the root domain |
