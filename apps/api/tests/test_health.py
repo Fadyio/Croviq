@@ -98,3 +98,37 @@ def test_environment_and_git_sha_from_env(monkeypatch: pytest.MonkeyPatch) -> No
     assert settings.environment == "production"
     assert settings.git_sha == "testsha1234567890abcdef"
     get_settings.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://app.croviq.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+)
+def test_cors_allowed_origins(client: TestClient, origin: str) -> None:
+    # Preflight request
+    preflight = client.options(
+        "/health",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "x-request-id",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers.get("access-control-allow-origin") == origin
+
+    # Simple GET request
+    response = client.get("/health", headers={"Origin": origin})
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == origin
+
+
+def test_cors_rejected_for_unauthorized_origin(client: TestClient) -> None:
+    unauthorized_origin = "https://unauthorized-domain.com"
+    response = client.get("/health", headers={"Origin": unauthorized_origin})
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") is None
