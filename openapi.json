@@ -40,6 +40,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/AuthLoginFailedEvent"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientErrorEvent"
                   }
                 ],
                 "title": "Event",
@@ -47,7 +50,8 @@
                   "propertyName": "event_type",
                   "mapping": {
                     "auth.login_attempt": "#/components/schemas/AuthLoginAttemptEvent",
-                    "auth.login_failed": "#/components/schemas/AuthLoginFailedEvent"
+                    "auth.login_failed": "#/components/schemas/AuthLoginFailedEvent",
+                    "client.error": "#/components/schemas/ClientErrorEvent"
                   }
                 }
               }
@@ -249,6 +253,41 @@
         "type": "object",
         "title": "BrandKit",
         "description": "Canonical BrandKit configuration model for a Croviq Workspace."
+      },
+      "ClientErrorEvent": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "const": "client.error",
+            "title": "Event Type"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["event_type"],
+        "title": "ClientErrorEvent"
       },
       "HTTPValidationError": {
         "properties": {

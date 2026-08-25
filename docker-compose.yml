@@ -25,6 +25,7 @@ services:
     volumes:
       - ./apps/api:/app/apps/api
       - ./packages/domain:/app/packages/domain
+      - ./packages/observability:/app/packages/observability
       - /app/apps/api/.venv
     environment:
       - ENVIRONMENT=development

@@ -32,7 +32,13 @@ class AuthLoginFailedEvent(ClientAuthEventBase):
     error_code: Literal["invalid_credentials", "demo_access_restricted"] | None = None
 
 
+class ClientErrorEvent(ClientAuthEventBase):
+    event_type: Literal["client.error"]
+    error_code: str | None = None
+    message: str | None = None
+
+
 ClientAuthEvent = Annotated[
-    AuthLoginAttemptEvent | AuthLoginFailedEvent,
+    AuthLoginAttemptEvent | AuthLoginFailedEvent | ClientErrorEvent,
     Field(discriminator="event_type"),
 ]
