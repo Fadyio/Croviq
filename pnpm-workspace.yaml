@@ -1,9 +1,0 @@
-packages:
-  - "apps/web"
-
-allowBuilds:
-  "@firebase/util": true
-  core-js: false
-  esbuild: true
-  protobufjs: true
-  workerd: true
