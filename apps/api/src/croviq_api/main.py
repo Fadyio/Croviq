@@ -1,12 +1,12 @@
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from croviq_api.auth import auth_router
+from croviq_api.auth import DemoAccessRestrictedError, auth_router
 from croviq_api.config import get_settings
 from croviq_api.logging import StructuredLoggingMiddleware
 from croviq_api.schemas import HealthResponse
-
-# In production (ADR-0013), all traffic is routed under single-origin app.croviq.app
+from croviq_api.workspaces import workspace_router
 # via Google Cloud Load Balancer, eliminating cross-origin browser CORS dependencies.
 # Local development origins are retained for local developer tooling and API test harnesses.
 LOCAL_DEVELOPMENT_ORIGINS = [
@@ -24,6 +24,18 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
     )
+
+    @app.exception_handler(DemoAccessRestrictedError)
+    async def demo_access_restricted_handler(
+        request: Request, exc: DemoAccessRestrictedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "error_code": exc.error_code,
+                "message": exc.message,
+            },
+        )
 
     app.add_middleware(StructuredLoggingMiddleware)
     app.add_middleware(
@@ -50,6 +62,7 @@ def create_app() -> FastAPI:
         )
 
     api_router.include_router(auth_router)
+    api_router.include_router(workspace_router)
 
     app.include_router(api_router)
     return app

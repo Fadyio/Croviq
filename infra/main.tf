@@ -286,6 +286,11 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.git_sha
       }
 
+      env {
+        name  = "CROVIQ_ALLOWED_EMAILS"
+        value = var.allowed_emails
+      }
+
 
       startup_probe {
         http_get {

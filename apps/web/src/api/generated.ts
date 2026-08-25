@@ -24,10 +24,27 @@ export interface paths {
       };
     };
   };
+  "/api/workspace": {
+    get: {
+      responses: {
+        200: components["schemas"]["Workspace"];
+      };
+    };
+  };
 }
 
 export interface components {
   schemas: {
+    BrandKit: {
+      /** Tone adjectives or stylistic descriptors (e.g. ['concise', 'informative']) */
+      tone?: string[];
+      /** Description of the target audience and viewer demographic */
+      target_audience?: string | null;
+      /** Primary video content style or genre */
+      content_style?: string | null;
+      /** Custom production instructions and brand guidelines */
+      custom_instructions?: string | null;
+    };
     HealthResponse: {
       /** Service health status */
       status?: string;
@@ -48,6 +65,22 @@ export interface components {
       /** Timestamp when the user was created (UTC) */
       created_at: string;
       /** Timestamp when the user was last updated (UTC) */
+      updated_at: string;
+    };
+    Workspace: {
+      /** Unique workspace identifier */
+      workspace_id: string;
+      /** Identifier of the user who owns this workspace */
+      owner_user_id: string;
+      /** Workspace / channel display name */
+      name: string;
+      /** Description of the YouTube channel or production context */
+      channel_description?: string | null;
+      /** Workspace brand kit configuration */
+      brand_kit?: components["schemas"]["BrandKit"];
+      /** Timestamp when the workspace was created (UTC) */
+      created_at: string;
+      /** Timestamp when the workspace was last updated (UTC) */
       updated_at: string;
     };
   };

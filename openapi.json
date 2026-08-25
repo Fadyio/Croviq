@@ -48,10 +48,87 @@
           }
         ]
       }
+    },
+    "/api/workspace": {
+      "get": {
+        "tags": ["Workspaces"],
+        "summary": "Get or Provision Default Workspace",
+        "description": "Retrieve the default workspace belonging to the verified creator. If none exists, creates exactly one default Workspace idempotently.",
+        "operationId": "get_or_provision_default_workspace_api_workspace_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workspace"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "BrandKit": {
+        "properties": {
+          "tone": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tone",
+            "description": "Tone adjectives or stylistic descriptors (e.g. ['concise', 'informative'])"
+          },
+          "target_audience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Audience",
+            "description": "Description of the target audience and viewer demographic"
+          },
+          "content_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Style",
+            "description": "Primary video content style or genre"
+          },
+          "custom_instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Instructions",
+            "description": "Custom production instructions and brand guidelines"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BrandKit",
+        "description": "Canonical BrandKit configuration model for a Croviq Workspace."
+      },
       "HealthResponse": {
         "properties": {
           "status": {
@@ -126,6 +203,61 @@
         "required": ["user_id", "email", "display_name", "created_at", "updated_at"],
         "title": "User",
         "description": "Canonical User identity model for Croviq."
+      },
+      "Workspace": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Workspace Id",
+            "description": "Unique workspace identifier"
+          },
+          "owner_user_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Owner User Id",
+            "description": "Identifier of the user who owns this workspace"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name",
+            "description": "Workspace / channel display name"
+          },
+          "channel_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Description",
+            "description": "Description of the YouTube channel or production context"
+          },
+          "brand_kit": {
+            "$ref": "#/components/schemas/BrandKit",
+            "description": "Workspace brand kit configuration"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the workspace was created (UTC)"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp when the workspace was last updated (UTC)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["workspace_id", "owner_user_id", "name", "created_at", "updated_at"],
+        "title": "Workspace",
+        "description": "Canonical Workspace tenant container model for Croviq."
       }
     },
     "securitySchemes": {

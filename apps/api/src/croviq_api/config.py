@@ -22,6 +22,21 @@ def resolve_git_sha() -> str:
         return "local"
 
 
+def parse_allowed_emails(raw_value: str | None) -> list[str]:
+    """Parse and normalize comma-separated allowed emails configuration.
+
+    Returns empty list if unset, failing closed unless explicitly configured.
+    """
+    if not raw_value or not raw_value.strip():
+        return []
+    emails: list[str] = []
+    for item in raw_value.split(","):
+        cleaned = item.strip().lower()
+        if cleaned and cleaned not in emails:
+            emails.append(cleaned)
+    return emails
+
+
 class Settings:
     def __init__(self) -> None:
         self.service_name: str = "croviq-api"
@@ -33,6 +48,8 @@ class Settings:
             or os.getenv("GCLOUD_PROJECT")
             or os.getenv("PROJECT_ID")
         )
+        self.allowed_emails: list[str] = parse_allowed_emails(os.getenv("CROVIQ_ALLOWED_EMAILS"))
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
