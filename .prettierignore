@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+.terraform
+*.tfstate*
+pnpm-lock.yaml
+.agents
+docs
+infra
+brandkit
+*.md

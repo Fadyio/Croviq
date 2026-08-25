@@ -1,0 +1,17 @@
+{
+  "name": "@croviq/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo '@croviq/web: ok'"
+  },
+  "dependencies": {
+    "@croviq/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}
