@@ -3,8 +3,7 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { AuthGuard } from "./components/AuthGuard";
 import { LoginPage } from "./pages/LoginPage";
 import { AppPage } from "./pages/AppPage";
-import { Loader2 } from "lucide-react";
-import { CroviqLogo } from "./components/CroviqLogo";
+import { LoadingScreen } from "./components/LoadingScreen";
 
 const normalizePath = (pathname: string): string => {
   if (pathname === "" || pathname === "/") return "/";
@@ -52,17 +51,7 @@ const AppRoutes: React.FC = () => {
 
   // Initial loading screen during session verification
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background text-text-primary flex flex-col items-center justify-center p-6 select-none">
-        <div className="flex flex-col items-center gap-4">
-          <CroviqLogo height={28} className="h-7 w-auto opacity-80 animate-pulse" />
-          <div className="flex items-center gap-2 text-xs font-mono text-text-muted mt-2">
-            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            <span>Verifying session...</span>
-          </div>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (currentPath === "/app") {
