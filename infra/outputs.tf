@@ -57,3 +57,18 @@ output "cloud_run_latest_revision" {
   value       = google_cloud_run_v2_service.api.latest_created_revision
   description = "The latest created revision identifier of the Cloud Run API service."
 }
+
+output "firestore_database_name" {
+  value       = google_firestore_database.default.name
+  description = "The database ID of the default Firestore database instance."
+}
+
+output "firestore_database_location" {
+  value       = google_firestore_database.default.location_id
+  description = "The location ID of the default Firestore database instance."
+}
+
+output "identity_platform_config_name" {
+  value       = google_identity_platform_config.default.name
+  description = "The resource name of the Identity Platform configuration."
+}
