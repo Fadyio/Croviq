@@ -22,14 +22,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy-api:
-    name: Deploy Cloud Run API
+  deploy-app:
+    name: Deploy Application Runtime
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     outputs:
-      service_url: ${{ steps.tf_outputs.outputs.service_url }}
-      service_name: ${{ steps.tf_outputs.outputs.service_name }}
-      revision: ${{ steps.tf_outputs.outputs.revision }}
+      api_service_url: ${{ steps.tf_outputs.outputs.api_service_url }}
+      api_service_name: ${{ steps.tf_outputs.outputs.api_service_name }}
+      api_revision: ${{ steps.tf_outputs.outputs.api_revision }}
+      web_service_name: ${{ steps.tf_outputs.outputs.web_service_name }}
+      web_revision: ${{ steps.tf_outputs.outputs.web_revision }}
+      load_balancer_ip: ${{ steps.tf_outputs.outputs.load_balancer_ip }}
       git_sha: ${{ steps.resolve-commit.outputs.sha }}
     steps:
       - name: Resolve Target Commit SHA
@@ -67,28 +70,46 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and Push Production API Image
-        id: docker_build
+        id: docker_build_api
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/api/Dockerfile
+          platforms: linux/amd64
           push: true
           tags: |
             us-central1-docker.pkg.dev/croviq-506602/croviq-api/croviq-api:${{ steps.resolve-commit.outputs.sha }}
             us-central1-docker.pkg.dev/croviq-506602/croviq-api/croviq-api:latest
 
+      - name: Build and Push Production Web Image
+        id: docker_build_web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            us-central1-docker.pkg.dev/croviq-506602/croviq-web/croviq-web:${{ steps.resolve-commit.outputs.sha }}
+            us-central1-docker.pkg.dev/croviq-506602/croviq-web/croviq-web:latest
+
       - name: Record Container Metadata
         id: meta
         run: |
-          DIGEST="${{ steps.docker_build.outputs.digest }}"
-          IMAGE_URI="us-central1-docker.pkg.dev/croviq-506602/croviq-api/croviq-api@${DIGEST}"
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
-          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          API_DIGEST="${{ steps.docker_build_api.outputs.digest }}"
+          API_IMAGE_URI="us-central1-docker.pkg.dev/croviq-506602/croviq-api/croviq-api@${API_DIGEST}"
+          WEB_DIGEST="${{ steps.docker_build_web.outputs.digest }}"
+          WEB_IMAGE_URI="us-central1-docker.pkg.dev/croviq-506602/croviq-web/croviq-web@${WEB_DIGEST}"
+          echo "api_digest=${API_DIGEST}" >> $GITHUB_OUTPUT
+          echo "api_image_uri=${API_IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "web_digest=${WEB_DIGEST}" >> $GITHUB_OUTPUT
+          echo "web_image_uri=${WEB_IMAGE_URI}" >> $GITHUB_OUTPUT
           echo "=========================================="
           echo "Git SHA: ${{ steps.resolve-commit.outputs.sha }}"
-          echo "Image Tag: ${{ steps.resolve-commit.outputs.sha }}"
-          echo "Image Digest: ${DIGEST}"
-          echo "Immutable Image URI: ${IMAGE_URI}"
+          echo "API Image Digest: ${API_DIGEST}"
+          echo "API Immutable URI: ${API_IMAGE_URI}"
+          echo "Web Image Digest: ${WEB_DIGEST}"
+          echo "Web Immutable URI: ${WEB_IMAGE_URI}"
           echo "=========================================="
 
       - name: Setup Terraform
@@ -111,7 +132,8 @@ jobs:
             -var="project_id=croviq-506602" \
             -var="region=us-central1" \
             -var="environment=prod" \
-            -var="api_image=${{ steps.meta.outputs.image_uri }}" \
+            -var="api_image=${{ steps.meta.outputs.api_image_uri }}" \
+            -var="web_image=${{ steps.meta.outputs.web_image_uri }}" \
             -var="git_sha=${{ steps.resolve-commit.outputs.sha }}" \
             -out=tfplan
 
@@ -125,16 +147,26 @@ jobs:
         id: tf_outputs
         working-directory: infra
         run: |
-          SERVICE_URL=$(terraform output -raw cloud_run_url)
-          SERVICE_NAME=$(terraform output -raw cloud_run_service_name)
-          REVISION=$(terraform output -raw cloud_run_latest_revision)
-          echo "service_url=${SERVICE_URL}" >> $GITHUB_OUTPUT
-          echo "service_name=${SERVICE_NAME}" >> $GITHUB_OUTPUT
-          echo "revision=${REVISION}" >> $GITHUB_OUTPUT
+          API_URL=$(terraform output -raw cloud_run_url)
+          API_NAME=$(terraform output -raw cloud_run_service_name)
+          API_REV=$(terraform output -raw cloud_run_latest_revision)
+          WEB_NAME=$(terraform output -raw web_cloud_run_service_name)
+          WEB_REV=$(terraform output -raw web_cloud_run_latest_revision)
+          LB_IP=$(terraform output -raw load_balancer_ip)
+          DNS_AUTH_NAME=$(terraform output -raw dns_authorization_record_name)
+          DNS_AUTH_TYPE=$(terraform output -raw dns_authorization_record_type)
+          DNS_AUTH_VALUE=$(terraform output -raw dns_authorization_record_value)
+          echo "api_service_url=${API_URL}" >> $GITHUB_OUTPUT
+          echo "api_service_name=${API_NAME}" >> $GITHUB_OUTPUT
+          echo "api_revision=${API_REV}" >> $GITHUB_OUTPUT
+          echo "web_service_name=${WEB_NAME}" >> $GITHUB_OUTPUT
+          echo "web_revision=${WEB_REV}" >> $GITHUB_OUTPUT
+          echo "load_balancer_ip=${LB_IP}" >> $GITHUB_OUTPUT
           echo "=========================================="
-          echo "Cloud Run Service: ${SERVICE_NAME}"
-          echo "Cloud Run Revision: ${REVISION}"
-          echo "Cloud Run URL: ${SERVICE_URL}"
+          echo "API Cloud Run: ${API_NAME} (${API_REV}) -> ${API_URL}"
+          echo "Web Cloud Run: ${WEB_NAME} (${WEB_REV})"
+          echo "Load Balancer Global IP: ${LB_IP}"
+          echo "DNS Auth Record: ${DNS_AUTH_NAME} ${DNS_AUTH_TYPE} ${DNS_AUTH_VALUE}"
           echo "=========================================="
 
       - name: Set up Cloud SDK for Read-Only Inspection
@@ -142,7 +174,7 @@ jobs:
 
       - name: Verify Live Cloud Run API Health
         run: |
-          SERVICE_URL="${{ steps.tf_outputs.outputs.service_url }}"
+          SERVICE_URL="${{ steps.tf_outputs.outputs.api_service_url }}"
           echo "Testing live health endpoint: ${SERVICE_URL}/health"
           RESPONSE=$(curl -fsS -i -H "x-request-id: deploy-verify-${{ steps.resolve-commit.outputs.sha }}" "${SERVICE_URL}/health")
           echo "$RESPONSE"

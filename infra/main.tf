@@ -15,6 +15,8 @@ locals {
     "serviceusage.googleapis.com",
     "identitytoolkit.googleapis.com",
     "firestore.googleapis.com",
+    "compute.googleapis.com",
+    "certificatemanager.googleapis.com",
   ]
 }
 
@@ -42,6 +44,21 @@ resource "google_artifact_registry_repository" "api_repo" {
 
   depends_on = [google_project_service.required_services]
 }
+resource "google_artifact_registry_repository" "web_repo" {
+  project       = var.project_id
+  location      = var.region
+  repository_id = var.artifact_registry_web_repository_id
+  description   = "Docker repository for Croviq Web container images"
+  format        = "DOCKER"
+
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
 
 # -----------------------------------------------------------------------------
 # 3. Service Accounts
@@ -56,6 +73,16 @@ resource "google_service_account" "api_runtime" {
 
   depends_on = [google_project_service.required_services]
 }
+# Runtime Service Account for Cloud Run Web
+resource "google_service_account" "web_runtime" {
+  project      = var.project_id
+  account_id   = var.web_runtime_service_account_id
+  display_name = "Croviq Web Runtime Service Account"
+  description  = "Dedicated identity for Croviq Web Cloud Run runtime"
+
+  depends_on = [google_project_service.required_services]
+}
+
 
 # Deployment Service Account for GitHub Actions CI/CD
 resource "google_service_account" "github_deployer" {
@@ -79,6 +106,15 @@ resource "google_artifact_registry_repository_iam_member" "deployer_ar_writer" {
   role       = "roles/artifactregistry.admin"
   member     = "serviceAccount:${google_service_account.github_deployer.email}"
 }
+# Allow deployment service account to administer and push/pull web container images
+resource "google_artifact_registry_repository_iam_member" "deployer_web_ar_writer" {
+  project    = var.project_id
+  location   = google_artifact_registry_repository.web_repo.location
+  repository = google_artifact_registry_repository.web_repo.name
+  role       = "roles/artifactregistry.admin"
+  member     = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 
 # Allow deployment service account to administer Cloud Run services
 resource "google_project_iam_member" "deployer_run_admin" {
@@ -93,6 +129,13 @@ resource "google_service_account_iam_member" "deployer_sa_user" {
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.github_deployer.email}"
 }
+# Allow deployment service account to act as web runtime service account on Cloud Run
+resource "google_service_account_iam_member" "deployer_web_sa_user" {
+  service_account_id = google_service_account.web_runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 
 # Allow deployment service account to inspect service usage / enabled APIs for Terraform state refresh
 resource "google_project_iam_member" "deployer_serviceusage_viewer" {
@@ -135,6 +178,20 @@ resource "google_project_iam_member" "deployer_datastore_owner" {
   role    = "roles/datastore.owner"
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
+# Allow deployment service account to administer Compute Engine / Load Balancer resources
+resource "google_project_iam_member" "deployer_compute_admin" {
+  project = var.project_id
+  role    = "roles/compute.admin"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Allow deployment service account to administer Certificate Manager resources
+resource "google_project_iam_member" "deployer_cert_manager_owner" {
+  project = var.project_id
+  role    = "roles/certificatemanager.owner"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 
 
 
@@ -319,6 +376,345 @@ resource "google_firestore_database" "default" {
   type                    = "FIRESTORE_NATIVE"
   delete_protection_state = "DELETE_PROTECTION_ENABLED"
   deletion_policy         = "DELETE"
+
+  depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 10. Cloud Run Web Service
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_v2_service" "web" {
+  project             = var.project_id
+  name                = "croviq-web"
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  deletion_protection = false
+
+
+  template {
+    service_account = google_service_account.web_runtime.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 5
+    }
+
+    containers {
+      image = var.web_image
+
+      ports {
+        container_port = 8080
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
+        cpu_idle = true
+      }
+
+
+      env {
+        name  = "CROVIQ_ENV"
+        value = "production"
+      }
+
+      env {
+        name  = "ENVIRONMENT"
+        value = "production"
+      }
+
+      env {
+        name  = "GIT_SHA"
+        value = var.git_sha
+      }
+
+      startup_probe {
+        http_get {
+          path = "/health"
+          port = 8080
+        }
+        initial_delay_seconds = 0
+        period_seconds        = 5
+        failure_threshold     = 3
+        timeout_seconds       = 2
+      }
+
+      liveness_probe {
+        http_get {
+          path = "/health"
+          port = 8080
+        }
+        period_seconds    = 15
+        failure_threshold = 3
+        timeout_seconds   = 2
+      }
+    }
+  }
+
+  traffic {
+    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
+    percent = 100
+  }
+
+  depends_on = [
+    google_project_service.required_services,
+    google_artifact_registry_repository.web_repo,
+    google_service_account.web_runtime
+  ]
+
+  lifecycle {
+    ignore_changes = [
+      scaling,
+    ]
+  }
+}
+
+# Public invoker IAM member for Cloud Run Web (traffic authorized via Load Balancer)
+resource "google_cloud_run_v2_service_iam_member" "web_public_invoker" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.web.location
+  name     = google_cloud_run_v2_service.web.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# -----------------------------------------------------------------------------
+# 11. Static Global External IP Address
+# -----------------------------------------------------------------------------
+
+resource "google_compute_global_address" "app_ip" {
+  project     = var.project_id
+  name        = "croviq-app-ip"
+  description = "Static global external IPv4 address for ${var.app_domain} load balancer"
+  ip_version  = "IPV4"
+
+  depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 12. Serverless Network Endpoint Groups (NEGs)
+# -----------------------------------------------------------------------------
+
+resource "google_compute_region_network_endpoint_group" "web_neg" {
+  project               = var.project_id
+  name                  = "croviq-web-neg"
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+
+  cloud_run {
+    service = google_cloud_run_v2_service.web.name
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_compute_region_network_endpoint_group" "api_neg" {
+  project               = var.project_id
+  name                  = "croviq-api-neg"
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+
+  cloud_run {
+    service = google_cloud_run_v2_service.api.name
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 13. Backend Services
+# -----------------------------------------------------------------------------
+
+resource "google_compute_backend_service" "web" {
+  project               = var.project_id
+  name                  = "croviq-web-backend"
+  description           = "Backend service for croviq-web Cloud Run via Serverless NEG"
+  protocol              = "HTTPS"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  enable_cdn            = false
+
+  backend {
+    group = google_compute_region_network_endpoint_group.web_neg.id
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_compute_backend_service" "api" {
+  project               = var.project_id
+  name                  = "croviq-api-backend"
+  description           = "Backend service for croviq-api Cloud Run via Serverless NEG"
+  protocol              = "HTTPS"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  enable_cdn            = false
+
+  backend {
+    group = google_compute_region_network_endpoint_group.api_neg.id
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 14. URL Map (Single-Origin Routing)
+# -----------------------------------------------------------------------------
+
+resource "google_compute_url_map" "app" {
+  project         = var.project_id
+  name            = "croviq-app-url-map"
+  description     = "URL Map for ${var.app_domain} routing /* to croviq-web and /api/* to croviq-api"
+  default_service = google_compute_backend_service.web.id
+
+  host_rule {
+    hosts        = [var.app_domain]
+    path_matcher = "croviq-app-routes"
+  }
+
+  path_matcher {
+    name            = "croviq-app-routes"
+    default_service = google_compute_backend_service.web.id
+
+    path_rule {
+      paths   = ["/api", "/api/*"]
+      service = google_compute_backend_service.api.id
+    }
+  }
+
+  test {
+    service     = google_compute_backend_service.web.id
+    host        = var.app_domain
+    path        = "/"
+    description = "Root path routes to croviq-web"
+  }
+
+  test {
+    service     = google_compute_backend_service.web.id
+    host        = var.app_domain
+    path        = "/dashboard"
+    description = "SPA route routes to croviq-web"
+  }
+
+  test {
+    service     = google_compute_backend_service.api.id
+    host        = var.app_domain
+    path        = "/api/health"
+    description = "/api/* routes to croviq-api"
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 15. Certificate Manager (DNS Authorization and Google-Managed SSL)
+# -----------------------------------------------------------------------------
+
+resource "google_certificate_manager_dns_authorization" "app_dns_auth" {
+  project     = var.project_id
+  name        = "croviq-app-dns-auth"
+  location    = "global"
+  description = "DNS authorization for ${var.app_domain}"
+  domain      = var.app_domain
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_certificate_manager_certificate" "app_cert" {
+  project     = var.project_id
+  name        = "croviq-app-cert"
+  location    = "global"
+  description = "Google-managed SSL certificate for ${var.app_domain}"
+  scope       = "DEFAULT"
+
+  managed {
+    domains = [var.app_domain]
+    dns_authorizations = [
+      google_certificate_manager_dns_authorization.app_dns_auth.id
+    ]
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_certificate_manager_certificate_map" "app_cert_map" {
+  project     = var.project_id
+  name        = "croviq-app-cert-map"
+  description = "Certificate map for ${var.app_domain}"
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_certificate_manager_certificate_map_entry" "app_cert_map_entry" {
+  project      = var.project_id
+  name         = "croviq-app-cert-map-entry"
+  description  = "Certificate map entry for ${var.app_domain}"
+  map          = google_certificate_manager_certificate_map.app_cert_map.name
+  hostname     = var.app_domain
+  certificates = [google_certificate_manager_certificate.app_cert.id]
+
+  depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 16. HTTPS Frontend (Target HTTPS Proxy & Global Forwarding Rule)
+# -----------------------------------------------------------------------------
+
+resource "google_compute_target_https_proxy" "app_https_proxy" {
+  project         = var.project_id
+  name            = "croviq-app-https-proxy"
+  description     = "Target HTTPS proxy for ${var.app_domain}"
+  url_map         = google_compute_url_map.app.id
+  certificate_map = "//certificatemanager.googleapis.com/${google_certificate_manager_certificate_map.app_cert_map.id}"
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_compute_global_forwarding_rule" "app_https_forwarding_rule" {
+  project               = var.project_id
+  name                  = "croviq-app-https-forwarding-rule"
+  description           = "Global HTTPS forwarding rule for ${var.app_domain}"
+  target                = google_compute_target_https_proxy.app_https_proxy.id
+  port_range            = "443"
+  ip_address            = google_compute_global_address.app_ip.address
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+
+  depends_on = [google_project_service.required_services]
+}
+
+# HTTP to HTTPS redirect
+resource "google_compute_url_map" "http_redirect" {
+  project     = var.project_id
+  name        = "croviq-app-http-redirect"
+  description = "HTTP to HTTPS redirect URL map for ${var.app_domain}"
+
+  default_url_redirect {
+    https_redirect         = true
+    strip_query            = false
+    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_compute_target_http_proxy" "http_redirect" {
+  project     = var.project_id
+  name        = "croviq-app-http-proxy"
+  description = "Target HTTP proxy for HTTPS redirection on ${var.app_domain}"
+  url_map     = google_compute_url_map.http_redirect.id
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_compute_global_forwarding_rule" "app_http_forwarding_rule" {
+  project               = var.project_id
+  name                  = "croviq-app-http-forwarding-rule"
+  description           = "Global HTTP forwarding rule for HTTPS redirection on ${var.app_domain}"
+  target                = google_compute_target_http_proxy.http_redirect.id
+  port_range            = "80"
+  ip_address            = google_compute_global_address.app_ip.address
+  load_balancing_scheme = "EXTERNAL_MANAGED"
 
   depends_on = [google_project_service.required_services]
 }

@@ -26,6 +26,18 @@ variable "artifact_registry_repository_id" {
   description = "The Artifact Registry repository ID for API container images."
   default     = "croviq-api"
 }
+variable "artifact_registry_web_repository_id" {
+  type        = string
+  description = "The Artifact Registry repository ID for web container images."
+  default     = "croviq-web"
+}
+
+variable "web_runtime_service_account_id" {
+  type        = string
+  description = "The service account ID for the Cloud Run web runtime."
+  default     = "croviq-web-runtime"
+}
+
 
 variable "api_runtime_service_account_id" {
   type        = string
@@ -72,6 +84,16 @@ variable "api_image" {
     error_message = "The api_image variable must specify an immutable image digest format: e.g., 'us-central1-docker.pkg.dev/PROJECT/REPO/IMAGE@sha256:HEX'."
   }
 }
+variable "web_image" {
+  type        = string
+  description = "The immutable container image reference (must include sha256 digest) for the croviq-web Cloud Run service."
+
+  validation {
+    condition     = can(regex("@sha256:[a-f0-9]{64}$", var.web_image))
+    error_message = "The web_image variable must specify an immutable image digest format: e.g., 'us-central1-docker.pkg.dev/PROJECT/REPO/IMAGE@sha256:HEX'."
+  }
+}
+
 
 variable "git_sha" {
   type        = string
