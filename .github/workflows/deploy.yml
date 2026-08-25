@@ -175,6 +175,6 @@ jobs:
       - name: Verify Live Cloud Run API Health
         run: |
           SERVICE_URL="${{ steps.tf_outputs.outputs.api_service_url }}"
-          echo "Testing live health endpoint: ${SERVICE_URL}/health"
-          RESPONSE=$(curl -fsS -i -H "x-request-id: deploy-verify-${{ steps.resolve-commit.outputs.sha }}" "${SERVICE_URL}/health")
+          echo "Testing live health endpoint: ${SERVICE_URL}/api/health"
+          RESPONSE=$(curl -fsS -i -H "x-request-id: deploy-verify-${{ steps.resolve-commit.outputs.sha }}" "${SERVICE_URL}/api/health")
           echo "$RESPONSE"

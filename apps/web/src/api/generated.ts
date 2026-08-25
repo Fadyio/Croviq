@@ -10,14 +10,14 @@
  */
 
 export interface paths {
-  "/health": {
+  "/api/health": {
     get: {
       responses: {
         200: components["schemas"]["HealthResponse"];
       };
     };
   };
-  "/auth/me": {
+  "/api/auth/me": {
     get: {
       responses: {
         200: components["schemas"]["User"];

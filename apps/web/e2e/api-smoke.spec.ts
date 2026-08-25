@@ -3,10 +3,10 @@ import { test, expect } from "@playwright/test";
 test.describe("API Health Endpoint Smoke", () => {
   const apiBaseUrl = process.env.API_BASE_URL || "http://localhost:8080";
 
-  test("GET /health returns HTTP 200, valid schema, and generated request ID", async ({
+  test("GET /api/health returns HTTP 200, valid schema, and generated request ID", async ({
     request,
   }) => {
-    const response = await request.get(`${apiBaseUrl}/health`);
+    const response = await request.get(`${apiBaseUrl}/api/health`);
 
     expect(response.status(), "API health check must return HTTP 200").toBe(200);
 
@@ -25,9 +25,11 @@ test.describe("API Health Endpoint Smoke", () => {
     expect(data.git_sha.length, "git_sha must not be empty").toBeGreaterThan(0);
   });
 
-  test("GET /health with custom x-request-id returns matching request ID", async ({ request }) => {
+  test("GET /api/health with custom x-request-id returns matching request ID", async ({
+    request,
+  }) => {
     const customRequestId = "e2e-test-request";
-    const response = await request.get(`${apiBaseUrl}/health`, {
+    const response = await request.get(`${apiBaseUrl}/api/health`, {
       headers: {
         "x-request-id": customRequestId,
       },
@@ -47,5 +49,12 @@ test.describe("API Health Endpoint Smoke", () => {
     expect(data.service, "service must be 'croviq-api'").toBe("croviq-api");
     expect(typeof data.git_sha, "git_sha must exist as string").toBe("string");
     expect(data.git_sha.length, "git_sha must not be empty").toBeGreaterThan(0);
+  });
+
+  test("GET /api/auth/me without token returns HTTP 401 Unauthorized", async ({ request }) => {
+    const response = await request.get(`${apiBaseUrl}/api/auth/me`);
+    expect(response.status(), "Unauthorized call to /api/auth/me must return HTTP 401").toBe(401);
+    const data = await response.json();
+    expect(data.detail, "401 response must contain detail").toBeDefined();
   });
 });

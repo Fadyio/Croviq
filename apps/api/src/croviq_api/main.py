@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from croviq_api.auth import auth_router
@@ -6,8 +6,10 @@ from croviq_api.config import get_settings
 from croviq_api.logging import StructuredLoggingMiddleware
 from croviq_api.schemas import HealthResponse
 
-ALLOWED_ORIGINS = [
-    "https://app.croviq.app",
+# In production (ADR-0013), all traffic is routed under single-origin app.croviq.app
+# via Google Cloud Load Balancer, eliminating cross-origin browser CORS dependencies.
+# Local development origins are retained for local developer tooling and API test harnesses.
+LOCAL_DEVELOPMENT_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
@@ -26,13 +28,15 @@ def create_app() -> FastAPI:
     app.add_middleware(StructuredLoggingMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
+        allow_origins=LOCAL_DEVELOPMENT_ORIGINS,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
         allow_headers=["*"],
     )
 
-    @app.get(
+    api_router = APIRouter(prefix="/api")
+
+    @api_router.get(
         "/health",
         response_model=HealthResponse,
         summary="Service Health Check",
@@ -45,8 +49,9 @@ def create_app() -> FastAPI:
             git_sha=settings.git_sha,
         )
 
+    api_router.include_router(auth_router)
 
-    app.include_router(auth_router)
+    app.include_router(api_router)
     return app
 
 

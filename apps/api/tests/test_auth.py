@@ -66,8 +66,8 @@ def extract_auth_logs(captured_stdout: str, request_id: str) -> list[dict[str, A
 
 
 def test_health_remains_public_without_auth(client: TestClient) -> None:
-    """Public /health endpoint must remain accessible without Authorization header."""
-    response = client.get("/health")
+    """Public /api/health endpoint must remain accessible without Authorization header."""
+    response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
@@ -77,7 +77,7 @@ def test_auth_me_missing_authorization_header_returns_401(
 ) -> None:
     """Missing Authorization header must return HTTP 401 Unauthorized."""
     req_id = f"test-missing-auth-{uuid.uuid4().hex}"
-    response = client.get("/auth/me", headers={"x-request-id": req_id})
+    response = client.get("/api/auth/me", headers={"x-request-id": req_id})
     assert response.status_code == 401
     data = response.json()
     assert "detail" in data
@@ -111,7 +111,7 @@ def test_auth_me_malformed_bearer_header_returns_401(
     """Malformed Authorization header must return HTTP 401 Unauthorized."""
     req_id = f"test-malformed-{uuid.uuid4().hex}"
     response = client.get(
-        "/auth/me",
+        "/api/auth/me",
         headers={"Authorization": malformed_header, "x-request-id": req_id},
     )
     assert response.status_code == 401
@@ -142,7 +142,7 @@ def test_auth_me_invalid_token_returns_401(
     req_id = f"test-invalid-token-{uuid.uuid4().hex}"
     raw_token = "invalid-token-xyz-12345"
     response = client.get(
-        "/auth/me",
+        "/api/auth/me",
         headers={"Authorization": f"Bearer {raw_token}", "x-request-id": req_id},
     )
     assert response.status_code == 401
@@ -170,7 +170,7 @@ def test_auth_me_expired_token_returns_401(
     fake_verifier.add_expired_token(expired_token)
 
     response = client.get(
-        "/auth/me",
+        "/api/auth/me",
         headers={"Authorization": f"Bearer {expired_token}", "x-request-id": req_id},
     )
     assert response.status_code == 401
@@ -210,7 +210,7 @@ def test_auth_me_valid_token_returns_canonical_user_200(
     fake_verifier.add_valid_token(valid_token, claims)
 
     response = client.get(
-        "/auth/me",
+        "/api/auth/me",
         headers={"Authorization": f"Bearer {valid_token}", "x-request-id": req_id},
     )
     assert response.status_code == 200
@@ -251,7 +251,7 @@ def test_auth_me_optional_profile_fields_handling(
     fake_verifier.add_valid_token(valid_token, claims)
 
     response = client.get(
-        "/auth/me",
+        "/api/auth/me",
         headers={"Authorization": f"Bearer {valid_token}"},
     )
     assert response.status_code == 200

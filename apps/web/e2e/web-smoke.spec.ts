@@ -10,6 +10,19 @@ test.describe("Web Application Smoke", () => {
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
     const failedRequests: string[] = [];
+    const directBackendRequests: string[] = [];
+    const relativeApiRequests: string[] = [];
+
+    // Capture network requests to verify single-origin routing
+    page.on("request", (req) => {
+      const url = req.url();
+      if (url.includes(":8080")) {
+        directBackendRequests.push(url);
+      }
+      if (url.includes("/api/health")) {
+        relativeApiRequests.push(url);
+      }
+    });
 
     // Capture browser console errors
     page.on("console", (msg) => {
@@ -29,7 +42,6 @@ test.describe("Web Application Smoke", () => {
         `${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "unknown error"}`,
       );
     });
-
     // Navigate to local web frontend
     const targetUrl = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:5173";
     const response = await page.goto(targetUrl, { waitUntil: "networkidle" });
@@ -74,6 +86,15 @@ test.describe("Web Application Smoke", () => {
       `Expected zero failed network requests, found: ${JSON.stringify(failedRequests)}`,
     ).toEqual([]);
 
+    // Verify single-origin routing: browser must use relative /api/health with 0 direct calls to :8080
+    expect(
+      directBackendRequests,
+      `Expected zero direct browser requests to :8080, found: ${JSON.stringify(directBackendRequests)}`,
+    ).toEqual([]);
+    expect(
+      relativeApiRequests.length,
+      "Browser must make at least one request to /api/health",
+    ).toBeGreaterThan(0);
     // Capture screenshot on success
     const screenshotPath = path.resolve(__dirname, "screenshots", "web-smoke.png");
     const screenshotBuffer = await page.screenshot({ path: screenshotPath, fullPage: true });

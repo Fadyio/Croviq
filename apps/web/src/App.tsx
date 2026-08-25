@@ -14,11 +14,9 @@ export const App: React.FC = () => {
   const [healthData, setHealthData] = useState<HealthData | null>(null);
 
   useEffect(() => {
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
-
     const fetchHealth = async () => {
       try {
-        const res = await fetch(`${apiBaseUrl}/health`);
+        const res = await fetch("/api/health");
         if (!res.ok) {
           setApiStatus("unavailable");
           return;
