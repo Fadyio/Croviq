@@ -1,10 +1,7 @@
 """Structured logging for authentication events."""
 
-from datetime import datetime, timezone
 from typing import Any
-
-from croviq_api.config import get_settings
-from croviq_api.logging import determine_severity, log_json_entry
+from croviq_observability import log_auth_event as obs_log_auth_event
 
 
 def log_auth_event(
@@ -16,7 +13,8 @@ def log_auth_event(
     error_code: str | None = None,
     message: str | None = None,
     include_error_code: bool = False,
-) -> None:
+    **extra: Any,
+) -> dict[str, Any]:
     """Log structured authentication event for Google Cloud Logging ingestion.
 
     Guarantees:
@@ -24,31 +22,18 @@ def log_auth_event(
     - Always includes request_id, event_type, status, service, and environment.
     - Includes user_id / authenticated_user_id when available.
     """
-    settings = get_settings()
-    timestamp = datetime.now(timezone.utc).isoformat()
-    severity = determine_severity(status)
-
     uid = user_id or authenticated_user_id
-
-    payload: dict[str, Any] = {
-        "timestamp": timestamp,
-        "severity": severity,
-        "service": settings.service_name,
-        "environment": settings.environment,
-        "event_type": event_type,
-        "status": status,
-        "request_id": request_id,
-        "git_sha": settings.git_sha,
-    }
-
+    extra_fields = dict(extra)
     if uid is not None:
-        payload["user_id"] = uid
-        payload["authenticated_user_id"] = uid
+        extra_fields["authenticated_user_id"] = uid
 
-    if error_code is not None or include_error_code:
-        payload["error_code"] = error_code
-
-    if message is not None:
-        payload["message"] = message
-
-    log_json_entry(payload)
+    return obs_log_auth_event(
+        event_type=event_type,
+        status=status,
+        request_id=request_id,
+        user_id=uid,
+        error_code=error_code,
+        message=message,
+        include_error_code=include_error_code,
+        **extra_fields,
+    )

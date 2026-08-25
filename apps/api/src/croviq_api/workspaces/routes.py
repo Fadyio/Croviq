@@ -25,9 +25,21 @@ async def get_or_provision_default_workspace(
 ) -> Workspace:
     """Look up workspace belonging to verified uid; if it does not exist, create exactly one default Workspace."""
     request_id = getattr(request.state, "request_id", "unknown")
-    workspace, created = await repo.get_or_create_default_workspace(
-        current_user, default_name="Croviq Demo Workspace"
-    )
+    try:
+        workspace, created = await repo.get_or_create_default_workspace(
+            current_user, default_name="Croviq Demo Workspace"
+        )
+    except Exception as exc:
+        log_workspace_event(
+            event_type="workspace.load_failed",
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            request_id=request_id,
+            user_id=current_user.user_id,
+            error_code="workspace_load_failed",
+            message=f"Failed to load or provision workspace for user {current_user.user_id}: {type(exc).__name__}",
+            exception=exc,
+        )
+        raise
 
     if created:
         log_workspace_event(

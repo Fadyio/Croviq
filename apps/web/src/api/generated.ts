@@ -67,6 +67,11 @@ export interface components {
       /** Custom production instructions and brand guidelines */
       custom_instructions?: string | null;
     };
+    ClientErrorEvent: {
+      event_type: "client.error";
+      error_code?: string | null;
+      message?: string | null;
+    };
     HTTPValidationError: {
       detail?: components["schemas"]["ValidationError"][];
     };

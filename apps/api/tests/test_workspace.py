@@ -385,3 +385,49 @@ async def test_firestore_repository_async_methods() -> None:
     assert ws_set_args["owner_user_id"] == "uid_firestore_1"
     assert ws_set_args["name"] == "Firestore Workspace"
     assert ws_set_args["brand_kit"]["tone"] == ["bold"]
+
+
+def test_firestore_repository_client_instantiation_omits_default_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FirestoreWorkspaceRepository must omit database argument when database is '(default)' or empty."""
+    from unittest.mock import MagicMock
+    import google.cloud.firestore
+
+    mock_async_client_cls = MagicMock()
+    monkeypatch.setattr(google.cloud.firestore, "AsyncClient", mock_async_client_cls)
+
+    # 1. Default configured database "(default)" with project_id
+    repo_default = FirestoreWorkspaceRepository(project_id="croviq-prod", database="(default)")
+    _ = repo_default.client
+    mock_async_client_cls.assert_called_once_with(project="croviq-prod")
+    mock_async_client_cls.reset_mock()
+
+    # 2. Implicit default database with project_id
+    repo_implicit = FirestoreWorkspaceRepository(project_id="croviq-prod")
+    _ = repo_implicit.client
+    mock_async_client_cls.assert_called_once_with(project="croviq-prod")
+    mock_async_client_cls.reset_mock()
+
+    # 3. Empty string database with project_id
+    repo_empty = FirestoreWorkspaceRepository(project_id="croviq-prod", database="")
+    _ = repo_empty.client
+    mock_async_client_cls.assert_called_once_with(project="croviq-prod")
+    mock_async_client_cls.reset_mock()
+
+    # 4. Custom named database with project_id
+    repo_custom = FirestoreWorkspaceRepository(project_id="croviq-prod", database="custom-db")
+    _ = repo_custom.client
+    mock_async_client_cls.assert_called_once_with(project="croviq-prod", database="custom-db")
+    mock_async_client_cls.reset_mock()
+
+    # 5. Default database without project_id
+    repo_no_proj_default = FirestoreWorkspaceRepository(database="(default)")
+    _ = repo_no_proj_default.client
+    mock_async_client_cls.assert_called_once_with()
+    mock_async_client_cls.reset_mock()
+
+    # 6. Custom named database without project_id
+    repo_no_proj_custom = FirestoreWorkspaceRepository(database="custom-db")
+    _ = repo_no_proj_custom.client
+    mock_async_client_cls.assert_called_once_with(database="custom-db")

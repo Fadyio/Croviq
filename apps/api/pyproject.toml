@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "croviq-domain",
+    "croviq-observability",
     "fastapi>=0.115.0",
     "firebase-admin>=7.5.0",
     "pydantic>=2.10.0",
@@ -12,6 +13,7 @@ dependencies = [
 
 [tool.uv.sources]
 croviq-domain = { path = "../../packages/domain", editable = true }
+croviq-observability = { path = "../../packages/observability", editable = true }
 
 [build-system]
 requires = ["hatchling"]

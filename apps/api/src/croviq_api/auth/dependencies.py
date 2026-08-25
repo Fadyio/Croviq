@@ -40,7 +40,7 @@ def get_current_principal(
     # 1. Missing Authorization header
     if not auth_header or not auth_header.strip():
         log_auth_event(
-            event_type="auth.verification_failed",
+            event_type="auth.login_failed",
             status=status.HTTP_401_UNAUTHORIZED,
             request_id=request_id,
             error_code="missing_authorization_header",
@@ -57,7 +57,7 @@ def get_current_principal(
     parts = raw_header.split()
     if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
         log_auth_event(
-            event_type="auth.verification_failed",
+            event_type="auth.login_failed",
             status=status.HTTP_401_UNAUTHORIZED,
             request_id=request_id,
             error_code="malformed_authorization_header",
@@ -75,6 +75,7 @@ def get_current_principal(
     try:
         claims = verifier.verify_token(token)
         principal = AuthenticatedPrincipal.from_claims(claims)
+        request.state.user_id = principal.uid
         log_auth_event(
             event_type="auth.login_verified",
             status=status.HTTP_200_OK,
@@ -85,7 +86,7 @@ def get_current_principal(
         )
     except ExpiredTokenError:
         log_auth_event(
-            event_type="auth.verification_failed",
+            event_type="auth.login_failed",
             status=status.HTTP_401_UNAUTHORIZED,
             request_id=request_id,
             error_code="expired_token",
@@ -98,7 +99,7 @@ def get_current_principal(
         )
     except (InvalidTokenError, AuthError, Exception):
         log_auth_event(
-            event_type="auth.verification_failed",
+            event_type="auth.login_failed",
             status=status.HTTP_401_UNAUTHORIZED,
             request_id=request_id,
             error_code="invalid_token",

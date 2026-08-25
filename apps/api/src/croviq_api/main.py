@@ -6,6 +6,7 @@ from croviq_api.auth import DemoAccessRestrictedError, auth_router
 from croviq_api.auth.logging import log_auth_event
 from croviq_api.config import get_settings
 from croviq_api.logging import StructuredLoggingMiddleware
+from croviq_observability import register_error_handlers
 from croviq_api.schemas import ClientAuthEvent, HealthResponse
 from croviq_api.workspaces import workspace_router
 # via Google Cloud Load Balancer, eliminating cross-origin browser CORS dependencies.
@@ -37,6 +38,8 @@ def create_app() -> FastAPI:
                 "message": exc.message,
             },
         )
+    register_error_handlers(app)
+
 
     app.add_middleware(StructuredLoggingMiddleware)
     app.add_middleware(

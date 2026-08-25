@@ -94,7 +94,7 @@ def test_auth_me_missing_authorization_header_returns_401(
     auth_logs = extract_auth_logs(captured.out, req_id)
     assert len(auth_logs) == 1
     log = auth_logs[0]
-    assert log["event_type"] == "auth.verification_failed"
+    assert log["event_type"] == "auth.login_failed"
     assert log["status"] == 401
     assert log["error_code"] == "missing_authorization_header"
     assert "user_id" not in log or log["user_id"] is None
@@ -128,7 +128,7 @@ def test_auth_me_malformed_bearer_header_returns_401(
     auth_logs = extract_auth_logs(captured.out, req_id)
     assert len(auth_logs) == 1
     log = auth_logs[0]
-    assert log["event_type"] == "auth.verification_failed"
+    assert log["event_type"] == "auth.login_failed"
     assert log["status"] == 401
     assert log["error_code"] == "malformed_authorization_header"
 
@@ -159,7 +159,7 @@ def test_auth_me_invalid_token_returns_401(
     auth_logs = extract_auth_logs(captured.out, req_id)
     assert len(auth_logs) == 1
     log = auth_logs[0]
-    assert log["event_type"] == "auth.verification_failed"
+    assert log["event_type"] == "auth.login_failed"
     assert log["status"] == 401
     assert log["error_code"] == "invalid_token"
 
@@ -187,7 +187,7 @@ def test_auth_me_expired_token_returns_401(
     auth_logs = extract_auth_logs(captured.out, req_id)
     assert len(auth_logs) == 1
     log = auth_logs[0]
-    assert log["event_type"] == "auth.verification_failed"
+    assert log["event_type"] == "auth.login_failed"
     assert log["status"] == 401
     assert log["error_code"] == "expired_token"
 

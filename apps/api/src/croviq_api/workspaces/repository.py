@@ -2,10 +2,12 @@
 
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import Any
 import os
+import time
+from typing import Any
 
 from croviq_api.config import get_settings
+from croviq_observability import log_firestore_event
 from croviq_domain.brand_kit import BrandKit
 from croviq_domain.user import User
 from croviq_domain.workspace import Workspace
@@ -163,65 +165,194 @@ class FirestoreWorkspaceRepository(WorkspaceRepository):
         if self._client is None:
             from google.cloud.firestore import AsyncClient
 
+            kwargs: dict[str, Any] = {}
             if self._project_id:
-                self._client = AsyncClient(project=self._project_id, database=self._database)
-            else:
-                self._client = AsyncClient(database=self._database)
+                kwargs["project"] = self._project_id
+            if self._database and self._database != "(default)":
+                kwargs["database"] = self._database
+
+            self._client = AsyncClient(**kwargs)
         return self._client
 
     async def get_user_workspace(self, owner_user_id: str) -> Workspace | None:
-        query = (
-            self.client.collection("workspaces")
-            .where("owner_user_id", "==", owner_user_id)
-            .limit(1)
-        )
-        docs = [doc async for doc in query.stream()]
-        if docs:
-            return self.workspace_from_dict(docs[0].to_dict())
-        return None
+        start_time = time.perf_counter()
+        try:
+            query = (
+                self.client.collection("workspaces")
+                .where("owner_user_id", "==", owner_user_id)
+                .limit(1)
+            )
+            docs = [doc async for doc in query.stream()]
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.read",
+                collection="workspaces",
+                operation="query",
+                status=200,
+                latency_ms=latency_ms,
+                message=f"Queried workspace for owner {owner_user_id}",
+            )
+            if docs:
+                return self.workspace_from_dict(docs[0].to_dict())
+            return None
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.error",
+                collection="workspaces",
+                operation="query",
+                status=500,
+                latency_ms=latency_ms,
+                exception=exc,
+                error_code="firestore_query_error",
+                message=f"Firestore query error for owner {owner_user_id}: {type(exc).__name__}",
+            )
+            raise
 
     async def get_workspace_by_id(self, workspace_id: str) -> Workspace | None:
-        doc_ref = self.client.collection("workspaces").document(workspace_id)
-        doc = await doc_ref.get()
-        if doc.exists:
-            return self.workspace_from_dict(doc.to_dict())
-        return None
+        start_time = time.perf_counter()
+        try:
+            doc_ref = self.client.collection("workspaces").document(workspace_id)
+            doc = await doc_ref.get()
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.read",
+                collection="workspaces",
+                operation="get",
+                document_id=workspace_id,
+                status=200,
+                latency_ms=latency_ms,
+                message=f"Fetched workspace {workspace_id}",
+            )
+            if doc.exists:
+                return self.workspace_from_dict(doc.to_dict())
+            return None
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.error",
+                collection="workspaces",
+                operation="get",
+                document_id=workspace_id,
+                status=500,
+                latency_ms=latency_ms,
+                exception=exc,
+                error_code="firestore_get_error",
+                message=f"Firestore get error for workspace {workspace_id}: {type(exc).__name__}",
+            )
+            raise
 
     async def create_workspace(self, workspace: Workspace) -> Workspace:
-        doc_ref = self.client.collection("workspaces").document(workspace.workspace_id)
-        data = {
-            "workspace_id": workspace.workspace_id,
-            "owner_user_id": workspace.owner_user_id,
-            "name": workspace.name,
-            "channel_description": workspace.channel_description,
-            "brand_kit": workspace.brand_kit.model_dump(),
-            "created_at": workspace.created_at.isoformat(),
-            "updated_at": workspace.updated_at.isoformat(),
-        }
-        await doc_ref.set(data)
-        return workspace
+        start_time = time.perf_counter()
+        try:
+            doc_ref = self.client.collection("workspaces").document(workspace.workspace_id)
+            data = {
+                "workspace_id": workspace.workspace_id,
+                "owner_user_id": workspace.owner_user_id,
+                "name": workspace.name,
+                "channel_description": workspace.channel_description,
+                "brand_kit": workspace.brand_kit.model_dump(),
+                "created_at": workspace.created_at.isoformat(),
+                "updated_at": workspace.updated_at.isoformat(),
+            }
+            await doc_ref.set(data)
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.write",
+                collection="workspaces",
+                operation="set",
+                document_id=workspace.workspace_id,
+                status=200,
+                latency_ms=latency_ms,
+                message=f"Created workspace document {workspace.workspace_id}",
+            )
+            return workspace
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.error",
+                collection="workspaces",
+                operation="set",
+                document_id=workspace.workspace_id,
+                status=500,
+                latency_ms=latency_ms,
+                exception=exc,
+                error_code="firestore_write_error",
+                message=f"Firestore set error for workspace {workspace.workspace_id}: {type(exc).__name__}",
+            )
+            raise
 
     async def save_user(self, user: User) -> User:
-        doc_ref = self.client.collection("users").document(user.user_id)
-        data = {
-            "user_id": user.user_id,
-            "email": str(user.email),
-            "display_name": user.display_name,
-            "avatar_url": user.avatar_url,
-            "created_at": user.created_at.isoformat(),
-            "updated_at": user.updated_at.isoformat(),
-        }
-        await doc_ref.set(data, merge=True)
-        return user
+        start_time = time.perf_counter()
+        try:
+            doc_ref = self.client.collection("users").document(user.user_id)
+            data = {
+                "user_id": user.user_id,
+                "email": str(user.email),
+                "display_name": user.display_name,
+                "avatar_url": user.avatar_url,
+                "created_at": user.created_at.isoformat(),
+                "updated_at": user.updated_at.isoformat(),
+            }
+            await doc_ref.set(data, merge=True)
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.write",
+                collection="users",
+                operation="set_merge",
+                document_id=user.user_id,
+                status=200,
+                latency_ms=latency_ms,
+                message=f"Saved user document {user.user_id}",
+            )
+            return user
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.error",
+                collection="users",
+                operation="set_merge",
+                document_id=user.user_id,
+                status=500,
+                latency_ms=latency_ms,
+                exception=exc,
+                error_code="firestore_write_error",
+                message=f"Firestore save error for user {user.user_id}: {type(exc).__name__}",
+            )
+            raise
 
     async def get_user(self, user_id: str) -> User | None:
-        doc_ref = self.client.collection("users").document(user_id)
-        doc = await doc_ref.get()
-        if doc.exists:
-            return self.user_from_dict(doc.to_dict())
-        return None
-
-
+        start_time = time.perf_counter()
+        try:
+            doc_ref = self.client.collection("users").document(user_id)
+            doc = await doc_ref.get()
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.read",
+                collection="users",
+                operation="get",
+                document_id=user_id,
+                status=200,
+                latency_ms=latency_ms,
+                message=f"Fetched user {user_id}",
+            )
+            if doc.exists:
+                return self.user_from_dict(doc.to_dict())
+            return None
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.error",
+                collection="users",
+                operation="get",
+                document_id=user_id,
+                status=500,
+                latency_ms=latency_ms,
+                exception=exc,
+                error_code="firestore_get_error",
+                message=f"Firestore get error for user {user_id}: {type(exc).__name__}",
+            )
+            raise
 _global_workspace_repo: WorkspaceRepository | None = None
 
 
