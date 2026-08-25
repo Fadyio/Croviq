@@ -1,11 +1,13 @@
 # Croviq
 
-Production hostname:
-app.croviq.app
+Production entrypoint:
+https://app.croviq.app (Google Cloud Global External Application Load Balancer)
+
+Architecture:
+Cloudflare (DNS Only) → Google Global External Application Load Balancer → Serverless NEGs → Cloud Run (croviq-web: /*, croviq-api: /api/*)
 
 Infrastructure:
-Terraform
-
+Terraform (Google Cloud)
 Production GCP project:
 croviq-506602
 

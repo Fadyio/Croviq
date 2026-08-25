@@ -7,8 +7,8 @@ Croviq encompasses client-side video editing interfaces, deterministic workflow 
 We adopt a modular monorepo structure with explicit boundaries:
 ```
 apps/
-  web/              # React + Vite + TypeScript frontend (pnpm)
-  api/              # Python 3.12 + FastAPI Cloud Run service (uv)
+  web/              # React + Vite + TypeScript frontend containerized for Cloud Run (pnpm)
+  api/              # Python 3.12 + FastAPI backend Cloud Run service (uv)
 
 packages/
   domain/           # Python / Pydantic models (canonical backend/domain contracts)
