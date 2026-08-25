@@ -122,6 +122,20 @@ resource "google_project_iam_member" "deployer_security_reviewer" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
+# Allow deployment service account to administer Identity Platform configuration
+resource "google_project_iam_member" "deployer_identity_admin" {
+  project = var.project_id
+  role    = "roles/identityplatform.admin"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Allow deployment service account to administer Firestore database
+resource "google_project_iam_member" "deployer_datastore_owner" {
+  project = var.project_id
+  role    = "roles/datastore.owner"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 
 
 # -----------------------------------------------------------------------------
