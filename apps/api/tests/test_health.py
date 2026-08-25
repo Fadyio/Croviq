@@ -87,3 +87,14 @@ def test_not_found_returns_404_and_structured_log(client: TestClient, capsys: py
     log = structured_logs[0]
     assert log["status"] == 404
     assert log["severity"] == "WARNING"
+
+
+def test_environment_and_git_sha_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CROVIQ_ENV", "production")
+    monkeypatch.setenv("GIT_SHA", "testsha1234567890abcdef")
+    from croviq_api.config import get_settings
+    get_settings.cache_clear()
+    settings = get_settings()
+    assert settings.environment == "production"
+    assert settings.git_sha == "testsha1234567890abcdef"
+    get_settings.cache_clear()

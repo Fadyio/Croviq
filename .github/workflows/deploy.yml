@@ -1,0 +1,142 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: "Git commit SHA to deploy (defaults to HEAD)"
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deployment-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-api:
+    name: Deploy Cloud Run API
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+    steps:
+      - name: Resolve Target Commit SHA
+        id: resolve-commit
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.git_sha }}" ]; then
+            echo "sha=${{ github.event.inputs.git_sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve-commit.outputs.sha }}
+
+      - name: Authenticate to Google Cloud via WIF
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/705994694330/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider"
+          service_account: "croviq-github-deployer@croviq-506602.iam.gserviceaccount.com"
+          token_format: "access_token"
+
+      - name: Authenticate Docker to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: "us-central1-docker.pkg.dev"
+          username: "oauth2accesstoken"
+          password: "${{ steps.auth.outputs.access_token }}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Production API Image
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/api
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            us-central1-docker.pkg.dev/croviq-506602/croviq-api/croviq-api:${{ steps.resolve-commit.outputs.sha }}
+            us-central1-docker.pkg.dev/croviq-506602/croviq-api/croviq-api:latest
+
+      - name: Record Container Metadata
+        id: meta
+        run: |
+          DIGEST="${{ steps.docker_build.outputs.digest }}"
+          IMAGE_URI="us-central1-docker.pkg.dev/croviq-506602/croviq-api/croviq-api@${DIGEST}"
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "=========================================="
+          echo "Git SHA: ${{ steps.resolve-commit.outputs.sha }}"
+          echo "Image Tag: ${{ steps.resolve-commit.outputs.sha }}"
+          echo "Image Digest: ${DIGEST}"
+          echo "Immutable Image URI: ${IMAGE_URI}"
+          echo "=========================================="
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - name: Terraform Init
+        working-directory: infra
+        run: |
+          terraform init \
+            -backend-config="bucket=croviq-506602-croviq-tfstate" \
+            -backend-config="prefix=croviq/main"
+
+      - name: Terraform Plan
+        id: tf_plan
+        working-directory: infra
+        run: |
+          terraform plan \
+            -var="project_id=croviq-506602" \
+            -var="region=us-central1" \
+            -var="api_image=${{ steps.meta.outputs.image_uri }}" \
+            -var="git_sha=${{ steps.resolve-commit.outputs.sha }}" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        id: tf_apply
+        working-directory: infra
+        run: |
+          terraform apply -auto-approve tfplan
+
+      - name: Capture Outputs
+        id: tf_outputs
+        working-directory: infra
+        run: |
+          SERVICE_URL=$(terraform output -raw cloud_run_url)
+          SERVICE_NAME=$(terraform output -raw cloud_run_service_name)
+          REVISION=$(terraform output -raw cloud_run_latest_revision)
+          echo "service_url=${SERVICE_URL}" >> $GITHUB_OUTPUT
+          echo "service_name=${SERVICE_NAME}" >> $GITHUB_OUTPUT
+          echo "revision=${REVISION}" >> $GITHUB_OUTPUT
+          echo "=========================================="
+          echo "Cloud Run Service: ${SERVICE_NAME}"
+          echo "Cloud Run Revision: ${REVISION}"
+          echo "Cloud Run URL: ${SERVICE_URL}"
+          echo "=========================================="
+
+      - name: Set up Cloud SDK for Read-Only Inspection
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify Live Cloud Run API Health
+        run: |
+          SERVICE_URL="${{ steps.tf_outputs.outputs.service_url }}"
+          echo "Testing live health endpoint: ${SERVICE_URL}/health"
+          RESPONSE=$(curl -fsS -i -H "x-request-id: deploy-verify-${{ steps.resolve-commit.outputs.sha }}" "${SERVICE_URL}/health")
+          echo "$RESPONSE"

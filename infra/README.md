@@ -89,6 +89,8 @@ terraform apply
 | `workload_identity_pool_provider_id` | `string` | `"github-actions-provider"` | Workload Identity Provider ID for GitHub Actions |
 | `github_repository_owner` | `string` | `"Fadyio"` | GitHub repository owner (org/user) |
 | `github_repository_name` | `string` | `"Croviq"` | GitHub repository name |
+| `api_image` | `string` | *(required)* | Immutable container image reference with `@sha256:` digest for Cloud Run |
+| `git_sha` | `string` | `""` | Git commit SHA deployed to Cloud Run |
 
 ## Outputs (Main Stack)
 
@@ -99,3 +101,6 @@ terraform apply
 | `runtime_service_account_email` | Email of the Cloud Run API runtime service account |
 | `deploy_service_account_email` | Email of the GitHub Actions deployment service account |
 | `workload_identity_provider` | Full identifier of the Workload Identity Provider for GitHub Actions OIDC |
+| `cloud_run_service_name` | Name of the Cloud Run API service |
+| `cloud_run_url` | Live HTTPS URL of the deployed Cloud Run API service |
+| `cloud_run_latest_revision` | Latest created revision identifier of the Cloud Run API service |

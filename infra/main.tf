@@ -91,6 +91,13 @@ resource "google_service_account_iam_member" "deployer_sa_user" {
   member             = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
+# Allow deployment service account to manage Terraform state objects in the state bucket
+resource "google_storage_bucket_iam_member" "deployer_tfstate_user" {
+  bucket = "${var.project_id}-croviq-tfstate"
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 # -----------------------------------------------------------------------------
 # 5. Workload Identity Federation (GitHub Actions OIDC)
 # -----------------------------------------------------------------------------
@@ -132,4 +139,101 @@ resource "google_service_account_iam_member" "github_wif_user" {
   service_account_id = google_service_account.github_deployer.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_pool.name}/attribute.repository/${var.github_repository_owner}/${var.github_repository_name}"
+}
+
+# -----------------------------------------------------------------------------
+# 6. Cloud Run API Service
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_v2_service" "api" {
+  project  = var.project_id
+  name     = "croviq-api"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_ALL"
+
+  template {
+    service_account = google_service_account.api_runtime.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 5
+    }
+
+    containers {
+      image = var.api_image
+
+      ports {
+        container_port = 8080
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
+        cpu_idle = true
+      }
+
+      env {
+        name  = "CROVIQ_ENV"
+        value = "production"
+      }
+
+      env {
+        name  = "ENVIRONMENT"
+        value = "production"
+      }
+
+      env {
+        name  = "GIT_SHA"
+        value = var.git_sha
+      }
+
+      env {
+        name  = "PORT"
+        value = "8080"
+      }
+
+      startup_probe {
+        http_get {
+          path = "/health"
+          port = 8080
+        }
+        initial_delay_seconds = 0
+        period_seconds        = 5
+        failure_threshold     = 3
+        timeout_seconds       = 2
+      }
+
+      liveness_probe {
+        http_get {
+          path = "/health"
+          port = 8080
+        }
+        period_seconds    = 15
+        failure_threshold = 3
+        timeout_seconds   = 2
+      }
+    }
+  }
+
+  traffic {
+    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
+    percent = 100
+  }
+
+  depends_on = [
+    google_project_service.required_services,
+    google_artifact_registry_repository.api_repo,
+    google_service_account.api_runtime
+  ]
+}
+
+# Public invoker IAM member for Cloud Run API
+resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.api.location
+  name     = google_cloud_run_v2_service.api.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }

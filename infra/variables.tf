@@ -62,3 +62,19 @@ variable "github_repository_name" {
   description = "The GitHub repository name."
   default     = "Croviq"
 }
+
+variable "api_image" {
+  type        = string
+  description = "The immutable container image reference (must include sha256 digest) for the croviq-api Cloud Run service."
+
+  validation {
+    condition     = can(regex("@sha256:[a-f0-9]{64}$", var.api_image))
+    error_message = "The api_image variable must specify an immutable image digest format: e.g., 'us-central1-docker.pkg.dev/PROJECT/REPO/IMAGE@sha256:HEX'."
+  }
+}
+
+variable "git_sha" {
+  type        = string
+  description = "The Git commit SHA associated with the deployed revision."
+  default     = ""
+}
