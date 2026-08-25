@@ -12,12 +12,12 @@ Earlier architectural drafts assumed a unified TypeScript stack across both fron
 ## Decision
 We adopt a Python 3.12 + FastAPI backend architecture with OpenAPI-generated client contracts:
 
-1. **Backend Runtime & Framework**: Python 3.12 and FastAPI power the API server, Deterministic Workflow Engine, agent coordinators, and media processing services (`apps/api`).
+1. **Backend Runtime & Framework**: Python 3.12 and FastAPI power the API server, Deterministic Workflow Engine, agent coordinators, and media processing services (`apps/api`). FastAPI natively owns and registers endpoints under the `/api` prefix (e.g. `/api/health`, `/api/auth/me`, `/api/workspaces`), aligning directly with the Google Cloud Load Balancer single-origin routing rules (ADR-0013).
 2. **Python Package & Toolchain Management**: `uv` is the standardized package and project manager for all Python workspaces and virtual environments.
 3. **Canonical Domain Schemas**: `packages/domain` contains canonical Pydantic v2 models defining all domain entities (`Mission`, `Run`, `Job`, `Artifact`, `EDL`, `QAReport`, `Lesson`, `Event`). Pydantic models are the single source of truth for all backend contracts.
 4. **Contract-First API Interface (OpenAPI)**: FastAPI automatically generates the OpenAPI specification from the canonical Pydantic models and route signatures.
-5. **Generated Frontend Contracts**: TypeScript types and API client code for `apps/web` will be generated directly from the OpenAPI schema. We strictly prohibit maintaining hand-written duplicate TypeScript domain schemas.
-6. **Frontend Runtime & Toolchain**: The frontend (`apps/web`) remains React + Vite + TypeScript, managed with `pnpm`.
+5. **Generated Frontend Contracts**: TypeScript types and API client code for `apps/web` are generated directly from the FastAPI OpenAPI schema. Frontend data fetching strictly targets relative `/api/...` endpoints on the single origin `https://app.croviq.app`, eliminating build-time direct backend hostnames. We strictly prohibit maintaining hand-written duplicate TypeScript domain schemas.
+6. **Frontend Runtime & Toolchain**: The frontend (`apps/web`) remains React + Vite + TypeScript, managed with `pnpm` and containerized for Cloud Run.
 7. **Modular Python Packages**:
    - `packages/domain`: Python / Pydantic models (canonical backend/domain contracts).
    - `packages/engine`: Python (deterministic workflow engine state machine and approval gate).

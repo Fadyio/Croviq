@@ -7,7 +7,8 @@ This directory contains the canonical Terraform configuration for provisioning C
 - **No Hardcoded Project IDs**: All configurations are parameterized via variables.
 - **Judge & Developer Reproducibility**: Evaluators can deploy a complete Croviq stack into their own Google Cloud project.
 - **Remote State Management**: Terraform state is securely stored in a private, versioned Google Cloud Storage bucket with uniform bucket-level access and deletion protection.
-- **Decoupled Architecture**: Infrastructure foundation (APIs, Artifact Registry, IAM, Workload Identity Federation) is managed without deploying placeholder images. Cloud Run services are deployed using immutable container image digests.
+- **Decoupled Architecture**: Infrastructure foundation (APIs, Artifact Registry, IAM, Workload Identity Federation, Global External Application Load Balancer with Serverless NEGs) is managed cleanly via Terraform. Both `croviq-web` (React/Vite) and `croviq-api` (Python/FastAPI) are deployed to Cloud Run behind a single HTTPS origin (`https://app.croviq.app`) via path-based routing (`/*` and `/api/*`).
+- **DNS Only on Cloudflare**: Cloudflare provides authoritative DNS only. All runtime execution, TLS certificates, load balancing, and application services run entirely on Google Cloud (ADR-0013).
 - **Keyless Authentication**: Workload Identity Federation (WIF) eliminates long-lived service account JSON keys for CI/CD.
 
 ## Reproducible Fresh-Project Deployment

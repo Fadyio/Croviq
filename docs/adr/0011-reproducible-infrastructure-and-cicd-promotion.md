@@ -9,14 +9,14 @@ Croviq relies on cloud services (Cloud Run, Cloud Storage, Firestore, Vertex AI,
 3. **Production Target Baseline**:
    - Production Google Cloud project: `croviq-506602` (specified only via production variable configuration).
    - Primary region: `us-central1`.
-   - Production application hostname: `app.croviq.app`.
+   - Production application entrypoint: `https://app.croviq.app` hosted via Google Global External Application Load Balancer routing to Cloud Run services `croviq-web` (`/*`) and `croviq-api` (`/api/*`) under a single origin (ADR-0013).
    - Root domain `croviq.app` remains independent and reserved for marketing/documentation.
 4. **CI/CD Promotion & GitHub Actions**:
    - GitHub Actions is the sole promotion mechanism for production deployments.
    - Every merge to `main` runs automated quality gates (formatting, linting, typechecking, tests, terraform validation).
    - Terraform plans are validated in CI; deployments apply infrastructure changes idempotently.
 5. **Secure Authentication**: Production GCP deployments from GitHub Actions will use Google Cloud Workload Identity Federation, eliminating long-lived service account JSON keys.
-6. **Edge & Cloudflare Decoupling**: Cloudflare edge routing and DNS are managed and deployed independently from Google Cloud infrastructure.
+6. **Authoritative DNS Only (Cloudflare)**: Cloudflare serves strictly as authoritative DNS pointing `app.croviq.app` to the Google Global External Application Load Balancer IP. Cloudflare does not host or execute application code (no Cloudflare Workers, Pages, KV, or R2).
 7. **Traceability & Proof of Action**: Every deployed container and infrastructure revision is stamped with its Git commit SHA and emitted in structured logs.
 8. **Judge & Developer Portability**: External evaluators and developers must be able to deploy a complete, functional instance of Croviq into their own Google Cloud projects using only documented Terraform variables and setup commands.
 
