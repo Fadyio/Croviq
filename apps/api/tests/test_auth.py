@@ -6,9 +6,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from croviq_api.main import create_app
+from croviq_api.auth.exceptions import ExpiredTokenError, InvalidTokenError
 from croviq_api.auth.verifier import TokenVerifier, get_token_verifier
-from croviq_api.auth.exceptions import InvalidTokenError, ExpiredTokenError
+from croviq_api.config import get_settings
+from croviq_api.main import create_app
 
 
 class FakeTokenVerifier(TokenVerifier):
@@ -32,6 +33,12 @@ class FakeTokenVerifier(TokenVerifier):
         raise InvalidTokenError("Invalid token")
 
 
+@pytest.fixture(autouse=True)
+def configure_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CROVIQ_ALLOWED_EMAILS", "fadynagh10@gmail.com")
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def fake_verifier() -> FakeTokenVerifier:
     return FakeTokenVerifier()
@@ -42,7 +49,6 @@ def app(fake_verifier: FakeTokenVerifier) -> FastAPI:
     application = create_app()
     application.dependency_overrides[get_token_verifier] = lambda: fake_verifier
     return application
-
 
 @pytest.fixture
 def client(app: FastAPI) -> TestClient:
@@ -91,7 +97,7 @@ def test_auth_me_missing_authorization_header_returns_401(
     assert log["event_type"] == "auth.verification_failed"
     assert log["status"] == 401
     assert log["error_code"] == "missing_authorization_header"
-    assert "authenticated_user_id" not in log or log["authenticated_user_id"] is None
+    assert "user_id" not in log or log["user_id"] is None
 
 
 @pytest.mark.parametrize(
@@ -189,20 +195,21 @@ def test_auth_me_expired_token_returns_401(
     assert expired_token not in captured.out
 
 
-def test_auth_me_valid_token_returns_canonical_user_200(
+def test_auth_me_allowed_verified_account_returns_canonical_user_200(
     client: TestClient, fake_verifier: FakeTokenVerifier, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Valid token returns HTTP 200 with canonical User entity matching verified claims."""
+    """Allowed verified account returns HTTP 200 with canonical User entity matching verified claims."""
     req_id = f"test-valid-user-{uuid.uuid4().hex}"
     valid_token = "valid-token-jwt-secret-xyz"
     user_uid = "firebase_user_abc123"
-    user_email = "alex@example.com"
-    user_name = "Alex Developer"
+    user_email = "fadynagh10@gmail.com"
+    user_name = "Fady Nagh"
     user_picture = "https://lh3.googleusercontent.com/a/photo.jpg"
 
     claims = {
         "uid": user_uid,
         "email": user_email,
+        "email_verified": True,
         "name": user_name,
         "picture": user_picture,
         "auth_time": int(datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc).timestamp()),
@@ -227,26 +234,108 @@ def test_auth_me_valid_token_returns_canonical_user_200(
     auth_logs = extract_auth_logs(captured.out, req_id)
     assert len(auth_logs) == 1
     log = auth_logs[0]
-    assert log["event_type"] == "auth.verification_succeeded"
+    assert log["event_type"] == "auth.access_allowed"
     assert log["status"] == 200
-    assert log["authenticated_user_id"] == user_uid
+    assert log["user_id"] == user_uid
 
     # Verify no token leakage
     assert valid_token not in captured.out
 
 
-def test_auth_me_optional_profile_fields_handling(
-    client: TestClient, fake_verifier: FakeTokenVerifier
+def test_auth_me_valid_but_different_email_returns_403(
+    client: TestClient, fake_verifier: FakeTokenVerifier, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Handle tokens with missing optional profile fields (name, picture)."""
-    valid_token = "token-minimal-claims"
-    user_uid = "user_minimal_999"
-    user_email = "minimal@example.com"
+    """Valid token for non-allowed account must return HTTP 403 Forbidden with demo_access_restricted."""
+    req_id = f"test-wrong-account-{uuid.uuid4().hex}"
+    valid_token = "valid-token-other-user"
+    user_uid = "unauthorized_user_777"
+    user_email = "other.person@gmail.com"
 
     claims = {
         "uid": user_uid,
         "email": user_email,
-        # No 'name' and no 'picture'
+        "email_verified": True,
+        "name": "Other Person",
+    }
+    fake_verifier.add_valid_token(valid_token, claims)
+
+    response = client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {valid_token}", "x-request-id": req_id},
+    )
+    assert response.status_code == 403
+    error_data = response.json()
+
+    assert error_data == {
+        "error_code": "demo_access_restricted",
+        "message": "This Croviq demo is restricted to an approved account.",
+    }
+
+    captured = capsys.readouterr()
+    auth_logs = extract_auth_logs(captured.out, req_id)
+    assert len(auth_logs) == 1
+    log = auth_logs[0]
+    assert log["event_type"] == "auth.access_denied"
+    assert log["status"] == 403
+    assert log["user_id"] == user_uid
+    assert log["error_code"] == "demo_access_restricted"
+
+    # Verify no token leakage
+    assert valid_token not in captured.out
+
+
+def test_auth_me_unverified_allowed_email_returns_403(
+    client: TestClient, fake_verifier: FakeTokenVerifier, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Unverified email (even if matching allowed email) must return HTTP 403 Forbidden."""
+    req_id = f"test-unverified-allowed-{uuid.uuid4().hex}"
+    valid_token = "valid-token-unverified"
+    user_uid = "unverified_user_888"
+    user_email = "fadynagh10@gmail.com"
+
+    claims = {
+        "uid": user_uid,
+        "email": user_email,
+        "email_verified": False,  # Unverified!
+        "name": "Fady Nagh",
+    }
+    fake_verifier.add_valid_token(valid_token, claims)
+
+    response = client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {valid_token}", "x-request-id": req_id},
+    )
+    assert response.status_code == 403
+    error_data = response.json()
+
+    assert error_data == {
+        "error_code": "demo_access_restricted",
+        "message": "This Croviq demo is restricted to an approved account.",
+    }
+
+    captured = capsys.readouterr()
+    auth_logs = extract_auth_logs(captured.out, req_id)
+    assert len(auth_logs) == 1
+    log = auth_logs[0]
+    assert log["event_type"] == "auth.access_denied"
+    assert log["status"] == 403
+    assert log["user_id"] == user_uid
+    assert log["error_code"] == "demo_access_restricted"
+
+
+def test_auth_me_case_insensitive_and_whitespace_email_normalization(
+    client: TestClient, fake_verifier: FakeTokenVerifier
+) -> None:
+    """Email normalization must handle mixed case and whitespace correctly."""
+    valid_token = "token-uppercase-email"
+    user_uid = "user_case_norm_123"
+    user_email = "   FaDyNaGh10@GMAIL.COM   "
+
+    claims = {
+        "uid": user_uid,
+        "email": user_email,
+        "email_verified": True,
+        "name": "Fady Nagh",
     }
     fake_verifier.add_valid_token(valid_token, claims)
 
@@ -256,8 +345,26 @@ def test_auth_me_optional_profile_fields_handling(
     )
     assert response.status_code == 200
     user_data = response.json()
-
     assert user_data["user_id"] == user_uid
-    assert user_data["email"] == user_email
-    assert user_data["display_name"] == "minimal"  # Derived from email prefix
-    assert user_data["avatar_url"] is None
+    assert user_data["email"].lower() == "fadynagh10@gmail.com"
+
+def test_auth_me_missing_email_in_claims_returns_403(
+    client: TestClient, fake_verifier: FakeTokenVerifier
+) -> None:
+    """Claims missing email must be rejected with HTTP 403."""
+    valid_token = "token-no-email"
+    user_uid = "user_no_email_456"
+
+    claims = {
+        "uid": user_uid,
+        # No email
+        "email_verified": True,
+    }
+    fake_verifier.add_valid_token(valid_token, claims)
+
+    response = client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {valid_token}"},
+    )
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "demo_access_restricted"

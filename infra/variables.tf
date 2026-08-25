@@ -107,6 +107,12 @@ variable "git_sha" {
   default     = ""
 }
 
+variable "allowed_emails" {
+  type        = string
+  description = "Comma-separated list of approved emails for the demo-locked workspace."
+  default     = "fadynagh10@gmail.com"
+}
+
 variable "firestore_location" {
   type        = string
   description = "The location ID for the Firestore database (e.g. us-central1)."

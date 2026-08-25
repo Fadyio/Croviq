@@ -6,6 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from croviq_api.auth.exceptions import (
     AuthError,
+    DemoAccessRestrictedError,
     ExpiredTokenError,
     InvalidTokenError,
     MalformedHeaderError,
@@ -14,8 +15,8 @@ from croviq_api.auth.exceptions import (
 from croviq_api.auth.logging import log_auth_event
 from croviq_api.auth.principal import AuthenticatedPrincipal
 from croviq_api.auth.verifier import TokenVerifier, get_token_verifier
+from croviq_api.config import get_settings
 from croviq_domain.user import User
-
 # HTTPBearer security scheme for OpenAPI documentation
 http_bearer = HTTPBearer(
     auto_error=False,
@@ -74,16 +75,6 @@ def get_current_principal(
     try:
         claims = verifier.verify_token(token)
         principal = AuthenticatedPrincipal.from_claims(claims)
-
-        log_auth_event(
-            event_type="auth.verification_succeeded",
-            status=status.HTTP_200_OK,
-            request_id=request_id,
-            authenticated_user_id=principal.uid,
-            message=f"Authenticated user {principal.uid}",
-        )
-        return principal
-
     except ExpiredTokenError:
         log_auth_event(
             event_type="auth.verification_failed",
@@ -110,6 +101,39 @@ def get_current_principal(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # 4. Enforce demo access policy
+    settings = get_settings()
+    is_allowed = False
+    if principal.email and principal.email_verified:
+        normalized_email = principal.email.strip().lower()
+        if normalized_email in settings.allowed_emails:
+            is_allowed = True
+
+    if not is_allowed:
+        log_auth_event(
+            event_type="auth.access_denied",
+            status=status.HTTP_403_FORBIDDEN,
+            request_id=request_id,
+            user_id=principal.uid,
+            authenticated_user_id=principal.uid,
+            error_code="demo_access_restricted",
+            message="This Croviq demo is restricted to an approved account.",
+        )
+        raise DemoAccessRestrictedError(
+            message="This Croviq demo is restricted to an approved account.",
+            error_code="demo_access_restricted",
+        )
+
+    log_auth_event(
+        event_type="auth.access_allowed",
+        status=status.HTTP_200_OK,
+        request_id=request_id,
+        user_id=principal.uid,
+        authenticated_user_id=principal.uid,
+        message=f"Authenticated user {principal.uid}",
+    )
+    return principal
 
 
 def get_current_user(

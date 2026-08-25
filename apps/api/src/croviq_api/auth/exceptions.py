@@ -36,3 +36,14 @@ class ExpiredTokenError(AuthError):
 
     def __init__(self, message: str = "Token has expired") -> None:
         super().__init__(message, error_code="expired_token")
+
+
+class DemoAccessRestrictedError(AuthError):
+    """Raised when an authenticated account is not authorized for the locked demo."""
+
+    def __init__(
+        self,
+        message: str = "This Croviq demo is restricted to an approved account.",
+        error_code: str = "demo_access_restricted",
+    ) -> None:
+        super().__init__(message, error_code=error_code)

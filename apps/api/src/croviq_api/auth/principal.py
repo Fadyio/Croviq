@@ -14,10 +14,10 @@ class AuthenticatedPrincipal:
 
     uid: str
     email: str | None = None
+    email_verified: bool = False
     name: str | None = None
     picture: str | None = None
     auth_time: datetime | None = None
-
     @classmethod
     def from_claims(cls, claims: dict[str, Any]) -> "AuthenticatedPrincipal":
         """Construct principal from verified token claims.
@@ -30,6 +30,8 @@ class AuthenticatedPrincipal:
             raise InvalidTokenError("Missing or invalid user identifier in verified claims")
 
         email = claims.get("email")
+        email_verified_raw = claims.get("email_verified")
+        email_verified = email_verified_raw is True or str(email_verified_raw).lower() == "true"
         name = claims.get("name")
         picture = claims.get("picture")
 
@@ -44,6 +46,7 @@ class AuthenticatedPrincipal:
         return cls(
             uid=uid.strip(),
             email=email.strip() if isinstance(email, str) and email.strip() else None,
+            email_verified=email_verified,
             name=name.strip() if isinstance(name, str) and name.strip() else None,
             picture=picture.strip() if isinstance(picture, str) and picture.strip() else None,
             auth_time=auth_time,
