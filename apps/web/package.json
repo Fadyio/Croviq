@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "lint": "echo '@croviq/web: ok'",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e": "playwright test",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
@@ -16,6 +18,8 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
