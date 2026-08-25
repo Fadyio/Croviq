@@ -172,9 +172,8 @@ jobs:
       - name: Set up Cloud SDK for Read-Only Inspection
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Verify Live Cloud Run API Health
+      - name: Verify Production Health via Load Balancer
         run: |
-          SERVICE_URL="${{ steps.tf_outputs.outputs.api_service_url }}"
-          echo "Testing live health endpoint: ${SERVICE_URL}/api/health"
-          RESPONSE=$(curl -fsS -i -H "x-request-id: deploy-verify-${{ steps.resolve-commit.outputs.sha }}" "${SERVICE_URL}/api/health")
+          echo "Testing production health endpoint: https://app.croviq.app/api/health"
+          RESPONSE=$(curl -fsS -i -H "x-request-id: deploy-verify-${{ steps.resolve-commit.outputs.sha }}" "https://app.croviq.app/api/health")
           echo "$RESPONSE"
