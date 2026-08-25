@@ -10,7 +10,7 @@ on:
 
 jobs:
   validate-infrastructure:
-    name: Validate Infrastructure
+    name: Terraform
     runs-on: ubuntu-latest
 
     steps:
@@ -41,3 +41,140 @@ jobs:
       - name: Terraform Validate
         working-directory: infra
         run: terraform validate
+
+  frontend-checks:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Format check
+        run: pnpm format:check
+
+  backend-checks:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: apps/api
+        run: uv sync --frozen
+
+      - name: Run backend pytest
+        working-directory: apps/api
+        run: uv run pytest
+
+  e2e-browser-test:
+    name: Browser E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Get Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @croviq/web exec playwright --version | awk '{print $2}')" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright browsers and dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @croviq/web exec playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @croviq/web exec playwright install-deps chromium
+
+      - name: Start Docker Compose environment
+        run: docker compose up -d --build
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for http://localhost:5173 and http://localhost:8080/health..."
+          for i in {1..60}; do
+            web_ok=0
+            api_ok=0
+            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
+              web_ok=1
+            fi
+            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+              api_ok=1
+            fi
+            if [ "$web_ok" -eq 1 ] && [ "$api_ok" -eq 1 ]; then
+              echo "Services are ready after ${i} seconds!"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Timed out waiting for services to be ready."
+          docker compose ps
+          docker compose logs
+          exit 1
+
+      - name: Run E2E tests
+        run: pnpm e2e
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            apps/web/test-results/
+            apps/web/playwright-report/
+            apps/web/e2e/screenshots/
+          retention-days: 7
+
+      - name: Stop Docker Compose environment
+        if: always()
+        run: docker compose down -v
