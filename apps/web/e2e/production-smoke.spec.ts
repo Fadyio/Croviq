@@ -11,7 +11,7 @@ test.describe("Viewport Layout and Responsive Smoke", () => {
     { name: "1280px", width: 1280, height: 800 },
     { name: "390px", width: 390, height: 844 },
   ]) {
-    test(`verifies production at ${vp.name} (${vp.width}x${vp.height}) with zero errors and connected API`, async ({
+    test(`verifies production at ${vp.name} (${vp.width}x${vp.height}) with zero errors and responsive login`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
@@ -48,25 +48,13 @@ test.describe("Viewport Layout and Responsive Smoke", () => {
       const logo = page.getByRole("img", { name: "Croviq" });
       await expect(logo, "Croviq logo must be visible on the page").toBeVisible();
 
-      // Verify Frontend Running status
-      const frontendLabel = page.getByText("Frontend", { exact: true });
-      await expect(frontendLabel, "'Frontend' label must be visible in status card").toBeVisible();
+      // Verify Google sign-in button
+      const googleButton = page.getByRole("button", { name: "Continue with Google" });
+      await expect(googleButton, "'Continue with Google' button must be visible").toBeVisible();
 
-      const runningStatus = page.getByText("Running", { exact: true });
-      await expect(runningStatus, "'Running' status must be visible for Frontend").toBeVisible();
-
-      // Verify API Connected status
-      const apiLabel = page.getByText("API", { exact: true });
-      await expect(apiLabel, "'API' label must be visible in status card").toBeVisible();
-
-      const connectedStatus = page.getByText("Connected", { exact: true });
-      await expect(connectedStatus, "'Connected' status must be visible for API").toBeVisible({
-        timeout: 15000,
-      });
-
-      // Verify croviq-api service label
-      const serviceInfo = page.getByText("croviq-api", { exact: true });
-      await expect(serviceInfo, "'croviq-api' service name must be visible").toBeVisible();
+      // Verify Hackathon notice
+      const notice = page.getByText("Private hackathon demo — authorized account only.");
+      await expect(notice, "Demo notice must be visible").toBeVisible();
 
       // Verify zero console errors, page errors, and failed network requests
       expect(

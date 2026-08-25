@@ -362,10 +362,18 @@ resource "google_identity_platform_config" "default" {
   project                    = var.project_id
   autodelete_anonymous_users = false
 
+  authorized_domains = [
+    "localhost",
+    "127.0.0.1",
+    var.app_domain,
+    var.root_domain,
+    "${var.project_id}.firebaseapp.com",
+    "${var.project_id}.web.app",
+  ]
+
   multi_tenant {
     allow_tenants = false
   }
-
   depends_on = [google_project_service.required_services]
 }
 
@@ -545,6 +553,10 @@ resource "google_compute_backend_service" "web" {
     group = google_compute_region_network_endpoint_group.web_neg.id
   }
 
+  log_config {
+    enable      = true
+    sample_rate = 1.0
+  }
   depends_on = [google_project_service.required_services]
 }
 
@@ -560,6 +572,10 @@ resource "google_compute_backend_service" "api" {
     group = google_compute_region_network_endpoint_group.api_neg.id
   }
 
+  log_config {
+    enable      = true
+    sample_rate = 1.0
+  }
   depends_on = [google_project_service.required_services]
 }
 

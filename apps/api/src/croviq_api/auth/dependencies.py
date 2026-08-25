@@ -75,6 +75,14 @@ def get_current_principal(
     try:
         claims = verifier.verify_token(token)
         principal = AuthenticatedPrincipal.from_claims(claims)
+        log_auth_event(
+            event_type="auth.login_verified",
+            status=status.HTTP_200_OK,
+            request_id=request_id,
+            user_id=principal.uid,
+            authenticated_user_id=principal.uid,
+            message=f"Identity token verified for user {principal.uid}",
+        )
     except ExpiredTokenError:
         log_auth_event(
             event_type="auth.verification_failed",

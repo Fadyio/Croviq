@@ -232,12 +232,15 @@ def test_auth_me_allowed_verified_account_returns_canonical_user_200(
 
     captured = capsys.readouterr()
     auth_logs = extract_auth_logs(captured.out, req_id)
-    assert len(auth_logs) == 1
-    log = auth_logs[0]
-    assert log["event_type"] == "auth.access_allowed"
-    assert log["status"] == 200
-    assert log["user_id"] == user_uid
-
+    assert len(auth_logs) == 2
+    verified_log = auth_logs[0]
+    assert verified_log["event_type"] == "auth.login_verified"
+    assert verified_log["status"] == 200
+    assert verified_log["user_id"] == user_uid
+    allowed_log = auth_logs[1]
+    assert allowed_log["event_type"] == "auth.access_allowed"
+    assert allowed_log["status"] == 200
+    assert allowed_log["user_id"] == user_uid
     # Verify no token leakage
     assert valid_token not in captured.out
 
@@ -273,13 +276,16 @@ def test_auth_me_valid_but_different_email_returns_403(
 
     captured = capsys.readouterr()
     auth_logs = extract_auth_logs(captured.out, req_id)
-    assert len(auth_logs) == 1
-    log = auth_logs[0]
-    assert log["event_type"] == "auth.access_denied"
-    assert log["status"] == 403
-    assert log["user_id"] == user_uid
-    assert log["error_code"] == "demo_access_restricted"
-
+    assert len(auth_logs) == 2
+    verified_log = auth_logs[0]
+    assert verified_log["event_type"] == "auth.login_verified"
+    assert verified_log["status"] == 200
+    assert verified_log["user_id"] == user_uid
+    denied_log = auth_logs[1]
+    assert denied_log["event_type"] == "auth.access_denied"
+    assert denied_log["status"] == 403
+    assert denied_log["user_id"] == user_uid
+    assert denied_log["error_code"] == "demo_access_restricted"
     # Verify no token leakage
     assert valid_token not in captured.out
 
@@ -315,13 +321,16 @@ def test_auth_me_unverified_allowed_email_returns_403(
 
     captured = capsys.readouterr()
     auth_logs = extract_auth_logs(captured.out, req_id)
-    assert len(auth_logs) == 1
-    log = auth_logs[0]
-    assert log["event_type"] == "auth.access_denied"
-    assert log["status"] == 403
-    assert log["user_id"] == user_uid
-    assert log["error_code"] == "demo_access_restricted"
-
+    assert len(auth_logs) == 2
+    verified_log = auth_logs[0]
+    assert verified_log["event_type"] == "auth.login_verified"
+    assert verified_log["status"] == 200
+    assert verified_log["user_id"] == user_uid
+    denied_log = auth_logs[1]
+    assert denied_log["event_type"] == "auth.access_denied"
+    assert denied_log["status"] == 403
+    assert denied_log["user_id"] == user_uid
+    assert denied_log["error_code"] == "demo_access_restricted"
 
 def test_auth_me_case_insensitive_and_whitespace_email_normalization(
     client: TestClient, fake_verifier: FakeTokenVerifier
@@ -368,3 +377,24 @@ def test_auth_me_missing_email_in_claims_returns_403(
     )
     assert response.status_code == 403
     assert response.json()["error_code"] == "demo_access_restricted"
+
+
+def test_auth_logout_endpoint_emits_logout_observed(
+    client: TestClient, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """POST /api/auth/logout emits auth.logout_observed structured log."""
+    req_id = f"test-logout-{uuid.uuid4().hex}"
+    response = client.post(
+        "/api/auth/logout",
+        headers={"x-request-id": req_id},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    captured = capsys.readouterr()
+    auth_logs = extract_auth_logs(captured.out, req_id)
+    assert len(auth_logs) == 1
+    logout_log = auth_logs[0]
+    assert logout_log["event_type"] == "auth.logout_observed"
+    assert logout_log["status"] == 200
+    assert logout_log["request_id"] == req_id

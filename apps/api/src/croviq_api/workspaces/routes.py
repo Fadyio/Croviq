@@ -38,14 +38,13 @@ async def get_or_provision_default_workspace(
             workspace_id=workspace.workspace_id,
             message=f"Created default workspace {workspace.workspace_id} for user {current_user.user_id}",
         )
-    else:
-        log_workspace_event(
-            event_type="workspace.loaded",
-            status=status.HTTP_200_OK,
-            request_id=request_id,
-            user_id=current_user.user_id,
-            workspace_id=workspace.workspace_id,
-            message=f"Loaded existing workspace {workspace.workspace_id} for user {current_user.user_id}",
-        )
+    log_workspace_event(
+        event_type="workspace.loaded",
+        status=status.HTTP_200_OK,
+        request_id=request_id,
+        user_id=current_user.user_id,
+        workspace_id=workspace.workspace_id,
+        message=f"Loaded workspace {workspace.workspace_id} for user {current_user.user_id}",
+    )
 
     return workspace
