@@ -263,10 +263,10 @@ def test_workspace_endpoint_unauthorized_email_returns_403(
     }
 
 
-def test_workspace_endpoint_unverified_email_returns_403(
+def test_workspace_endpoint_unverified_email_succeeds_200(
     client: TestClient, fake_verifier: FakeTokenVerifier
 ) -> None:
-    """Accessing /api/workspace with unverified email returns HTTP 403 demo_access_restricted."""
+    """Accessing /api/workspace with unverified allowed email returns HTTP 200."""
     token = "token-unverified-allowed"
     fake_verifier.add_valid_token(
         token,
@@ -281,9 +281,8 @@ def test_workspace_endpoint_unverified_email_returns_403(
         "/api/workspace",
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert response.status_code == 403
-    assert response.json()["error_code"] == "demo_access_restricted"
-
+    assert response.status_code == 200
+    assert response.json()["owner_user_id"] == "uid_unverified"
 
 # -----------------------------------------------------------------------------
 # 4. Direct Repository Layer Tests (Firestore and In-Memory)

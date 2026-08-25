@@ -113,7 +113,7 @@ def get_current_principal(
     # 4. Enforce demo access policy
     settings = get_settings()
     is_allowed = False
-    if principal.email and principal.email_verified:
+    if principal.email:
         normalized_email = principal.email.strip().lower()
         if normalized_email in settings.allowed_emails:
             is_allowed = True

@@ -290,10 +290,10 @@ def test_auth_me_valid_but_different_email_returns_403(
     assert valid_token not in captured.out
 
 
-def test_auth_me_unverified_allowed_email_returns_403(
+def test_auth_me_unverified_allowed_email_succeeds_200(
     client: TestClient, fake_verifier: FakeTokenVerifier, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Unverified email (even if matching allowed email) must return HTTP 403 Forbidden."""
+    """Unverified email matching allowed email must return HTTP 200 OK."""
     req_id = f"test-unverified-allowed-{uuid.uuid4().hex}"
     valid_token = "valid-token-unverified"
     user_uid = "unverified_user_888"
@@ -311,13 +311,10 @@ def test_auth_me_unverified_allowed_email_returns_403(
         "/api/auth/me",
         headers={"Authorization": f"Bearer {valid_token}", "x-request-id": req_id},
     )
-    assert response.status_code == 403
-    error_data = response.json()
-
-    assert error_data == {
-        "error_code": "demo_access_restricted",
-        "message": "This Croviq demo is restricted to an approved account.",
-    }
+    assert response.status_code == 200
+    user_data = response.json()
+    assert user_data["user_id"] == user_uid
+    assert user_data["email"] == user_email
 
     captured = capsys.readouterr()
     auth_logs = extract_auth_logs(captured.out, req_id)
@@ -326,12 +323,10 @@ def test_auth_me_unverified_allowed_email_returns_403(
     assert verified_log["event_type"] == "auth.login_verified"
     assert verified_log["status"] == 200
     assert verified_log["user_id"] == user_uid
-    denied_log = auth_logs[1]
-    assert denied_log["event_type"] == "auth.access_denied"
-    assert denied_log["status"] == 403
-    assert denied_log["user_id"] == user_uid
-    assert denied_log["error_code"] == "demo_access_restricted"
-
+    allowed_log = auth_logs[1]
+    assert allowed_log["event_type"] == "auth.access_allowed"
+    assert allowed_log["status"] == 200
+    assert allowed_log["user_id"] == user_uid
 def test_auth_me_case_insensitive_and_whitespace_email_normalization(
     client: TestClient, fake_verifier: FakeTokenVerifier
 ) -> None:
