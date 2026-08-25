@@ -23,3 +23,10 @@ resource "google_storage_bucket" "tfstate" {
     prevent_destroy = true
   }
 }
+
+# Allow GitHub Actions deployer service account to manage Terraform state objects
+resource "google_storage_bucket_iam_member" "deployer_tfstate_user" {
+  bucket = google_storage_bucket.tfstate.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:croviq-github-deployer@${var.project_id}.iam.gserviceaccount.com"
+}

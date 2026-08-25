@@ -91,12 +91,6 @@ resource "google_service_account_iam_member" "deployer_sa_user" {
   member             = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
-# Allow deployment service account to manage Terraform state objects in the state bucket
-resource "google_storage_bucket_iam_member" "deployer_tfstate_user" {
-  bucket = "${var.project_id}-croviq-tfstate"
-  role   = "roles/storage.objectUser"
-  member = "serviceAccount:${google_service_account.github_deployer.email}"
-}
 
 # -----------------------------------------------------------------------------
 # 5. Workload Identity Federation (GitHub Actions OIDC)
