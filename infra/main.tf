@@ -247,6 +247,12 @@ resource "google_cloud_run_v2_service" "api" {
     google_artifact_registry_repository.api_repo,
     google_service_account.api_runtime
   ]
+
+  lifecycle {
+    ignore_changes = [
+      scaling,
+    ]
+  }
 }
 
 # Public invoker IAM member for Cloud Run API
