@@ -15,6 +15,7 @@ def log_auth_event(
     authenticated_user_id: str | None = None,
     error_code: str | None = None,
     message: str | None = None,
+    include_error_code: bool = False,
 ) -> None:
     """Log structured authentication event for Google Cloud Logging ingestion.
 
@@ -43,7 +44,8 @@ def log_auth_event(
     if uid is not None:
         payload["user_id"] = uid
         payload["authenticated_user_id"] = uid
-    if error_code is not None:
+
+    if error_code is not None or include_error_code:
         payload["error_code"] = error_code
 
     if message is not None:

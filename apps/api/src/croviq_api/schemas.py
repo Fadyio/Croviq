@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthResponse(BaseModel):
@@ -13,3 +15,24 @@ class DemoAccessRestrictedResponse(BaseModel):
         default="This Croviq demo is restricted to an approved account.",
         description="User-facing error explanation",
     )
+
+
+class ClientAuthEventBase(BaseModel):
+    """Client-supplied auth telemetry with no free-form payload fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AuthLoginAttemptEvent(ClientAuthEventBase):
+    event_type: Literal["auth.login_attempt"]
+
+
+class AuthLoginFailedEvent(ClientAuthEventBase):
+    event_type: Literal["auth.login_failed"]
+    error_code: Literal["invalid_credentials", "demo_access_restricted"] | None = None
+
+
+ClientAuthEvent = Annotated[
+    AuthLoginAttemptEvent | AuthLoginFailedEvent,
+    Field(discriminator="event_type"),
+]

@@ -17,6 +17,14 @@ export interface paths {
       };
     };
   };
+  "/api/client-events": {
+    post: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
   "/api/auth/me": {
     get: {
       responses: {
@@ -42,6 +50,13 @@ export interface paths {
 
 export interface components {
   schemas: {
+    AuthLoginAttemptEvent: {
+      event_type: "auth.login_attempt";
+    };
+    AuthLoginFailedEvent: {
+      event_type: "auth.login_failed";
+      error_code?: "invalid_credentials" | "demo_access_restricted" | null;
+    };
     BrandKit: {
       /** Tone adjectives or stylistic descriptors (e.g. ['concise', 'informative']) */
       tone?: string[];
@@ -51,6 +66,9 @@ export interface components {
       content_style?: string | null;
       /** Custom production instructions and brand guidelines */
       custom_instructions?: string | null;
+    };
+    HTTPValidationError: {
+      detail?: components["schemas"]["ValidationError"][];
     };
     HealthResponse: {
       /** Service health status */
@@ -73,6 +91,13 @@ export interface components {
       created_at: string;
       /** Timestamp when the user was last updated (UTC) */
       updated_at: string;
+    };
+    ValidationError: {
+      loc: string | number[];
+      msg: string;
+      type: string;
+      input?: unknown;
+      ctx?: Record<string, unknown>;
     };
     Workspace: {
       /** Unique workspace identifier */

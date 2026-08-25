@@ -79,13 +79,21 @@ export interface paths {
     schema_entries = []
 
     def json_schema_to_ts(prop_schema: dict) -> str:
-        prop_type = prop_schema.get("type")
         if "$ref" in prop_schema:
             ref_name = prop_schema["$ref"].split("/")[-1]
             return f"components['schemas']['{ref_name}']"
+        if "const" in prop_schema:
+            return json.dumps(prop_schema["const"])
+        if "enum" in prop_schema:
+            return " | ".join(json.dumps(val) for val in prop_schema["enum"])
+        if "oneOf" in prop_schema:
+            types = [json_schema_to_ts(s) for s in prop_schema["oneOf"]]
+            return " | ".join(types)
+        if "anyOf" in prop_schema:
+            types = [json_schema_to_ts(s) for s in prop_schema["anyOf"]]
+            return " | ".join(types)
+        prop_type = prop_schema.get("type")
         if prop_type == "string":
-            if prop_schema.get("format") == "date-time":
-                return "string"
             return "string"
         if prop_type == "integer" or prop_type == "number":
             return "number"
@@ -98,9 +106,6 @@ export interface paths {
             return f"{json_schema_to_ts(items)}[]"
         if prop_type == "object":
             return "Record<string, unknown>"
-        if "anyOf" in prop_schema:
-            types = [json_schema_to_ts(s) for s in prop_schema["anyOf"]]
-            return " | ".join(types)
         return "unknown"
     for schema_name, schema_data in schemas.items():
         properties = schema_data.get("properties", {})

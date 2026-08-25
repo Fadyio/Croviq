@@ -109,8 +109,8 @@ variable "git_sha" {
 
 variable "allowed_emails" {
   type        = string
-  description = "Comma-separated list of approved emails for the demo-locked workspace."
-  default     = "fadynagh10@gmail.com"
+  description = "The only Identity Platform email allowed to access the demo workspace."
+  default     = "demo@croviq.app"
 }
 
 variable "firestore_location" {

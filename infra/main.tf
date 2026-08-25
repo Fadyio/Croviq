@@ -371,6 +371,29 @@ resource "google_identity_platform_config" "default" {
     "${var.project_id}.web.app",
   ]
 
+  client {
+    permissions {
+      disabled_user_signup = true
+    }
+  }
+
+  sign_in {
+    email {
+      enabled           = true
+      password_required = true
+    }
+
+    anonymous {
+      enabled = false
+    }
+  }
+
+  monitoring {
+    request_logging {
+      enabled = true
+    }
+  }
+
   multi_tenant {
     allow_tenants = false
   }
