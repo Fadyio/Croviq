@@ -130,6 +130,8 @@ terraform apply
 | `environment` | `string` | `"dev"` | Environment tag (`dev`, `staging`, `prod`) |
 | `app_domain` | `string` | `"app.croviq.app"` | Application hostname |
 | `artifact_registry_repository_id` | `string` | `"croviq-api"` | Artifact Registry repository ID for API container images |
+| `artifact_registry_web_repository_id` | `string` | `"croviq-web"` | Artifact Registry repository ID for web container images |
+| `web_runtime_service_account_id` | `string` | `"croviq-web-runtime"` | Service account ID for the Cloud Run web runtime |
 | `api_runtime_service_account_id` | `string` | `"croviq-api-runtime"` | Service account ID for the Cloud Run API runtime |
 | `github_deployer_service_account_id` | `string` | `"croviq-github-deployer"` | Service account ID for GitHub Actions deployment |
 | `workload_identity_pool_id` | `string` | `"github-actions-pool"` | Workload Identity Pool ID for GitHub Actions |
@@ -137,6 +139,7 @@ terraform apply
 | `github_repository_owner` | `string` | `"Fadyio"` | GitHub repository owner (org/user) |
 | `github_repository_name` | `string` | `"Croviq"` | GitHub repository name |
 | `api_image` | `string` | *(required)* | Immutable container image reference with `@sha256:` digest for Cloud Run |
+| `web_image` | `string` | *(required)* | Immutable container image reference with `@sha256:` digest for Cloud Run Web |
 | `git_sha` | `string` | `""` | Git commit SHA deployed to Cloud Run |
 | `firestore_location` | `string` | `"us-central1"` | Location ID for the default Firestore database |
 
@@ -155,3 +158,19 @@ terraform apply
 | `firestore_database_name` | Database ID of the default Firestore database instance |
 | `firestore_database_location` | Location ID of the default Firestore database instance |
 | `identity_platform_config_name` | Resource name of the Identity Platform configuration |
+| `web_cloud_run_service_name` | Name of the Cloud Run Web service |
+| `web_cloud_run_url` | Live HTTPS URL of the deployed Cloud Run Web service |
+| `web_cloud_run_latest_revision` | Latest created revision identifier of the Cloud Run Web service |
+| `web_artifact_registry_repository` | Fully qualified Artifact Registry web repository resource name |
+| `web_runtime_service_account_email` | Email of the Cloud Run Web runtime service account |
+| `load_balancer_ip` | Static global external IPv4 address for the Application Load Balancer |
+| `dns_authorization_record_name` | DNS Resource Record Name for Certificate Manager DNS authorization |
+| `dns_authorization_record_type` | DNS Resource Record Type for Certificate Manager DNS authorization |
+| `dns_authorization_record_value` | DNS Resource Record Value for Certificate Manager DNS authorization |
+| `web_neg_name` | Name of the Serverless NEG for croviq-web |
+| `api_neg_name` | Name of the Serverless NEG for croviq-api |
+| `web_backend_service_name` | Name of the backend service for croviq-web |
+| `api_backend_service_name` | Name of the backend service for croviq-api |
+| `url_map_name` | Name of the URL map for single-origin routing |
+| `certificate_manager_certificate_name` | Name of the Google Certificate Manager managed certificate |
+| `certificate_map_name` | Name of the Google Certificate Manager certificate map |
