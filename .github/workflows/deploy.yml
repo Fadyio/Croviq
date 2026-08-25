@@ -105,6 +105,7 @@ jobs:
           terraform plan \
             -var="project_id=croviq-506602" \
             -var="region=us-central1" \
+            -var="environment=prod" \
             -var="api_image=${{ steps.meta.outputs.image_uri }}" \
             -var="git_sha=${{ steps.resolve-commit.outputs.sha }}" \
             -out=tfplan
