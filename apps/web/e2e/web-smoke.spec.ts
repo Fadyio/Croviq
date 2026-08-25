@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test.describe("Web Application Smoke", () => {
-  test("loads successfully with visible split-screen login and zero browser errors", async ({
+  test("loads successfully with password-only login and zero browser errors", async ({
     page,
   }, testInfo) => {
     const consoleErrors: string[] = [];
@@ -55,19 +55,13 @@ test.describe("Web Application Smoke", () => {
     const logo = page.getByRole("img", { name: "Croviq" });
     await expect(logo, "Croviq logo must be visible on the page").toBeVisible();
 
-    // Verify concise statement
-    const statement = page.getByRole("heading", { name: "CI/CD for video creators." });
-    await expect(statement, "Statement must be visible").toBeVisible();
-
-    // Verify Google Sign-In card elements
+    // Verify email/password sign-in controls
     const loginHeading = page.getByRole("heading", { name: "Sign in to Croviq" });
     await expect(loginHeading).toBeVisible();
-
-    const googleButton = page.getByRole("button", { name: "Continue with Google" });
-    await expect(googleButton, "Continue with Google button must be visible").toBeVisible();
-
-    const demoNotice = page.getByText("Private hackathon demo — authorized account only.");
-    await expect(demoNotice, "Hackathon notice must be visible").toBeVisible();
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByLabel("Password")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Google/i })).toHaveCount(0);
 
     // Verify zero console errors, page errors, and failed network requests
     expect(

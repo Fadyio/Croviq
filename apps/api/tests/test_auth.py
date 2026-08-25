@@ -35,7 +35,7 @@ class FakeTokenVerifier(TokenVerifier):
 
 @pytest.fixture(autouse=True)
 def configure_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CROVIQ_ALLOWED_EMAILS", "fadynagh10@gmail.com")
+    monkeypatch.setenv("CROVIQ_ALLOWED_EMAILS", "demo@croviq.app")
     get_settings.cache_clear()
 
 
@@ -202,7 +202,7 @@ def test_auth_me_allowed_verified_account_returns_canonical_user_200(
     req_id = f"test-valid-user-{uuid.uuid4().hex}"
     valid_token = "valid-token-jwt-secret-xyz"
     user_uid = "firebase_user_abc123"
-    user_email = "fadynagh10@gmail.com"
+    user_email = "demo@croviq.app"
     user_name = "Fady Nagh"
     user_picture = "https://lh3.googleusercontent.com/a/photo.jpg"
 
@@ -297,7 +297,7 @@ def test_auth_me_unverified_allowed_email_returns_403(
     req_id = f"test-unverified-allowed-{uuid.uuid4().hex}"
     valid_token = "valid-token-unverified"
     user_uid = "unverified_user_888"
-    user_email = "fadynagh10@gmail.com"
+    user_email = "demo@croviq.app"
 
     claims = {
         "uid": user_uid,
@@ -338,7 +338,7 @@ def test_auth_me_case_insensitive_and_whitespace_email_normalization(
     """Email normalization must handle mixed case and whitespace correctly."""
     valid_token = "token-uppercase-email"
     user_uid = "user_case_norm_123"
-    user_email = "   FaDyNaGh10@GMAIL.COM   "
+    user_email = "   DeMo@CrOvIq.ApP   "
 
     claims = {
         "uid": user_uid,
@@ -355,7 +355,7 @@ def test_auth_me_case_insensitive_and_whitespace_email_normalization(
     assert response.status_code == 200
     user_data = response.json()
     assert user_data["user_id"] == user_uid
-    assert user_data["email"].lower() == "fadynagh10@gmail.com"
+    assert user_data["email"].lower() == "demo@croviq.app"
 
 def test_auth_me_missing_email_in_claims_returns_403(
     client: TestClient, fake_verifier: FakeTokenVerifier
@@ -398,3 +398,95 @@ def test_auth_logout_endpoint_emits_logout_observed(
     assert logout_log["event_type"] == "auth.logout_observed"
     assert logout_log["status"] == 200
     assert logout_log["request_id"] == req_id
+
+
+def test_client_login_attempt_emits_sanitized_structured_log(
+    client: TestClient, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An allowed client event records only controlled auth telemetry."""
+    req_id = f"test-client-event-{uuid.uuid4().hex}"
+    response = client.post(
+        "/api/client-events",
+        headers={"x-request-id": req_id},
+        json={"event_type": "auth.login_attempt"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    captured = capsys.readouterr()
+    auth_logs = extract_auth_logs(captured.out, req_id)
+    assert len(auth_logs) == 1
+    log = auth_logs[0]
+    assert log["event_type"] == "auth.login_attempt"
+    assert log["status"] == 200
+    assert log["request_id"] == req_id
+    for field in (
+        "timestamp",
+        "severity",
+        "service",
+        "environment",
+        "event_type",
+        "request_id",
+        "status",
+        "git_sha",
+    ):
+        assert field in log
+    assert log["error_code"] is None
+
+
+def test_client_events_reject_sensitive_or_uncontrolled_payloads(
+    client: TestClient, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Telemetry rejects arbitrary fields without leaking them to logs."""
+    password = "correct-horse-battery-staple"
+    id_token = "raw-id-token-should-never-be-logged"
+    authorization = "Bearer raw-authorization-should-never-be-logged"
+    firebase_error = "auth/operation-not-allowed"
+
+    response = client.post(
+        "/api/client-events",
+        headers={"Authorization": authorization},
+        json={
+            "event_type": "auth.login_failed",
+            "error_code": "invalid_credentials",
+            "password": password,
+            "id_token": id_token,
+            "firebase_error": firebase_error,
+        },
+    )
+
+    assert response.status_code == 422
+    unknown_event = client.post(
+        "/api/client-events",
+        json={"event_type": "auth.some_future_event"},
+    )
+    assert unknown_event.status_code == 422
+
+    captured = capsys.readouterr()
+    for sensitive_value in (password, id_token, authorization, firebase_error):
+        assert sensitive_value not in captured.out
+
+
+def test_client_login_failure_allows_omitted_error_code(
+    client: TestClient, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failed client event may omit its controlled error code."""
+    req_id = f"test-client-failure-{uuid.uuid4().hex}"
+    response = client.post(
+        "/api/client-events",
+        headers={"x-request-id": req_id},
+        json={"event_type": "auth.login_failed"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    captured = capsys.readouterr()
+    auth_logs = extract_auth_logs(captured.out, req_id)
+    assert len(auth_logs) == 1
+    log = auth_logs[0]
+    assert log["event_type"] == "auth.login_failed"
+    assert log["error_code"] is None
+    assert log["request_id"] == req_id
+    assert log["status"] == 200

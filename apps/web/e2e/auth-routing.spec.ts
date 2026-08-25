@@ -1,134 +1,211 @@
-import { test, expect } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-const MOCK_APPROVED_USER = {
-  user_id: "google_user_fadynagh10",
-  email: "fadynagh10@gmail.com",
-  display_name: "Fady Nagh",
-  avatar_url: "https://lh3.googleusercontent.com/a/photo-sample.jpg",
-  created_at: "2026-08-25T06:00:00Z",
-  updated_at: "2026-08-25T06:00:00Z",
+const DEMO_EMAIL = "demo@croviq.app";
+const FIREBASE_ID_TOKEN =
+  "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vY3JvdmlxLTUwNjYwMiIsImF1ZCI6ImNyb3ZpcS01MDYwMiIsImF1dGhfdGltZSI6MSwidXNlcl9pZCI6ImRlbW9fdXNlcl8xMjMiLCJzdWIiOiJkZW1vX3VzZXJfMTIzIiwiaWF0IjoxLCJleHAiOjQxMDI0NDQ4MDAsImVtYWlsIjoiZGVtb0Bjcm92aXEuYXBwIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsiZGVtb0Bjcm92aXEuYXBwIl19LCJzaWduX2luX3Byb3ZpZGVyIjoicGFzc3dvcmQifX0.signature";
+
+const APPROVED_USER = {
+  user_id: "demo_user_123",
+  email: DEMO_EMAIL,
+  display_name: "Croviq Demo",
+  avatar_url: null,
+  created_at: "2026-08-26T00:00:00Z",
+  updated_at: "2026-08-26T00:00:00Z",
 };
 
-test.describe("Authentication & Protected Routing", () => {
+const WORKSPACE = {
+  workspace_id: "ws_demo",
+  owner_user_id: APPROVED_USER.user_id,
+  name: "Croviq Demo Workspace",
+  created_at: "2026-08-26T00:00:00Z",
+  updated_at: "2026-08-26T00:00:00Z",
+};
+
+const mockClientEvents = async (page: Page, events: Record<string, unknown>[]) => {
+  await page.route("**/api/client-events", async (route) => {
+    events.push(JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "ok" }),
+    });
+  });
+};
+
+const mockFirebasePasswordSignIn = async (page: Page, succeeds: boolean) => {
+  await page.route("**/identitytoolkit.googleapis.com/**", async (route) => {
+    const url = route.request().url();
+    if (url.includes("accounts:lookup")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          users: [
+            {
+              localId: APPROVED_USER.user_id,
+              email: DEMO_EMAIL,
+              emailVerified: true,
+              displayName: APPROVED_USER.display_name,
+              providerUserInfo: [
+                {
+                  providerId: "password",
+                  email: DEMO_EMAIL,
+                },
+              ],
+              createdAt: "0",
+              lastLoginAt: "0",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (!url.includes("accounts:signInWithPassword")) {
+      await route.abort();
+      return;
+    }
+
+    if (!succeeds) {
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "INVALID_LOGIN_CREDENTIALS" } }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        kind: "identitytoolkit#VerifyPasswordResponse",
+        localId: APPROVED_USER.user_id,
+        email: DEMO_EMAIL,
+        displayName: APPROVED_USER.display_name,
+        idToken: FIREBASE_ID_TOKEN,
+        registered: true,
+        refreshToken: "mock-refresh-token",
+        expiresIn: "3600",
+      }),
+    });
+  });
+};
+
+const mockApprovedApi = async (page: Page) => {
+  await page.route("**/api/auth/me", async (route) => {
+    expect(route.request().headers().authorization).toBe(`Bearer ${FIREBASE_ID_TOKEN}`);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(APPROVED_USER),
+    });
+  });
+  await page.route("**/api/workspace", async (route) => {
+    expect(route.request().headers().authorization).toBe(`Bearer ${FIREBASE_ID_TOKEN}`);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(WORKSPACE),
+    });
+  });
+};
+
+const signIn = async (page: Page) => {
+  await page.getByLabel("Email").fill(DEMO_EMAIL);
+  await page.getByLabel("Password").fill("test-only-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+};
+
+test.describe("Email/password authentication", () => {
   test("unauthenticated access to /app redirects to /login", async ({ page }) => {
     await page.goto("/app");
     await page.waitForURL("**/login");
-    expect(page.url()).toContain("/login");
-
-    // Verify login card is visible
-    const loginHeading = page.getByRole("heading", { name: "Sign in to Croviq" });
-    await expect(loginHeading).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in to Croviq" })).toBeVisible();
   });
 
-  test("login screen renders all required design elements", async ({ page }) => {
+  test("password-only login UI omits Google and signup controls", async ({ page }) => {
     await page.goto("/login");
 
-    // Left pane brand elements
-    const logo = page.getByRole("img", { name: "Croviq" });
-    await expect(logo).toBeVisible();
-
-    const statement = page.getByRole("heading", { name: "CI/CD for video creators." });
-    await expect(statement).toBeVisible();
-
-    // Verify pipeline stage labels in left pane
-    await expect(page.getByText("Ingest", { exact: true })).toBeVisible();
-    await expect(page.getByText("Analysis", { exact: true })).toBeVisible();
-    await expect(page.getByText("Cut & EDL", { exact: true })).toBeVisible();
-    await expect(page.getByText("Truth QA", { exact: true })).toBeVisible();
-    await expect(page.getByText("Publish", { exact: true })).toBeVisible();
-
-    // Right pane card elements
-    const googleButton = page.getByRole("button", { name: "Continue with Google" });
-    await expect(googleButton).toBeVisible();
-    await expect(googleButton).toBeEnabled();
-
-    // Hackathon demo notice
-    const notice = page.getByText("Private hackathon demo — authorized account only.");
-    await expect(notice).toBeVisible();
+    await expect(page.getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in to Croviq" })).toBeVisible();
+    await expect(page.getByLabel("Email")).toHaveAttribute("type", "email");
+    await expect(page.getByLabel("Password")).toHaveAttribute("type", "password");
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: /Google/i })).toHaveCount(0);
+    await expect(page.getByText("CI/CD for video creators.")).toHaveCount(0);
+    await expect(page.getByText("Private hackathon demo")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /sign up|forgot password/i })).toHaveCount(0);
   });
 
-  test("motion does not break in prefers-reduced-motion mode", async ({ page }) => {
-    // Emulate reduced motion
-    await page.emulateMedia({ reducedMotion: "reduce" });
+  test("wrong credentials show a friendly error without raw Firebase details", async ({ page }) => {
+    const events: Record<string, unknown>[] = [];
+    await mockClientEvents(page, events);
+    await mockFirebasePasswordSignIn(page, false);
     await page.goto("/login");
 
-    const logo = page.getByRole("img", { name: "Croviq" });
-    await expect(logo).toBeVisible();
+    await signIn(page);
 
-    const googleButton = page.getByRole("button", { name: "Continue with Google" });
-    await expect(googleButton).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveText("Email or password is incorrect.");
+    await expect(page.getByText("auth/invalid-credential", { exact: false })).toHaveCount(0);
+    await expect(page.getByText("INVALID_LOGIN_CREDENTIALS", { exact: false })).toHaveCount(0);
+    await expect
+      .poll(() => events)
+      .toEqual([
+        { event_type: "auth.login_attempt" },
+        { event_type: "auth.login_failed", error_code: "invalid_credentials" },
+      ]);
   });
 
-  test("protected route behavior with mocked authenticated state", async ({ page }) => {
-    // Mock /api/workspace endpoint so /app workspace fetch resolves cleanly
-    await page.route("**/api/workspace", async (route) => {
+  test("an authenticated non-demo account receives the authorization message", async ({ page }) => {
+    const events: Record<string, unknown>[] = [];
+    await mockClientEvents(page, events);
+    await mockFirebasePasswordSignIn(page, true);
+    await page.route("**/api/auth/me", async (route) => {
       await route.fulfill({
-        status: 200,
+        status: 403,
         contentType: "application/json",
-        body: JSON.stringify({
-          workspace_id: "ws_demo_fady",
-          owner_user_id: MOCK_APPROVED_USER.user_id,
-          name: "Croviq Demo Workspace",
-          channel_description: "Production channel for AI video pipelines",
-          brand_kit: {
-            tone: ["concise", "informative"],
-            target_audience: "Video creators & developers",
-            content_style: "Technical walkthrough",
-          },
-          created_at: "2026-08-25T06:00:00Z",
-          updated_at: "2026-08-25T06:00:00Z",
-        }),
+        body: JSON.stringify({ error_code: "demo_access_restricted" }),
       });
     });
-
-    // Inject mock user into sessionStorage before navigating
-    await page.addInitScript((mockUser) => {
-      sessionStorage.setItem("__CROVIQ_MOCK_USER__", JSON.stringify(mockUser));
-      window.__CROVIQ_MOCK_USER__ = mockUser;
-    }, MOCK_APPROVED_USER);
-
-    await page.goto("/app");
-
-    // Verify /app loads and displays user identity and workspace
-    const logo = page.getByRole("img", { name: "Croviq" });
-    await expect(logo).toBeVisible();
-
-    const workspaceName = page.getByText("Croviq Demo Workspace").first();
-    await expect(workspaceName).toBeVisible();
-
-    const userName = page.getByText("Fady Nagh").first();
-    await expect(userName).toBeVisible();
-
-    const userEmail = page.getByText("fadynagh10@gmail.com").first();
-    await expect(userEmail).toBeVisible();
-
-    const apiConnectedBadge = page.getByText("API Connected");
-    await expect(apiConnectedBadge).toBeVisible();
-
-    const logoutButton = page.getByRole("button", { name: "Logout" });
-    await expect(logoutButton).toBeVisible();
-
-    // Authenticated user navigating to /login or / should auto-redirect to /app
     await page.goto("/login");
+
+    await signIn(page);
+
+    await expect(page.getByRole("alert")).toHaveText(
+      "This account is not authorized to access Croviq.",
+    );
+    await expect
+      .poll(() => events)
+      .toEqual([
+        { event_type: "auth.login_attempt" },
+        { event_type: "auth.login_failed", error_code: "demo_access_restricted" },
+      ]);
+  });
+
+  test("approved mocked sign-in reaches /app and persists across refresh", async ({ page }) => {
+    const events: Record<string, unknown>[] = [];
+    await mockClientEvents(page, events);
+    await mockFirebasePasswordSignIn(page, true);
+    await mockApprovedApi(page);
+    await page.goto("/login");
+
+    await signIn(page);
     await page.waitForURL("**/app");
-    expect(page.url()).toContain("/app");
+    await expect(page.getByText(WORKSPACE.name).first()).toBeVisible();
+    await expect(page.getByText(DEMO_EMAIL, { exact: true })).toBeVisible();
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByText(WORKSPACE.name).first()).toBeVisible();
+    await expect(events).toEqual([{ event_type: "auth.login_attempt" }]);
   });
 
-  test("logout clears application state and returns to /login", async ({ page }) => {
-    await page.route("**/api/workspace", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          workspace_id: "ws_demo_fady",
-          owner_user_id: MOCK_APPROVED_USER.user_id,
-          name: "Croviq Demo Workspace",
-          created_at: "2026-08-25T06:00:00Z",
-          updated_at: "2026-08-25T06:00:00Z",
-        }),
-      });
-    });
-
+  test("logout clears the Firebase session and returns to /login", async ({ page }) => {
+    const events: Record<string, unknown>[] = [];
+    await mockClientEvents(page, events);
+    await mockFirebasePasswordSignIn(page, true);
+    await mockApprovedApi(page);
     await page.route("**/api/auth/logout", async (route) => {
       await route.fulfill({
         status: 200,
@@ -136,24 +213,21 @@ test.describe("Authentication & Protected Routing", () => {
         body: JSON.stringify({ status: "ok" }),
       });
     });
+    await page.goto("/login");
 
-    // Inject mock user
-    await page.addInitScript((mockUser) => {
-      sessionStorage.setItem("__CROVIQ_MOCK_USER__", JSON.stringify(mockUser));
-      window.__CROVIQ_MOCK_USER__ = mockUser;
-    }, MOCK_APPROVED_USER);
+    await signIn(page);
+    await page.waitForURL("**/app");
+    await page.getByRole("button", { name: "Logout" }).click();
 
-    await page.goto("/app");
-
-    const logoutButton = page.getByRole("button", { name: "Logout" });
-    await expect(logoutButton).toBeVisible();
-    await logoutButton.click();
-
-    // Verify redirected back to /login
     await page.waitForURL("**/login");
-    expect(page.url()).toContain("/login");
+    await expect(page.getByRole("heading", { name: "Sign in to Croviq" })).toBeVisible();
+  });
 
-    const loginHeading = page.getByRole("heading", { name: "Sign in to Croviq" });
-    await expect(loginHeading).toBeVisible();
+  test("login remains usable with reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/login");
+
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByLabel("Password")).toBeVisible();
   });
 });

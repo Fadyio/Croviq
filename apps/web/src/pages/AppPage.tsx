@@ -7,7 +7,7 @@ import type { components } from "../api/generated";
 type Workspace = components["schemas"]["Workspace"];
 
 export const AppPage: React.FC = () => {
-  const { user, idToken, logout } = useAuth();
+  const { user, firebaseUser, logout } = useAuth();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState<boolean>(true);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -16,16 +16,17 @@ export const AppPage: React.FC = () => {
     let isMounted = true;
 
     const fetchWorkspace = async () => {
-      if (!idToken) {
+      if (!firebaseUser) {
         setIsLoadingWorkspace(false);
         return;
       }
 
       setIsLoadingWorkspace(true);
       try {
+        const token = await firebaseUser.getIdToken();
         const res = await fetch("/api/workspace", {
           headers: {
-            Authorization: `Bearer ${idToken}`,
+            Authorization: `Bearer ${token}`,
             "x-request-id": `web-ws-${Date.now()}`,
           },
         });
@@ -57,7 +58,7 @@ export const AppPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [idToken]);
+  }, [firebaseUser]);
 
   return (
     <div className="min-h-screen bg-background text-text-primary flex flex-col font-sans selection:bg-primary/30">

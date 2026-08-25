@@ -48,13 +48,11 @@ test.describe("Viewport Layout and Responsive Smoke", () => {
       const logo = page.getByRole("img", { name: "Croviq" });
       await expect(logo, "Croviq logo must be visible on the page").toBeVisible();
 
-      // Verify Google sign-in button
-      const googleButton = page.getByRole("button", { name: "Continue with Google" });
-      await expect(googleButton, "'Continue with Google' button must be visible").toBeVisible();
-
-      // Verify Hackathon notice
-      const notice = page.getByText("Private hackathon demo — authorized account only.");
-      await expect(notice, "Demo notice must be visible").toBeVisible();
+      // Verify password-only sign-in controls
+      await expect(page.getByLabel("Email")).toBeVisible();
+      await expect(page.getByLabel("Password")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+      await expect(page.getByRole("button", { name: /Google/i })).toHaveCount(0);
 
       // Verify zero console errors, page errors, and failed network requests
       expect(

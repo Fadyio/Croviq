@@ -24,6 +24,65 @@
         }
       }
     },
+    "/api/client-events": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Record Sanitized Client Authentication Event",
+        "description": "Record a constrained client auth event without accepting sensitive payloads.",
+        "operationId": "record_client_auth_event_api_client_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AuthLoginAttemptEvent"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AuthLoginFailedEvent"
+                  }
+                ],
+                "title": "Event",
+                "discriminator": {
+                  "propertyName": "event_type",
+                  "mapping": {
+                    "auth.login_attempt": "#/components/schemas/AuthLoginAttemptEvent",
+                    "auth.login_failed": "#/components/schemas/AuthLoginFailedEvent"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Record Client Auth Event Api Client Events Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/me": {
       "get": {
         "tags": ["Auth"],
@@ -101,6 +160,44 @@
   },
   "components": {
     "schemas": {
+      "AuthLoginAttemptEvent": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "const": "auth.login_attempt",
+            "title": "Event Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["event_type"],
+        "title": "AuthLoginAttemptEvent"
+      },
+      "AuthLoginFailedEvent": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "const": "auth.login_failed",
+            "title": "Event Type"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["invalid_credentials", "demo_access_restricted"]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["event_type"],
+        "title": "AuthLoginFailedEvent"
+      },
       "BrandKit": {
         "properties": {
           "tone": {
@@ -152,6 +249,19 @@
         "type": "object",
         "title": "BrandKit",
         "description": "Canonical BrandKit configuration model for a Croviq Workspace."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
       },
       "HealthResponse": {
         "properties": {
@@ -227,6 +337,42 @@
         "required": ["user_id", "email", "display_name", "created_at", "updated_at"],
         "title": "User",
         "description": "Canonical User identity model for Croviq."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
       },
       "Workspace": {
         "properties": {

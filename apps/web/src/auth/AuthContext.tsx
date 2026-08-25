@@ -1,239 +1,169 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
-  signInWithPopup,
-  signOut,
+  browserLocalPersistence,
   onAuthStateChanged,
+  setPersistence,
+  signInWithEmailAndPassword,
+  signOut,
   type User as FirebaseUser,
 } from "firebase/auth";
-import { auth, googleProvider } from "../lib/firebase";
+import { auth } from "../lib/firebase";
 import type { components } from "../api/generated";
 
 export type User = components["schemas"]["User"];
+export type ClientAuthEvent =
+  components["schemas"]["AuthLoginAttemptEvent"] | components["schemas"]["AuthLoginFailedEvent"];
 
 export interface AuthContextValue {
   user: User | null;
   firebaseUser: FirebaseUser | null;
-  idToken: string | null;
   isLoading: boolean;
   error: string | null;
-  authErrorCode: string | null;
-  loginWithGoogle: () => Promise<boolean>;
+  loginWithPassword: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
-  // Test helper to inject mock auth state without hitting Firebase
-  setMockUser: (mockUser: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const DEMO_RESTRICTED_MESSAGE = "This Croviq demo is restricted to the approved account.";
+const INVALID_CREDENTIALS_MESSAGE = "Email or password is incorrect.";
+const ACCESS_RESTRICTED_MESSAGE = "This account is not authorized to access Croviq.";
 
-declare global {
-  interface Window {
-    __CROVIQ_MOCK_USER__?: User | null;
+const recordClientAuthEvent = async (event: ClientAuthEvent): Promise<void> => {
+  try {
+    await fetch("/api/client-events", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-request-id": `web-auth-${Date.now()}`,
+      },
+      body: JSON.stringify(event),
+    });
+  } catch {
+    // Client telemetry must not prevent authentication.
   }
-}
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window !== "undefined") {
-      if (window.__CROVIQ_MOCK_USER__) return window.__CROVIQ_MOCK_USER__;
-      const stored = sessionStorage.getItem("__CROVIQ_MOCK_USER__");
-      if (stored) {
-        try {
-          return JSON.parse(stored) as User;
-        } catch {
-          return null;
-        }
-      }
-    }
-    return null;
-  });
-
+  const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [idToken, setIdToken] = useState<string | null>(() => {
-    if (typeof window !== "undefined" && window.__CROVIQ_MOCK_USER__) {
-      return "mock-jwt-token-croviq";
-    }
-    return null;
-  });
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
 
   const clearError = useCallback(() => {
     setError(null);
-    setAuthErrorCode(null);
   }, []);
 
-  const setMockUser = useCallback((mockUser: User | null) => {
-    setUser(mockUser);
-    if (mockUser) {
-      setIdToken("mock-jwt-token-croviq");
-      sessionStorage.setItem("__CROVIQ_MOCK_USER__", JSON.stringify(mockUser));
-    } else {
-      setIdToken(null);
-      sessionStorage.removeItem("__CROVIQ_MOCK_USER__");
-    }
-    setIsLoading(false);
-  }, []);
-
-  /**
-   * Verify token with backend /api/auth/me endpoint.
-   * Backend remains authoritative source of truth for demo-locked policy.
-   */
   const verifyTokenWithBackend = useCallback(async (token: string): Promise<User | null> => {
     try {
-      const res = await fetch("/api/auth/me", {
+      const response = await fetch("/api/auth/me", {
         headers: {
           Authorization: `Bearer ${token}`,
           "x-request-id": `web-auth-${Date.now()}`,
         },
       });
 
-      if (res.ok) {
-        const userData = (await res.json()) as User;
-        return userData;
+      if (response.ok) {
+        return (await response.json()) as User;
       }
 
-      if (res.status === 403) {
-        const errorBody = await res.json().catch(() => ({}));
-        setError(DEMO_RESTRICTED_MESSAGE);
-        setAuthErrorCode(errorBody.error_code || "demo_access_restricted");
-        // Sign out Firebase session if account is not authorized
+      if (response.status === 403) {
+        setError(ACCESS_RESTRICTED_MESSAGE);
+        void recordClientAuthEvent({
+          event_type: "auth.login_failed",
+          error_code: "demo_access_restricted",
+        });
         try {
           await signOut(auth);
         } catch {
-          // ignore signout errors
+          // Authorization denial remains the user-facing result if Firebase sign-out fails.
         }
         return null;
       }
 
-      if (res.status === 401) {
+      if (response.status === 401) {
         setError("Sign-in expired or invalid. Please sign in again.");
-        setAuthErrorCode("unauthorized");
-        try {
-          await signOut(auth);
-        } catch {
-          // ignore
-        }
+        await signOut(auth);
         return null;
       }
 
       setError("Unable to complete sign-in. Please try again.");
-      setAuthErrorCode("server_error");
       return null;
     } catch {
       setError("Network error contacting Croviq API. Please check your connection.");
-      setAuthErrorCode("network_error");
       return null;
     }
   }, []);
 
-  // Listen for Firebase Auth state changes
   useEffect(() => {
-    // If mock auth is active (e.g. during Playwright automated tests), bypass Firebase listener
-    if (
-      typeof window !== "undefined" &&
-      (window.__CROVIQ_MOCK_USER__ || sessionStorage.getItem("__CROVIQ_MOCK_USER__"))
-    ) {
-      setIsLoading(false);
-      return;
-    }
+    let isMounted = true;
 
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setFirebaseUser(fbUser);
-      if (fbUser) {
-        try {
-          const token = await fbUser.getIdToken();
-          setIdToken(token);
-          const domainUser = await verifyTokenWithBackend(token);
-          if (domainUser) {
-            setUser(domainUser);
-            clearError();
-          } else {
-            setUser(null);
-            setIdToken(null);
-          }
-        } catch {
-          setUser(null);
-          setIdToken(null);
-        } finally {
-          setIsLoading(false);
-        }
-      } else {
+    // Request browser-local persistence asynchronously without blocking listener attachment
+    void setPersistence(auth, browserLocalPersistence).catch(() => {
+      // If persistence cannot be set (e.g. strict private mode), in-memory session still functions.
+    });
+
+    const unsubscribe = onAuthStateChanged(auth, async (nextFirebaseUser) => {
+      if (!isMounted) return;
+
+      setFirebaseUser(nextFirebaseUser);
+      if (!nextFirebaseUser) {
         setUser(null);
-        setIdToken(null);
         setIsLoading(false);
+        return;
+      }
+
+      try {
+        const token = await nextFirebaseUser.getIdToken();
+        const domainUser = await verifyTokenWithBackend(token);
+        if (!isMounted) return;
+
+        setUser(domainUser);
+        if (domainUser) clearError();
+      } catch {
+        if (isMounted) {
+          setUser(null);
+          setError("Unable to complete sign-in. Please try again.");
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     });
 
-    return () => unsubscribe();
-  }, [verifyTokenWithBackend, clearError]);
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [clearError, verifyTokenWithBackend]);
 
-  const loginWithGoogle = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true);
-    clearError();
+  const loginWithPassword = useCallback(
+    async (email: string, password: string): Promise<void> => {
+      setIsLoading(true);
+      clearError();
+      void recordClientAuthEvent({ event_type: "auth.login_attempt" });
 
-    try {
-      const userCredential = await signInWithPopup(auth, googleProvider);
-      const fbUser = userCredential.user;
-      setFirebaseUser(fbUser);
-
-      const token = await fbUser.getIdToken();
-      setIdToken(token);
-
-      const domainUser = await verifyTokenWithBackend(token);
-      if (domainUser) {
-        setUser(domainUser);
-        clearError();
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch {
+        setError(INVALID_CREDENTIALS_MESSAGE);
+        void recordClientAuthEvent({
+          event_type: "auth.login_failed",
+          error_code: "invalid_credentials",
+        });
         setIsLoading(false);
-        return true;
-      } else {
-        setUser(null);
-        setIdToken(null);
-        setIsLoading(false);
-        return false;
       }
-    } catch (err: unknown) {
-      setIsLoading(false);
-      const firebaseError = err as { code?: string; message?: string };
-      if (
-        firebaseError.code === "auth/popup-closed-by-user" ||
-        firebaseError.code === "auth/cancelled-popup-request"
-      ) {
-        // User voluntarily dismissed popup, no alarm banner needed
-        return false;
-      }
-
-      if (firebaseError.code === "auth/popup-blocked") {
-        setError("Sign-in popup was blocked by your browser. Please allow popups for Croviq.");
-        setAuthErrorCode("popup_blocked");
-        return false;
-      }
-
-      setError(firebaseError.message || "Google sign-in could not be completed.");
-      setAuthErrorCode("auth_failed");
-      return false;
-    }
-  }, [verifyTokenWithBackend, clearError]);
+    },
+    [clearError],
+  );
 
   const logout = useCallback(async (): Promise<void> => {
     setIsLoading(true);
-
-    // Clear mock storage if present
-    if (typeof window !== "undefined") {
-      delete window.__CROVIQ_MOCK_USER__;
-      sessionStorage.removeItem("__CROVIQ_MOCK_USER__");
-    }
-
     try {
       await signOut(auth);
     } catch {
-      // ignore
+      // Local application state still must clear if Firebase sign-out fails.
     }
 
-    // Fire-and-forget server logout event recording
     try {
       await fetch("/api/auth/logout", {
         method: "POST",
@@ -242,12 +172,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       });
     } catch {
-      // non-blocking
+      // Logout observation must not block client logout.
     }
 
     setUser(null);
     setFirebaseUser(null);
-    setIdToken(null);
     clearError();
     setIsLoading(false);
   }, [clearError]);
@@ -257,14 +186,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         firebaseUser,
-        idToken,
         isLoading,
         error,
-        authErrorCode,
-        loginWithGoogle,
+        loginWithPassword,
         logout,
         clearError,
-        setMockUser,
       }}
     >
       {children}
