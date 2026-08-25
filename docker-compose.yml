@@ -10,12 +10,6 @@ services:
       - .:/app
       - /app/node_modules
       - /app/apps/web/node_modules
-      - /app/apps/api/node_modules
-      - /app/packages/domain/node_modules
-      - /app/packages/observability/node_modules
-      - /app/packages/engine/node_modules
-      - /app/packages/agents/node_modules
-      - /app/packages/media/node_modules
     environment:
       - NODE_ENV=development
     restart: unless-stopped

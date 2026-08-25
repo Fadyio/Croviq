@@ -9,13 +9,7 @@ RUN corepack enable && corepack prepare pnpm@11.23.0 --activate
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json tsconfig.json ./
 
 # Copy package manifests
-COPY packages/domain/package.json ./packages/domain/
-COPY packages/observability/package.json ./packages/observability/
-COPY packages/engine/package.json ./packages/engine/
-COPY packages/agents/package.json ./packages/agents/
-COPY packages/media/package.json ./packages/media/
 COPY apps/web/package.json ./apps/web/
-COPY apps/api/package.json ./apps/api/
 
 # Install workspace dependencies
 RUN pnpm install --frozen-lockfile

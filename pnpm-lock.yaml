@@ -15,33 +15,8 @@ importers:
         specifier: ^5.8.2
         version: 5.9.3
 
-  apps/api:
-    dependencies:
-      '@croviq/agents':
-        specifier: workspace:*
-        version: link:../../packages/agents
-      '@croviq/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
-      '@croviq/engine':
-        specifier: workspace:*
-        version: link:../../packages/engine
-      '@croviq/media':
-        specifier: workspace:*
-        version: link:../../packages/media
-      '@croviq/observability':
-        specifier: workspace:*
-        version: link:../../packages/observability
-    devDependencies:
-      typescript:
-        specifier: ^5.8.2
-        version: 5.9.3
-
   apps/web:
     dependencies:
-      '@croviq/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
       lucide-react:
         specifier: ^1.16.0
         version: 1.33.0(react@19.2.8)
@@ -76,57 +51,6 @@ importers:
       vite:
         specifier: ^6.2.0
         version: 6.4.3(jiti@1.21.7)
-
-  packages/agents:
-    dependencies:
-      '@croviq/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@croviq/observability':
-        specifier: workspace:*
-        version: link:../observability
-    devDependencies:
-      typescript:
-        specifier: ^5.8.2
-        version: 5.9.3
-
-  packages/domain:
-    devDependencies:
-      typescript:
-        specifier: ^5.8.2
-        version: 5.9.3
-
-  packages/engine:
-    dependencies:
-      '@croviq/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@croviq/observability':
-        specifier: workspace:*
-        version: link:../observability
-    devDependencies:
-      typescript:
-        specifier: ^5.8.2
-        version: 5.9.3
-
-  packages/media:
-    dependencies:
-      '@croviq/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@croviq/observability':
-        specifier: workspace:*
-        version: link:../observability
-    devDependencies:
-      typescript:
-        specifier: ^5.8.2
-        version: 5.9.3
-
-  packages/observability:
-    devDependencies:
-      typescript:
-        specifier: ^5.8.2
-        version: 5.9.3
 
 packages:
 
