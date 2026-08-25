@@ -25,7 +25,7 @@ def resolve_git_sha() -> str:
 class Settings:
     def __init__(self) -> None:
         self.service_name: str = "croviq-api"
-        self.environment: str = os.getenv("ENVIRONMENT", "development")
+        self.environment: str = os.getenv("CROVIQ_ENV") or os.getenv("ENVIRONMENT", "development")
         self.git_sha: str = resolve_git_sha()
 
 

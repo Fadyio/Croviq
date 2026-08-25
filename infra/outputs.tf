@@ -42,3 +42,18 @@ output "workload_identity_provider" {
   value       = google_iam_workload_identity_pool_provider.github_provider.name
   description = "The full identifier of the Workload Identity Provider for GitHub Actions OIDC."
 }
+
+output "cloud_run_service_name" {
+  value       = google_cloud_run_v2_service.api.name
+  description = "The name of the Cloud Run API service."
+}
+
+output "cloud_run_url" {
+  value       = google_cloud_run_v2_service.api.uri
+  description = "The live HTTPS URL of the deployed Cloud Run API service."
+}
+
+output "cloud_run_latest_revision" {
+  value       = google_cloud_run_v2_service.api.latest_created_revision
+  description = "The latest created revision identifier of the Cloud Run API service."
+}
