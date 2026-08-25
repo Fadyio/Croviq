@@ -24,6 +24,7 @@ services:
       - "8080:8080"
     volumes:
       - ./apps/api:/app/apps/api
+      - ./packages/domain:/app/packages/domain
       - /app/apps/api/.venv
     environment:
       - ENVIRONMENT=development

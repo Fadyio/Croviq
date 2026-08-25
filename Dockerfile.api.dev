@@ -10,9 +10,9 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 ENV PYTHONUNBUFFERED=1
 
-# Copy dependency definition files
+# Copy package definitions
+COPY packages/domain /app/packages/domain
 COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/
-
 WORKDIR /app/apps/api
 
 # Install dependencies using frozen lockfile
