@@ -6,6 +6,7 @@
 # -----------------------------------------------------------------------------
 locals {
   required_services = [
+    "cloudresourcemanager.googleapis.com",
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "iam.googleapis.com",
@@ -89,6 +90,34 @@ resource "google_service_account_iam_member" "deployer_sa_user" {
   service_account_id = google_service_account.api_runtime.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Allow deployment service account to inspect service usage / enabled APIs for Terraform state refresh
+resource "google_project_iam_member" "deployer_serviceusage_viewer" {
+  project = var.project_id
+  role    = "roles/serviceusage.serviceUsageViewer"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Allow deployment service account to inspect service accounts for Terraform state refresh
+resource "google_project_iam_member" "deployer_iam_viewer" {
+  project = var.project_id
+  role    = "roles/iam.serviceAccountViewer"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Allow deployment service account to inspect WIF pools for Terraform state refresh
+resource "google_project_iam_member" "deployer_wif_viewer" {
+  project = var.project_id
+  role    = "roles/iam.workloadIdentityPoolViewer"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Allow deployment service account to read project IAM policy for Terraform state refresh
+resource "google_project_iam_member" "deployer_project_iam_viewer" {
+  project = var.project_id
+  role    = "roles/resourcemanager.projectIamViewer"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
 
