@@ -26,3 +26,18 @@ For all future features:
 5. **DEPLOYED** (when applicable)
 6. **LOGS VERIFIED** (when applicable)
 7. **BROWSER VERIFIED** (when applicable)
+
+## Promotion Workflow
+
+```
+LOCAL
+→ COMMIT
+→ PUSH
+→ CI
+→ DEPLOY
+→ LOG VERIFY
+→ BROWSER VERIFY
+```
+
+Production infrastructure changes are never applied manually from application code.
+
