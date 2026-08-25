@@ -1,0 +1,4 @@
+project_id  = "your-gcp-project-id"
+region      = "us-central1"
+environment = "dev"
+app_domain  = "app.example.com"
