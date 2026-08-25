@@ -1,0 +1,38 @@
+name: WIF Verification
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  verify-wif:
+    name: Verify Workload Identity Federation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud via WIF
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/705994694330/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider"
+          service_account: "croviq-github-deployer@croviq-506602.iam.gserviceaccount.com"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify GCP Authentication
+        run: |
+          echo "=== Active Authenticated Account ==="
+          gcloud auth list
+          echo "=== Configured Project ==="
+          gcloud config get-value project
+          echo "=== Read-only Artifact Registry verification ==="
+          gcloud artifacts repositories describe croviq-api --location=us-central1 --project=croviq-506602
