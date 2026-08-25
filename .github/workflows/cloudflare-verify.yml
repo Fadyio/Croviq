@@ -27,7 +27,7 @@ jobs:
             exit 1
           fi
 
-      - name: Authenticate to Google Cloud via WIF
+      - name: Authenticate to Google Cloud via WIF (Remote State Access)
         id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -35,58 +35,30 @@ jobs:
           service_account: "croviq-github-deployer@croviq-506602.iam.gserviceaccount.com"
           token_format: "access_token"
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Discover Current Production State Variables
-        id: prod_state
-        run: |
-          SERVICE_JSON=$(gcloud run services describe croviq-api --project=croviq-506602 --region=us-central1 --format=json)
-          IMAGE_URI=$(echo "$SERVICE_JSON" | jq -r '.spec.template.spec.containers[0].image // empty')
-          GIT_SHA=$(echo "$SERVICE_JSON" | jq -r '(.spec.template.spec.containers[0].env[] | select(.name=="GIT_SHA") | .value) // empty')
-          if [ -z "$IMAGE_URI" ]; then
-            IMAGE_URI="us-central1-docker.pkg.dev/croviq-506602/croviq-api/croviq-api@sha256:b3767453fd25e10d59168b9829b1ca21eba6ec43567bb7b30ff94c908197c729"
-          fi
-          if [ -z "$GIT_SHA" ]; then
-            GIT_SHA="b88dca0eb86d5b68ca2cfdf474ea0f7940aa1a06"
-          fi
-
-          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
-          echo "git_sha=${GIT_SHA}" >> $GITHUB_OUTPUT
-          echo "=========================================="
-          echo "Current Production Image: ${IMAGE_URI}"
-          echo "Current Production Git SHA: ${GIT_SHA}"
-          echo "=========================================="
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.15.8"
 
-      - name: Terraform Init
-        working-directory: infra
+      - name: Terraform Cloudflare DNS Init
+        working-directory: infra/cloudflare-dns
         run: |
           terraform init \
             -backend-config="bucket=croviq-506602-croviq-tfstate" \
-            -backend-config="prefix=croviq/main"
+            -backend-config="prefix=croviq/cloudflare-dns"
 
-      - name: Terraform Validate
-        working-directory: infra
+      - name: Terraform Cloudflare DNS Validate
+        working-directory: infra/cloudflare-dns
         run: terraform validate
 
-      - name: Terraform Plan (Read-Only Verification)
+      - name: Terraform Cloudflare DNS Plan (Read-Only Verification)
         id: tf_plan
-        working-directory: infra
+        working-directory: infra/cloudflare-dns
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          echo "Running terraform plan with CLOUDFLARE_API_TOKEN..."
+          echo "Running terraform plan for infra/cloudflare-dns..."
           terraform plan \
-            -var="project_id=croviq-506602" \
-            -var="region=us-central1" \
-            -var="environment=prod" \
-            -var="api_image=${{ steps.prod_state.outputs.image_uri }}" \
-            -var="git_sha=${{ steps.prod_state.outputs.git_sha }}" \
             -detailed-exitcode \
             -no-color \
             -out=tfplan || PLAN_EXIT=$?
