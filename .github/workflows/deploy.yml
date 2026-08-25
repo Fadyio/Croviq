@@ -26,6 +26,11 @@ jobs:
     name: Deploy Cloud Run API
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+    outputs:
+      service_url: ${{ steps.tf_outputs.outputs.service_url }}
+      service_name: ${{ steps.tf_outputs.outputs.service_name }}
+      revision: ${{ steps.tf_outputs.outputs.revision }}
+      git_sha: ${{ steps.resolve-commit.outputs.sha }}
     steps:
       - name: Resolve Target Commit SHA
         id: resolve-commit
@@ -141,3 +146,82 @@ jobs:
           echo "Testing live health endpoint: ${SERVICE_URL}/health"
           RESPONSE=$(curl -fsS -i -H "x-request-id: deploy-verify-${{ steps.resolve-commit.outputs.sha }}" "${SERVICE_URL}/health")
           echo "$RESPONSE"
+
+  deploy-web:
+    name: Deploy Cloudflare Frontend
+    runs-on: ubuntu-latest
+    needs: [deploy-api]
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+    steps:
+      - name: Resolve Target Commit SHA
+        id: resolve-commit
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.git_sha }}" ]; then
+            echo "sha=${{ github.event.inputs.git_sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve-commit.outputs.sha }}
+
+      - name: Validate Cloudflare Deployment Credentials
+        run: |
+          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "::error::Missing CLOUDFLARE_API_TOKEN in GitHub Secrets. Deployment cannot proceed."
+            exit 1
+          fi
+          if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
+            echo "::error::Missing CLOUDFLARE_ACCOUNT_ID in GitHub Secrets. Deployment cannot proceed."
+            exit 1
+          fi
+          echo "Cloudflare deployment credentials validated successfully."
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Frontend Application
+        env:
+          VITE_API_BASE_URL: ${{ needs.deploy-api.outputs.service_url || 'https://croviq-api-uhz5nod4gq-uc.a.run.app' }}
+        run: |
+          echo "Building frontend with VITE_API_BASE_URL=${VITE_API_BASE_URL} at commit ${{ steps.resolve-commit.outputs.sha }}"
+          pnpm --filter @croviq/web build
+
+      - name: Deploy Frontend to Cloudflare
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          OUTPUT=$(pnpm --filter @croviq/web exec wrangler deploy)
+          echo "$OUTPUT"
+
+          VERSION_ID=$(echo "$OUTPUT" | grep -i "Current Version ID:" | awk '{print $NF}')
+          if [ -z "$VERSION_ID" ]; then
+            VERSION_ID="deployed-${{ steps.resolve-commit.outputs.sha }}"
+          fi
+          echo "version_id=${VERSION_ID}" >> $GITHUB_OUTPUT
+          echo "=========================================="
+          echo "Frontend Git SHA: ${{ steps.resolve-commit.outputs.sha }}"
+          echo "Cloudflare Deployment Version ID: ${VERSION_ID}"
+          echo "Production Hostname: app.croviq.app"
+          echo "Production URL: https://app.croviq.app"
+          echo "=========================================="
+
+      - name: Verify Live Frontend Deployment
+        run: |
+          echo "Verifying live frontend at https://app.croviq.app"
+          curl -fsS -i --doh-url https://cloudflare-dns.com/dns-query https://app.croviq.app

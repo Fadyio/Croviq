@@ -52,6 +52,15 @@ test.describe("Web Application Smoke", () => {
     const runningStatus = page.getByText("Running", { exact: true });
     await expect(runningStatus, "'Running' status must be visible for Frontend").toBeVisible();
 
+    // Verify "API" status is visible and connected
+    const apiLabel = page.getByText("API", { exact: true });
+    await expect(apiLabel, "'API' label must be visible in status card").toBeVisible();
+
+    const connectedStatus = page.getByText("Connected", { exact: true });
+    await expect(connectedStatus, "'Connected' status must be visible for API").toBeVisible();
+
+    const serviceInfo = page.getByText("croviq-api", { exact: true });
+    await expect(serviceInfo, "'croviq-api' service name must be visible").toBeVisible();
     // Verify zero console errors, page errors, and failed network requests
     expect(
       consoleErrors,
