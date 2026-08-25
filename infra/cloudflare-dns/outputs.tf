@@ -7,3 +7,13 @@ output "cloudflare_zone_name" {
   value       = data.cloudflare_zone.croviq.name
   description = "The Cloudflare zone name."
 }
+
+output "certificate_dns_authorization_record_id" {
+  value       = cloudflare_record.app_cert_dns_authorization.id
+  description = "The Cloudflare DNS record ID for the certificate authorization record."
+}
+
+output "certificate_dns_authorization_record_hostname" {
+  value       = cloudflare_record.app_cert_dns_authorization.hostname
+  description = "The FQDN of the certificate authorization record."
+}

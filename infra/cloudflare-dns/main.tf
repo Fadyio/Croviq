@@ -10,3 +10,19 @@
 data "cloudflare_zone" "croviq" {
   name = var.cloudflare_zone_name
 }
+
+# -----------------------------------------------------------------------------
+# 2. Google Certificate Manager DNS Authorization Record
+# -----------------------------------------------------------------------------
+
+# DNS CNAME validation record for Google Certificate Manager (croviq-app-cert).
+# Must be DNS-only (proxied = false) so Google's ACME challenge validation can resolve the CNAME.
+resource "cloudflare_record" "app_cert_dns_authorization" {
+  zone_id = data.cloudflare_zone.croviq.id
+  name    = var.certificate_dns_authorization_name
+  type    = var.certificate_dns_authorization_type
+  value   = var.certificate_dns_authorization_value
+  proxied = false
+  ttl     = 1
+  comment = "Google Certificate Manager DNS authorization for app.croviq.app"
+}
