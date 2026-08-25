@@ -37,3 +37,13 @@ output "root_certificate_dns_authorization_record_hostname" {
   value       = cloudflare_record.root_cert_dns_authorization.hostname
   description = "The FQDN of the root certificate authorization record."
 }
+
+output "root_record_id" {
+  value       = cloudflare_record.root.id
+  description = "The Cloudflare DNS record ID for croviq.app root A record."
+}
+
+output "root_record_hostname" {
+  value       = cloudflare_record.root.hostname
+  description = "The FQDN of the root A record."
+}

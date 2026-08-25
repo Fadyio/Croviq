@@ -42,3 +42,9 @@ variable "app_ipv4_address" {
   description = "The IPv4 address of the Google Cloud Load Balancer for app.croviq.app."
   default     = "8.233.204.233"
 }
+
+variable "root_ipv4_address" {
+  type        = string
+  description = "The IPv4 address of the Google Cloud Load Balancer for croviq.app."
+  default     = "8.233.204.233"
+}

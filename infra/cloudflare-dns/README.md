@@ -50,6 +50,7 @@ terraform plan
 | `certificate_root_dns_authorization_type` | `string` | *(required)* | DNS Resource Record Type for Google Certificate Manager root domain DNS authorization |
 | `certificate_root_dns_authorization_value` | `string` | *(required)* | DNS Resource Record Value for Google Certificate Manager root domain DNS authorization |
 | `app_ipv4_address` | `string` | `"8.233.204.233"` | The IPv4 address of the Google Cloud Load Balancer for app.croviq.app |
+| `root_ipv4_address` | `string` | `"8.233.204.233"` | The IPv4 address of the Google Cloud Load Balancer for croviq.app |
 
 ## Outputs
 
@@ -63,3 +64,5 @@ terraform plan
 | `app_record_hostname` | The FQDN of the app A record |
 | `root_certificate_dns_authorization_record_id` | The Cloudflare DNS record ID for the root certificate authorization record |
 | `root_certificate_dns_authorization_record_hostname` | The FQDN of the root certificate authorization record |
+| `root_record_id` | The Cloudflare DNS record ID for croviq.app root A record |
+| `root_record_hostname` | The FQDN of the root A record |
