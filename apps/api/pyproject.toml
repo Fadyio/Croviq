@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "firebase-admin>=7.5.0",
     "google-api-core<2.35.0",
+    "google-cloud-aiplatform>=1.111.0",
     "pydantic>=2.10.0",
     "uvicorn>=0.34.0",
 ]
