@@ -694,6 +694,96 @@
           }
         }
       }
+    },
+    "/api/productions/{production_id}/edl": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Assemble Canonical Edit Decision List (EDL)",
+        "description": "Deterministically derives audio-safe cut instructions and visual coverage markers from approved Director review.",
+        "operationId": "assemble_edl_api_productions__production_id__edl_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssembleEDLResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get Production Edit Decision List",
+        "description": "Retrieve the active canonical Edit Decision List and derived renderable keep segments.",
+        "operationId": "get_production_edl_api_productions__production_id__edl_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EDLDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -840,6 +930,77 @@
         "required": ["run_id", "production_id", "status", "started_at"],
         "title": "AnalyzeProductionResponse",
         "description": "Response returned when editorial analysis is completed."
+      },
+      "AssembleEDLResponse": {
+        "properties": {
+          "edl_id": {
+            "type": "string",
+            "title": "Edl Id",
+            "description": "Unique identifier for the assembled Edit Decision List"
+          },
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Associated Production entity identifier"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Monotonically increasing version number for this production's EDL"
+          },
+          "cut_count": {
+            "type": "integer",
+            "title": "Cut Count",
+            "description": "Number of executable cut instructions (SAFE + NEEDS_COVERAGE)"
+          },
+          "coverage_marker_count": {
+            "type": "integer",
+            "title": "Coverage Marker Count",
+            "description": "Number of visual coverage markers (B-roll + jump cut covers)"
+          },
+          "source_duration_ms": {
+            "type": "integer",
+            "title": "Source Duration Ms",
+            "description": "Total duration of the source video in milliseconds"
+          },
+          "total_removed_duration_ms": {
+            "type": "integer",
+            "title": "Total Removed Duration Ms",
+            "description": "Total duration removed by safe cuts in milliseconds"
+          },
+          "estimated_target_duration_ms": {
+            "type": "integer",
+            "title": "Estimated Target Duration Ms",
+            "description": "Estimated final master video duration in milliseconds"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "EDL readiness status for deterministic rendering",
+            "default": "READY"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the EDL was assembled in UTC"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "edl_id",
+          "production_id",
+          "version",
+          "cut_count",
+          "coverage_marker_count",
+          "source_duration_ms",
+          "total_removed_duration_ms",
+          "estimated_target_duration_ms",
+          "created_at"
+        ],
+        "title": "AssembleEDLResponse",
+        "description": "Response returned upon successfully assembling a canonical Edit Decision List."
       },
       "AuthLoginAttemptEvent": {
         "properties": {
@@ -1151,6 +1312,65 @@
         "required": ["event_type"],
         "title": "ClientErrorEvent"
       },
+      "CoverageMarker": {
+        "properties": {
+          "marker_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Marker Id",
+            "description": "Unique identifier for the coverage marker"
+          },
+          "decision_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Decision Id",
+            "description": "ID of the related editorial decision"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms",
+            "description": "Start timestamp in source video milliseconds"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source End Ms",
+            "description": "End timestamp in source video milliseconds"
+          },
+          "coverage_type": {
+            "$ref": "#/components/schemas/CoverageType",
+            "description": "Coverage category (e.g. SOURCE_SCREEN, BROLL_CANDIDATE)"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "description": "Editorial justification for the visual coverage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "marker_id",
+          "decision_id",
+          "source_start_ms",
+          "source_end_ms",
+          "coverage_type",
+          "reason"
+        ],
+        "title": "CoverageMarker",
+        "description": "Visual coverage metadata identifying footage insertion candidates."
+      },
+      "CoverageType": {
+        "type": "string",
+        "enum": ["SOURCE_SCREEN", "BROLL_CANDIDATE"],
+        "title": "CoverageType",
+        "description": "Visual coverage types supported for jump-cut mitigation and B-roll insertion."
+      },
       "CreateUploadRequest": {
         "properties": {
           "filename": {
@@ -1231,6 +1451,152 @@
         "required": ["production_id", "upload_id", "upload_url", "expires_at"],
         "title": "CreateUploadResponse",
         "description": "Response returned upon successfully registering an upload and generating a signed PUT URL."
+      },
+      "CutInstruction": {
+        "properties": {
+          "cut_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Cut Id",
+            "description": "Unique identifier for the cut instruction"
+          },
+          "decision_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Decision Id",
+            "description": "Originating Editor/Director decision identifier"
+          },
+          "decision_type": {
+            "$ref": "#/components/schemas/EditorDecisionType",
+            "description": "Semantic decision type (e.g. REMOVE_FILLER, REMOVE_FALSE_START, etc.)"
+          },
+          "transcript_start_word": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transcript Start Word",
+            "description": "0-indexed start word boundary in canonical transcript"
+          },
+          "transcript_end_word": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transcript End Word",
+            "description": "0-indexed end word boundary in canonical transcript"
+          },
+          "requested_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Requested Start Ms",
+            "description": "Raw requested start timestamp from word anchor in ms"
+          },
+          "requested_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Requested End Ms",
+            "description": "Raw requested end timestamp from word anchor in ms"
+          },
+          "safe_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Safe Start Ms",
+            "description": "Deterministic cut start timestamp snapped to inter-word silence in ms"
+          },
+          "safe_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Safe End Ms",
+            "description": "Deterministic cut end timestamp snapped to inter-word silence in ms"
+          },
+          "removed_duration_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Removed Duration Ms",
+            "description": "Total duration removed by this cut in milliseconds",
+            "default": 0
+          },
+          "left_anchor": {
+            "type": "string",
+            "title": "Left Anchor",
+            "description": "Spoken word or marker immediately preceding the cut boundary"
+          },
+          "right_anchor": {
+            "type": "string",
+            "title": "Right Anchor",
+            "description": "Spoken word or marker immediately following the cut boundary"
+          },
+          "transition_ms": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 0.0,
+            "title": "Transition Ms",
+            "description": "Micro-crossfade transition duration in milliseconds (canonical 20ms)",
+            "default": 20
+          },
+          "safety_status": {
+            "$ref": "#/components/schemas/CutSafetyStatus",
+            "description": "Cut safety classification: SAFE, NEEDS_COVERAGE, or REJECTED_UNSAFE"
+          },
+          "safety_reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Safety Reason",
+            "description": "Deterministic explanation for safety status determination"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence score for this cut instruction"
+          },
+          "coverage_marker_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Marker Id",
+            "description": "Optional associated coverage marker ID when visual cut needs covering"
+          },
+          "requires_room_tone": {
+            "type": "boolean",
+            "title": "Requires Room Tone",
+            "description": "Whether a room-tone bridge is recommended across the join",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cut_id",
+          "decision_id",
+          "decision_type",
+          "transcript_start_word",
+          "transcript_end_word",
+          "requested_start_ms",
+          "requested_end_ms",
+          "safe_start_ms",
+          "safe_end_ms",
+          "left_anchor",
+          "right_anchor",
+          "safety_status",
+          "safety_reason",
+          "confidence"
+        ],
+        "title": "CutInstruction",
+        "description": "Deterministic, audio-safe cut instruction ready for FFmpeg render execution."
+      },
+      "CutSafetyStatus": {
+        "type": "string",
+        "enum": ["SAFE", "NEEDS_COVERAGE", "REJECTED_UNSAFE"],
+        "title": "CutSafetyStatus",
+        "description": "Deterministic safety classification for proposed cuts."
       },
       "DirectorDecision": {
         "properties": {
@@ -1394,6 +1760,121 @@
         "enum": ["APPROVE", "REJECT", "MODIFY"],
         "title": "DirectorVerdict",
         "description": "Review verdicts issued by Director (Maya)."
+      },
+      "EDLDetailResponse": {
+        "properties": {
+          "edl": {
+            "$ref": "#/components/schemas/EditDecisionList",
+            "description": "Canonical EditDecisionList domain entity"
+          },
+          "keep_segments": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Keep Segments",
+            "description": "Ordered list of contiguous (start_ms, end_ms) media intervals to KEEP for master video render"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["edl", "keep_segments"],
+        "title": "EDLDetailResponse",
+        "description": "Detailed response for inspecting an EditDecisionList along with derived renderable segments."
+      },
+      "EditDecisionList": {
+        "properties": {
+          "edl_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Edl Id",
+            "description": "Unique identifier for the Edit Decision List"
+          },
+          "production_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated Production entity identifier"
+          },
+          "source_duration_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Source Duration Ms",
+            "description": "Total duration of the source media in milliseconds"
+          },
+          "editor_proposal_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editor Proposal Id",
+            "description": "Reference to the originating EditorProposal"
+          },
+          "director_review_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Director Review Id",
+            "description": "Reference to the originating DirectorReview"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version",
+            "description": "Monotonically increasing version number for this production's EDL",
+            "default": 1
+          },
+          "cuts": {
+            "items": {
+              "$ref": "#/components/schemas/CutInstruction"
+            },
+            "type": "array",
+            "title": "Cuts",
+            "description": "Ordered list of deterministic cut instructions"
+          },
+          "coverage_markers": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageMarker"
+            },
+            "type": "array",
+            "title": "Coverage Markers",
+            "description": "Visual coverage markers for B-roll and screen recordings"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the EDL was generated (UTC)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["edl_id", "production_id", "source_duration_ms", "created_at"],
+        "title": "EditDecisionList",
+        "description": "Canonical, vendor-neutral Edit Decision List (EDL) schema."
       },
       "EditorDecision": {
         "properties": {
@@ -1955,7 +2436,7 @@
           },
           "end_ms": {
             "type": "integer",
-            "exclusiveMinimum": 0.0,
+            "minimum": 0.0,
             "title": "End Ms",
             "description": "End timestamp in source video milliseconds"
           },

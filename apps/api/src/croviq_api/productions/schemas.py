@@ -10,6 +10,7 @@ from croviq_domain.editorial import (
     EditorialRun,
     EditorialRunStatus,
 )
+from croviq_domain.edl import EditDecisionList
 
 from croviq_domain.production import Production
 from croviq_domain.transcript import Transcript
@@ -198,4 +199,71 @@ class EditorialRunDetailResponse(BaseModel):
     activities: list[AgentActivity] = Field(
         default_factory=list,
         description="Product-facing agent activities generated during the run",
+    )
+
+
+class AssembleEDLResponse(BaseModel):
+    """Response returned upon successfully assembling a canonical Edit Decision List."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    edl_id: str = Field(
+        ...,
+        description="Unique identifier for the assembled Edit Decision List",
+    )
+    production_id: str = Field(
+        ...,
+        description="Associated Production entity identifier",
+    )
+    version: int = Field(
+        ...,
+        description="Monotonically increasing version number for this production's EDL",
+    )
+    cut_count: int = Field(
+        ...,
+        description="Number of executable cut instructions (SAFE + NEEDS_COVERAGE)",
+    )
+    coverage_marker_count: int = Field(
+        ...,
+        description="Number of visual coverage markers (B-roll + jump cut covers)",
+    )
+    source_duration_ms: int = Field(
+        ...,
+        description="Total duration of the source video in milliseconds",
+    )
+    total_removed_duration_ms: int = Field(
+        ...,
+        description="Total duration removed by safe cuts in milliseconds",
+    )
+    estimated_target_duration_ms: int = Field(
+        ...,
+        description="Estimated final master video duration in milliseconds",
+    )
+    status: str = Field(
+        default="READY",
+        description="EDL readiness status for deterministic rendering",
+    )
+    created_at: datetime = Field(
+        ...,
+        description="Timestamp when the EDL was assembled in UTC",
+    )
+
+
+class EDLDetailResponse(BaseModel):
+    """Detailed response for inspecting an EditDecisionList along with derived renderable segments."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    edl: EditDecisionList = Field(
+        ...,
+        description="Canonical EditDecisionList domain entity",
+    )
+    keep_segments: list[tuple[int, int]] = Field(
+        ...,
+        description="Ordered list of contiguous (start_ms, end_ms) media intervals to KEEP for master video render",
     )

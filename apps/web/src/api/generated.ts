@@ -134,6 +134,20 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/edl": {
+    post: {
+      responses: {
+        200: components["schemas"]["AssembleEDLResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+    get: {
+      responses: {
+        200: components["schemas"]["EDLDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
 }
 
 export interface components {
@@ -173,6 +187,28 @@ export interface components {
       started_at: string;
       /** Run completion timestamp in UTC */
       completed_at?: string | null;
+    };
+    AssembleEDLResponse: {
+      /** Unique identifier for the assembled Edit Decision List */
+      edl_id: string;
+      /** Associated Production entity identifier */
+      production_id: string;
+      /** Monotonically increasing version number for this production's EDL */
+      version: number;
+      /** Number of executable cut instructions (SAFE + NEEDS_COVERAGE) */
+      cut_count: number;
+      /** Number of visual coverage markers (B-roll + jump cut covers) */
+      coverage_marker_count: number;
+      /** Total duration of the source video in milliseconds */
+      source_duration_ms: number;
+      /** Total duration removed by safe cuts in milliseconds */
+      total_removed_duration_ms: number;
+      /** Estimated final master video duration in milliseconds */
+      estimated_target_duration_ms: number;
+      /** EDL readiness status for deterministic rendering */
+      status?: string;
+      /** Timestamp when the EDL was assembled in UTC */
+      created_at: string;
     };
     AuthLoginAttemptEvent: {
       event_type: "auth.login_attempt";
@@ -244,6 +280,21 @@ export interface components {
       error_code?: string | null;
       message?: string | null;
     };
+    CoverageMarker: {
+      /** Unique identifier for the coverage marker */
+      marker_id: string;
+      /** ID of the related editorial decision */
+      decision_id: string;
+      /** Start timestamp in source video milliseconds */
+      source_start_ms: number;
+      /** End timestamp in source video milliseconds */
+      source_end_ms: number;
+      /** Coverage category (e.g. SOURCE_SCREEN, BROLL_CANDIDATE) */
+      coverage_type: components["schemas"]["CoverageType"];
+      /** Editorial justification for the visual coverage */
+      reason: string;
+    };
+    CoverageType: "SOURCE_SCREEN" | "BROLL_CANDIDATE";
     CreateUploadRequest: {
       /** Original name of the video file to upload */
       filename: string;
@@ -268,6 +319,45 @@ export interface components {
       /** Timestamp when the pre-signed upload URL expires (UTC) */
       expires_at: string;
     };
+    CutInstruction: {
+      /** Unique identifier for the cut instruction */
+      cut_id: string;
+      /** Originating Editor/Director decision identifier */
+      decision_id: string;
+      /** Semantic decision type (e.g. REMOVE_FILLER, REMOVE_FALSE_START, etc.) */
+      decision_type: components["schemas"]["EditorDecisionType"];
+      /** 0-indexed start word boundary in canonical transcript */
+      transcript_start_word: number;
+      /** 0-indexed end word boundary in canonical transcript */
+      transcript_end_word: number;
+      /** Raw requested start timestamp from word anchor in ms */
+      requested_start_ms: number;
+      /** Raw requested end timestamp from word anchor in ms */
+      requested_end_ms: number;
+      /** Deterministic cut start timestamp snapped to inter-word silence in ms */
+      safe_start_ms: number;
+      /** Deterministic cut end timestamp snapped to inter-word silence in ms */
+      safe_end_ms: number;
+      /** Total duration removed by this cut in milliseconds */
+      removed_duration_ms?: number;
+      /** Spoken word or marker immediately preceding the cut boundary */
+      left_anchor: string;
+      /** Spoken word or marker immediately following the cut boundary */
+      right_anchor: string;
+      /** Micro-crossfade transition duration in milliseconds (canonical 20ms) */
+      transition_ms?: number;
+      /** Cut safety classification: SAFE, NEEDS_COVERAGE, or REJECTED_UNSAFE */
+      safety_status: components["schemas"]["CutSafetyStatus"];
+      /** Deterministic explanation for safety status determination */
+      safety_reason: string;
+      /** Confidence score for this cut instruction */
+      confidence: number;
+      /** Optional associated coverage marker ID when visual cut needs covering */
+      coverage_marker_id?: string | null;
+      /** Whether a room-tone bridge is recommended across the join */
+      requires_room_tone?: boolean;
+    };
+    CutSafetyStatus: "SAFE" | "NEEDS_COVERAGE" | "REJECTED_UNSAFE";
     DirectorDecision: {
       /** ID of the EditorDecision being reviewed */
       editor_decision_id: string;
@@ -305,6 +395,32 @@ export interface components {
       confidence: number;
     };
     DirectorVerdict: "APPROVE" | "REJECT" | "MODIFY";
+    EDLDetailResponse: {
+      /** Canonical EditDecisionList domain entity */
+      edl: components["schemas"]["EditDecisionList"];
+      /** Ordered list of contiguous (start_ms, end_ms) media intervals to KEEP for master video render */
+      keep_segments: unknown[][];
+    };
+    EditDecisionList: {
+      /** Unique identifier for the Edit Decision List */
+      edl_id: string;
+      /** Associated Production entity identifier */
+      production_id: string;
+      /** Total duration of the source media in milliseconds */
+      source_duration_ms: number;
+      /** Reference to the originating EditorProposal */
+      editor_proposal_id?: string | null;
+      /** Reference to the originating DirectorReview */
+      director_review_id?: string | null;
+      /** Monotonically increasing version number for this production's EDL */
+      version?: number;
+      /** Ordered list of deterministic cut instructions */
+      cuts?: components["schemas"]["CutInstruction"][];
+      /** Visual coverage markers for B-roll and screen recordings */
+      coverage_markers?: components["schemas"]["CoverageMarker"][];
+      /** Timestamp when the EDL was generated (UTC) */
+      created_at: string;
+    };
     EditorDecision: {
       /** Unique identifier for the decision within the proposal */
       decision_id: string;
