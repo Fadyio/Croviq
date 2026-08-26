@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from datetime import datetime, timezone
 import time
+import os
 from typing import Any
 
 from croviq_api.config import get_settings
@@ -369,10 +370,7 @@ def get_default_production_repository() -> ProductionRepository:
     global _global_production_repo
     if _global_production_repo is None:
         settings = get_settings()
-        if (
-            settings.environment == "production"
-            or settings.environment == "staging"
-        ) and settings.gcp_project_id:
+        if settings.environment in ("production", "staging") or os.getenv("USE_FIRESTORE") == "true":
             _global_production_repo = FirestoreProductionRepository(
                 project_id=settings.gcp_project_id
             )
