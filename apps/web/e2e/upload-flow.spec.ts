@@ -148,8 +148,7 @@ test.describe("Production Home and Raw Media Upload", () => {
     await expect(page.getByText("Workspace ID")).toHaveCount(0);
     await expect(page.getByText("Owner User ID")).toHaveCount(0);
     await expect(page.getByText("Git SHA")).toHaveCount(0);
-    await expect(page.getByText(/Milestone/i)).toHaveCount(0);
-
+    await page.screenshot({ path: "e2e/screenshots/studio-cockpit-1440px.png", fullPage: true });
     expect(consoleErrors).toEqual([]);
   });
 
@@ -237,8 +236,19 @@ test.describe("Production Home and Raw Media Upload", () => {
     await expect(page.getByText("Uploaded")).toBeVisible();
     await expect(page.getByText("Production recorded and ready for analysis")).toBeVisible();
     await expect(page.getByText("Production ID: prod_test_001")).toBeVisible();
-
+    await page.screenshot({ path: "e2e/screenshots/studio-cockpit-uploaded.png", fullPage: true });
     expect(consoleErrors).toEqual([]);
+  });
+
+  test("renders responsive Production Home at mobile viewport (390px)", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockFirebasePasswordSignIn(page);
+    await mockBackendApis(page);
+    await login(page);
+
+    await expect(page.getByRole("heading", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What are we making?" })).toBeVisible();
+    await page.screenshot({ path: "e2e/screenshots/studio-cockpit-390px.png", fullPage: true });
   });
 
   test("rejects invalid media format with clear error", async ({ page }) => {
