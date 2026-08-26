@@ -21,6 +21,8 @@ class ClientAuthEventBase(BaseModel):
     """Client-supplied auth telemetry with no free-form payload fields."""
 
     model_config = ConfigDict(extra="forbid")
+    firebase_uid: str | None = None
+    git_sha: str | None = None
 
 
 class AuthLoginAttemptEvent(ClientAuthEventBase):
@@ -32,13 +34,41 @@ class AuthLoginFailedEvent(ClientAuthEventBase):
     error_code: Literal["invalid_credentials", "demo_access_restricted"] | None = None
 
 
+class AuthSessionRestoredEvent(ClientAuthEventBase):
+    event_type: Literal["auth.session.restored"]
+
+
+class AuthTokenRefreshedEvent(ClientAuthEventBase):
+    event_type: Literal["auth.token.refreshed"]
+
+
+class AuthTokenRefreshFailedEvent(ClientAuthEventBase):
+    event_type: Literal["auth.token_refresh_failed"]
+    error_code: str | None = None
+
+
+class AuthSessionLostEvent(ClientAuthEventBase):
+    event_type: Literal["auth.session_lost"]
+    error_code: str | None = None
+
+
+class AuthExplicitLogoutEvent(ClientAuthEventBase):
+    event_type: Literal["auth.explicit_logout"]
+
+
 class ClientErrorEvent(ClientAuthEventBase):
     event_type: Literal["client.error"]
     error_code: str | None = None
     message: str | None = None
 
-
 ClientAuthEvent = Annotated[
-    AuthLoginAttemptEvent | AuthLoginFailedEvent | ClientErrorEvent,
+    AuthLoginAttemptEvent
+    | AuthLoginFailedEvent
+    | AuthSessionRestoredEvent
+    | AuthTokenRefreshedEvent
+    | AuthTokenRefreshFailedEvent
+    | AuthSessionLostEvent
+    | AuthExplicitLogoutEvent
+    | ClientErrorEvent,
     Field(discriminator="event_type"),
 ]

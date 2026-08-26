@@ -485,3 +485,41 @@ def test_client_login_failure_allows_omitted_error_code(
     assert log["error_code"] is None
     assert log["request_id"] == req_id
     assert log["status"] == 200
+
+
+def test_client_lifecycle_events_record_safe_telemetry(
+    client: TestClient, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Lifecycle telemetry records safe session and token refresh events."""
+    events = [
+        {"event_type": "auth.session.restored", "firebase_uid": "uid_123"},
+        {"event_type": "auth.token.refreshed", "firebase_uid": "uid_123"},
+        {
+            "event_type": "auth.token_refresh_failed",
+            "firebase_uid": "uid_123",
+            "error_code": "network_error",
+        },
+        {
+            "event_type": "auth.session_lost",
+            "firebase_uid": "uid_123",
+            "error_code": "token_expired",
+        },
+        {"event_type": "auth.explicit_logout", "firebase_uid": "uid_123"},
+    ]
+
+    for payload in events:
+        req_id = f"test-lifecycle-{uuid.uuid4().hex}"
+        response = client.post(
+            "/api/client-events",
+            headers={"x-request-id": req_id},
+            json=payload,
+        )
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
+        captured = capsys.readouterr()
+        auth_logs = extract_auth_logs(captured.out, req_id)
+        assert len(auth_logs) == 1
+        log = auth_logs[0]
+        assert log["event_type"] == payload["event_type"]
+        assert log["user_id"] == "uid_123"

@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
   browserLocalPersistence,
-  onAuthStateChanged,
+  onIdTokenChanged,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
@@ -12,7 +12,13 @@ import type { components } from "../api/generated";
 
 export type User = components["schemas"]["User"];
 export type ClientAuthEvent =
-  components["schemas"]["AuthLoginAttemptEvent"] | components["schemas"]["AuthLoginFailedEvent"];
+  | components["schemas"]["AuthLoginAttemptEvent"]
+  | components["schemas"]["AuthLoginFailedEvent"]
+  | components["schemas"]["AuthSessionRestoredEvent"]
+  | components["schemas"]["AuthTokenRefreshedEvent"]
+  | components["schemas"]["AuthTokenRefreshFailedEvent"]
+  | components["schemas"]["AuthSessionLostEvent"]
+  | components["schemas"]["AuthExplicitLogoutEvent"];
 
 export interface AuthContextValue {
   user: User | null;
@@ -25,9 +31,17 @@ export interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
 const INVALID_CREDENTIALS_MESSAGE = "Email or password is incorrect.";
 const ACCESS_RESTRICTED_MESSAGE = "This account is not authorized to access Croviq.";
+
+const createOptimisticUser = (fbUser: FirebaseUser): User => ({
+  user_id: fbUser.uid,
+  email: fbUser.email ?? "",
+  display_name: fbUser.displayName ?? fbUser.email ?? "Croviq User",
+  avatar_url: fbUser.photoURL ?? null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+});
 
 const recordClientAuthEvent = async (event: ClientAuthEvent): Promise<void> => {
   try {
@@ -43,7 +57,6 @@ const recordClientAuthEvent = async (event: ClientAuthEvent): Promise<void> => {
     // Client telemetry must not prevent authentication.
   }
 };
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
@@ -54,56 +67,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
   }, []);
 
-  const verifyTokenWithBackend = useCallback(async (token: string): Promise<User | null> => {
-    try {
-      const response = await fetch("/api/auth/me", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "x-request-id": `web-auth-${Date.now()}`,
-        },
-      });
-
-      if (response.ok) {
-        return (await response.json()) as User;
-      }
-
-      if (response.status === 403) {
-        setError(ACCESS_RESTRICTED_MESSAGE);
-        void recordClientAuthEvent({
-          event_type: "auth.login_failed",
-          error_code: "demo_access_restricted",
+  const verifyTokenWithBackend = useCallback(
+    async (token: string, currentFirebaseUser: FirebaseUser): Promise<User | null> => {
+      try {
+        let response = await fetch("/api/auth/me", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "x-request-id": `web-auth-${Date.now()}`,
+          },
         });
-        try {
-          await signOut(auth);
-        } catch {
-          // Authorization denial remains the user-facing result if Firebase sign-out fails.
+
+        // If 401, attempt a force token refresh before giving up, but never destroy session
+        if (response.status === 401) {
+          try {
+            const refreshedToken = await currentFirebaseUser.getIdToken(true);
+            response = await fetch("/api/auth/me", {
+              headers: {
+                Authorization: `Bearer ${refreshedToken}`,
+                "x-request-id": `web-auth-${Date.now()}`,
+              },
+            });
+          } catch {
+            void recordClientAuthEvent({
+              event_type: "auth.token_refresh_failed",
+              firebase_uid: currentFirebaseUser.uid,
+            });
+          }
         }
-        return null;
-      }
 
-      if (response.status === 401) {
-        setError("Sign-in expired or invalid. Please sign in again.");
-        await signOut(auth);
-        return null;
-      }
+        if (response.ok) {
+          return (await response.json()) as User;
+        }
 
-      setError("Unable to complete sign-in. Please try again.");
-      return null;
-    } catch {
-      setError("Network error contacting Croviq API. Please check your connection.");
-      return null;
-    }
-  }, []);
+        if (response.status === 403) {
+          setError(ACCESS_RESTRICTED_MESSAGE);
+          void recordClientAuthEvent({
+            event_type: "auth.login_failed",
+            error_code: "demo_access_restricted",
+            firebase_uid: currentFirebaseUser.uid,
+          });
+          try {
+            await signOut(auth);
+          } catch {
+            // Authorization denial remains the user-facing result if Firebase sign-out fails.
+          }
+          return null;
+        }
+
+        // On 500, 502, 503, transient 401 or temporary errors, do NOT call signOut.
+        // Fallback to domain user representation from verified Firebase User to prevent logout.
+        return createOptimisticUser(currentFirebaseUser);
+      } catch {
+        // Network error contacting Croviq API. Keep authenticated session alive with optimistic user.
+        return createOptimisticUser(currentFirebaseUser);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let isMounted = true;
 
-    // Request browser-local persistence asynchronously without blocking listener attachment
     void setPersistence(auth, browserLocalPersistence).catch(() => {
-      // If persistence cannot be set (e.g. strict private mode), in-memory session still functions.
+      // Persistence failure fallback
     });
 
-    const unsubscribe = onAuthStateChanged(auth, async (nextFirebaseUser) => {
+    const unsubscribe = onIdTokenChanged(auth, async (nextFirebaseUser) => {
       if (!isMounted) return;
 
       setFirebaseUser(nextFirebaseUser);
@@ -113,17 +142,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      void recordClientAuthEvent({
+        event_type: "auth.session.restored",
+        firebase_uid: nextFirebaseUser.uid,
+      });
+
       try {
         const token = await nextFirebaseUser.getIdToken();
-        const domainUser = await verifyTokenWithBackend(token);
+        void recordClientAuthEvent({
+          event_type: "auth.token.refreshed",
+          firebase_uid: nextFirebaseUser.uid,
+        });
+
+        const domainUser = await verifyTokenWithBackend(token, nextFirebaseUser);
         if (!isMounted) return;
 
         setUser(domainUser);
         if (domainUser) clearError();
       } catch {
         if (isMounted) {
-          setUser(null);
-          setError("Unable to complete sign-in. Please try again.");
+          void recordClientAuthEvent({
+            event_type: "auth.session_lost",
+            firebase_uid: nextFirebaseUser.uid,
+          });
+          setUser(createOptimisticUser(nextFirebaseUser));
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -143,6 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       void recordClientAuthEvent({ event_type: "auth.login_attempt" });
 
       try {
+        await setPersistence(auth, browserLocalPersistence);
         await signInWithEmailAndPassword(auth, email, password);
       } catch {
         setError(INVALID_CREDENTIALS_MESSAGE);
@@ -158,6 +201,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(async (): Promise<void> => {
     setIsLoading(true);
+    const currentUid = firebaseUser?.uid;
+    if (currentUid) {
+      void recordClientAuthEvent({
+        event_type: "auth.explicit_logout",
+        firebase_uid: currentUid,
+      });
+    }
+
     try {
       await signOut(auth);
     } catch {
@@ -179,7 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFirebaseUser(null);
     clearError();
     setIsLoading(false);
-  }, [clearError]);
+  }, [clearError, firebaseUser?.uid]);
 
   return (
     <AuthContext.Provider

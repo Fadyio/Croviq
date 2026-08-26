@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -75,12 +76,18 @@ def create_app() -> FastAPI:
     )
     async def record_client_auth_event(event: ClientAuthEvent, request: Request) -> dict[str, str]:
         """Record a constrained client auth event without accepting sensitive payloads."""
+        extra: dict[str, Any] = {}
+        git_sha = getattr(event, "git_sha", None)
+        if git_sha is not None:
+            extra["git_sha"] = git_sha
         log_auth_event(
             event_type=event.event_type,
             status=status.HTTP_200_OK,
             request_id=getattr(request.state, "request_id", "unknown"),
+            user_id=getattr(event, "firebase_uid", None),
             error_code=getattr(event, "error_code", None),
             include_error_code=True,
+            **extra,
         )
         return {"status": "ok"}
 
