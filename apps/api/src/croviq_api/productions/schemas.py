@@ -29,7 +29,7 @@ class CreateUploadRequest(BaseModel):
     size_bytes: int = Field(
         ...,
         gt=0,
-        description="Declared size of the file in bytes (must be <= 2 GB)",
+        description="Declared size of the file in bytes (must be <= 1 GB)",
         examples=[104857600],
     )
     channel_id: str = Field(

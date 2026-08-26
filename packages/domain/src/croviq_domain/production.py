@@ -7,12 +7,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from croviq_domain.validators import validate_timezone_aware
 
-# Canonical maximum upload file size: 2 GB (approved)
-MAX_UPLOAD_SIZE_BYTES: int = 2 * 1024 * 1024 * 1024
+# Canonical maximum upload file size: 1 GB (1,073,741,824 bytes) (approved)
+MAX_UPLOAD_SIZE_BYTES: int = 1_073_741_824
 
 # Canonical signed URL expiry: 30 minutes (1800 seconds) (approved)
 DEFAULT_SIGNED_URL_EXPIRY_SECONDS: int = 1800
-
 # Canonical allowed media MIME types and their valid extensions
 ALLOWED_MEDIA_TYPES: dict[str, list[str]] = {
     "video/mp4": [".mp4", ".m4v"],
@@ -77,7 +76,7 @@ def validate_media_file(
         raise ValueError("File size must be greater than 0 bytes")
     if size_bytes > MAX_UPLOAD_SIZE_BYTES:
         raise ValueError(
-            f"File size {size_bytes} exceeds maximum allowed size of {MAX_UPLOAD_SIZE_BYTES} bytes (2 GB)"
+            f"File size {size_bytes} exceeds maximum allowed size of {MAX_UPLOAD_SIZE_BYTES} bytes (1 GB)"
         )
 
     norm_content_type = content_type.strip().lower()

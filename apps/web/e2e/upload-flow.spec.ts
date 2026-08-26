@@ -130,7 +130,7 @@ test.describe("Production Home and Raw Media Upload", () => {
     // Verify honest Connect YouTube state
     await expect(page.getByText("Connect YouTube Channel")).toBeVisible();
     const connectYtButton = page.getByRole("button", {
-      name: /Connect YouTube \(Requires OAuth\)/i,
+      name: /Coming soon/i,
     });
     await expect(connectYtButton).toBeVisible();
     await expect(connectYtButton).toBeDisabled();
@@ -138,7 +138,7 @@ test.describe("Production Home and Raw Media Upload", () => {
     // Verify "What are we making?" upload dropzone
     await expect(page.getByRole("heading", { name: "What are we making?" })).toBeVisible();
     await expect(page.getByText(/Drop your raw video here/i)).toBeVisible();
-    await expect(page.getByText(/Up to 2 GB/i)).toBeVisible();
+    await expect(page.getByText(/Up to 1 GB/i)).toBeVisible();
 
     // Verify "Recent productions" section
     await expect(page.getByRole("heading", { name: "Recent productions" })).toBeVisible();
@@ -148,6 +148,7 @@ test.describe("Production Home and Raw Media Upload", () => {
     await expect(page.getByText("Workspace ID")).toHaveCount(0);
     await expect(page.getByText("Owner User ID")).toHaveCount(0);
     await expect(page.getByText("Git SHA")).toHaveCount(0);
+    await expect(page.getByText(/Milestone/i)).toHaveCount(0);
 
     expect(consoleErrors).toEqual([]);
   });

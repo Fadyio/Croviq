@@ -19,7 +19,7 @@ type CreateUploadResponse = components["schemas"]["CreateUploadResponse"];
 
 const SAMPLE_CHANNEL_ID = "croviq_syn_ai_eng_01";
 const SAMPLE_CHANNEL_TITLE = "Synthetic AI Engineering (~50k subs)";
-const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+const MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB (1,073,741,824 bytes)
 
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return "0 B";
@@ -117,7 +117,7 @@ export const AppPage: React.FC = () => {
     }
 
     if (file.size > MAX_UPLOAD_BYTES) {
-      setErrorMessage("File exceeds 2 GB maximum upload limit");
+      setErrorMessage("File exceeds 1 GB maximum upload limit");
       setSelectedFile(null);
       return;
     }
@@ -373,12 +373,12 @@ export const AppPage: React.FC = () => {
                     <span>Connect YouTube Channel</span>
                   </div>
                   <span className="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider bg-surface-3 text-text-muted border border-border-subtle rounded">
-                    Milestone 3
+                    Coming soon
                   </span>
                 </div>
                 <p className="text-xs text-text-muted leading-relaxed">
-                  Real YouTube OAuth integration for live creator channels will be enabled in
-                  Milestone 3.
+                  Direct YouTube channel connection is coming soon. Use the sample channel to
+                  continue.
                 </p>
               </div>
 
@@ -387,7 +387,7 @@ export const AppPage: React.FC = () => {
                 disabled
                 className="w-full py-2 px-3 text-xs font-medium rounded-md bg-surface-3 text-text-muted border border-border-subtle cursor-not-allowed flex items-center justify-center gap-1.5"
               >
-                <span>Connect YouTube (Requires OAuth)</span>
+                <span>Coming soon</span>
               </button>
             </div>
           </div>
@@ -435,7 +435,7 @@ export const AppPage: React.FC = () => {
                 Drop your raw video here, or <span className="text-primary underline">browse</span>
               </p>
               <p className="text-xs text-text-muted mt-1.5">
-                MP4, MOV, or WebM &middot; Up to 2 GB &middot; Direct-to-GCS upload
+                MP4, MOV, or WebM &middot; Up to 1 GB &middot; Direct upload
               </p>
             </div>
           ) : (

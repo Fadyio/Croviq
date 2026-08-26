@@ -173,7 +173,7 @@ export interface components {
       filename: string;
       /** MIME content type of the video file (e.g. video/mp4, video/quicktime, video/webm) */
       content_type: string;
-      /** Declared size of the file in bytes (must be <= 2 GB) */
+      /** Declared size of the file in bytes (must be <= 1 GB) */
       size_bytes: number;
       /** Canonical channel identifier for this production (e.g. croviq_syn_ai_eng_01) */
       channel_id: string;

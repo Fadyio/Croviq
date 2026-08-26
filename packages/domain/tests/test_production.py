@@ -17,12 +17,12 @@ from croviq_domain.production import (
 
 
 def test_constants():
-    assert MAX_UPLOAD_SIZE_BYTES == 2 * 1024 * 1024 * 1024  # 2 GB
+    assert MAX_UPLOAD_SIZE_BYTES == 1_073_741_824  # 1 GB (1,073,741,824 bytes)
+    assert MAX_UPLOAD_SIZE_BYTES == 1 * 1024 * 1024 * 1024
     assert DEFAULT_SIGNED_URL_EXPIRY_SECONDS == 1800  # 30 minutes
     assert "video/mp4" in ALLOWED_MEDIA_TYPES
     assert "video/quicktime" in ALLOWED_MEDIA_TYPES
     assert "video/webm" in ALLOWED_MEDIA_TYPES
-
 
 def test_sanitize_filename():
     assert sanitize_filename("my_video.mp4") == "my_video.mp4"
@@ -77,6 +77,25 @@ def test_validate_media_file_mismatched_extension():
         )
 
 
+def test_validate_media_file_boundary_1gb_accepted():
+    mime, ext = validate_media_file(
+        filename="full_limit.mp4",
+        content_type="video/mp4",
+        size_bytes=1_073_741_824,  # Exactly 1 GB (accepted)
+    )
+    assert mime == "video/mp4"
+    assert ext == ".mp4"
+
+
+def test_validate_media_file_boundary_over_1gb_rejected():
+    with pytest.raises(ValueError, match="exceeds maximum allowed size of 1073741824 bytes \\(1 GB\\)"):
+        validate_media_file(
+            filename="over_limit.mp4",
+            content_type="video/mp4",
+            size_bytes=1_073_741_825,  # 1 GB + 1 byte (rejected)
+        )
+
+
 def test_validate_media_file_size_exceeded():
     with pytest.raises(ValueError, match="exceeds maximum allowed"):
         validate_media_file(
@@ -93,7 +112,6 @@ def test_validate_media_file_zero_or_negative_size():
             content_type="video/mp4",
             size_bytes=0,
         )
-
 
 def test_build_source_media_gcs_object_path():
     path = build_source_media_gcs_object_path(

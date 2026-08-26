@@ -2,7 +2,10 @@ import os
 import subprocess
 from functools import lru_cache
 
-
+from croviq_domain.production import (
+    DEFAULT_SIGNED_URL_EXPIRY_SECONDS,
+    MAX_UPLOAD_SIZE_BYTES,
+)
 def resolve_git_sha() -> str:
     """Resolve git SHA from environment or git repository fallback."""
     if sha := os.getenv("GIT_SHA"):
@@ -59,8 +62,8 @@ class Settings:
             "MEDIA_STORAGE_PROVIDER",
             "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
         )
-        self.signed_url_expiry_seconds: int = int(os.getenv("SIGNED_URL_EXPIRY_SECONDS", "1800"))
-        self.max_upload_size_bytes: int = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(2 * 1024 * 1024 * 1024)))
+        self.signed_url_expiry_seconds: int = int(os.getenv("SIGNED_URL_EXPIRY_SECONDS", str(DEFAULT_SIGNED_URL_EXPIRY_SECONDS)))
+        self.max_upload_size_bytes: int = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(MAX_UPLOAD_SIZE_BYTES)))
         self.api_runtime_service_account: str | None = os.getenv("API_RUNTIME_SERVICE_ACCOUNT") or (
             f"croviq-api-runtime@{self.gcp_project_id}.iam.gserviceaccount.com" if self.gcp_project_id else None
         )
