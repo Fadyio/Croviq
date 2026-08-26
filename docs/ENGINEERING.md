@@ -92,6 +92,32 @@ Never log: passwords, ID tokens, Authorization headers, OAuth tokens, API keys, 
 5. Inspect correlated auth/workspace/media logs.
 6. Inspect Firestore and GCS state read-only.
 7. Determine root cause and report evidence before modifying code.
+### 4.7 Canonical Cloud Logging Queries (Logs Explorer)
+Use these canonical filter queries in Google Cloud Logs Explorer (Project: `croviq-506602`):
+
+- **All API Logs**:
+  ```text
+  resource.type="cloud_run_revision"
+  resource.labels.service_name="croviq-api"
+  ```
+- **Error & Failure Logs**:
+  ```text
+  resource.type="cloud_run_revision"
+  resource.labels.service_name="croviq-api"
+  (severity>=ERROR OR jsonPayload.status>=500)
+  ```
+- **Render Lifecycle Logs**:
+  ```text
+  resource.type="cloud_run_revision"
+  resource.labels.service_name="croviq-api"
+  (jsonPayload.event_type=~"^render\\." OR jsonPayload.route=~"/renders")
+  ```
+- **Correlated Request Tracing**:
+  ```text
+  resource.type="cloud_run_revision"
+  resource.labels.service_name="croviq-api"
+  jsonPayload.request_id="<REQUEST_ID>"
+  ```
 
 ---
 
