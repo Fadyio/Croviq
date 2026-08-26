@@ -286,9 +286,7 @@ export const AppPage: React.FC = () => {
         <div className="flex items-center gap-3 md:gap-4">
           <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-surface-2 border border-border-subtle text-xs text-text-secondary">
             <span className="w-2 h-2 rounded-full bg-success"></span>
-            <span className="font-mono text-text-muted">
-              {user?.email || "creator@croviq.app"}
-            </span>
+            <span className="font-mono text-text-muted">{user?.email || "creator@croviq.app"}</span>
           </div>
 
           <button
@@ -452,7 +450,9 @@ export const AppPage: React.FC = () => {
                     <span className="text-sm font-medium text-text-primary truncate">
                       {selectedFile.name}
                     </span>
-                    <span className="text-xs text-text-muted">{formatBytes(selectedFile.size)}</span>
+                    <span className="text-xs text-text-muted">
+                      {formatBytes(selectedFile.size)}
+                    </span>
                   </div>
                 </div>
 
@@ -506,8 +506,8 @@ export const AppPage: React.FC = () => {
                         uploadStatus === "uploaded"
                           ? "bg-success"
                           : uploadStatus === "failed"
-                          ? "bg-danger"
-                          : "bg-primary"
+                            ? "bg-danger"
+                            : "bg-primary"
                       }`}
                       style={{ width: `${uploadProgress}%` }}
                     />
@@ -596,9 +596,7 @@ export const AppPage: React.FC = () => {
         <section className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold text-text-primary">Recent productions</h2>
-            <span className="text-xs text-text-muted font-mono">
-              {productions.length} total
-            </span>
+            <span className="text-xs text-text-muted font-mono">{productions.length} total</span>
           </div>
 
           {isLoadingProductions ? (
@@ -647,8 +645,8 @@ export const AppPage: React.FC = () => {
                         prod.status === "uploaded"
                           ? "bg-success/10 text-success border-success/20"
                           : prod.status === "failed"
-                          ? "bg-danger/10 text-danger border-danger/20"
-                          : "bg-primary/10 text-primary border-primary/20"
+                            ? "bg-danger/10 text-danger border-danger/20"
+                            : "bg-primary/10 text-primary border-primary/20"
                       }`}
                     >
                       {prod.status}
