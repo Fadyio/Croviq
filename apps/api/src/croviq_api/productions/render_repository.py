@@ -72,12 +72,17 @@ class RenderRepository(ABC):
     def _deserialize_render_artifact(self, data: dict[str, Any]) -> RenderArtifact:
         """Deserialize raw Firestore dictionary into validated RenderArtifact."""
         payload = deepcopy(data)
+        if "artifact_type" in payload and isinstance(payload["artifact_type"], str):
+            payload["artifact_type"] = payload["artifact_type"].upper()
+        if "status" in payload and isinstance(payload["status"], str):
+            payload["status"] = payload["status"].lower()
         if "created_at" in payload and payload["created_at"]:
             payload["created_at"] = parse_datetime(payload["created_at"])
         if "completed_at" in payload and payload["completed_at"]:
             payload["completed_at"] = parse_datetime(payload["completed_at"])
-        return RenderArtifact.model_validate(payload)
-
+        valid_keys = set(RenderArtifact.model_fields.keys())
+        filtered = {k: v for k, v in payload.items() if k in valid_keys}
+        return RenderArtifact.model_validate(filtered)
 
 class InMemoryRenderRepository(RenderRepository):
     """In-memory mock RenderRepository for unit testing and local development."""
@@ -194,10 +199,11 @@ class FirestoreRenderRepository(RenderRepository):
                 document_id=artifact.artifact_id,
                 status=500,
                 latency_ms=latency_ms,
-                error_code=str(exc),
+                error_code="firestore_write_error",
+                message=f"Firestore write error for render artifact {artifact.artifact_id}: {type(exc).__name__}",
+                exception=exc,
             )
             raise
-
     async def get_render_artifact(
         self,
         production_id: str,
@@ -239,10 +245,11 @@ class FirestoreRenderRepository(RenderRepository):
                 document_id=artifact_id,
                 status=500,
                 latency_ms=latency_ms,
-                error_code=str(exc),
+                error_code="firestore_read_error",
+                message=f"Firestore read error for render artifact {artifact_id}: {type(exc).__name__}",
+                exception=exc,
             )
             raise
-
     async def get_render_artifact_by_type(
         self,
         production_id: str,
@@ -287,10 +294,11 @@ class FirestoreRenderRepository(RenderRepository):
                 document_id=f"edl:{edl_id}_type:{type_str}",
                 status=500,
                 latency_ms=latency_ms,
-                error_code=str(exc),
+                error_code="firestore_query_error",
+                message=f"Firestore query error for render artifact {edl_id}/{type_str}: {type(exc).__name__}",
+                exception=exc,
             )
             raise
-
     async def list_render_artifacts(
         self,
         production_id: str,
@@ -323,25 +331,24 @@ class FirestoreRenderRepository(RenderRepository):
                 document_id="all",
                 status=500,
                 latency_ms=latency_ms,
-                error_code=str(exc),
+                error_code="firestore_list_error",
+                message=f"Firestore list error for renders: {type(exc).__name__}",
+                exception=exc,
             )
             raise
-
 
 def get_default_render_repository() -> RenderRepository:
     """Factory for default RenderRepository instance."""
     global _global_render_repo
     if _global_render_repo is None:
         settings = get_settings()
-        if settings.environment in ("development", "test"):
-            _global_render_repo = InMemoryRenderRepository()
-        else:
+        if settings.environment in ("production", "staging") or os.getenv("USE_FIRESTORE") == "true":
             _global_render_repo = FirestoreRenderRepository(
                 project_id=settings.gcp_project_id,
-                database=settings.firestore_database,
             )
+        else:
+            _global_render_repo = InMemoryRenderRepository()
     return _global_render_repo
-
 
 def get_render_repository() -> RenderRepository:
     """FastAPI dependency provider for RenderRepository."""

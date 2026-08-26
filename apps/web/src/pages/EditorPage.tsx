@@ -107,7 +107,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     ]);
 
     if (!productionResponse.ok) {
-      throw new Error(`Production '${productionId}' not found`);
+      throw new Error(`Production '${productionId}' could not be loaded`);
     }
 
     const productionData = (await productionResponse.json()) as Production;
@@ -117,12 +117,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       edlResponse,
       "Edit plan",
     );
-    const rendersData = rendersResponse
-      ? await readOptionalJson<components["schemas"]["RenderListResponse"]>(
-          rendersResponse,
-          "Renders",
-        )
-      : null;
+    let rendersData: components["schemas"]["RenderListResponse"] | null = null;
+    if (rendersResponse && rendersResponse.ok) {
+      try {
+        rendersData = (await rendersResponse.json()) as components["schemas"]["RenderListResponse"];
+      } catch {
+        rendersData = null;
+      }
+    }
     setProduction(productionData);
     setTranscript(transcriptData);
     setProposal(runData?.proposal ?? null);
