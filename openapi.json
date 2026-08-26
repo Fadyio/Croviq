@@ -7,9 +7,7 @@
   "paths": {
     "/api/health": {
       "get": {
-        "tags": [
-          "Health"
-        ],
+        "tags": ["Health"],
         "summary": "Service Health Check",
         "operationId": "health_check_api_health_get",
         "responses": {
@@ -28,9 +26,7 @@
     },
     "/api/client-events": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Record Sanitized Client Authentication Event",
         "description": "Record a constrained client auth event without accepting sensitive payloads.",
         "operationId": "record_client_auth_event_api_client_events_post",
@@ -93,9 +89,7 @@
     },
     "/api/auth/me": {
       "get": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Get Current Authenticated User",
         "description": "Retrieve the canonical User profile derived from verified identity.",
         "operationId": "get_me_api_auth_me_get",
@@ -120,9 +114,7 @@
     },
     "/api/auth/logout": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Record User Logout",
         "description": "Record client-side logout activity and emit operational audit log.",
         "operationId": "logout_api_auth_logout_post",
@@ -146,9 +138,7 @@
     },
     "/api/workspace": {
       "get": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Get or Provision Default Workspace",
         "description": "Retrieve the default workspace belonging to the verified creator. If none exists, creates exactly one default Workspace idempotently.",
         "operationId": "get_or_provision_default_workspace_api_workspace_get",
@@ -173,9 +163,7 @@
     },
     "/api/channel/memory/profile": {
       "get": {
-        "tags": [
-          "Memory"
-        ],
+        "tags": ["Memory"],
         "summary": "Retrieve Channel Memory Profile",
         "description": "Retrieve the canonical structured ChannelMemoryProfile from Memory Bank.",
         "operationId": "get_channel_memory_profile_api_channel_memory_profile_get",
@@ -224,9 +212,7 @@
     },
     "/api/channel/memory/lessons": {
       "get": {
-        "tags": [
-          "Memory"
-        ],
+        "tags": ["Memory"],
         "summary": "Retrieve Channel Lessons",
         "description": "Retrieve active ChannelLessons scoped to a channel, optionally filtered by target agent.",
         "operationId": "get_channel_lessons_api_channel_memory_lessons_get",
@@ -297,9 +283,7 @@
     },
     "/api/uploads": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Initiate Direct GCS Media Upload",
         "description": "Registers an upload session, creates a pending Production record, and returns a short-lived V4 signed PUT URL for direct browser-to-GCS upload.",
         "operationId": "create_upload_api_uploads_post",
@@ -344,9 +328,7 @@
     },
     "/api/uploads/{upload_id}/complete": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Verify and Complete Media Upload",
         "description": "Verifies the uploaded object in GCS (existence, size, content type) and transitions the Production to uploaded.",
         "operationId": "complete_upload_api_uploads__upload_id__complete_post",
@@ -392,9 +374,7 @@
     },
     "/api/productions": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "List Recent Productions",
         "description": "Retrieve a list of recent content productions belonging to the creator's workspace.",
         "operationId": "list_productions_api_productions_get",
@@ -441,9 +421,7 @@
     },
     "/api/productions/{production_id}": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Production by ID",
         "description": "Retrieve a single Production record by its identifier.",
         "operationId": "get_production_api_productions__production_id__get",
@@ -489,9 +467,7 @@
     },
     "/api/productions/{production_id}/transcribe": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Transcribe Production Source Media",
         "description": "Trigger word-aligned speech recognition on uploaded source media via Speech-to-Text v2.",
         "operationId": "transcribe_production_api_productions__production_id__transcribe_post",
@@ -537,9 +513,7 @@
     },
     "/api/productions/{production_id}/transcript": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Production Transcript",
         "description": "Retrieve the word-aligned transcript for a production.",
         "operationId": "get_production_transcript_api_productions__production_id__transcript_get",
@@ -585,9 +559,7 @@
     },
     "/api/productions/{production_id}/source-analysis-input": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Source Video Analysis Input Contract",
         "description": "Retrieve the complete source video analysis contract ready for Gemini reasoning (Issue #26).",
         "operationId": "get_source_analysis_input_api_productions__production_id__source_analysis_input_get",
@@ -644,9 +616,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "AuthLoginAttemptEvent"
       },
       "AuthLoginFailedEvent": {
@@ -660,10 +630,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "invalid_credentials",
-                  "demo_access_restricted"
-                ]
+                "enum": ["invalid_credentials", "demo_access_restricted"]
               },
               {
                 "type": "null"
@@ -674,9 +641,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "AuthLoginFailedEvent"
       },
       "BrandKit": {
@@ -737,25 +702,19 @@
             "type": "string",
             "title": "Lesson Id",
             "description": "Unique identifier for the lesson.",
-            "examples": [
-              "lsn_early_demo_01"
-            ]
+            "examples": ["lsn_early_demo_01"]
           },
           "channel_id": {
             "type": "string",
             "title": "Channel Id",
             "description": "Channel identifier scope.",
-            "examples": [
-              "croviq_syn_ai_eng_01"
-            ]
+            "examples": ["croviq_syn_ai_eng_01"]
           },
           "directive": {
             "type": "string",
             "title": "Directive",
             "description": "Actionable instruction for the agent.",
-            "examples": [
-              "Reach the first concrete demonstration before 00:30."
-            ]
+            "examples": ["Reach the first concrete demonstration before 00:30."]
           },
           "target_agent": {
             "$ref": "#/components/schemas/TargetAgent",
@@ -775,9 +734,7 @@
             "minimum": 0.0,
             "title": "Confidence",
             "description": "Confidence score for this lesson (0.0 to 1.0).",
-            "examples": [
-              0.92
-            ]
+            "examples": [0.92]
           },
           "status": {
             "type": "string",
@@ -810,17 +767,13 @@
             "type": "string",
             "title": "Channel Id",
             "description": "Canonical channel identifier used as memory scope.",
-            "examples": [
-              "croviq_syn_ai_eng_01"
-            ]
+            "examples": ["croviq_syn_ai_eng_01"]
           },
           "channel_name": {
             "type": "string",
             "title": "Channel Name",
             "description": "Display name of the channel.",
-            "examples": [
-              "AI Engineering & Agent Systems"
-            ]
+            "examples": ["AI Engineering & Agent Systems"]
           },
           "primary_topics": {
             "items": {
@@ -829,13 +782,7 @@
             "type": "array",
             "title": "Primary Topics",
             "description": "Top subject-matter domains covered by the channel.",
-            "examples": [
-              [
-                "AI Agents",
-                "LLM Systems",
-                "DevOps & CI/CD"
-              ]
-            ]
+            "examples": [["AI Agents", "LLM Systems", "DevOps & CI/CD"]]
           },
           "content_pillars": {
             "items": {
@@ -844,13 +791,7 @@
             "type": "array",
             "title": "Content Pillars",
             "description": "Core content themes and recurring series pillars.",
-            "examples": [
-              [
-                "Agent Architecture",
-                "Production Deployment",
-                "Emerging AI Releases"
-              ]
-            ]
+            "examples": [["Agent Architecture", "Production Deployment", "Emerging AI Releases"]]
           },
           "language": {
             "type": "string",
@@ -865,15 +806,7 @@
             "type": "array",
             "title": "Audience Geographies",
             "description": "Top audience geography ISO country codes ordered by viewership volume.",
-            "examples": [
-              [
-                "US",
-                "IN",
-                "GB",
-                "CA",
-                "DE"
-              ]
-            ]
+            "examples": [["US", "IN", "GB", "CA", "DE"]]
           },
           "audience_characteristics": {
             "items": {
@@ -883,11 +816,7 @@
             "title": "Audience Characteristics",
             "description": "Key audience behavioral and demographic attributes.",
             "examples": [
-              [
-                "Software Engineers",
-                "DevOps / SRE Practitioners",
-                "High desktop viewing share"
-              ]
+              ["Software Engineers", "DevOps / SRE Practitioners", "High desktop viewing share"]
             ]
           },
           "historical_baselines": {
@@ -905,12 +834,7 @@
             "type": "array",
             "title": "High Performing Formats",
             "description": "Video formats demonstrating above-average performance.",
-            "examples": [
-              [
-                "agent_build",
-                "deep_dive"
-              ]
-            ]
+            "examples": [["agent_build", "deep_dive"]]
           },
           "weak_formats": {
             "items": {
@@ -919,11 +843,7 @@
             "type": "array",
             "title": "Weak Formats",
             "description": "Video formats demonstrating below-average performance.",
-            "examples": [
-              [
-                "tutorial"
-              ]
-            ]
+            "examples": [["tutorial"]]
           },
           "recurring_retention_patterns": {
             "items": {
@@ -957,10 +877,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "channel_id",
-          "channel_name"
-        ],
+        "required": ["channel_id", "channel_name"],
         "title": "ChannelMemoryProfile",
         "description": "Canonical structured memory profile for a channel stored in Memory Bank."
       },
@@ -996,9 +913,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "ClientErrorEvent"
       },
       "CreateUploadRequest": {
@@ -1009,45 +924,32 @@
             "minLength": 1,
             "title": "Filename",
             "description": "Original name of the video file to upload",
-            "examples": [
-              "github_actions_tutorial.mp4"
-            ]
+            "examples": ["github_actions_tutorial.mp4"]
           },
           "content_type": {
             "type": "string",
             "title": "Content Type",
             "description": "MIME content type of the video file (e.g. video/mp4, video/quicktime, video/webm)",
-            "examples": [
-              "video/mp4"
-            ]
+            "examples": ["video/mp4"]
           },
           "size_bytes": {
             "type": "integer",
             "exclusiveMinimum": 0.0,
             "title": "Size Bytes",
             "description": "Declared size of the file in bytes (must be <= 1 GB)",
-            "examples": [
-              104857600
-            ]
+            "examples": [104857600]
           },
           "channel_id": {
             "type": "string",
             "minLength": 1,
             "title": "Channel Id",
             "description": "Canonical channel identifier for this production (e.g. croviq_syn_ai_eng_01)",
-            "examples": [
-              "croviq_syn_ai_eng_01"
-            ]
+            "examples": ["croviq_syn_ai_eng_01"]
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "filename",
-          "content_type",
-          "size_bytes",
-          "channel_id"
-        ],
+        "required": ["filename", "content_type", "size_bytes", "channel_id"],
         "title": "CreateUploadRequest",
         "description": "Request payload to initiate a direct GCS media upload."
       },
@@ -1091,12 +993,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "upload_id",
-          "upload_url",
-          "expires_at"
-        ],
+        "required": ["production_id", "upload_id", "upload_url", "expires_at"],
         "title": "CreateUploadResponse",
         "description": "Response returned upon successfully registering an upload and generating a signed PUT URL."
       },
@@ -1134,9 +1031,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "git_sha"
-        ],
+        "required": ["git_sha"],
         "title": "HealthResponse"
       },
       "MediaMetadata": {
@@ -1227,10 +1122,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "duration_ms",
-          "size_bytes"
-        ],
+        "required": ["duration_ms", "size_bytes"],
         "title": "MediaMetadata",
         "description": "Canonical metadata extracted from source video/audio via FFprobe."
       },
@@ -1320,20 +1212,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "total"
-        ],
+        "required": ["total"],
         "title": "ProductionListResponse",
         "description": "Response returned when listing recent productions."
       },
       "ProductionStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "uploading",
-          "uploaded",
-          "failed"
-        ],
+        "enum": ["pending", "uploading", "uploaded", "failed"],
         "title": "ProductionStatus"
       },
       "SilenceInterval": {
@@ -1359,11 +1244,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "start_ms",
-          "end_ms",
-          "duration_ms"
-        ],
+        "required": ["start_ms", "end_ms", "duration_ms"],
         "title": "SilenceInterval",
         "description": "Represents a silence or non-speech interval between spoken words."
       },
@@ -1445,12 +1326,7 @@
       },
       "SourceMediaStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "uploading",
-          "uploaded",
-          "failed"
-        ],
+        "enum": ["pending", "uploading", "uploaded", "failed"],
         "title": "SourceMediaStatus"
       },
       "SourceVideoAnalysisInput": {
@@ -1494,39 +1370,23 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "source_media",
-          "media_metadata",
-          "transcript",
-          "channel_id"
-        ],
+        "required": ["production_id", "source_media", "media_metadata", "transcript", "channel_id"],
         "title": "SourceVideoAnalysisInput",
         "description": "Canonical provider-neutral input contract consumed by Gemini agents in Issue #26."
       },
       "TargetAgent": {
         "type": "string",
-        "enum": [
-          "director",
-          "editor",
-          "packaging",
-          "qa"
-        ],
+        "enum": ["director", "editor", "packaging", "qa"],
         "title": "TargetAgent"
       },
       "TranscribeProductionResponse": {
         "properties": {
           "status": {
             "type": "string",
-            "enum": [
-              "completed",
-              "already_transcribed"
-            ],
+            "enum": ["completed", "already_transcribed"],
             "title": "Status",
             "description": "Transcription status ('completed' or 'already_transcribed')",
-            "examples": [
-              "completed"
-            ]
+            "examples": ["completed"]
           },
           "transcript_id": {
             "type": "string",
@@ -1754,12 +1614,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "index",
-          "text",
-          "start_ms",
-          "end_ms"
-        ],
+        "required": ["index", "text", "start_ms", "end_ms"],
         "title": "TranscriptWord",
         "description": "Canonical representation of a single spoken word with millisecond time alignment."
       },
@@ -1810,13 +1665,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "user_id",
-          "email",
-          "display_name",
-          "created_at",
-          "updated_at"
-        ],
+        "required": ["user_id", "email", "display_name", "created_at", "updated_at"],
         "title": "User",
         "description": "Canonical User identity model for Croviq."
       },
@@ -1853,11 +1702,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
+        "required": ["loc", "msg", "type"],
         "title": "ValidationError"
       },
       "Workspace": {
@@ -1911,13 +1756,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "workspace_id",
-          "owner_user_id",
-          "name",
-          "created_at",
-          "updated_at"
-        ],
+        "required": ["workspace_id", "owner_user_id", "name", "created_at", "updated_at"],
         "title": "Workspace",
         "description": "Canonical Workspace tenant container model for Croviq."
       }
