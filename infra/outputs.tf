@@ -212,3 +212,13 @@ output "root_certificate_map_entry_name" {
   value       = google_certificate_manager_certificate_map_entry.root_cert_map_entry.name
   description = "The name of the Google Certificate Manager certificate map entry for the root domain."
 }
+
+output "media_bucket_name" {
+  value       = google_storage_bucket.media_raw.name
+  description = "The name of the private Google Cloud Storage bucket used for raw media uploads."
+}
+
+output "media_bucket_url" {
+  value       = google_storage_bucket.media_raw.url
+  description = "The GCS URL of the private media storage bucket."
+}

@@ -26,6 +26,12 @@ class EventType(StrEnum):
     FIRESTORE_WRITE = "firestore.write"
     FIRESTORE_ERROR = "firestore.error"
 
+    # Media Upload events
+    UPLOAD_CREATED = "upload.created"
+    UPLOAD_STARTED = "upload.started"
+    UPLOAD_COMPLETED = "upload.completed"
+    UPLOAD_FAILED = "upload.failed"
+
     # Memory Bank events
     MEMORY_PROFILE_GENERATE_STARTED = "memory.profile.generate.started"
     MEMORY_PROFILE_GENERATE_COMPLETED = "memory.profile.generate.completed"
@@ -50,5 +56,8 @@ CLIENT_ALLOWED_EVENT_TYPES: frozenset[str] = frozenset(
         EventType.CLIENT_ERROR.value,
         EventType.AUTH_LOGIN_ATTEMPT.value,
         EventType.AUTH_LOGIN_FAILED.value,
+        EventType.UPLOAD_STARTED.value,
+        EventType.UPLOAD_COMPLETED.value,
+        EventType.UPLOAD_FAILED.value,
     ]
 )

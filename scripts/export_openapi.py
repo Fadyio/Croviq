@@ -108,6 +108,10 @@ export interface paths {
             return "Record<string, unknown>"
         return "unknown"
     for schema_name, schema_data in schemas.items():
+        if "enum" in schema_data:
+            enum_vals = " | ".join(json.dumps(val) for val in schema_data["enum"])
+            schema_entries.append(f"    {schema_name}: {enum_vals};")
+            continue
         properties = schema_data.get("properties", {})
         required = set(schema_data.get("required", []))
         prop_lines = []
@@ -120,7 +124,6 @@ export interface paths {
             prop_lines.append(f"{doc_str}      {prop_name}{opt_marker}: {ts_type};")
         body = "\n".join(prop_lines)
         schema_entries.append(f"    {schema_name}: {{\n{body}\n    }};")
-
     schemas_body = "\n".join(schema_entries)
     components_footer = "\n  };\n}\n"
 

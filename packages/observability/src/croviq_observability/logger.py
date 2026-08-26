@@ -333,3 +333,55 @@ def log_memory_event(
         exception=exception,
         **kwargs,
     )
+
+def log_upload_event(
+    event_type: str,
+    status: int | str,
+    request_id: str,
+    user_id: str,
+    workspace_id: str,
+    channel_id: str,
+    production_id: str,
+    upload_id: str,
+    filename: str | None = None,
+    size_bytes: int | None = None,
+    content_type: str | None = None,
+    latency_ms: float | None = None,
+    message: str | None = None,
+    error_code: str | None = None,
+    exception: BaseException | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Log structured media upload event for Google Cloud Logging ingestion.
+
+    Guarantees:
+    - Never logs signed URLs, authorization tokens, or GCP credentials.
+    """
+    severity: LogSeverity = "ERROR" if (str(status).startswith("4") or str(status).startswith("5") or status == "failed" or exception is not None) else "INFO"
+    extra: dict[str, Any] = {
+        "user_id": user_id,
+        "workspace_id": workspace_id,
+        "channel_id": channel_id,
+        "production_id": production_id,
+        "upload_id": upload_id,
+    }
+    if filename is not None:
+        extra["filename"] = filename
+    if size_bytes is not None:
+        extra["size_bytes"] = size_bytes
+    if content_type is not None:
+        extra["content_type"] = content_type
+    if latency_ms is not None:
+        extra["latency_ms"] = latency_ms
+
+    return _default_logger.log(
+        event_type=event_type,
+        severity=severity,
+        status=status,
+        request_id=request_id,
+        message=message,
+        error_code=error_code,
+        exception=exception,
+        **extra,
+        **kwargs,
+    )

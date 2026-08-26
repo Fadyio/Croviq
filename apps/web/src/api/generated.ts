@@ -11,56 +11,81 @@
 
 export interface paths {
   "/api/health": {
-    get: {
-      responses: {
-        200: components["schemas"]["HealthResponse"];
+      get: {
+        responses: {
+          200: components['schemas']['HealthResponse'];
+        };
       };
-    };
   };
   "/api/client-events": {
-    post: {
-      responses: {
-        200: unknown;
-        422: components["schemas"]["HTTPValidationError"];
+      post: {
+        responses: {
+          200: unknown; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
   };
   "/api/auth/me": {
-    get: {
-      responses: {
-        200: components["schemas"]["User"];
+      get: {
+        responses: {
+          200: components['schemas']['User'];
+        };
       };
-    };
   };
   "/api/auth/logout": {
-    post: {
-      responses: {
-        200: unknown;
+      post: {
+        responses: {
+          200: unknown;
+        };
       };
-    };
   };
   "/api/workspace": {
-    get: {
-      responses: {
-        200: components["schemas"]["Workspace"];
+      get: {
+        responses: {
+          200: components['schemas']['Workspace'];
+        };
       };
-    };
   };
   "/api/channel/memory/profile": {
-    get: {
-      responses: {
-        200: components["schemas"]["ChannelMemoryProfile"];
-        422: components["schemas"]["HTTPValidationError"];
+      get: {
+        responses: {
+          200: components['schemas']['ChannelMemoryProfile']; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
   };
   "/api/channel/memory/lessons": {
-    get: {
-      responses: {
-        200: unknown;
-        422: components["schemas"]["HTTPValidationError"];
+      get: {
+        responses: {
+          200: unknown; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
+  };
+  "/api/uploads": {
+      post: {
+        responses: {
+          201: components['schemas']['CreateUploadResponse']; 422: components['schemas']['HTTPValidationError'];
+        };
+      };
+  };
+  "/api/uploads/{upload_id}/complete": {
+      post: {
+        responses: {
+          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
+        };
+      };
+  };
+  "/api/productions": {
+      get: {
+        responses: {
+          200: components['schemas']['ProductionListResponse']; 422: components['schemas']['HTTPValidationError'];
+        };
+      };
+  };
+  "/api/productions/{production_id}": {
+      get: {
+        responses: {
+          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
+        };
+      };
   };
 }
 
@@ -91,7 +116,7 @@ export interface components {
       /** Actionable instruction for the agent. */
       directive: string;
       /** Agent role this lesson directs (director, editor, packaging, qa). */
-      target_agent: components["schemas"]["TargetAgent"];
+      target_agent: components['schemas']['TargetAgent'];
       /** Statistical or qualitative summary of evidence supporting this directive. */
       evidence_summary: string;
       /** Confidence score for this lesson (0.0 to 1.0). */
@@ -136,8 +161,32 @@ export interface components {
       error_code?: string | null;
       message?: string | null;
     };
+    CreateUploadRequest: {
+      /** Original name of the video file to upload */
+      filename: string;
+      /** MIME content type of the video file (e.g. video/mp4, video/quicktime, video/webm) */
+      content_type: string;
+      /** Declared size of the file in bytes (must be <= 2 GB) */
+      size_bytes: number;
+      /** Canonical channel identifier for this production (e.g. croviq_syn_ai_eng_01) */
+      channel_id: string;
+    };
+    CreateUploadResponse: {
+      /** Unique identifier of the created Production record */
+      production_id: string;
+      /** Unique identifier of the source media upload */
+      upload_id: string;
+      /** Pre-signed V4 Google Cloud Storage PUT URL for direct browser upload */
+      upload_url: string;
+      /** HTTP method to use when uploading media directly to storage */
+      method?: string;
+      /** Required HTTP headers (such as Content-Type) to send with the upload request */
+      required_headers?: Record<string, unknown>;
+      /** Timestamp when the pre-signed upload URL expires (UTC) */
+      expires_at: string;
+    };
     HTTPValidationError: {
-      detail?: components["schemas"]["ValidationError"][];
+      detail?: components['schemas']['ValidationError'][];
     };
     HealthResponse: {
       /** Service health status */
@@ -147,7 +196,53 @@ export interface components {
       /** Current git commit SHA or environment identifier */
       git_sha: string;
     };
-    TargetAgent: {};
+    Production: {
+      /** Unique production identifier */
+      production_id: string;
+      /** Workspace tenant identifier */
+      workspace_id: string;
+      /** Associated YouTube or Sample Channel identifier */
+      channel_id: string;
+      /** Identifier of the user who owns this production */
+      owner_user_id: string;
+      /** Raw source media metadata associated with this production */
+      source_media?: components['schemas']['SourceMedia'] | null;
+      /** Current production status */
+      status?: components['schemas']['ProductionStatus'];
+      /** Timestamp when the production was created (UTC) */
+      created_at: string;
+      /** Timestamp when the production was last updated (UTC) */
+      updated_at: string;
+    };
+    ProductionListResponse: {
+      /** List of recent Production records */
+      productions?: components['schemas']['Production'][];
+      /** Total number of productions returned */
+      total: number;
+    };
+    ProductionStatus: "pending" | "uploading" | "uploaded" | "failed";
+    SourceMedia: {
+      /** Unique upload identifier */
+      upload_id: string;
+      /** Original user-provided filename */
+      original_filename: string;
+      /** MIME content type of the media file */
+      content_type: string;
+      /** Declared or verified size of the media file in bytes */
+      size_bytes: number;
+      /** Target Google Cloud Storage bucket name */
+      gcs_bucket: string;
+      /** Target Google Cloud Storage object path */
+      gcs_object: string;
+      /** Upload lifecycle status */
+      status?: components['schemas']['SourceMediaStatus'];
+      /** Timestamp when the upload record was created (UTC) */
+      created_at: string;
+      /** Timestamp when the media upload was verified and completed (UTC) */
+      uploaded_at?: string | null;
+    };
+    SourceMediaStatus: "pending" | "uploading" | "uploaded" | "failed";
+    TargetAgent: "director" | "editor" | "packaging" | "qa";
     User: {
       /** Unique user identifier (e.g. Firebase UID / Google sub) */
       user_id: string;
@@ -179,7 +274,7 @@ export interface components {
       /** Description of the YouTube channel or production context */
       channel_description?: string | null;
       /** Workspace brand kit configuration */
-      brand_kit?: components["schemas"]["BrandKit"];
+      brand_kit?: components['schemas']['BrandKit'];
       /** Timestamp when the workspace was created (UTC) */
       created_at: string;
       /** Timestamp when the workspace was last updated (UTC) */
