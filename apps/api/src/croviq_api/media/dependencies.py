@@ -13,7 +13,7 @@ from croviq_media.inspector import (
 )
 from croviq_media.transcript import (
     FakeTranscriptionService,
-    GroqTranscriptionService,
+    GeminiTranscriptionService,
     TranscriptionService,
 )
 _fake_media_storage_instance: FakeMediaStorage | None = None
@@ -57,15 +57,11 @@ def get_transcription_service() -> TranscriptionService:
         return _custom_transcription_service
 
     settings = get_settings()
-    if settings.speech_service_provider == "groq":
-        if not settings.groq_api_key:
-            raise RuntimeError("GROQ_API_KEY is required for Groq transcription")
-        return GroqTranscriptionService(
-            api_key=settings.groq_api_key,
-            endpoint_url=settings.groq_transcription_endpoint,
-            model=settings.groq_transcription_model,
-            prompt=settings.groq_transcription_prompt,
-            timeout_seconds=settings.groq_timeout_seconds,
+    if settings.speech_service_provider in ("google", "gemini"):
+        return GeminiTranscriptionService(
+            project_id=settings.gcp_project_id,
+            location=settings.gemini_transcription_location,
+            model=settings.gemini_transcription_model,
         )
     return FakeTranscriptionService()
 

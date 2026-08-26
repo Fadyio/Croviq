@@ -84,7 +84,7 @@ def test_reconcile_editor_proposal_with_transcript_anchors_timestamps_and_text()
     reconciled = reconcile_editor_proposal_with_transcript(proposal, tr)
     assert len(reconciled.decisions) == 1
     d = reconciled.decisions[0]
-    # Authoritative Groq word timestamps
+    # Authoritative word timestamps
     assert d.source_start_ms == 310
     assert d.source_end_ms == 900
     assert d.original_text == "second third"

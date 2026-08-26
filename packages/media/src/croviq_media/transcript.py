@@ -1,20 +1,36 @@
-"""TranscriptionService abstraction and Groq Whisper implementation."""
+"""TranscriptionService abstraction and Gemini 3.5 Transcribe implementation."""
 
 from abc import ABC, abstractmethod
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from typing import Any, Callable
 import uuid
 
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
 
-GROQ_TRANSCRIPTION_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
-GROQ_WHISPER_MODEL = "whisper-large-v3"
-DEFAULT_GROQ_PROMPT = (
-    "Croviq, GitHub Actions, GitHub, YAML, workflow, runner, CI/CD, "
-    "Cloud Run, Terraform, Docker, Google Cloud, repository, commit, deployment"
-)
+GEMINI_TRANSCRIBE_MODEL = "gemini-3.5-transcribe-preview"
+DEFAULT_GEMINI_LOCATION = "global"
+DEFAULT_CUSTOM_VOCABULARY = [
+    "Croviq",
+    "GitHub Actions",
+    "GitHub",
+    "CI/CD",
+    "YAML",
+    "Terraform",
+    "Cloud Run",
+    "Google Cloud",
+    "Vertex AI",
+    "Gemini",
+    "Docker",
+    "Kubernetes",
+    "OIDC",
+    "Workload Identity Federation",
+    "Firestore",
+    "Twick",
+    "FFmpeg",
+]
 SOURCE_DURATION_TOLERANCE_MS = 2_000
 
 
@@ -39,8 +55,22 @@ def parse_duration_to_ms(offset: Any) -> int:
         return max(0, int(round(seconds * 1000 + nanos / 1_000_000)))
     if isinstance(offset, (int, float)):
         return max(0, int(round(offset * 1000)))
+    if isinstance(offset, str):
+        cleaned = offset.strip()
+        if not cleaned:
+            return 0
+        if cleaned.endswith("ms"):
+            try:
+                return max(0, int(round(float(cleaned[:-2]))))
+            except Exception:
+                pass
+        if cleaned.endswith("s"):
+            cleaned = cleaned[:-1]
+        try:
+            return max(0, int(round(float(cleaned) * 1000)))
+        except Exception:
+            pass
     raise TranscriptionError(f"Unsupported timestamp value: {offset!r}")
-
 
 def _get_text(value: Any, *names: str) -> str:
     for name in names:
@@ -70,42 +100,42 @@ def _require_reasonable_source_duration(last_timestamp_ms: int, source_duration_
         )
 
 
-def _map_segment_word_indexes(
-    words: list[TranscriptWord],
-    start_ms: int,
-    end_ms: int,
-) -> tuple[int, int]:
-    matching = [
-        word.index
-        for word in words
-        if word.start_ms >= start_ms and word.end_ms <= end_ms
-    ]
-    if matching:
-        return matching[0], matching[-1]
-
-    overlapping = [
-        word.index
-        for word in words
-        if word.end_ms > start_ms and word.start_ms < end_ms
-    ]
-    if overlapping:
-        return overlapping[0], overlapping[-1]
-
-    closest = min(
-        words,
-        key=lambda w: min(abs(w.start_ms - start_ms), abs(w.end_ms - end_ms)),
-    )
-    return closest.index, closest.index
-
-def parse_groq_transcription_response(
-    payload: Any,
+def parse_gemini_transcription_response(
+    response: Any,
     production_id: str,
     language_code: str = "en-US",
     source_duration_ms: int | None = None,
 ) -> Transcript:
-    """Map Groq Whisper verbose JSON into the canonical Croviq Transcript."""
-    words_payload = _get_value(payload, "words", []) or []
-    segments_payload = _get_value(payload, "segments", []) or []
+    """Map Gemini 3.5 Transcribe response into the canonical Croviq Transcript."""
+    candidates = _get_value(response, "candidates", []) or []
+    if not candidates:
+        raise TranscriptionError("Gemini transcription response contained no candidates")
+
+    audio_transcription: Any = None
+    full_text = ""
+    candidate = candidates[0]
+    content = _get_value(candidate, "content")
+    parts = _get_value(content, "parts", []) if content else []
+    for part in parts:
+        at = _get_value(part, "audio_transcription")
+        if at is not None:
+            audio_transcription = at
+        pt = _get_value(part, "text")
+        if pt and not full_text:
+            full_text = str(pt).strip()
+
+    if audio_transcription is None:
+        audio_transcription = _get_value(response, "audio_transcription")
+
+    words_payload: list[Any] = []
+    if audio_transcription is not None:
+        words_payload = _get_value(audio_transcription, "words", []) or []
+        transcription_text = _get_value(audio_transcription, "text")
+        if transcription_text:
+            full_text = str(transcription_text).strip()
+        detected_lang = _get_value(audio_transcription, "language_code")
+        if detected_lang:
+            language_code = str(detected_lang).strip()
 
     words: list[TranscriptWord] = []
     previous_start_ms = -1
@@ -113,8 +143,8 @@ def parse_groq_transcription_response(
         text = _get_text(raw_word, "word", "text")
         if not text:
             raise TranscriptionError(f"word {index} is missing text")
-        raw_start_ms = parse_duration_to_ms(_get_value(raw_word, "start"))
-        raw_end_ms = parse_duration_to_ms(_get_value(raw_word, "end"))
+        raw_start_ms = parse_duration_to_ms(_get_value(raw_word, "start_offset", _get_value(raw_word, "start")))
+        raw_end_ms = parse_duration_to_ms(_get_value(raw_word, "end_offset", _get_value(raw_word, "end")))
 
         if previous_start_ms >= 0 and raw_start_ms < previous_start_ms:
             raise TranscriptionError(f"Word timestamps must be monotonic (got {raw_start_ms}ms after {previous_start_ms}ms)")
@@ -131,44 +161,55 @@ def parse_groq_transcription_response(
             )
         )
         previous_start_ms = start_ms
+
     if not words:
-        raise TranscriptionError("Groq transcription response did not include word timestamps")
+        raise TranscriptionError("Gemini transcription response did not include word timestamps")
 
     segments: list[TranscriptSegment] = []
-    for segment_index, raw_segment in enumerate(segments_payload):
-        start_ms = parse_duration_to_ms(_get_value(raw_segment, "start"))
-        end_ms = parse_duration_to_ms(_get_value(raw_segment, "end"))
-        text = _get_text(raw_segment, "text")
-        if not text:
-            raise TranscriptionError(f"segment {segment_index} is missing text")
-        word_start_index, word_end_index = _map_segment_word_indexes(words, start_ms, end_ms)
-        segments.append(
-            TranscriptSegment(
-                segment_id=f"seg_{segment_index:03d}",
-                start_ms=start_ms,
-                end_ms=end_ms,
-                text=text,
-                word_start_index=word_start_index,
-                word_end_index=word_end_index,
+    if full_text:
+        sentence_texts = [s.strip() for s in re.split(r"(?<=[.!?])\s+", full_text.strip()) if s.strip()]
+    else:
+        sentence_texts = []
+
+    if sentence_texts:
+        word_idx = 0
+        for seg_i, sent_text in enumerate(sentence_texts):
+            sent_clean_words = [w for w in re.findall(r"\S+", sent_text)]
+            if not sent_clean_words or word_idx >= len(words):
+                continue
+            start_word_idx = word_idx
+            end_word_idx = min(len(words) - 1, start_word_idx + len(sent_clean_words) - 1)
+            if seg_i == len(sentence_texts) - 1:
+                end_word_idx = len(words) - 1
+
+            start_ms = words[start_word_idx].start_ms
+            end_ms = words[end_word_idx].end_ms
+            segments.append(
+                TranscriptSegment(
+                    segment_id=f"seg_{seg_i:03d}",
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    text=sent_text,
+                    word_start_index=start_word_idx,
+                    word_end_index=end_word_idx,
+                )
             )
-        )
+            word_idx = end_word_idx + 1
 
     if not segments:
-        word_start_index, word_end_index = 0, len(words) - 1
         segments.append(
             TranscriptSegment(
                 segment_id="seg_000",
                 start_ms=words[0].start_ms,
                 end_ms=words[-1].end_ms,
-                text=_get_text(payload, "text") or " ".join(word.text for word in words),
-                word_start_index=word_start_index,
-                word_end_index=word_end_index,
+                text=full_text or " ".join(w.text for w in words),
+                word_start_index=0,
+                word_end_index=len(words) - 1,
             )
         )
 
     last_timestamp_ms = max(words[-1].end_ms, max(segment.end_ms for segment in segments))
-    response_duration_ms = parse_duration_to_ms(_get_value(payload, "duration")) if _get_value(payload, "duration") is not None else 0
-    duration_ms = max(response_duration_ms, last_timestamp_ms)
+    duration_ms = max(last_timestamp_ms, source_duration_ms or 0)
     _require_reasonable_source_duration(last_timestamp_ms, source_duration_ms)
 
     return Transcript(
@@ -282,34 +323,37 @@ class FakeTranscriptionService(TranscriptionService):
         )
 
 
-def _default_http_post(**kwargs: Any) -> Any:
-    import httpx
-
-    with httpx.Client() as client:
-        return client.post(**kwargs)
-
-class GroqTranscriptionService(TranscriptionService):
-    """Thin HTTP adapter for Groq Whisper audio transcription."""
+class GeminiTranscriptionService(TranscriptionService):
+    """Google GenAI SDK adapter for Gemini 3.5 Transcribe audio transcription."""
 
     def __init__(
         self,
-        api_key: str,
-        endpoint_url: str = GROQ_TRANSCRIPTION_ENDPOINT,
-        model: str = GROQ_WHISPER_MODEL,
-        prompt: str | None = DEFAULT_GROQ_PROMPT,
+        project_id: str | None = None,
+        location: str = DEFAULT_GEMINI_LOCATION,
+        model: str = GEMINI_TRANSCRIBE_MODEL,
+        custom_vocabulary: list[str] | None = None,
         timeout_seconds: float = 120.0,
-        http_post: Callable[..., Any] | None = None,
+        generate_content_func: Callable[..., Any] | None = None,
     ) -> None:
-        cleaned_key = api_key.strip()
-        if not cleaned_key:
-            raise TranscriptionError("GROQ_API_KEY is required for Groq transcription")
-        self.api_key = cleaned_key
-        self.endpoint_url = endpoint_url
+        self.project_id = project_id
+        self.location = location
         self.model = model
-        self.prompt = prompt.strip() if prompt else None
+        self.custom_vocabulary = custom_vocabulary
         self.timeout_seconds = timeout_seconds
-        self._http_post = http_post or _default_http_post
+        self._generate_content_func = generate_content_func
+        self._client: Any = None
         self.last_request_id: str | None = None
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            from google import genai
+
+            self._client = genai.Client(
+                vertexai=True,
+                project=self.project_id,
+                location=self.location,
+            )
+        return self._client
 
     async def transcribe_audio_file(
         self,
@@ -335,7 +379,9 @@ class GroqTranscriptionService(TranscriptionService):
         except TranscriptionError:
             raise
         except Exception as exc:
-            raise TranscriptionError(f"Groq transcription failed: {type(exc).__name__}") from exc
+            err_type = type(exc).__name__
+            err_msg = str(exc).split("secret=")[0].split("Bearer ")[0].strip()
+            raise TranscriptionError(f"Gemini transcription failed: {err_type} {err_msg}".strip()) from exc
 
     def _transcribe_audio_file_sync(
         self,
@@ -344,50 +390,40 @@ class GroqTranscriptionService(TranscriptionService):
         production_id: str,
         source_duration_ms: int | None,
     ) -> Transcript:
-        data: dict[str, Any] = {
-            "model": self.model,
-            "response_format": "verbose_json",
-            "timestamp_granularities[]": ["word", "segment"],
-            "temperature": "0",
-        }
-        if language_code:
-            data["language"] = language_code.split("-")[0].lower()
-        if self.prompt:
-            data["prompt"] = self.prompt
+        from google.genai import types
 
-        with path.open("rb") as audio_file:
-            response = self._http_post(
-                url=self.endpoint_url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "User-Agent": "croviq-api/0.1.0",
-                },
-                data=data,
-                files={"file": (path.name, audio_file, "audio/wav")},
-                timeout=self.timeout_seconds,
+        with path.open("rb") as f:
+            audio_bytes = f.read()
+
+        part = types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav")
+        transcription_config = types.AudioTranscriptionConfig(
+            mode=types.AudioTranscriptionConfigMode.VERBATIM,
+            word_timestamp=True,
+        )
+        # Note: word_timestamp=True is required for word-level timing anchors.
+        # On Gemini 3.5 Transcribe Preview, custom_vocabulary is incompatible with word_timestamp=True.
+        config = types.GenerateContentConfig(
+            audio_transcription_config=transcription_config,
+        )
+
+        if self._generate_content_func is not None:
+            response = self._generate_content_func(
+                model=self.model,
+                contents=[part],
+                config=config,
+            )
+        else:
+            client = self._get_client()
+            response = client.models.generate_content(
+                model=self.model,
+                contents=[part],
+                config=config,
             )
 
-        self.last_request_id = getattr(response, "headers", {}).get("x-request-id") or getattr(response, "headers", {}).get("x-groq-id")
-        status_code = getattr(response, "status_code", 0)
-        if status_code < 200 or status_code >= 300:
-            error_code = "unknown"
-            try:
-                body = response.json()
-                error_obj = body.get("error", {}) if isinstance(body, dict) else {}
-                error_code = str(error_obj.get("code") or error_obj.get("type") or "unknown")
-            except Exception:
-                pass
-            raise TranscriptionError(
-                f"Groq transcription failed status={status_code} code={error_code} request_id={self.last_request_id or 'unknown'}"
-            )
+        self.last_request_id = getattr(response, "response_id", None) or f"req_{uuid.uuid4().hex[:8]}"
 
-        try:
-            payload = response.json()
-        except Exception as exc:
-            raise TranscriptionError("Groq transcription failed: invalid JSON response") from exc
-
-        return parse_groq_transcription_response(
-            payload,
+        return parse_gemini_transcription_response(
+            response=response,
             production_id=production_id,
             language_code=language_code,
             source_duration_ms=source_duration_ms,

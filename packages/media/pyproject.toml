@@ -6,6 +6,7 @@ dependencies = [
     "croviq-domain",
     "croviq-observability",
     "google-cloud-storage>=2.18.0",
+    "google-genai>=2.20.0",
     "httpx>=0.28.0",
     "pydantic>=2.10.0",
 ]
