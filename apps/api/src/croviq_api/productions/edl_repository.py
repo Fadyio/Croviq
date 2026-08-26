@@ -12,6 +12,8 @@ from croviq_domain.edl import EditDecisionList
 from croviq_observability import log_firestore_event
 
 
+_global_edl_repo: "EDLRepository | None" = None
+
 def parse_datetime(raw: Any) -> datetime:
     """Parse datetime from Firestore timestamp or ISO string to UTC datetime."""
     if isinstance(raw, datetime):
