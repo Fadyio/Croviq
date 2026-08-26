@@ -17,15 +17,15 @@ from croviq_media.inspector import (
     MediaInspector,
 )
 from croviq_media.transcript import (
-    DEFAULT_GROQ_PROMPT,
-    GROQ_TRANSCRIPTION_ENDPOINT,
-    GROQ_WHISPER_MODEL,
+    DEFAULT_CUSTOM_VOCABULARY,
+    DEFAULT_GEMINI_LOCATION,
+    GEMINI_TRANSCRIBE_MODEL,
     FakeTranscriptionService,
-    GroqTranscriptionService,
+    GeminiTranscriptionService,
     TranscriptionError,
     TranscriptionService,
     parse_duration_to_ms,
-    parse_groq_transcription_response,
+    parse_gemini_transcription_response,
 )
 
 __all__ = [
@@ -39,17 +39,17 @@ __all__ = [
     "CutSafetyAnalyzer",
     "assemble_edl_from_review",
     "FFprobeMediaInspector",
-    "DEFAULT_GROQ_PROMPT",
-    "GROQ_TRANSCRIPTION_ENDPOINT",
-    "GROQ_WHISPER_MODEL",
+    "DEFAULT_CUSTOM_VOCABULARY",
+    "DEFAULT_GEMINI_LOCATION",
+    "GEMINI_TRANSCRIBE_MODEL",
     "FakeTranscriptionService",
-    "GroqTranscriptionService",
+    "GeminiTranscriptionService",
     "MediaInspectionError",
     "MediaInspector",
     "TranscriptionError",
     "TranscriptionService",
     "parse_duration_to_ms",
-    "parse_groq_transcription_response",
+    "parse_gemini_transcription_response",
 ]
 
 __version__ = "0.1.0"

@@ -63,7 +63,7 @@ def reconcile_editor_proposal_with_transcript(
         start_idx = max(0, min(d.transcript_start_word, max_word_idx))
         end_idx = max(start_idx, min(d.transcript_end_word, max_word_idx))
 
-        # Strict word timing truth from Groq Whisper transcript
+        # Strict word timing truth from canonical transcript
         start_word = transcript.words[start_idx]
         end_word = transcript.words[end_idx]
         source_start_ms = start_word.start_ms
@@ -305,7 +305,7 @@ class GoogleGenAIClient(GenAIClient):
                 else:
                     raise GenAIError("Gemini response did not include parsed EditorProposal or text payload")
 
-                # Strictly anchor word timing to canonical Groq transcript
+                # Strictly anchor word timing to canonical transcript
                 reconciled = reconcile_editor_proposal_with_transcript(raw_proposal, transcript)
 
                 usage = AgentUsageMetadata(

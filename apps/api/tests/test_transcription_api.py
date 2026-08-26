@@ -464,7 +464,7 @@ async def test_transcribe_maps_provider_failure_to_safe_error_and_logs_no_secret
     )
     await prod_repo.create_production(prod)
     fake_stt.fail_next = TranscriptionError(
-        "Groq transcription failed status=401 code=invalid_api_key secret=GROQ_API_KEY raw provider body"
+        "Gemini transcription failed: ClientError 401 UNAUTHENTICATED secret=BEARER_TOKEN raw provider body"
     )
 
     resp = client.post(f"/api/productions/{prod.production_id}/transcribe")
@@ -472,6 +472,24 @@ async def test_transcribe_maps_provider_failure_to_safe_error_and_logs_no_secret
     assert resp.status_code == 502
     assert resp.json()["detail"] == "transcription_provider_error"
     captured = capsys.readouterr().out
-    assert "GROQ_API_KEY" not in captured
+    assert "BEARER_TOKEN" not in captured
     assert "raw provider body" not in captured
 
+
+def test_get_transcription_service_resolves_gemini_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    from croviq_api.config import get_settings
+    from croviq_api.media.dependencies import get_transcription_service, set_transcription_service
+    from croviq_media.transcript import GeminiTranscriptionService
+
+    get_settings.cache_clear()
+    set_transcription_service(None)
+    monkeypatch.setenv("SPEECH_SERVICE_PROVIDER", "google")
+    monkeypatch.setenv("GCP_PROJECT_ID", "croviq-test-project")
+    monkeypatch.setenv("GEMINI_TRANSCRIPTION_MODEL", "gemini-3.5-transcribe-preview")
+
+    service = get_transcription_service()
+    assert isinstance(service, GeminiTranscriptionService)
+    assert service.project_id == "croviq-test-project"
+    assert service.model == "gemini-3.5-transcribe-preview"
+    set_transcription_service(None)
+    get_settings.cache_clear()

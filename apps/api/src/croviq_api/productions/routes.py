@@ -23,6 +23,7 @@ from croviq_api.productions.repository import (
     ProductionRepository,
     get_production_repository,
 )
+from croviq_media.transcript import GeminiTranscriptionService
 from croviq_api.productions.transcript_repository import (
     TranscriptRepository,
     get_transcript_repository,
@@ -481,7 +482,7 @@ async def get_production(
     "/productions/{production_id}/transcribe",
     response_model=TranscribeProductionResponse,
     summary="Transcribe Production Source Media",
-    description="Extract 16 kHz mono WAV audio from uploaded source media and transcribe it with Groq Whisper.",
+    description="Extract 16 kHz mono WAV audio from uploaded source media and transcribe it with Gemini 3.5 Transcribe.",
 )
 async def transcribe_production(
     production_id: str,
@@ -542,8 +543,9 @@ async def transcribe_production(
         )
 
     perf_start = time.perf_counter()
-    provider = "groq"
-    model = get_settings().groq_transcription_model
+    settings = get_settings()
+    provider = "google" if isinstance(transcription_service, GeminiTranscriptionService) else getattr(transcription_service, "provider", "google")
+    model = getattr(transcription_service, "model", settings.gemini_transcription_model)
 
     log_transcription_event(
         event_type="transcription.started",
@@ -552,9 +554,8 @@ async def transcribe_production(
         production_id=production_id,
         provider=provider,
         model=model,
-        message="Initiating Groq Whisper transcription",
+        message="Initiating speech transcription",
     )
-
     try:
         suffix = Path(source.original_filename).suffix or Path(source.gcs_object).suffix or ".video"
         with tempfile.TemporaryDirectory(prefix="croviq_transcribe_") as temp_dir:
@@ -569,15 +570,14 @@ async def transcribe_production(
             extraction_started = time.perf_counter()
             with audio_extractor.temporary_speech_audio(source_path, sample_rate=16000) as audio_path:
                 extraction_latency_ms = (time.perf_counter() - extraction_started) * 1000
-                groq_started = time.perf_counter()
+                stt_started = time.perf_counter()
                 transcript = await transcription_service.transcribe_audio_file(
                     audio_path=audio_path,
                     language_code="en-US",
                     production_id=production_id,
                     source_duration_ms=media_metadata.duration_ms,
                 )
-                groq_latency_ms = (time.perf_counter() - groq_started) * 1000
-
+                stt_latency_ms = (time.perf_counter() - stt_started) * 1000
         saved_transcript = await transcript_repo.save_transcript(transcript)
         latency_ms = (time.perf_counter() - perf_start) * 1000
 
@@ -595,9 +595,9 @@ async def transcribe_production(
             provider=provider,
             model=model,
             extraction_latency_ms=extraction_latency_ms,
-            groq_latency_ms=groq_latency_ms,
+            transcription_latency_ms=stt_latency_ms,
             request_provider_id=getattr(transcription_service, "last_request_id", None),
-            message="Groq Whisper transcription completed",
+            message="Speech transcription completed",
         )
 
         return TranscribeProductionResponse(
