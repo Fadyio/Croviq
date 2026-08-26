@@ -183,11 +183,12 @@ test.describe("Email/password authentication", () => {
       "This account is not authorized to access Croviq.",
     );
     await expect
-      .poll(() => events)
-      .toEqual([
-        { event_type: "auth.login_attempt" },
-        { event_type: "auth.login_failed", error_code: "demo_access_restricted" },
-      ]);
+      .poll(() =>
+        events.some(
+          (e) => e.event_type === "auth.login_failed" && e.error_code === "demo_access_restricted",
+        ),
+      )
+      .toBe(true);
   });
 
   test("approved mocked sign-in reaches /app and persists across refresh", async ({ page }) => {
@@ -207,7 +208,59 @@ test.describe("Email/password authentication", () => {
     await expect(page).toHaveURL(/\/app$/);
     await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await expect(page.getByText("Your autonomous video production team.")).toBeVisible();
-    await expect(events).toEqual([{ event_type: "auth.login_attempt" }]);
+    await expect
+      .poll(() => events.some((e) => e.event_type === "auth.session.restored"))
+      .toBe(true);
+  });
+
+  test("backend temporary 500 keeps user authenticated without logout", async ({ page }) => {
+    const events: Record<string, unknown>[] = [];
+    await mockClientEvents(page, events);
+    await mockFirebasePasswordSignIn(page, true);
+    await mockApprovedApi(page);
+    await page.goto("/login");
+
+    await signIn(page);
+    await page.waitForURL("**/app");
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+
+    // Mock /api/auth/me returning temporary 500
+    await page.route("**/api/auth/me", async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Internal server error" }),
+      });
+    });
+
+    await page.reload();
+    // User must remain authenticated on /app
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await expect(page.getByText(DEMO_EMAIL, { exact: true })).toBeVisible();
+  });
+
+  test("backend network error keeps user authenticated without logout", async ({ page }) => {
+    const events: Record<string, unknown>[] = [];
+    await mockClientEvents(page, events);
+    await mockFirebasePasswordSignIn(page, true);
+    await mockApprovedApi(page);
+    await page.goto("/login");
+
+    await signIn(page);
+    await page.waitForURL("**/app");
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+
+    // Mock /api/auth/me network failure
+    await page.route("**/api/auth/me", async (route) => {
+      await route.abort("failed");
+    });
+
+    await page.reload();
+    // User must remain authenticated on /app
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await expect(page.getByText(DEMO_EMAIL, { exact: true })).toBeVisible();
   });
 
   test("logout clears the Firebase session and returns to /login", async ({ page }) => {
@@ -230,8 +283,8 @@ test.describe("Email/password authentication", () => {
 
     await page.waitForURL("**/login");
     await expect(page.getByRole("heading", { name: "Sign in to Croviq" })).toBeVisible();
+    await expect.poll(() => events.some((e) => e.event_type === "auth.explicit_logout")).toBe(true);
   });
-
   test("login remains usable with reduced motion", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/login");

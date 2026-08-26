@@ -218,12 +218,43 @@ export interface components {
       /** Timestamp when the EDL was assembled in UTC */
       created_at: string;
     };
+    AuthExplicitLogoutEvent: {
+      firebase_uid?: string | null;
+      git_sha?: string | null;
+      event_type: "auth.explicit_logout";
+    };
     AuthLoginAttemptEvent: {
+      firebase_uid?: string | null;
+      git_sha?: string | null;
       event_type: "auth.login_attempt";
     };
     AuthLoginFailedEvent: {
+      firebase_uid?: string | null;
+      git_sha?: string | null;
       event_type: "auth.login_failed";
       error_code?: "invalid_credentials" | "demo_access_restricted" | null;
+    };
+    AuthSessionLostEvent: {
+      firebase_uid?: string | null;
+      git_sha?: string | null;
+      event_type: "auth.session_lost";
+      error_code?: string | null;
+    };
+    AuthSessionRestoredEvent: {
+      firebase_uid?: string | null;
+      git_sha?: string | null;
+      event_type: "auth.session.restored";
+    };
+    AuthTokenRefreshFailedEvent: {
+      firebase_uid?: string | null;
+      git_sha?: string | null;
+      event_type: "auth.token_refresh_failed";
+      error_code?: string | null;
+    };
+    AuthTokenRefreshedEvent: {
+      firebase_uid?: string | null;
+      git_sha?: string | null;
+      event_type: "auth.token.refreshed";
     };
     BrandKit: {
       /** Tone adjectives or stylistic descriptors (e.g. ['concise', 'informative']) */
@@ -284,6 +315,8 @@ export interface components {
       updated_at?: string;
     };
     ClientErrorEvent: {
+      firebase_uid?: string | null;
+      git_sha?: string | null;
       event_type: "client.error";
       error_code?: string | null;
       message?: string | null;

@@ -42,6 +42,21 @@
                     "$ref": "#/components/schemas/AuthLoginFailedEvent"
                   },
                   {
+                    "$ref": "#/components/schemas/AuthSessionRestoredEvent"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AuthTokenRefreshedEvent"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AuthTokenRefreshFailedEvent"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AuthSessionLostEvent"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AuthExplicitLogoutEvent"
+                  },
+                  {
                     "$ref": "#/components/schemas/ClientErrorEvent"
                   }
                 ],
@@ -51,6 +66,11 @@
                   "mapping": {
                     "auth.login_attempt": "#/components/schemas/AuthLoginAttemptEvent",
                     "auth.login_failed": "#/components/schemas/AuthLoginFailedEvent",
+                    "auth.session.restored": "#/components/schemas/AuthSessionRestoredEvent",
+                    "auth.token.refreshed": "#/components/schemas/AuthTokenRefreshedEvent",
+                    "auth.token_refresh_failed": "#/components/schemas/AuthTokenRefreshFailedEvent",
+                    "auth.session_lost": "#/components/schemas/AuthSessionLostEvent",
+                    "auth.explicit_logout": "#/components/schemas/AuthExplicitLogoutEvent",
                     "client.error": "#/components/schemas/ClientErrorEvent"
                   }
                 }
@@ -1048,8 +1068,65 @@
         "title": "AssembleEDLResponse",
         "description": "Response returned upon successfully assembling a canonical Edit Decision List."
       },
+      "AuthExplicitLogoutEvent": {
+        "properties": {
+          "firebase_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firebase Uid"
+          },
+          "git_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
+          "event_type": {
+            "type": "string",
+            "const": "auth.explicit_logout",
+            "title": "Event Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["event_type"],
+        "title": "AuthExplicitLogoutEvent"
+      },
       "AuthLoginAttemptEvent": {
         "properties": {
+          "firebase_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firebase Uid"
+          },
+          "git_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
           "event_type": {
             "type": "string",
             "const": "auth.login_attempt",
@@ -1063,6 +1140,28 @@
       },
       "AuthLoginFailedEvent": {
         "properties": {
+          "firebase_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firebase Uid"
+          },
+          "git_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
           "event_type": {
             "type": "string",
             "const": "auth.login_failed",
@@ -1085,6 +1184,168 @@
         "type": "object",
         "required": ["event_type"],
         "title": "AuthLoginFailedEvent"
+      },
+      "AuthSessionLostEvent": {
+        "properties": {
+          "firebase_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firebase Uid"
+          },
+          "git_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
+          "event_type": {
+            "type": "string",
+            "const": "auth.session_lost",
+            "title": "Event Type"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["event_type"],
+        "title": "AuthSessionLostEvent"
+      },
+      "AuthSessionRestoredEvent": {
+        "properties": {
+          "firebase_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firebase Uid"
+          },
+          "git_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
+          "event_type": {
+            "type": "string",
+            "const": "auth.session.restored",
+            "title": "Event Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["event_type"],
+        "title": "AuthSessionRestoredEvent"
+      },
+      "AuthTokenRefreshFailedEvent": {
+        "properties": {
+          "firebase_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firebase Uid"
+          },
+          "git_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
+          "event_type": {
+            "type": "string",
+            "const": "auth.token_refresh_failed",
+            "title": "Event Type"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["event_type"],
+        "title": "AuthTokenRefreshFailedEvent"
+      },
+      "AuthTokenRefreshedEvent": {
+        "properties": {
+          "firebase_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firebase Uid"
+          },
+          "git_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
+          "event_type": {
+            "type": "string",
+            "const": "auth.token.refreshed",
+            "title": "Event Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["event_type"],
+        "title": "AuthTokenRefreshedEvent"
       },
       "BrandKit": {
         "properties": {
@@ -1325,6 +1586,28 @@
       },
       "ClientErrorEvent": {
         "properties": {
+          "firebase_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firebase Uid"
+          },
+          "git_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
           "event_type": {
             "type": "string",
             "const": "client.error",
