@@ -1,0 +1,361 @@
+"""Unit tests for Canonical EDL (EditDecisionList) and CutInstruction domain models."""
+
+from datetime import datetime, timezone
+import pytest
+
+from croviq_domain.editorial import EditorDecisionType
+from croviq_domain.edl import (
+    CoverageMarker,
+    CoverageType,
+    CutInstruction,
+    CutSafetyStatus,
+    EditDecisionList,
+    derive_keep_segments,
+)
+
+
+def test_coverage_marker_valid():
+    marker = CoverageMarker(
+        marker_id="cov_001",
+        decision_id="dec_002",
+        source_start_ms=26160,
+        source_end_ms=42340,
+        coverage_type=CoverageType.BROLL_CANDIDATE,
+        reason="Close-up macro insert over assembly commentary",
+    )
+    assert marker.marker_id == "cov_001"
+    assert marker.coverage_type == CoverageType.BROLL_CANDIDATE
+    assert marker.source_end_ms > marker.source_start_ms
+
+
+def test_coverage_marker_invalid_bounds():
+    with pytest.raises(ValueError, match="source_end_ms .* must be greater than source_start_ms"):
+        CoverageMarker(
+            marker_id="cov_001",
+            decision_id="dec_002",
+            source_start_ms=5000,
+            source_end_ms=4000,
+            coverage_type=CoverageType.SOURCE_SCREEN,
+            reason="Invalid bounds",
+        )
+
+
+def test_cut_instruction_valid_safe():
+    cut = CutInstruction(
+        cut_id="cut_001",
+        decision_id="dec_filler_01",
+        decision_type=EditorDecisionType.REMOVE_FILLER,
+        transcript_start_word=3,
+        transcript_end_word=4,
+        requested_start_ms=1200,
+        requested_end_ms=1500,
+        safe_start_ms=1150,
+        safe_end_ms=1550,
+        removed_duration_ms=400,
+        left_anchor="we",
+        right_anchor="should",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="Clean inter-word pause boundaries",
+        confidence=0.98,
+        coverage_marker_id=None,
+        requires_room_tone=False,
+    )
+    assert cut.cut_id == "cut_001"
+    assert cut.transition_ms == 20
+    assert cut.removed_duration_ms == 400
+    assert cut.safety_status == CutSafetyStatus.SAFE
+
+
+def test_cut_instruction_needs_coverage():
+    cut = CutInstruction(
+        cut_id="cut_002",
+        decision_id="dec_tighten_01",
+        decision_type=EditorDecisionType.TIGHTEN_EXPLANATION,
+        transcript_start_word=10,
+        transcript_end_word=25,
+        requested_start_ms=5000,
+        requested_end_ms=12000,
+        safe_start_ms=4950,
+        safe_end_ms=12050,
+        removed_duration_ms=7100,
+        left_anchor="workflow",
+        right_anchor="deploy",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.NEEDS_COVERAGE,
+        safety_reason="Audio clean but talking-head jump cut detected",
+        confidence=0.92,
+        coverage_marker_id="cov_001",
+        requires_room_tone=False,
+    )
+    assert cut.safety_status == CutSafetyStatus.NEEDS_COVERAGE
+    assert cut.coverage_marker_id == "cov_001"
+
+
+def test_cut_instruction_rejected_unsafe():
+    cut = CutInstruction(
+        cut_id="cut_003",
+        decision_id="dec_unsafe_01",
+        decision_type=EditorDecisionType.REMOVE_FILLER,
+        transcript_start_word=5,
+        transcript_end_word=5,
+        requested_start_ms=2000,
+        requested_end_ms=2100,
+        safe_start_ms=2000,
+        safe_end_ms=2100,
+        removed_duration_ms=0,
+        left_anchor="tight",
+        right_anchor="word",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.REJECTED_UNSAFE,
+        safety_reason="Zero inter-word gap with severe co-articulation risk",
+        confidence=0.45,
+    )
+    assert cut.safety_status == CutSafetyStatus.REJECTED_UNSAFE
+
+
+def test_cut_instruction_invalid_bounds():
+    with pytest.raises(ValueError, match="safe_end_ms .* must be >= safe_start_ms"):
+        CutInstruction(
+            cut_id="cut_bad",
+            decision_id="dec_01",
+            decision_type=EditorDecisionType.REMOVE_FILLER,
+            transcript_start_word=1,
+            transcript_end_word=2,
+            requested_start_ms=1000,
+            requested_end_ms=2000,
+            safe_start_ms=2000,
+            safe_end_ms=1000,
+            removed_duration_ms=0,
+            left_anchor="a",
+            right_anchor="b",
+            safety_status=CutSafetyStatus.SAFE,
+            safety_reason="bad bounds",
+            confidence=0.8,
+        )
+
+
+def test_edit_decision_list_zero_cut_valid():
+    now = datetime.now(timezone.utc)
+    edl = EditDecisionList(
+        edl_id="edl_zero_01",
+        production_id="prod_f0b41bfd429e",
+        source_duration_ms=97180,
+        editor_proposal_id="prop_01",
+        director_review_id="rev_01",
+        version=1,
+        cuts=[],
+        coverage_markers=[
+            CoverageMarker(
+                marker_id="cov_001",
+                decision_id="dec_002",
+                source_start_ms=26160,
+                source_end_ms=42340,
+                coverage_type=CoverageType.BROLL_CANDIDATE,
+                reason="Plate swap macro footage",
+            )
+        ],
+        created_at=now,
+    )
+    assert edl.edl_id == "edl_zero_01"
+    assert len(edl.cuts) == 0
+    assert len(edl.coverage_markers) == 1
+    assert edl.active_cuts_count == 0
+
+
+def test_edit_decision_list_with_cuts():
+    now = datetime.now(timezone.utc)
+    cut1 = CutInstruction(
+        cut_id="cut_01",
+        decision_id="dec_01",
+        decision_type=EditorDecisionType.REMOVE_FILLER,
+        transcript_start_word=2,
+        transcript_end_word=2,
+        requested_start_ms=1000,
+        requested_end_ms=1400,
+        safe_start_ms=980,
+        safe_end_ms=1420,
+        removed_duration_ms=440,
+        left_anchor="start",
+        right_anchor="next",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="Safe filler cut",
+        confidence=0.95,
+    )
+    cut2 = CutInstruction(
+        cut_id="cut_02",
+        decision_id="dec_02",
+        decision_type=EditorDecisionType.REMOVE_REPETITION,
+        transcript_start_word=10,
+        transcript_end_word=15,
+        requested_start_ms=5000,
+        requested_end_ms=8000,
+        safe_start_ms=4950,
+        safe_end_ms=8050,
+        removed_duration_ms=3100,
+        left_anchor="phrase",
+        right_anchor="continued",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.NEEDS_COVERAGE,
+        safety_reason="Safe audio, needs screen cover",
+        confidence=0.91,
+    )
+    edl = EditDecisionList(
+        edl_id="edl_cut_01",
+        production_id="prod_test_01",
+        source_duration_ms=20000,
+        version=1,
+        cuts=[cut1, cut2],
+        created_at=now,
+    )
+    assert edl.active_cuts_count == 2
+    assert edl.total_removed_duration_ms == 3540
+    assert edl.estimated_target_duration_ms == 16460
+
+
+def test_derive_keep_segments_zero_cuts():
+    now = datetime.now(timezone.utc)
+    edl = EditDecisionList(
+        edl_id="edl_zero",
+        production_id="prod_01",
+        source_duration_ms=50000,
+        version=1,
+        cuts=[],
+        created_at=now,
+    )
+    segments = derive_keep_segments(edl)
+    assert segments == [(0, 50000)]
+
+
+def test_derive_keep_segments_single_cut_middle():
+    now = datetime.now(timezone.utc)
+    cut = CutInstruction(
+        cut_id="cut_01",
+        decision_id="dec_01",
+        decision_type=EditorDecisionType.REMOVE_FILLER,
+        transcript_start_word=5,
+        transcript_end_word=6,
+        requested_start_ms=10000,
+        requested_end_ms=15000,
+        safe_start_ms=10000,
+        safe_end_ms=15000,
+        removed_duration_ms=5000,
+        left_anchor="before",
+        right_anchor="after",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="clean cut",
+        confidence=0.95,
+    )
+    edl = EditDecisionList(
+        edl_id="edl_mid",
+        production_id="prod_01",
+        source_duration_ms=40000,
+        version=1,
+        cuts=[cut],
+        created_at=now,
+    )
+    segments = derive_keep_segments(edl)
+    assert segments == [(0, 10000), (15000, 40000)]
+
+
+def test_derive_keep_segments_cut_at_beginning_and_end():
+    now = datetime.now(timezone.utc)
+    cut_start = CutInstruction(
+        cut_id="cut_01",
+        decision_id="dec_01",
+        decision_type=EditorDecisionType.TRIM_PAUSE,
+        transcript_start_word=0,
+        transcript_end_word=0,
+        requested_start_ms=0,
+        requested_end_ms=2000,
+        safe_start_ms=0,
+        safe_end_ms=2000,
+        removed_duration_ms=2000,
+        left_anchor="[START]",
+        right_anchor="first",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="trim intro pause",
+        confidence=0.99,
+    )
+    cut_end = CutInstruction(
+        cut_id="cut_02",
+        decision_id="dec_02",
+        decision_type=EditorDecisionType.TRIM_PAUSE,
+        transcript_start_word=50,
+        transcript_end_word=50,
+        requested_start_ms=28000,
+        requested_end_ms=30000,
+        safe_start_ms=28000,
+        safe_end_ms=30000,
+        removed_duration_ms=2000,
+        left_anchor="last",
+        right_anchor="[END]",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="trim outro dead air",
+        confidence=0.99,
+    )
+    edl = EditDecisionList(
+        edl_id="edl_edges",
+        production_id="prod_01",
+        source_duration_ms=30000,
+        version=1,
+        cuts=[cut_start, cut_end],
+        created_at=now,
+    )
+    segments = derive_keep_segments(edl)
+    assert segments == [(2000, 28000)]
+
+
+def test_derive_keep_segments_skips_rejected_unsafe():
+    now = datetime.now(timezone.utc)
+    cut_safe = CutInstruction(
+        cut_id="cut_safe",
+        decision_id="dec_safe",
+        decision_type=EditorDecisionType.REMOVE_FILLER,
+        transcript_start_word=2,
+        transcript_end_word=2,
+        requested_start_ms=5000,
+        requested_end_ms=6000,
+        safe_start_ms=5000,
+        safe_end_ms=6000,
+        removed_duration_ms=1000,
+        left_anchor="a",
+        right_anchor="b",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="safe",
+        confidence=0.95,
+    )
+    cut_unsafe = CutInstruction(
+        cut_id="cut_unsafe",
+        decision_id="dec_unsafe",
+        decision_type=EditorDecisionType.REMOVE_FALSE_START,
+        transcript_start_word=10,
+        transcript_end_word=12,
+        requested_start_ms=15000,
+        requested_end_ms=18000,
+        safe_start_ms=15000,
+        safe_end_ms=18000,
+        removed_duration_ms=0,
+        left_anchor="c",
+        right_anchor="d",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.REJECTED_UNSAFE,
+        safety_reason="rejected unsafe",
+        confidence=0.3,
+    )
+    edl = EditDecisionList(
+        edl_id="edl_mix",
+        production_id="prod_01",
+        source_duration_ms=25000,
+        version=1,
+        cuts=[cut_safe, cut_unsafe],
+        created_at=now,
+    )
+    segments = derive_keep_segments(edl)
+    # The unsafe cut is ignored, so segment from 6000 to 25000 is kept uninterrupted
+    assert segments == [(0, 5000), (6000, 25000)]

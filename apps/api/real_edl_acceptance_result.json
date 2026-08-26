@@ -1,0 +1,24 @@
+{
+  "edl_id": "edl_6324ea33234a",
+  "production_id": "prod_f0b41bfd429e",
+  "transcript_id": "tr_b9ab6b65d13e",
+  "run_id": "run_1787720797_fd429e",
+  "source_duration_ms": 113824,
+  "active_cut_count": 0,
+  "coverage_marker_count": 1,
+  "total_removed_duration_ms": 0,
+  "estimated_target_duration_ms": 113824,
+  "keep_segments": [[0, 113824]],
+  "coverage_markers": [
+    {
+      "marker_id": "cov_147e604682b8",
+      "decision_id": "dec_002",
+      "source_start_ms": 26160,
+      "source_end_ms": 42340,
+      "coverage_type": "BROLL_CANDIDATE",
+      "reason": "Close-up macro demonstration of unscrewing and swapping the rear plate accessory works best with focused insert B-roll over the commentary."
+    }
+  ],
+  "cuts": [],
+  "latency_ms": 0.28845900669693947
+}

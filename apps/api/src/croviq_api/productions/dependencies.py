@@ -14,6 +14,11 @@ from croviq_api.productions.editorial_repository import (
     EditorialRepository,
     get_editorial_repository,
 )
+from croviq_api.productions.edl_repository import (
+    EDLRepository,
+    get_edl_repository,
+)
+from croviq_api.productions.edl_service import EDLService
 from croviq_api.productions.editorial_service import DirectorEditorService
 from croviq_api.productions.repository import (
     ProductionRepository,
@@ -71,4 +76,21 @@ def get_editorial_service(
         media_inspector=media_inspector,
         editorial_repo=editorial_repo,
         genai_client=genai_client,
+    )
+
+
+def get_edl_service(
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
+    editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    media_inspector: Annotated[MediaInspector, Depends(get_media_inspector)],
+) -> EDLService:
+    """FastAPI dependency provider for EDLService."""
+    return EDLService(
+        production_repo=production_repo,
+        transcript_repo=transcript_repo,
+        editorial_repo=editorial_repo,
+        edl_repo=edl_repo,
+        media_inspector=media_inspector,
     )

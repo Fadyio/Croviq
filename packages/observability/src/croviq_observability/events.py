@@ -67,6 +67,11 @@ class EventType(StrEnum):
     # Editorial Run lifecycle events
     EDITORIAL_RUN_COMPLETED = "editorial.run.completed"
     EDITORIAL_RUN_FAILED = "editorial.run.failed"
+    # EDL assembly events
+    EDL_ASSEMBLY_STARTED = "edl.assembly.started"
+    EDL_ASSEMBLY_COMPLETED = "edl.assembly.completed"
+    EDL_ASSEMBLY_FAILED = "edl.assembly.failed"
+    CUT_SAFETY_EVALUATED = "cut.safety.evaluated"
 
 
 # Normalized set of all standard event names

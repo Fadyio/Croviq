@@ -27,13 +27,19 @@ from croviq_api.productions.transcript_repository import (
     TranscriptRepository,
     get_transcript_repository,
 )
-from croviq_api.productions.dependencies import get_editorial_service
+from croviq_api.productions.dependencies import (
+    get_editorial_service,
+    get_edl_service,
+)
+from croviq_api.productions.edl_service import EDLService
 from croviq_api.productions.editorial_repository import (
     EditorialRepository,
     get_editorial_repository,
 )
 from croviq_api.productions.editorial_service import DirectorEditorService
 from croviq_api.productions.schemas import (
+    AssembleEDLResponse,
+    EDLDetailResponse,
     AnalyzeProductionResponse,
     CreateUploadRequest,
     CreateUploadResponse,
@@ -814,4 +820,58 @@ async def get_editorial_run(
         proposal=proposal,
         review=review,
         activities=activities,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/edl",
+    response_model=AssembleEDLResponse,
+    summary="Assemble Canonical Edit Decision List (EDL)",
+    description="Deterministically derives audio-safe cut instructions and visual coverage markers from approved Director review.",
+)
+async def assemble_edl(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    edl_service: Annotated[EDLService, Depends(get_edl_service)],
+) -> AssembleEDLResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    edl = await edl_service.assemble_edl(
+        production_id=production_id,
+        current_user=current_user,
+        request_id=request_id,
+    )
+    return AssembleEDLResponse(
+        edl_id=edl.edl_id,
+        production_id=edl.production_id,
+        version=edl.version,
+        cut_count=edl.active_cuts_count,
+        coverage_marker_count=len(edl.coverage_markers),
+        source_duration_ms=edl.source_duration_ms,
+        total_removed_duration_ms=edl.total_removed_duration_ms,
+        estimated_target_duration_ms=edl.estimated_target_duration_ms,
+        status="READY",
+        created_at=edl.created_at,
+    )
+
+
+@router.get(
+    "/productions/{production_id}/edl",
+    response_model=EDLDetailResponse,
+    summary="Get Production Edit Decision List",
+    description="Retrieve the active canonical Edit Decision List and derived renderable keep segments.",
+)
+async def get_production_edl(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    edl_service: Annotated[EDLService, Depends(get_edl_service)],
+) -> EDLDetailResponse:
+    edl, keep_segments = await edl_service.get_edl(
+        production_id=production_id,
+        current_user=current_user,
+    )
+    return EDLDetailResponse(
+        edl=edl,
+        keep_segments=keep_segments,
     )

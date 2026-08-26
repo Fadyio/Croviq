@@ -33,6 +33,14 @@ from croviq_domain.editorial import (
     EditorialRunStatus,
     ShortCandidate,
 )
+from croviq_domain.edl import (
+    CoverageMarker,
+    CoverageType,
+    CutInstruction,
+    CutSafetyStatus,
+    EditDecisionList,
+    derive_keep_segments,
+)
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.memory import (
     ChannelLesson,
@@ -66,6 +74,12 @@ __all__ = [
     "AgentActivity",
     "DirectorDecision",
     "DirectorReview",
+    "CoverageMarker",
+    "CoverageType",
+    "CutInstruction",
+    "CutSafetyStatus",
+    "EditDecisionList",
+    "derive_keep_segments",
     "DirectorVerdict",
     "EditorDecision",
     "EditorDecisionType",

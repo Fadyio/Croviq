@@ -513,3 +513,91 @@ def log_media_inspect_event(
         **extra,
         **kwargs,
     )
+
+
+def log_edl_event(
+    event_type: str,
+    production_id: str,
+    edl_id: str | None = None,
+    run_id: str | None = None,
+    status: int | str = "success",
+    request_id: str | None = None,
+    cut_count: int | None = None,
+    coverage_marker_count: int | None = None,
+    removed_duration_ms: int | None = None,
+    latency_ms: float | None = None,
+    message: str | None = None,
+    error_code: str | None = None,
+    exception: BaseException | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Log structured EDL assembly lifecycle event for Google Cloud Logging ingestion."""
+    severity: LogSeverity = "ERROR" if (str(status).startswith("4") or str(status).startswith("5") or status == "failed" or exception is not None) else "INFO"
+    status_code: int | None = None
+    if isinstance(status, int):
+        status_code = status
+    elif isinstance(status, str) and status.isdigit():
+        status_code = int(status)
+
+    extra: dict[str, Any] = {
+        "production_id": production_id,
+    }
+    if edl_id:
+        extra["edl_id"] = edl_id
+    if run_id:
+        extra["run_id"] = run_id
+    if not isinstance(status, int):
+        extra["execution_status"] = str(status)
+    if cut_count is not None:
+        extra["cut_count"] = cut_count
+    if coverage_marker_count is not None:
+        extra["coverage_marker_count"] = coverage_marker_count
+    if removed_duration_ms is not None:
+        extra["removed_duration_ms"] = removed_duration_ms
+    if latency_ms is not None:
+        extra["latency_ms"] = latency_ms
+
+    return _default_logger.log(
+        event_type=event_type,
+        severity=severity,
+        status=status_code,
+        request_id=request_id,
+        message=message,
+        error_code=error_code,
+        exception=exception,
+        **extra,
+        **kwargs,
+    )
+
+
+def log_cut_safety_event(
+    production_id: str,
+    decision_id: str,
+    safety_status: str,
+    safety_reason: str,
+    requested_start_ms: int,
+    requested_end_ms: int,
+    safe_start_ms: int,
+    safe_end_ms: int,
+    removed_duration_ms: int,
+    request_id: str | None = None,
+    confidence: float | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Log structured individual cut safety evaluation."""
+    return _default_logger.log(
+        event_type=EventType.CUT_SAFETY_EVALUATED,
+        severity="INFO",
+        request_id=request_id,
+        production_id=production_id,
+        decision_id=decision_id,
+        safety_status=safety_status,
+        safety_reason=safety_reason,
+        requested_start_ms=requested_start_ms,
+        requested_end_ms=requested_end_ms,
+        safe_start_ms=safe_start_ms,
+        safe_end_ms=safe_end_ms,
+        removed_duration_ms=removed_duration_ms,
+        confidence=confidence,
+        **kwargs,
+    )
