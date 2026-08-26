@@ -286,9 +286,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-xs text-text-muted">
-            {user?.email || "demo@croviq.app"}
-          </span>
+          <span className="text-xs text-text-muted">{user?.email || "demo@croviq.app"}</span>
 
           <button
             onClick={logout}
@@ -305,12 +303,8 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-8 flex flex-col gap-8">
         {/* Intro */}
         <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-bold tracking-tight text-text-primary">
-            Croviq
-          </h1>
-          <p className="text-xs text-text-secondary">
-            Your autonomous video production team.
-          </p>
+          <h1 className="text-xl font-bold tracking-tight text-text-primary">Croviq</h1>
+          <p className="text-xs text-text-secondary">Your autonomous video production team.</p>
         </div>
 
         {/* Upload Station */}
@@ -526,12 +520,8 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
               <div className="w-8 h-8 rounded-full bg-surface-3 flex items-center justify-center text-text-muted">
                 <Video className="w-4 h-4" />
               </div>
-              <p className="text-xs text-text-secondary font-medium">
-                No productions yet.
-              </p>
-              <p className="text-xs text-text-muted">
-                Drop a video above to begin.
-              </p>
+              <p className="text-xs text-text-secondary font-medium">No productions yet.</p>
+              <p className="text-xs text-text-muted">Drop a video above to begin.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5" data-testid="productions-list">

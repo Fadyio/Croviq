@@ -196,9 +196,7 @@ test.describe("Product Home and Creator Flow", () => {
     // Verify production appears automatically without clicking "Use Sample Channel"
     const prodRow = page.getByTestId("production-row-prod_f0b41bfd429e");
     await expect(prodRow).toBeVisible();
-    await expect(
-      page.getByText("Fairphone 6+ Has Surprising Features! #shorts.mp4"),
-    ).toBeVisible();
+    await expect(page.getByText("Fairphone 6+ Has Surprising Features! #shorts.mp4")).toBeVisible();
     await expect(page.getByText("3.1 MB")).toBeVisible();
     await expect(page.getByText("UPLOADED")).toBeVisible();
     await expect(page.getByText("0 total")).toHaveCount(0);
