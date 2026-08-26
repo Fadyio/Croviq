@@ -389,16 +389,13 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
-        name = "GROQ_API_KEY"
-
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.groq_api_key.secret_id
-            version = "latest"
-          }
-        }
+        name  = "SPEECH_SERVICE_PROVIDER"
+        value = "google"
       }
-
+      env {
+        name  = "GEMINI_TRANSCRIPTION_MODEL"
+        value = "gemini-3.5-transcribe-preview"
+      }
 
 
 
@@ -434,10 +431,7 @@ resource "google_cloud_run_v2_service" "api" {
     google_project_service.required_services,
     google_artifact_registry_repository.api_repo,
     google_service_account.api_runtime,
-    google_secret_manager_secret.groq_api_key,
-    google_secret_manager_secret_iam_member.api_runtime_groq_accessor,
   ]
-
   lifecycle {
     ignore_changes = [
       scaling,
