@@ -160,6 +160,126 @@
           }
         ]
       }
+    },
+    "/api/channel/memory/profile": {
+      "get": {
+        "tags": ["Memory"],
+        "summary": "Retrieve Channel Memory Profile",
+        "description": "Retrieve the canonical structured ChannelMemoryProfile from Memory Bank.",
+        "operationId": "get_channel_memory_profile_api_channel_memory_profile_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Canonical channel identifier.",
+              "default": "croviq_syn_ai_eng_01",
+              "title": "Channel Id"
+            },
+            "description": "Canonical channel identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelMemoryProfile"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channel/memory/lessons": {
+      "get": {
+        "tags": ["Memory"],
+        "summary": "Retrieve Channel Lessons",
+        "description": "Retrieve active ChannelLessons scoped to a channel, optionally filtered by target agent.",
+        "operationId": "get_channel_lessons_api_channel_memory_lessons_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Canonical channel identifier.",
+              "default": "croviq_syn_ai_eng_01",
+              "title": "Channel Id"
+            },
+            "description": "Canonical channel identifier."
+          },
+          {
+            "name": "target_agent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TargetAgent"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional filter by target agent (director, editor, packaging, qa).",
+              "title": "Target Agent"
+            },
+            "description": "Optional filter by target agent (director, editor, packaging, qa)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChannelLesson"
+                  },
+                  "title": "Response Get Channel Lessons Api Channel Memory Lessons Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -254,6 +374,191 @@
         "title": "BrandKit",
         "description": "Canonical BrandKit configuration model for a Croviq Workspace."
       },
+      "ChannelLesson": {
+        "properties": {
+          "lesson_id": {
+            "type": "string",
+            "title": "Lesson Id",
+            "description": "Unique identifier for the lesson.",
+            "examples": ["lsn_early_demo_01"]
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id",
+            "description": "Channel identifier scope.",
+            "examples": ["croviq_syn_ai_eng_01"]
+          },
+          "directive": {
+            "type": "string",
+            "title": "Directive",
+            "description": "Actionable instruction for the agent.",
+            "examples": ["Reach the first concrete demonstration before 00:30."]
+          },
+          "target_agent": {
+            "$ref": "#/components/schemas/TargetAgent",
+            "description": "Agent role this lesson directs (director, editor, packaging, qa)."
+          },
+          "evidence_summary": {
+            "type": "string",
+            "title": "Evidence Summary",
+            "description": "Statistical or qualitative summary of evidence supporting this directive.",
+            "examples": [
+              "Videos with first demo <= 30s average 58.4% retention vs 44.1% for late demos."
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence score for this lesson (0.0 to 1.0).",
+            "examples": [0.92]
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Lifecycle status of this lesson (active, deprecated, experimental).",
+            "default": "active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when this lesson was recorded (UTC)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "lesson_id",
+          "channel_id",
+          "directive",
+          "target_agent",
+          "evidence_summary",
+          "confidence"
+        ],
+        "title": "ChannelLesson",
+        "description": "Structured, evidence-backed editorial rule for a specific agent role."
+      },
+      "ChannelMemoryProfile": {
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id",
+            "description": "Canonical channel identifier used as memory scope.",
+            "examples": ["croviq_syn_ai_eng_01"]
+          },
+          "channel_name": {
+            "type": "string",
+            "title": "Channel Name",
+            "description": "Display name of the channel.",
+            "examples": ["AI Engineering & Agent Systems"]
+          },
+          "primary_topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Primary Topics",
+            "description": "Top subject-matter domains covered by the channel.",
+            "examples": [["AI Agents", "LLM Systems", "DevOps & CI/CD"]]
+          },
+          "content_pillars": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Content Pillars",
+            "description": "Core content themes and recurring series pillars.",
+            "examples": [["Agent Architecture", "Production Deployment", "Emerging AI Releases"]]
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Primary spoken and metadata language (ISO 639-1 code).",
+            "default": "en"
+          },
+          "audience_geographies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Audience Geographies",
+            "description": "Top audience geography ISO country codes ordered by viewership volume.",
+            "examples": [["US", "IN", "GB", "CA", "DE"]]
+          },
+          "audience_characteristics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Audience Characteristics",
+            "description": "Key audience behavioral and demographic attributes.",
+            "examples": [
+              ["Software Engineers", "DevOps / SRE Practitioners", "High desktop viewing share"]
+            ]
+          },
+          "historical_baselines": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Historical Baselines",
+            "description": "Baseline performance benchmarks (e.g. views, CTR, retention, duration)."
+          },
+          "high_performing_formats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "High Performing Formats",
+            "description": "Video formats demonstrating above-average performance.",
+            "examples": [["agent_build", "deep_dive"]]
+          },
+          "weak_formats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Weak Formats",
+            "description": "Video formats demonstrating below-average performance.",
+            "examples": [["tutorial"]]
+          },
+          "recurring_retention_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recurring Retention Patterns",
+            "description": "Distilled retention observations from historical video performance."
+          },
+          "packaging_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Packaging Patterns",
+            "description": "Distilled CTR and packaging observations (titles, topics, thumbnails)."
+          },
+          "editorial_directives": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Editorial Directives",
+            "description": "Actionable editorial rules derived from channel evidence."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp when this memory profile was generated or updated (UTC)."
+          }
+        },
+        "type": "object",
+        "required": ["channel_id", "channel_name"],
+        "title": "ChannelMemoryProfile",
+        "description": "Canonical structured memory profile for a channel stored in Memory Bank."
+      },
       "ClientErrorEvent": {
         "properties": {
           "event_type": {
@@ -325,6 +630,11 @@
         "type": "object",
         "required": ["git_sha"],
         "title": "HealthResponse"
+      },
+      "TargetAgent": {
+        "type": "string",
+        "enum": ["director", "editor", "packaging", "qa"],
+        "title": "TargetAgent"
       },
       "User": {
         "properties": {
