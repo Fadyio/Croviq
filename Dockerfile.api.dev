@@ -14,6 +14,7 @@ ENV PYTHONUNBUFFERED=1
 COPY packages/domain /app/packages/domain
 COPY packages/observability /app/packages/observability
 COPY packages/media /app/packages/media
+COPY packages/agents /app/packages/agents
 COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/
 WORKDIR /app/apps/api
 
