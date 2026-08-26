@@ -1,14 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, AlertCircle, LogOut, Sparkles, Loader2 } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, AlertCircle, LogOut, Loader2 } from "lucide-react";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
 import { PreviewToggle, type PreviewMode } from "../components/editor/PreviewToggle";
 import { VideoStage } from "../components/editor/VideoStage";
 import { EditorTimeline } from "../components/editor/EditorTimeline";
 import { TranscriptPanel } from "../components/editor/TranscriptPanel";
-import { ProductionTeam } from "../components/editor/ProductionTeam";
+import { AgentPresence } from "../components/editor/AgentPresence";
 import { AgentActivityFeed } from "../components/editor/AgentActivityFeed";
 import { DecisionInspector } from "../components/editor/DecisionInspector";
+import { ProductionRunStrip } from "../components/editor/ProductionRunStrip";
 import {
   edlToTwickTimeline,
   type EditDecisionList,
@@ -22,8 +23,31 @@ import {
   type CoverageMarker,
 } from "../lib/edl-adapter";
 import type { components } from "../api/generated";
+import {
+  deriveProductionRunStages,
+  nextMissingProcessingStage,
+  type PersistedProductionRun,
+  type ProcessingStage,
+} from "../lib/production-run";
 
 type Production = components["schemas"]["Production"];
+type EditorialRunDetail = components["schemas"]["EditorialRunDetailResponse"];
+
+interface LoadedEditorData {
+  productionRun: PersistedProductionRun;
+  runDetail: EditorialRunDetail | null;
+}
+
+const readOptionalJson = async <T,>(response: Response, label: string): Promise<T | null> => {
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`${label} could not be loaded`);
+  return response.json() as Promise<T>;
+};
+const waitForRunUpdate = async (): Promise<void> => {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  window.setTimeout(resolve, 750);
+  await promise;
+};
 
 interface EditorPageProps {
   productionId: string;
@@ -33,108 +57,228 @@ interface EditorPageProps {
 export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigateHome }) => {
   const { user, firebaseUser, logout } = useAuth();
 
-  // Data State
   const [production, setProduction] = useState<Production | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [proposal, setProposal] = useState<EditorProposal | null>(null);
   const [review, setReview] = useState<DirectorReview | null>(null);
   const [activities, setActivities] = useState<AgentActivity[]>([]);
+  const [editorialRun, setEditorialRun] = useState<EditorialRunDetail["run"] | null>(null);
   const [edl, setEdl] = useState<EditDecisionList | null>(null);
-
-  // Loading & Error State
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activeProcessingStage, setActiveProcessingStage] = useState<ProcessingStage | null>(null);
+  const [failedProcessingStage, setFailedProcessingStage] = useState<ProcessingStage | null>(null);
 
-  // Playhead & Playback State
-  const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
-  const [durationMs, setDurationMs] = useState<number>(113824);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [currentTimeMs, setCurrentTimeMs] = useState(0);
+  const [durationMs, setDurationMs] = useState(113824);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("edited");
-
-  // Selection State
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<TimelineBlock | null>(null);
 
-  // Fetch all persisted production data in parallel
-  const fetchEditorData = useCallback(async () => {
-    if (!firebaseUser || !productionId) return;
-    setIsLoading(true);
-    setErrorMessage(null);
+  const runPromiseRef = useRef<Promise<void> | null>(null);
+  const processingProductionIdRef = useRef<string | null>(null);
+  const activeProcessingStageRef = useRef<ProcessingStage | null>(null);
 
-    try {
-      const token = await firebaseUser.getIdToken();
-      const headers = { Authorization: `Bearer ${token}` };
+  const loadPersistedData = useCallback(async (): Promise<LoadedEditorData> => {
+    if (!firebaseUser) throw new Error("Authentication required");
+    const token = await firebaseUser.getIdToken();
+    const headers = { Authorization: `Bearer ${token}` };
 
-      // 1. Fetch Production
-      const prodRes = await fetch(`/api/productions/${productionId}`, { headers });
-      if (!prodRes.ok) {
-        throw new Error(`Production '${productionId}' not found`);
-      }
-      const prodData: Production = await prodRes.json();
-      setProduction(prodData);
+    const [productionResponse, playbackResponse, transcriptResponse, runResponse, edlResponse] =
+      await Promise.all([
+        fetch(`/api/productions/${productionId}`, { headers }),
+        fetch(`/api/productions/${productionId}/playback`, { headers }).catch(() => null),
+        fetch(`/api/productions/${productionId}/transcript`, { headers }),
+        fetch(`/api/productions/${productionId}/editorial-run`, { headers }),
+        fetch(`/api/productions/${productionId}/edl`, { headers }),
+      ]);
 
-      // 2. Fetch Playback Signed URL
-      try {
-        const playRes = await fetch(`/api/productions/${productionId}/playback`, { headers });
-        if (playRes.ok) {
-          const playData = await playRes.json();
-          setPlaybackUrl(playData.playback_url);
-        }
-      } catch {
-        // Fallback if playback url is unavailable
-      }
-
-      // 3. Fetch Transcript
-      try {
-        const trRes = await fetch(`/api/productions/${productionId}/transcript`, { headers });
-        if (trRes.ok) {
-          const trData: Transcript = await trRes.json();
-          setTranscript(trData);
-        }
-      } catch {
-        // Transcript not yet available
-      }
-
-      // 4. Fetch Editorial Run (Proposal, Review, Activities)
-      try {
-        const runRes = await fetch(`/api/productions/${productionId}/editorial-run`, { headers });
-        if (runRes.ok) {
-          const runData = await runRes.json();
-          setProposal(runData.proposal || null);
-          setReview(runData.review || null);
-          setActivities(runData.activities || []);
-        }
-      } catch {
-        // Editorial run not yet available
-      }
-
-      // 5. Fetch Canonical EDL
-      try {
-        const edlRes = await fetch(`/api/productions/${productionId}/edl`, { headers });
-        if (edlRes.ok) {
-          const edlData = await edlRes.json();
-          const loadedEdl: EditDecisionList = edlData.edl;
-          setEdl(loadedEdl);
-          if (loadedEdl.source_duration_ms > 0) {
-            setDurationMs(loadedEdl.source_duration_ms);
-          }
-        }
-      } catch {
-        // EDL not yet available
-      }
-    } catch (err: unknown) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "Failed to load production editor workspace",
-      );
-    } finally {
-      setIsLoading(false);
+    if (!productionResponse.ok) {
+      throw new Error(`Production '${productionId}' not found`);
     }
+
+    const productionData = (await productionResponse.json()) as Production;
+    const transcriptData = await readOptionalJson<Transcript>(transcriptResponse, "Transcript");
+    const runData = await readOptionalJson<EditorialRunDetail>(runResponse, "Editorial run");
+    const edlData = await readOptionalJson<components["schemas"]["EDLDetailResponse"]>(
+      edlResponse,
+      "Edit plan",
+    );
+
+    setProduction(productionData);
+    setTranscript(transcriptData);
+    setProposal(runData?.proposal ?? null);
+    setReview(runData?.review ?? null);
+    setActivities(runData?.activities ?? []);
+    setEditorialRun(runData?.run ?? null);
+
+    const loadedEdl = edlData?.edl ?? null;
+    setEdl(loadedEdl);
+    if (loadedEdl?.source_duration_ms) setDurationMs(loadedEdl.source_duration_ms);
+    else if (transcriptData?.duration_ms) setDurationMs(transcriptData.duration_ms);
+
+    if (playbackResponse?.ok) {
+      const playbackData = await playbackResponse.json();
+      setPlaybackUrl(playbackData.playback_url);
+    }
+
+    return {
+      runDetail: runData,
+      productionRun: {
+        uploaded: productionData.source_media?.status === "uploaded",
+        uploadedAt: productionData.source_media?.uploaded_at,
+        transcriptCreatedAt: transcriptData?.created_at,
+        editorialRun: runData?.run,
+        activities: runData?.activities,
+        edlCreatedAt: loadedEdl?.created_at,
+      },
+    };
   }, [firebaseUser, productionId]);
 
+  const refreshEditorialRun = useCallback(
+    async (headers: HeadersInit): Promise<EditorialRunDetail | null> => {
+      const response = await fetch(`/api/productions/${productionId}/editorial-run`, {
+        headers,
+      });
+      if (!response.ok) return null;
+      const runData = (await response.json()) as EditorialRunDetail;
+      setEditorialRun(runData.run);
+      setProposal(runData.proposal ?? null);
+      setReview(runData.review ?? null);
+      setActivities(runData.activities ?? []);
+      if (runData.run.status === "reviewing") {
+        activeProcessingStageRef.current = "maya-review";
+        setActiveProcessingStage("maya-review");
+      }
+      return runData;
+    },
+    [productionId],
+  );
+
+  const processProduction = useCallback(
+    async (showInitialLoader: boolean, retryFailedRun = false) => {
+      setFailedProcessingStage(null);
+      setErrorMessage(null);
+      if (showInitialLoader) setIsLoading(true);
+
+      let snapshot: LoadedEditorData;
+      try {
+        snapshot = await loadPersistedData();
+      } catch (error) {
+        if (showInitialLoader) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Failed to load production editor workspace",
+          );
+        }
+        return;
+      } finally {
+        if (showInitialLoader) setIsLoading(false);
+      }
+
+      const persistedEditorialStatus = snapshot.runDetail?.run.status;
+      const persistedEditorialStage: ProcessingStage =
+        persistedEditorialStatus === "reviewing" ||
+        (persistedEditorialStatus === "failed" && snapshot.runDetail?.proposal)
+          ? "maya-review"
+          : "leo-edit";
+
+      if (persistedEditorialStatus === "failed" && !retryFailedRun) {
+        setFailedProcessingStage(persistedEditorialStage);
+        return;
+      }
+
+      if (persistedEditorialStatus === "analyzing" || persistedEditorialStatus === "reviewing") {
+        if (!firebaseUser) return;
+        activeProcessingStageRef.current = persistedEditorialStage;
+        setActiveProcessingStage(persistedEditorialStage);
+        const token = await firebaseUser.getIdToken();
+        const headers = { Authorization: `Bearer ${token}` };
+        let currentStatus: components["schemas"]["EditorialRunStatus"] = persistedEditorialStatus;
+        while (currentStatus === "analyzing" || currentStatus === "reviewing") {
+          await waitForRunUpdate();
+          const currentRun = await refreshEditorialRun(headers);
+          if (currentRun) currentStatus = currentRun.run.status ?? "pending";
+        }
+        if (currentStatus === "failed") {
+          setFailedProcessingStage(activeProcessingStageRef.current ?? persistedEditorialStage);
+          setActiveProcessingStage(null);
+          return;
+        }
+        snapshot = await loadPersistedData();
+      }
+
+      let nextStage = nextMissingProcessingStage(snapshot.productionRun);
+      while (nextStage) {
+        const visibleStage: ProcessingStage =
+          nextStage === "leo-edit" &&
+          (snapshot.runDetail?.run.status === "reviewing" ||
+            (snapshot.runDetail?.run.status === "failed" && snapshot.runDetail.proposal))
+            ? "maya-review"
+            : nextStage;
+        activeProcessingStageRef.current = visibleStage;
+        setActiveProcessingStage(visibleStage);
+
+        let pollTimer: number | undefined;
+        try {
+          if (!firebaseUser) throw new Error("Authentication required");
+          const token = await firebaseUser.getIdToken();
+          const headers = { Authorization: `Bearer ${token}` };
+          const endpoint =
+            nextStage === "transcript"
+              ? "transcribe"
+              : nextStage === "leo-edit"
+                ? "analyze"
+                : "edl";
+
+          if (nextStage === "leo-edit") {
+            pollTimer = window.setInterval(() => {
+              void refreshEditorialRun(headers);
+            }, 750);
+          }
+
+          const response = await fetch(`/api/productions/${productionId}/${endpoint}`, {
+            method: "POST",
+            headers,
+          });
+          if (!response.ok) throw new Error(`${endpoint} failed`);
+          if (pollTimer !== undefined) window.clearInterval(pollTimer);
+
+          snapshot = await loadPersistedData();
+          nextStage = nextMissingProcessingStage(snapshot.productionRun);
+        } catch {
+          if (pollTimer !== undefined) window.clearInterval(pollTimer);
+          setFailedProcessingStage(activeProcessingStageRef.current ?? visibleStage);
+          setActiveProcessingStage(null);
+          return;
+        }
+      }
+
+      activeProcessingStageRef.current = null;
+      setActiveProcessingStage(null);
+    },
+    [firebaseUser, loadPersistedData, productionId, refreshEditorialRun],
+  );
+
+  const beginProductionRun = useCallback(
+    (showInitialLoader: boolean, retryFailedRun = false) => {
+      if (runPromiseRef.current) return;
+      runPromiseRef.current = processProduction(showInitialLoader, retryFailedRun).finally(() => {
+        runPromiseRef.current = null;
+      });
+    },
+    [processProduction],
+  );
+
   useEffect(() => {
-    fetchEditorData();
-  }, [fetchEditorData]);
+    if (!firebaseUser) return;
+    if (processingProductionIdRef.current !== productionId) {
+      processingProductionIdRef.current = productionId;
+      runPromiseRef.current = null;
+    }
+    beginProductionRun(true);
+  }, [beginProductionRun, firebaseUser, productionId]);
 
   // Construct Twick Timeline Representation from EDL & Editorial Run
   const twickData = useMemo(() => {
@@ -159,15 +303,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     );
   }, [currentTimeMs, edl?.coverage_markers]);
 
-  // Derive active agent based on playhead or selection
   const activeAgent = useMemo<"leo" | "maya" | null>(() => {
-    if (activeCoverage) return "leo";
-    if (selectedDecisionId) {
-      const dec = proposal?.decisions?.find((d) => d.decision_id === selectedDecisionId);
-      if (dec) return "leo";
-    }
+    if (activeProcessingStage === "leo-edit") return "leo";
+    if (activeProcessingStage === "maya-review") return "maya";
     return null;
-  }, [activeCoverage, proposal?.decisions, selectedDecisionId]);
+  }, [activeProcessingStage]);
 
   // Selected decision entity
   const selectedDecision = useMemo<EditorDecision | null>(() => {
@@ -203,6 +343,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     (decision: EditorDecision | null) => {
       if (decision) {
         setSelectedDecisionId(decision.decision_id);
+        setCurrentTimeMs(decision.source_start_ms);
         const matchingBlock = twickData.blocks.find((b) => b.decisionId === decision.decision_id);
         setSelectedBlock(matchingBlock || null);
       } else {
@@ -221,6 +362,30 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
   const videoFilename =
     production?.source_media?.original_filename ||
     (productionId === "prod_f0b41bfd429e" ? "Fairphone 6 Plus teardown.mp4" : productionId);
+  const runStages = deriveProductionRunStages(
+    {
+      uploaded: production?.source_media?.status === "uploaded",
+      uploadedAt: production?.source_media?.uploaded_at,
+      transcriptCreatedAt: transcript?.created_at,
+      editorialRun,
+      activities,
+      edlCreatedAt: edl?.created_at,
+    },
+    { active: activeProcessingStage, failed: failedProcessingStage },
+  );
+
+  const processingStatusMessage: Partial<Record<ProcessingStage, string>> = {
+    transcript: "Preparing transcript…",
+    "leo-edit": "Leo is reviewing the footage…",
+    "maya-review": "Maya is reviewing Leo's edit…",
+    "edit-plan": "Preparing edit plan…",
+  };
+  const processingFailureMessage: Record<ProcessingStage, string> = {
+    transcript: "Transcription failed",
+    "leo-edit": "Leo analysis failed",
+    "maya-review": "Director review failed",
+    "edit-plan": "Edit plan failed",
+  };
 
   if (isLoading) {
     return (
@@ -303,11 +468,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
           </button>
         </div>
       </header>
+      <ProductionRunStrip stages={runStages} />
 
-      {/* Editor Main Content: ~75-80% Video & Timeline (Left) + ~20-25% Agents & Transcript (Right) */}
       <main className="flex-1 p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start max-w-[1920px] w-full mx-auto">
-        {/* Left Section: Video Stage + Twick Timeline (8 or 9 cols on desktop) */}
-        <div className="lg:col-span-8 xl:col-span-9 flex flex-col gap-4">
+        <div className="lg:col-span-9 flex flex-col gap-4 min-w-0">
           {/* Video Stage */}
           <VideoStage
             playbackUrl={playbackUrl}
@@ -334,40 +498,60 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
           />
         </div>
 
-        {/* Right Section: Autonomous Production Team + Activity / Decision Inspector + Transcript Rail */}
-        <div className="lg:col-span-4 xl:col-span-3 flex flex-col gap-4">
-          {/* Autonomous Editorial Team Status */}
-          <ProductionTeam proposal={proposal} review={review} activeAgent={activeAgent} />
+        <aside className="lg:col-span-3 flex min-w-0 flex-col gap-3">
+          <section className="border-b border-border-subtle pb-3">
+            <h2 className="mb-2 text-xs font-semibold text-text-primary">
+              {activeAgent ? "Active agent" : "Production activity"}
+            </h2>
+            <AgentPresence activeAgent={activeAgent} />
 
-          {/* Decision Inspector (when selected) OR Agent Activity Feed */}
-          {selectedDecision || selectedBlock ? (
-            <DecisionInspector
-              decision={selectedDecision}
-              directorDecision={selectedDirectorDecision}
-              selectedBlock={selectedBlock}
-              onClose={handleCloseInspector}
-              onSeek={handleSeek}
-            />
-          ) : (
-            <AgentActivityFeed
-              activities={activities}
-              onSelectActivity={(act) => {
-                // If activity relates to a decision, select it
-                if (proposal?.decisions) {
-                  const matching = proposal.decisions.find(
-                    (d) =>
-                      act.message.includes(d.action) ||
-                      (d.concise_reason && act.message.includes(d.concise_reason.substring(0, 15))),
-                  );
-                  if (matching) {
-                    handleSelectDecision(matching);
+            {failedProcessingStage && (
+              <div
+                className="mt-2 flex items-center justify-between gap-3 rounded-md bg-danger/10 px-2.5 py-2"
+                role="alert"
+              >
+                <span className="flex items-center gap-2 text-[11px] font-medium text-danger">
+                  <AlertCircle className="size-3.5 shrink-0" />
+                  {processingFailureMessage[failedProcessingStage]}
+                </span>
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-[10px] font-semibold text-text-primary ring-1 ring-border-strong transition-colors hover:bg-surface-3 focus-visible:outline-none focus-visible:ring-primary"
+                  onClick={() => beginProductionRun(false, true)}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            <div className="mt-3">
+              {selectedDecision || selectedBlock ? (
+                <DecisionInspector
+                  decision={selectedDecision}
+                  directorDecision={selectedDirectorDecision}
+                  selectedBlock={selectedBlock}
+                  onClose={handleCloseInspector}
+                  onSeek={handleSeek}
+                />
+              ) : (
+                <AgentActivityFeed
+                  activities={activities}
+                  decisions={proposal?.decisions ?? []}
+                  review={review}
+                  statusMessage={
+                    activeProcessingStage ? processingStatusMessage[activeProcessingStage] : null
                   }
-                }
-              }}
-            />
-          )}
+                  onSelectActivity={(activity) => {
+                    const matching = proposal?.decisions?.find(
+                      (decision) => decision.decision_id === activity.related_decision_id,
+                    );
+                    if (matching) handleSelectDecision(matching);
+                  }}
+                />
+              )}
+            </div>
+          </section>
 
-          {/* Canonical Groq Transcript Panel */}
           <TranscriptPanel
             transcript={transcript}
             currentTimeMs={currentTimeMs}
@@ -376,7 +560,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             onSelectDecision={handleSelectDecision}
             onSeek={handleSeek}
           />
-        </div>
+        </aside>
       </main>
     </div>
   );

@@ -291,11 +291,9 @@ test.describe("Product Home and Creator Flow", () => {
     // Click upload
     await uploadBtn.click();
 
-    // Verify uploaded state and Open Editor button
-    await expect(page.getByText("Uploaded")).toBeVisible();
-    await expect(page.getByText("Upload complete")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Open Editor" })).toBeVisible();
-    await page.screenshot({ path: "e2e/screenshots/studio-cockpit-uploaded.png", fullPage: true });
+    // Upload completion takes the creator straight into the production Editor.
+    await expect(page).toHaveURL(/\/productions\/prod_test_001\/editor/);
+    await expect(page.getByText("Upload complete")).toHaveCount(0);
     expect(consoleErrors).toEqual([]);
   });
 
