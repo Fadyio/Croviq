@@ -33,6 +33,7 @@ export interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const INVALID_CREDENTIALS_MESSAGE = "Email or password is incorrect.";
 const ACCESS_RESTRICTED_MESSAGE = "This account is not authorized to access Croviq.";
+const SESSION_EXPIRED_MESSAGE = "Your session has expired. Please sign in again.";
 
 const createOptimisticUser = (fbUser: FirebaseUser): User => ({
   user_id: fbUser.uid,
@@ -81,6 +82,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (response.status === 401) {
           try {
             const refreshedToken = await currentFirebaseUser.getIdToken(true);
+            void recordClientAuthEvent({
+              event_type: "auth.token.refreshed",
+              firebase_uid: currentFirebaseUser.uid,
+            });
             response = await fetch("/api/auth/me", {
               headers: {
                 Authorization: `Bearer ${refreshedToken}`,
@@ -92,6 +97,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               event_type: "auth.token_refresh_failed",
               firebase_uid: currentFirebaseUser.uid,
             });
+            setError(SESSION_EXPIRED_MESSAGE);
+            return null;
+          }
+
+          if (response.status === 401) {
+            setError(SESSION_EXPIRED_MESSAGE);
+            return null;
           }
         }
 
@@ -106,15 +118,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             error_code: "demo_access_restricted",
             firebase_uid: currentFirebaseUser.uid,
           });
-          try {
-            await signOut(auth);
-          } catch {
-            // Authorization denial remains the user-facing result if Firebase sign-out fails.
-          }
+          // A backend authorization refusal blocks Croviq access, but retains the Firebase session.
+          // Never trigger sign out automatically.
           return null;
         }
 
-        // On 500, 502, 503, transient 401 or temporary errors, do NOT call signOut.
+        // On 500, 502, 503, or temporary backend errors, do NOT call signOut.
         // Fallback to domain user representation from verified Firebase User to prevent logout.
         return createOptimisticUser(currentFirebaseUser);
       } catch {

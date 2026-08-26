@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 const DEMO_EMAIL = "demo@croviq.app";
@@ -91,6 +93,23 @@ const mockFirebasePasswordSignIn = async (page: Page, succeeds: boolean) => {
     });
   });
 };
+const mockFirebaseTokenRefresh = async (page: Page, refreshedIdToken: string) => {
+  await page.route("**/securetoken.googleapis.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        access_token: refreshedIdToken,
+        expires_in: "3600",
+        token_type: "Bearer",
+        refresh_token: "mock-refresh-token",
+        id_token: refreshedIdToken,
+        user_id: APPROVED_USER.user_id,
+        project_id: "croviq-506602",
+      }),
+    });
+  });
+};
 
 const mockApprovedApi = async (page: Page) => {
   await page.route("**/api/auth/me", async (route) => {
@@ -164,7 +183,9 @@ test.describe("Email/password authentication", () => {
       ]);
   });
 
-  test("an authenticated non-demo account receives the authorization message", async ({ page }) => {
+  test("an authenticated non-demo account receives authorization message, retains Firebase session without signOut, and provides explicit logout", async ({
+    page,
+  }) => {
     const events: Record<string, unknown>[] = [];
     await mockClientEvents(page, events);
     await mockFirebasePasswordSignIn(page, true);
@@ -175,6 +196,13 @@ test.describe("Email/password authentication", () => {
         body: JSON.stringify({ error_code: "demo_access_restricted" }),
       });
     });
+    await page.route("**/api/auth/logout", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "ok" }),
+      });
+    });
     await page.goto("/login");
 
     await signIn(page);
@@ -182,6 +210,13 @@ test.describe("Email/password authentication", () => {
     await expect(page.getByRole("alert")).toHaveText(
       "This account is not authorized to access Croviq.",
     );
+    await expect(page).toHaveURL(/\/login$/);
+
+    // Firebase session is retained; explicit sign out control is provided
+    await expect(page.getByText(`Signed in as ${DEMO_EMAIL}`)).toBeVisible();
+    const signOutBtn = page.getByRole("button", { name: "Sign out" });
+    await expect(signOutBtn).toBeVisible();
+
     await expect
       .poll(() =>
         events.some(
@@ -189,6 +224,130 @@ test.describe("Email/password authentication", () => {
         ),
       )
       .toBe(true);
+    expect(events.some((e) => e.event_type === "auth.explicit_logout")).toBe(false);
+
+    // Explicit logout clears Firebase session and returns to unauthenticated login view
+    await signOutBtn.click();
+    await expect.poll(() => events.some((e) => e.event_type === "auth.explicit_logout")).toBe(true);
+    await expect(page.getByText(`Signed in as ${DEMO_EMAIL}`)).toHaveCount(0);
+    await expect(signOutBtn).toHaveCount(0);
+  });
+
+  test("401 initial response forces token refresh, retries /api/auth/me successfully, and remains authenticated", async ({
+    page,
+  }) => {
+    const events: Record<string, unknown>[] = [];
+    await mockClientEvents(page, events);
+    await mockFirebasePasswordSignIn(page, true);
+    const REFRESHED_ID_TOKEN =
+      "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vY3JvdmlxLTUwNjYwMiIsImF1ZCI6ImNyb3ZpcS01MDYwMiIsInVzZXJfaWQiOiJkZW1vX3VzZXJfMTIzIiwic3ViIjoiZGVtb191c2VyXzEyMyIsImVtYWlsIjoiZGVtb0Bjcm92aXEuYXBwIn0.signature";
+    await mockFirebaseTokenRefresh(page, REFRESHED_ID_TOKEN);
+
+    let authMeCalls = 0;
+    await page.route("**/api/auth/me", async (route) => {
+      authMeCalls++;
+      if (authMeCalls === 1) {
+        // Initial request with stale token receives 401
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Token expired" }),
+        });
+      } else {
+        // Retried request carries refreshed token and succeeds
+        expect(route.request().headers().authorization).toBe(`Bearer ${REFRESHED_ID_TOKEN}`);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(APPROVED_USER),
+        });
+      }
+    });
+    await page.route("**/api/workspace", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(WORKSPACE),
+      });
+    });
+    await page.route("**/api/productions", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ productions: [], total: 0 }),
+      });
+    });
+
+    await page.goto("/login");
+    await signIn(page);
+
+    await page.waitForURL("**/app");
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await expect(page.getByText(DEMO_EMAIL, { exact: true })).toBeVisible();
+    expect(authMeCalls).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => events.some((e) => e.event_type === "auth.token.refreshed")).toBe(true);
+  });
+
+  test("401 persistent failure after refresh shows session expired without calling signOut", async ({
+    page,
+  }) => {
+    const events: Record<string, unknown>[] = [];
+    await mockClientEvents(page, events);
+    await mockFirebasePasswordSignIn(page, true);
+    const REFRESHED_ID_TOKEN =
+      "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJkZW1vX3VzZXJfMTIzIiwiZW1haWwiOiJkZW1vQGNyb3ZpcS5hcHAifQ.signature";
+    await mockFirebaseTokenRefresh(page, REFRESHED_ID_TOKEN);
+
+    await page.route("**/api/auth/me", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Invalid credentials" }),
+      });
+    });
+
+    await page.goto("/login");
+    await signIn(page);
+
+    await expect(page.getByRole("alert")).toHaveText(
+      "Your session has expired. Please sign in again.",
+    );
+    await expect(page).toHaveURL(/\/login$/);
+    // signOut was NOT called automatically
+    expect(events.some((e) => e.event_type === "auth.explicit_logout")).toBe(false);
+    await expect(page.getByText(`Signed in as ${DEMO_EMAIL}`)).toBeVisible();
+  });
+
+  test("regression guard: signOut(auth) has exactly one logical production call site in logout()", () => {
+    const srcDir = path.resolve(import.meta.dirname, "../src");
+    const getAllTsFiles = (dir: string): string[] => {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      const files: string[] = [];
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          files.push(...getAllTsFiles(fullPath));
+        } else if (
+          entry.isFile() &&
+          (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) &&
+          !entry.name.endsWith(".spec.ts")
+        ) {
+          files.push(fullPath);
+        }
+      }
+      return files;
+    };
+
+    const stripComments = (code: string) => code.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "");
+    const files = getAllTsFiles(srcDir);
+    let totalSignOutCalls = 0;
+    for (const file of files) {
+      const content = fs.readFileSync(file, "utf-8");
+      const executableCode = stripComments(content);
+      const matches = Array.from(executableCode.matchAll(/signOut\s*\(/g));
+      totalSignOutCalls += matches.length;
+    }
+    expect(totalSignOutCalls).toBe(1);
   });
 
   test("approved mocked sign-in reaches /app and persists across refresh", async ({ page }) => {

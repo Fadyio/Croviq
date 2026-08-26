@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, LogOut } from "lucide-react";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
 
 export const LoginPage: React.FC = () => {
-  const { clearError, error, isLoading, loginWithPassword } = useAuth();
+  const { clearError, error, isLoading, loginWithPassword, logout, firebaseUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const prefersReducedMotion = useReducedMotion();
@@ -119,6 +119,28 @@ export const LoginPage: React.FC = () => {
                 "Sign in"
               )}
             </motion.button>
+
+            {firebaseUser && (
+              <div className="flex flex-col items-center gap-2 pt-3 border-t border-border-subtle">
+                <p className="text-xs text-text-muted">
+                  Signed in as{" "}
+                  <span className="font-medium text-text-secondary">
+                    {firebaseUser.email ?? "Firebase user"}
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout();
+                  }}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <LogOut aria-hidden="true" className="h-3.5 w-3.5" />
+                  Sign out
+                </button>
+              </div>
+            )}
           </form>
         </div>
       </motion.section>
