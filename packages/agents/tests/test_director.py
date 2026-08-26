@@ -4,6 +4,7 @@ import pytest
 from croviq_agents.client import FakeGenAIClient
 from croviq_agents.director import MayaDirector
 from croviq_agents.editor import LeoDialogueEditor
+from croviq_domain.edl import EditDecisionList
 from croviq_domain.editorial import (
     DirectorDecision,
     DirectorReview,
@@ -11,6 +12,13 @@ from croviq_domain.editorial import (
     EditorDecision,
     EditorDecisionType,
     EditorProposal,
+)
+from croviq_domain.render_review import (
+    RenderReview,
+    RenderReviewIssue,
+    RenderReviewIssueType,
+    RenderReviewSeverity,
+    RenderReviewVerdict,
 )
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.production import SourceMedia, SourceMediaStatus
@@ -189,3 +197,126 @@ async def test_maya_director_can_reject_or_modify_decisions() -> None:
     reject_acts = [a for a in activities if a.related_decision_id == "dec_01"]
     assert len(reject_acts) == 1
     assert "[REJECT]" in reject_acts[0].message
+
+
+@pytest.mark.asyncio
+async def test_maya_director_review_render_approve() -> None:
+    fake_client = FakeGenAIClient()
+    director = MayaDirector(client=fake_client)
+    analysis_input = _sample_analysis_input()
+
+    proposal = EditorProposal(
+        production_id="prod_dir_test",
+        model="gemini-3.7-flash",
+        summary="Initial dialogue pass",
+        decisions=[
+            EditorDecision(
+                decision_id="dec_01",
+                decision_type=EditorDecisionType.REMOVE_FILLER,
+                transcript_start_word=1,
+                transcript_end_word=1,
+                source_start_ms=410,
+                source_end_ms=550,
+                original_text="to",
+                action="remove",
+                concise_reason="Remove filler",
+                confidence=0.95,
+            )
+        ],
+        short_candidate=None,
+        overall_confidence=0.94,
+    )
+
+    edl = EditDecisionList(
+        edl_id="edl_test_1",
+        production_id="prod_dir_test",
+        source_duration_ms=analysis_input.transcript.duration_ms,
+        cuts=[],
+        coverage_markers=[],
+        created_at=datetime.now(timezone.utc),
+    )
+
+    render_review, usage, activities = await director.review_render(
+        preview_gcs_bucket="croviq-media-raw",
+        preview_gcs_object="workspaces/ws_test/productions/prod_dir_test/renders/edl_test_1/preview.mp4",
+        preview_artifact_id="art_prev_01",
+        edl=edl,
+        proposal=proposal,
+        director_review=None,
+        transcript=analysis_input.transcript,
+        production_id="prod_dir_test",
+        run_id="run_dir_01",
+    )
+
+    assert render_review.verdict == RenderReviewVerdict.APPROVE
+    assert render_review.approved_for_master is True
+    assert len(render_review.issues) == 0
+    assert len(activities) >= 1
+    assert activities[0].agent == "Maya"
+    assert activities[0].role == "Director"
+    assert "Edit approved." in activities[0].message
+
+
+@pytest.mark.asyncio
+async def test_maya_director_review_render_correct() -> None:
+    canned_issue = RenderReviewIssue(
+        issue_id="iss_01",
+        issue_type=RenderReviewIssueType.OVER_AGGRESSIVE_CUT,
+        source_start_ms=400,
+        source_end_ms=600,
+        related_decision_id="dec_01",
+        severity=RenderReviewSeverity.MEDIUM,
+        message="One cut feels too aggressive. Restoring context.",
+        suggested_action="Restore explanatory clause",
+    )
+    canned_review = RenderReview(
+        review_id="rrv_correct",
+        production_id="prod_dir_test",
+        edl_id="edl_test_1",
+        preview_artifact_id="art_prev_01",
+        agent="maya",
+        model="fake-gemini-3.7-flash",
+        verdict=RenderReviewVerdict.CORRECT,
+        summary="One cut near 00:00 feels too aggressive. Restoring context.",
+        issues=[canned_issue],
+        approved_for_master=False,
+        confidence=0.89,
+        created_at=datetime.now(timezone.utc),
+    )
+    fake_client = FakeGenAIClient(canned_render_review=canned_review)
+    director = MayaDirector(client=fake_client)
+    analysis_input = _sample_analysis_input()
+
+    proposal = EditorProposal(
+        production_id="prod_dir_test",
+        model="gemini-3.7-flash",
+        summary="Initial dialogue pass",
+        decisions=[],
+        short_candidate=None,
+        overall_confidence=0.94,
+    )
+    edl = EditDecisionList(
+        edl_id="edl_test_1",
+        production_id="prod_dir_test",
+        source_duration_ms=analysis_input.transcript.duration_ms,
+        cuts=[],
+        coverage_markers=[],
+        created_at=datetime.now(timezone.utc),
+    )
+
+    render_review, usage, activities = await director.review_render(
+        preview_gcs_bucket="croviq-media-raw",
+        preview_gcs_object="workspaces/ws_test/productions/prod_dir_test/renders/edl_test_1/preview.mp4",
+        preview_artifact_id="art_prev_01",
+        edl=edl,
+        proposal=proposal,
+        director_review=None,
+        transcript=analysis_input.transcript,
+        production_id="prod_dir_test",
+        run_id="run_dir_01",
+    )
+
+    assert render_review.verdict == RenderReviewVerdict.CORRECT
+    assert render_review.approved_for_master is False
+    assert len(render_review.issues) == 1
+    assert any("Restoring context" in act.message for act in activities)

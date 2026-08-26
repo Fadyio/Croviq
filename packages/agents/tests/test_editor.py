@@ -7,6 +7,18 @@ from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.production import SourceMedia, SourceMediaStatus
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
+from croviq_domain.editorial import (
+    EditorDecision,
+    EditorDecisionType,
+    EditorProposal,
+)
+from croviq_domain.render_review import (
+    RenderReview,
+    RenderReviewIssue,
+    RenderReviewIssueType,
+    RenderReviewSeverity,
+    RenderReviewVerdict,
+)
 
 
 def _sample_analysis_input() -> SourceVideoAnalysisInput:
@@ -112,3 +124,54 @@ async def test_leo_dialogue_editor_generates_proposal_and_activities() -> None:
     decision_acts = [a for a in activities if a.activity_type == "decision"]
     assert len(decision_acts) == len(proposal.decisions)
     assert all(a.related_decision_id is not None for a in decision_acts)
+
+
+@pytest.mark.asyncio
+async def test_leo_dialogue_editor_revise() -> None:
+    fake_client = FakeGenAIClient()
+    editor = LeoDialogueEditor(client=fake_client)
+    analysis_input = _sample_analysis_input()
+
+    original_proposal, _, _ = await editor.analyze(
+        analysis_input=analysis_input,
+        run_id="run_01",
+    )
+
+    render_review = RenderReview(
+        review_id="rrv_correct",
+        production_id="prod_editor_test",
+        edl_id="edl_01",
+        preview_artifact_id="art_prev_01",
+        agent="maya",
+        model="fake-gemini-3.7-flash",
+        verdict=RenderReviewVerdict.CORRECT,
+        summary="Cut was too aggressive. Restoring context.",
+        issues=[
+            RenderReviewIssue(
+                issue_id="iss_01",
+                issue_type=RenderReviewIssueType.OVER_AGGRESSIVE_CUT,
+                source_start_ms=original_proposal.decisions[0].source_start_ms,
+                source_end_ms=original_proposal.decisions[0].source_end_ms,
+                related_decision_id=original_proposal.decisions[0].decision_id,
+                severity=RenderReviewSeverity.MEDIUM,
+                message="One cut feels too aggressive. Restoring context.",
+                suggested_action="Restore take",
+            )
+        ],
+        approved_for_master=False,
+        confidence=0.88,
+        created_at=datetime.now(timezone.utc),
+    )
+
+    revised_proposal, usage, activities = await editor.revise(
+        analysis_input=analysis_input,
+        proposal=original_proposal,
+        render_review=render_review,
+        run_id="run_01",
+    )
+
+    assert revised_proposal.production_id == "prod_editor_test"
+    assert len(revised_proposal.decisions) > 0
+    assert len(activities) >= 1
+    assert activities[0].agent == "Leo"
+    assert activities[0].role == "Dialogue Editor"

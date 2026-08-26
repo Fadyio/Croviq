@@ -1,0 +1,16 @@
+{
+  "production_id": "prod_0b7657f515ae",
+  "edl_id": "edl_6cfe6b3bf3f2",
+  "preview_artifact_id": "art_prev_6b3bf3f2",
+  "preview_gcs_uri": "gs://croviq-506602-croviq-media-raw/workspaces/ws_27iEBUMcu6ToDYwp2OdEIHBuwIA3/productions/prod_0b7657f515ae/renders/edl_6cfe6b3bf3f2/preview.mp4",
+  "maya_verdict": "APPROVE",
+  "approved_for_master": true,
+  "summary": "Deterministic preview review complete. The spoken dialogue track flows naturally without audible cut artifacts, mid-phoneme clipping, or room tone discontinuities. Visual pacing and product demonstrations align cleanly with narrative presentation. Approved for master render.",
+  "confidence": 0.98,
+  "issues": [],
+  "master_artifact_id": "art_mast_6b3bf3f2",
+  "master_gcs_uri": "gs://croviq-506602-croviq-media-raw/workspaces/ws_27iEBUMcu6ToDYwp2OdEIHBuwIA3/productions/prod_0b7657f515ae/renders/edl_6cfe6b3bf3f2/master.mp4",
+  "usage": {
+    "cached": true
+  }
+}

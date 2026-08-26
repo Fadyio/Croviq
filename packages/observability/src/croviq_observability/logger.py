@@ -663,3 +663,144 @@ def log_render_event(
         **extra,
         **kwargs,
     )
+
+
+def log_render_review_event(
+    event_type: str | EventType,
+    production_id: str,
+    edl_id: str,
+    preview_artifact_id: str,
+    review_id: str | None = None,
+    run_id: str | None = None,
+    agent: str = "maya",
+    model: str | None = None,
+    verdict: str | None = None,
+    latency_ms: int | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    request_id: str | None = None,
+    git_sha: str | None = None,
+    error_code: str | None = None,
+    message: str | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Log structured post-render review lifecycle event."""
+    normalized_type = event_type.value if isinstance(event_type, EventType) else str(event_type)
+    severity: LogSeverity = "ERROR" if (normalized_type == EventType.DIRECTOR_RENDER_REVIEW_FAILED.value or error_code) else "INFO"
+
+    extra: dict[str, Any] = {
+        "production_id": production_id,
+        "edl_id": edl_id,
+        "preview_artifact_id": preview_artifact_id,
+        "agent": agent,
+    }
+    if review_id is not None:
+        extra["review_id"] = review_id
+    if run_id is not None:
+        extra["run_id"] = run_id
+    if model is not None:
+        extra["model"] = model
+    if verdict is not None:
+        extra["verdict"] = verdict
+    if latency_ms is not None:
+        extra["latency_ms"] = latency_ms
+    if input_tokens is not None:
+        extra["input_tokens"] = input_tokens
+    if output_tokens is not None:
+        extra["output_tokens"] = output_tokens
+    if git_sha is not None:
+        extra["git_sha"] = git_sha
+
+    return _default_logger.log(
+        event_type=normalized_type,
+        severity=severity,
+        status=500 if severity == "ERROR" else 200,
+        request_id=request_id,
+        message=message or f"Director render review {verdict or 'event'}",
+        error_code=error_code,
+        **extra,
+        **kwargs,
+    )
+
+
+def log_editor_correction_event(
+    event_type: str | EventType,
+    production_id: str,
+    edl_id: str,
+    run_id: str | None = None,
+    agent: str = "leo",
+    model: str | None = None,
+    latency_ms: int | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    request_id: str | None = None,
+    git_sha: str | None = None,
+    error_code: str | None = None,
+    message: str | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Log structured editor correction lifecycle event."""
+    normalized_type = event_type.value if isinstance(event_type, EventType) else str(event_type)
+    severity: LogSeverity = "ERROR" if (normalized_type == EventType.EDITOR_CORRECTION_FAILED.value or error_code) else "INFO"
+
+    extra: dict[str, Any] = {
+        "production_id": production_id,
+        "edl_id": edl_id,
+        "agent": agent,
+    }
+    if run_id is not None:
+        extra["run_id"] = run_id
+    if model is not None:
+        extra["model"] = model
+    if latency_ms is not None:
+        extra["latency_ms"] = latency_ms
+    if input_tokens is not None:
+        extra["input_tokens"] = input_tokens
+    if output_tokens is not None:
+        extra["output_tokens"] = output_tokens
+    if git_sha is not None:
+        extra["git_sha"] = git_sha
+
+    return _default_logger.log(
+        event_type=normalized_type,
+        severity=severity,
+        status=500 if severity == "ERROR" else 200,
+        request_id=request_id,
+        message=message or f"Editor correction {normalized_type}",
+        error_code=error_code,
+        **extra,
+        **kwargs,
+    )
+
+
+def log_master_approved_event(
+    production_id: str,
+    edl_id: str,
+    preview_artifact_id: str,
+    review_id: str,
+    run_id: str | None = None,
+    request_id: str | None = None,
+    git_sha: str | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Log structured Master render approval event."""
+    extra: dict[str, Any] = {
+        "production_id": production_id,
+        "edl_id": edl_id,
+        "preview_artifact_id": preview_artifact_id,
+        "review_id": review_id,
+    }
+    if run_id is not None:
+        extra["run_id"] = run_id
+    if git_sha is not None:
+        extra["git_sha"] = git_sha
+
+    return _default_logger.log(
+        event_type=EventType.MASTER_APPROVED.value,
+        severity="INFO",
+        status=200,
+        request_id=request_id,
+        message="Master render approved by Director post-render review",
+        **extra,
+        **kwargs,
+    )

@@ -180,6 +180,30 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/review-preview": {
+    post: {
+      responses: {
+        200: components["schemas"]["ReviewPreviewResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/render-review": {
+    get: {
+      responses: {
+        200: components["schemas"]["RenderReviewDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/render-reviews": {
+    get: {
+      responses: {
+        200: components["schemas"]["RenderReviewDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
 }
 
 export interface components {
@@ -680,6 +704,84 @@ export interface components {
       production_id: string;
       /** List of all render artifacts associated with the production */
       renders: components["schemas"]["RenderArtifactResponse"][];
+    };
+    RenderReview: {
+      /** Unique identifier for the post-render review record */
+      review_id: string;
+      /** Associated Production entity identifier */
+      production_id: string;
+      /** Associated EDL identifier that produced the preview */
+      edl_id: string;
+      /** Associated RenderArtifact identifier of the rendered preview */
+      preview_artifact_id: string;
+      /** Agent identifier (Maya) */
+      agent?: string;
+      /** Model identifier used for the post-render evaluation */
+      model: string;
+      /** Post-render verdict: APPROVE or CORRECT */
+      verdict: components["schemas"]["RenderReviewVerdict"];
+      /** Concise product-facing summary of the post-render review */
+      summary: string;
+      /** List of specific issues identified in the rendered preview */
+      issues?: components["schemas"]["RenderReviewIssue"][];
+      /** Whether the preview is approved to proceed to deterministic Master render */
+      approved_for_master: boolean;
+      /** Director's confidence in the review */
+      confidence: number;
+      /** Creation timestamp in UTC */
+      created_at?: string;
+    };
+    RenderReviewDetailResponse: {
+      /** Canonical unique production identifier */
+      production_id: string;
+      /** Most recent post-render review record */
+      review?: components["schemas"]["RenderReview"] | null;
+      /** All post-render review records for this production */
+      reviews?: components["schemas"]["RenderReview"][];
+      /** Whether production requires manual human review after exhausted bounded correction */
+      needs_manual_review?: boolean;
+    };
+    RenderReviewIssue: {
+      /** Unique identifier for the review issue */
+      issue_id: string;
+      /** Categorized issue type */
+      issue_type: components["schemas"]["RenderReviewIssueType"];
+      /** Start time of the affected region in source media milliseconds */
+      source_start_ms: number;
+      /** End time of the affected region in source media milliseconds */
+      source_end_ms: number;
+      /** Referenced EditorDecision ID if directly tied to an existing decision */
+      related_decision_id?: string | null;
+      /** Severity level of the issue (LOW, MEDIUM, HIGH) */
+      severity: components["schemas"]["RenderReviewSeverity"];
+      /** Concise product-facing explanation of the issue (no raw chain-of-thought) */
+      message: string;
+      /** Suggested editorial correction to resolve the issue */
+      suggested_action: string;
+    };
+    RenderReviewIssueType:
+      | "UNNATURAL_AUDIO_JOIN"
+      | "VISUAL_JUMP"
+      | "OVER_AGGRESSIVE_CUT"
+      | "MISSED_EDIT"
+      | "CONTEXT_LOSS"
+      | "PACING"
+      | "COVERAGE_NEEDED";
+    RenderReviewSeverity: "LOW" | "MEDIUM" | "HIGH";
+    RenderReviewVerdict: "APPROVE" | "CORRECT";
+    ReviewPreviewResponse: {
+      /** Canonical unique production identifier */
+      production_id: string;
+      /** Maya's post-render review record */
+      review: components["schemas"]["RenderReview"];
+      /** Master render artifact if approved and rendered */
+      master_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
+      /** Second post-render review if bounded correction was performed */
+      second_review?: components["schemas"]["RenderReview"] | null;
+      /** Current workflow status (complete, needs_manual_review, correcting, approved) */
+      status: string;
+      /** Product-facing agent activity messages emitted during review and correction */
+      activities?: components["schemas"]["AgentActivity"][];
     };
     ShortCandidate: {
       /** Start timestamp in source video milliseconds */

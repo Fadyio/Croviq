@@ -63,6 +63,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
   const [previewArtifact, setPreviewArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
   >(null);
+  const [masterArtifact, setMasterArtifact] = useState<
+    components["schemas"]["RenderArtifactResponse"] | null
+  >(null);
+  const [renderReview, setRenderReview] = useState<components["schemas"]["RenderReview"] | null>(
+    null,
+  );
+  const [renderSubStatus, setRenderSubStatus] = useState<string | null>(null);
+  const [isManualReviewRequired, setIsManualReviewRequired] = useState<boolean>(false);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [proposal, setProposal] = useState<EditorProposal | null>(null);
   const [review, setReview] = useState<DirectorReview | null>(null);
@@ -73,7 +81,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeProcessingStage, setActiveProcessingStage] = useState<ProcessingStage | null>(null);
   const [failedProcessingStage, setFailedProcessingStage] = useState<ProcessingStage | null>(null);
-
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [durationMs, setDurationMs] = useState(113824);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -97,6 +104,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       runResponse,
       edlResponse,
       rendersResponse,
+      reviewResponse,
     ] = await Promise.all([
       fetch(`/api/productions/${productionId}`, { headers }),
       fetch(`/api/productions/${productionId}/playback`, { headers }).catch(() => null),
@@ -104,6 +112,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       fetch(`/api/productions/${productionId}/editorial-run`, { headers }),
       fetch(`/api/productions/${productionId}/edl`, { headers }),
       fetch(`/api/productions/${productionId}/renders`, { headers }).catch(() => null),
+      fetch(`/api/productions/${productionId}/render-reviews`, { headers }).catch(() => null),
     ]);
 
     if (!productionResponse.ok) {
@@ -125,6 +134,19 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
         rendersData = null;
       }
     }
+    let reviewsData: components["schemas"]["RenderReviewDetailResponse"] | null = null;
+    if (reviewResponse && reviewResponse.ok) {
+      try {
+        reviewsData =
+          (await reviewResponse.json()) as components["schemas"]["RenderReviewDetailResponse"];
+      } catch {
+        reviewsData = null;
+      }
+    }
+    const latestReview = reviewsData?.review ?? null;
+    setRenderReview(latestReview);
+    const needsManualReview = Boolean(reviewsData?.needs_manual_review);
+    setIsManualReviewRequired(needsManualReview);
     setProduction(productionData);
     setTranscript(transcriptData);
     setProposal(runData?.proposal ?? null);
@@ -151,6 +173,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       setRenderedPreviewUrl(completedPreview.playback_url);
     }
 
+    const completedMaster =
+      rendersData?.renders?.find((r) => r.artifact_type === "MASTER" && r.status === "completed") ??
+      null;
+    setMasterArtifact(completedMaster);
     return {
       runDetail: runData,
       productionRun: {
@@ -163,6 +189,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
         renderCompletedAt: completedPreview?.completed_at,
         renderStatus: completedPreview?.status,
         renderDurationMs: completedPreview?.duration_ms,
+        renderReview: latestReview,
+        masterArtifact: completedMaster,
+        masterStatus: completedMaster?.status,
+        masterCompletedAt: completedMaster?.completed_at,
+        needsManualReview,
       },
     };
   }, [firebaseUser, productionId]);
@@ -255,28 +286,61 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
           if (!firebaseUser) throw new Error("Authentication required");
           const token = await firebaseUser.getIdToken();
           const headers = { Authorization: `Bearer ${token}` };
-          const endpoint =
-            nextStage === "transcript"
-              ? "transcribe"
-              : nextStage === "leo-edit"
-                ? "analyze"
-                : nextStage === "edit-plan"
-                  ? "edl"
-                  : "renders/preview";
-          if (nextStage === "leo-edit") {
-            pollTimer = window.setInterval(() => {
-              void refreshEditorialRun(headers);
-            }, 750);
+          if (nextStage === "render") {
+            const hasPreview = Boolean(
+              snapshot.productionRun.renderCompletedAt ||
+              snapshot.productionRun.renderStatus === "completed",
+            );
+            if (!hasPreview) {
+              setRenderSubStatus("Rendering preview…");
+              const previewResp = await fetch(`/api/productions/${productionId}/renders/preview`, {
+                method: "POST",
+                headers,
+              });
+              if (!previewResp.ok) throw new Error("renders/preview failed");
+              snapshot = await loadPersistedData();
+            }
+
+            if (!snapshot.productionRun.renderReview && !snapshot.productionRun.masterArtifact) {
+              setRenderSubStatus("Maya reviewing preview…");
+              const reviewResp = await fetch(`/api/productions/${productionId}/review-preview`, {
+                method: "POST",
+                headers,
+              });
+              if (!reviewResp.ok) throw new Error("review-preview failed");
+              const reviewResult =
+                (await reviewResp.json()) as components["schemas"]["ReviewPreviewResponse"];
+              if (reviewResult.status === "needs_manual_review") {
+                setIsManualReviewRequired(true);
+                setRenderSubStatus("Needs manual review");
+              } else if (reviewResult.status === "complete") {
+                setIsManualReviewRequired(false);
+                setRenderSubStatus("Complete");
+              }
+              snapshot = await loadPersistedData();
+            }
+          } else {
+            const endpoint =
+              nextStage === "transcript"
+                ? "transcribe"
+                : nextStage === "leo-edit"
+                  ? "analyze"
+                  : "edl";
+            if (nextStage === "leo-edit") {
+              pollTimer = window.setInterval(() => {
+                void refreshEditorialRun(headers);
+              }, 750);
+            }
+
+            const response = await fetch(`/api/productions/${productionId}/${endpoint}`, {
+              method: "POST",
+              headers,
+            });
+            if (!response.ok) throw new Error(`${endpoint} failed`);
+            if (pollTimer !== undefined) window.clearInterval(pollTimer);
+
+            snapshot = await loadPersistedData();
           }
-
-          const response = await fetch(`/api/productions/${productionId}/${endpoint}`, {
-            method: "POST",
-            headers,
-          });
-          if (!response.ok) throw new Error(`${endpoint} failed`);
-          if (pollTimer !== undefined) window.clearInterval(pollTimer);
-
-          snapshot = await loadPersistedData();
           nextStage = nextMissingProcessingStage(snapshot.productionRun);
         } catch {
           if (pollTimer !== undefined) window.clearInterval(pollTimer);
@@ -288,6 +352,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
 
       activeProcessingStageRef.current = null;
       setActiveProcessingStage(null);
+      setRenderSubStatus(null);
     },
     [firebaseUser, loadPersistedData, productionId, refreshEditorialRun],
   );
@@ -337,8 +402,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
   const activeAgent = useMemo<"leo" | "maya" | null>(() => {
     if (activeProcessingStage === "leo-edit") return "leo";
     if (activeProcessingStage === "maya-review") return "maya";
+    if (activeProcessingStage === "render" && renderSubStatus?.includes("Maya")) return "maya";
+    if (activeProcessingStage === "render" && renderSubStatus?.includes("correction")) return "leo";
     return null;
-  }, [activeProcessingStage]);
+  }, [activeProcessingStage, renderSubStatus]);
 
   // Selected decision entity
   const selectedDecision = useMemo<EditorDecision | null>(() => {
@@ -413,7 +480,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     "leo-edit": "Leo is reviewing the footage…",
     "maya-review": "Maya is reviewing Leo's edit…",
     "edit-plan": "Preparing edit plan…",
-    render: "Rendering preview video…",
+    render: renderSubStatus ?? "Rendering preview video…",
   };
   const processingFailureMessage: Record<ProcessingStage, string> = {
     transcript: "Transcription failed",
@@ -504,7 +571,33 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
           </button>
         </div>
       </header>
-      <ProductionRunStrip stages={runStages} />
+      <ProductionRunStrip
+        stages={deriveProductionRunStages(
+          {
+            uploaded: production?.source_media?.status === "uploaded",
+            uploadedAt: production?.source_media?.uploaded_at,
+            transcriptCreatedAt: transcript?.created_at,
+            editorialRun,
+            activities,
+            edlCreatedAt: edl?.created_at,
+            renderCompletedAt: previewArtifact?.completed_at,
+            renderStatus: previewArtifact?.status,
+            renderDurationMs: previewArtifact?.duration_ms,
+            renderReview,
+            masterArtifact,
+            masterStatus: masterArtifact?.status,
+            masterCompletedAt: masterArtifact?.completed_at,
+            needsManualReview:
+              isManualReviewRequired ||
+              (renderReview?.verdict === "CORRECT" && renderSubStatus === "Needs manual review"),
+          },
+          {
+            active: activeProcessingStage,
+            failed: failedProcessingStage,
+            renderSubStatus,
+          },
+        )}
+      />
 
       <main className="flex-1 min-h-0 p-3 sm:p-4 flex flex-col lg:flex-row gap-3 sm:gap-4 max-w-[1920px] w-full mx-auto overflow-hidden">
         {/* Main Editor Column (flexible remaining width) */}
@@ -540,7 +633,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
 
         {/* Right Rail (fixed 380px, bounded height to workspace, 25-30% activity / 70-75% transcript) */}
         <aside className="w-full lg:w-[380px] shrink-0 h-full min-h-0 flex flex-col gap-2.5 overflow-hidden bg-surface-1/40 rounded-xl border border-border-subtle p-3">
-          <section className="shrink-0 flex flex-col gap-2 border-b border-border-subtle pb-2.5 max-h-[36%] overflow-y-auto">
+          <section className="shrink-0 flex flex-col gap-2 border-b border-border-subtle pb-2.5 max-h-[36%] overflow-y-auto overflow-x-hidden w-full min-w-0">
             <AgentPresence activeAgent={activeAgent} />
 
             {failedProcessingStage && (

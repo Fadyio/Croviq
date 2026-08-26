@@ -684,6 +684,101 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
       });
     },
   );
+
+  // Mock Post-Render Review & Render Review listing (Issue #30)
+  await page.route(
+    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/render-reviews`,
+    async (route) => {
+      if (!state.render) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            production_id: FAIRPHONE_PRODUCTION_ID,
+            review: null,
+            reviews: [],
+            needs_manual_review: false,
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          review: {
+            review_id: "rrv_fairphone_01",
+            production_id: FAIRPHONE_PRODUCTION_ID,
+            edl_id: defaultFairphoneEdl.edl_id,
+            preview_artifact_id: "art_preview_001",
+            agent: "maya",
+            model: "gemini-3.7-flash",
+            verdict: "APPROVE",
+            summary: "Dialogue flows naturally. Edit approved.",
+            issues: [],
+            approved_for_master: true,
+            confidence: 0.98,
+            created_at: "2026-08-26T00:02:55Z",
+          },
+          reviews: [],
+          needs_manual_review: false,
+        }),
+      });
+    },
+  );
+
+  await page.route(
+    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/review-preview`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          review: {
+            review_id: "rrv_fairphone_01",
+            production_id: FAIRPHONE_PRODUCTION_ID,
+            edl_id: defaultFairphoneEdl.edl_id,
+            preview_artifact_id: "art_preview_001",
+            agent: "maya",
+            model: "gemini-3.7-flash",
+            verdict: "APPROVE",
+            summary: "Dialogue flows naturally. Edit approved.",
+            issues: [],
+            approved_for_master: true,
+            confidence: 0.98,
+            created_at: "2026-08-26T00:02:55Z",
+          },
+          master_artifact: {
+            artifact_id: "art_master_001",
+            production_id: FAIRPHONE_PRODUCTION_ID,
+            edl_id: defaultFairphoneEdl.edl_id,
+            artifact_type: "MASTER",
+            status: "completed",
+            duration_ms: 113824,
+            playback_url: "https://storage.googleapis.com/fake-master.mp4",
+            playback_expires_at: "2026-08-27T00:00:00Z",
+            created_at: "2026-08-26T00:03:00Z",
+            completed_at: "2026-08-26T00:03:05Z",
+          },
+          status: "complete",
+          activities: [
+            {
+              activity_id: "act_003",
+              production_id: FAIRPHONE_PRODUCTION_ID,
+              run_id: FAIRPHONE_RUN_ID,
+              agent: "maya",
+              role: "Director",
+              activity_type: "render_review",
+              message: "The dialogue flows naturally. Edit approved.",
+              created_at: "2026-08-26T00:03:00Z",
+            },
+          ],
+        }),
+      });
+    },
+  );
 };
 
 const loginAndNavigateToEditor = async (page: Page, options: MockEditorOptions = {}) => {

@@ -7,6 +7,8 @@ export type ProcessingStage = "transcript" | "leo-edit" | "maya-review" | "edit-
 
 type EditorialRun = components["schemas"]["EditorialRun"];
 type AgentActivity = components["schemas"]["AgentActivity"];
+type RenderReview = components["schemas"]["RenderReview"];
+type RenderArtifactResponse = components["schemas"]["RenderArtifactResponse"];
 
 export interface PersistedProductionRun {
   uploadedAt?: string | null;
@@ -18,20 +20,26 @@ export interface PersistedProductionRun {
   renderCompletedAt?: string | null;
   renderStatus?: "pending" | "rendering" | "completed" | "failed" | null;
   renderDurationMs?: number | null;
+  renderReview?: RenderReview | null;
+  masterArtifact?: RenderArtifactResponse | null;
+  masterStatus?: "pending" | "rendering" | "completed" | "failed" | null;
+  masterCompletedAt?: string | null;
+  needsManualReview?: boolean;
 }
 
 export interface ProductionRunStage {
   id: RunStageId;
   label: string;
   status: RunStageStatus;
+  subStatus?: string | null;
   durationMs?: number;
 }
 
 export interface RunStageOverrides {
   active?: ProcessingStage | null;
   failed?: ProcessingStage | null;
+  renderSubStatus?: string | null;
 }
-
 const elapsed = (start?: string | null, end?: string | null): number | undefined => {
   if (!start || !end) return undefined;
   const value = new Date(end).getTime() - new Date(start).getTime();
@@ -64,6 +72,21 @@ export const deriveProductionRunStages = (
   const mayaComplete = editorialStatus === "completed";
   const activities = run.activities ?? [];
 
+  const previewComplete = run.renderStatus === "completed" || Boolean(run.renderCompletedAt);
+  const masterComplete = run.masterStatus === "completed" || Boolean(run.masterCompletedAt);
+  const hasApprovedReview = Boolean(run.renderReview?.approved_for_master);
+  const renderFullyComplete = masterComplete || (previewComplete && hasApprovedReview);
+
+  const renderStatus: RunStageStatus = run.needsManualReview
+    ? "failed"
+    : renderFullyComplete
+      ? "completed"
+      : run.renderStatus === "rendering" || run.masterStatus === "rendering"
+        ? "active"
+        : run.renderStatus === "failed" || run.masterStatus === "failed"
+          ? "failed"
+          : "pending";
+
   const stages: ProductionRunStage[] = [
     { id: "uploaded", label: "Uploaded", status: run.uploaded ? "completed" : "pending" },
     {
@@ -93,21 +116,23 @@ export const deriveProductionRunStages = (
     {
       id: "render",
       label: "Render",
-      status:
-        run.renderStatus === "completed" || Boolean(run.renderCompletedAt)
-          ? "completed"
-          : run.renderStatus === "rendering"
-            ? "active"
-            : run.renderStatus === "failed"
-              ? "failed"
-              : "pending",
-      durationMs: run.renderDurationMs ?? elapsed(run.edlCreatedAt, run.renderCompletedAt),
+      status: renderStatus,
+      subStatus:
+        overrides.renderSubStatus ?? (run.needsManualReview ? "Needs manual review" : null),
+      durationMs:
+        run.renderDurationMs ??
+        elapsed(run.edlCreatedAt, run.masterCompletedAt ?? run.renderCompletedAt),
     },
   ];
 
   if (overrides.active) {
     const stage = stages.find((candidate) => candidate.id === overrides.active);
-    if (stage && stage.status !== "completed") stage.status = "active";
+    if (stage && stage.status !== "completed") {
+      stage.status = "active";
+      if (stage.id === "render" && overrides.renderSubStatus) {
+        stage.subStatus = overrides.renderSubStatus;
+      }
+    }
   }
   if (overrides.failed) {
     const stage = stages.find((candidate) => candidate.id === overrides.failed);
@@ -124,9 +149,11 @@ export const nextMissingProcessingStage = (
   if (!run.transcriptCreatedAt) return "transcript";
   if (run.editorialRun?.status !== "completed") return "leo-edit";
   if (!run.edlCreatedAt) return "edit-plan";
-  if (run.renderStatus !== "completed" && !run.renderCompletedAt) return "render";
+  if (run.needsManualReview) return null;
+  const previewComplete = run.renderStatus === "completed" || Boolean(run.renderCompletedAt);
+  const masterComplete = run.masterStatus === "completed" || Boolean(run.masterCompletedAt);
+  if (!previewComplete || (!run.renderReview && !masterComplete)) return "render";
   return null;
 };
-
 export const formatStageDuration = (durationMs: number): string =>
   `${(durationMs / 1000).toFixed(1)}s`;
