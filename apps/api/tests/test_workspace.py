@@ -122,7 +122,7 @@ def test_get_workspace_first_request_provisions_default_workspace(
     data = response.json()
 
     assert data["owner_user_id"] == user_uid
-    assert data["name"] == "Croviq Demo Workspace"
+    assert data["name"] == "Croviq"
     assert data["workspace_id"].startswith("ws_")
     assert "created_at" in data
     assert "updated_at" in data
@@ -307,7 +307,7 @@ async def test_in_memory_repository_user_and_workspace_lifecycle() -> None:
     ws1, created1 = await repo.get_or_create_default_workspace(user)
     assert created1 is True
     assert ws1.owner_user_id == user.user_id
-    assert ws1.name == "Croviq Demo Workspace"
+    assert ws1.name == "Croviq"
 
     # 2. Second get_or_create returns existing workspace
     ws2, created2 = await repo.get_or_create_default_workspace(user)

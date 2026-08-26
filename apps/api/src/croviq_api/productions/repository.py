@@ -299,10 +299,10 @@ class FirestoreProductionRepository(ProductionRepository):
             query = (
                 self.client.collection("productions")
                 .where("workspace_id", "==", workspace_id)
-                .order_by("created_at", direction="DESCENDING")
-                .limit(limit)
             )
             docs = [doc async for doc in query.stream()]
+            prods = [self.production_from_dict(doc.to_dict()) for doc in docs]
+            prods.sort(key=lambda p: p.created_at, reverse=True)
             latency_ms = (time.perf_counter() - start_time) * 1000
             log_firestore_event(
                 event_type="firestore.read",
@@ -312,7 +312,7 @@ class FirestoreProductionRepository(ProductionRepository):
                 latency_ms=latency_ms,
                 message=f"Listed productions for workspace {workspace_id}",
             )
-            return [self.production_from_dict(doc.to_dict()) for doc in docs]
+            return prods[:limit]
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
             log_firestore_event(

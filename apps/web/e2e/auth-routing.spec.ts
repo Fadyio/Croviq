@@ -16,7 +16,7 @@ const APPROVED_USER = {
 const WORKSPACE = {
   workspace_id: "ws_demo",
   owner_user_id: APPROVED_USER.user_id,
-  name: "Croviq Demo Workspace",
+  name: "Croviq",
   created_at: "2026-08-26T00:00:00Z",
   updated_at: "2026-08-26T00:00:00Z",
 };
@@ -199,12 +199,14 @@ test.describe("Email/password authentication", () => {
 
     await signIn(page);
     await page.waitForURL("**/app");
-    await expect(page.getByText(WORKSPACE.name).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await expect(page.getByText("Your autonomous video production team.")).toBeVisible();
     await expect(page.getByText(DEMO_EMAIL, { exact: true })).toBeVisible();
 
     await page.reload();
     await expect(page).toHaveURL(/\/app$/);
-    await expect(page.getByText(WORKSPACE.name).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await expect(page.getByText("Your autonomous video production team.")).toBeVisible();
     await expect(events).toEqual([{ event_type: "auth.login_attempt" }]);
   });
 
