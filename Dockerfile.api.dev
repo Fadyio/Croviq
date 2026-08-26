@@ -13,8 +13,8 @@ ENV PYTHONUNBUFFERED=1
 # Copy package definitions
 COPY packages/domain /app/packages/domain
 COPY packages/observability /app/packages/observability
+COPY packages/media /app/packages/media
 COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/
-
 WORKDIR /app/apps/api
 
 # Install dependencies using frozen lockfile
