@@ -59,6 +59,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
 
   const [production, setProduction] = useState<Production | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [renderedPreviewUrl, setRenderedPreviewUrl] = useState<string | null>(null);
+  const [previewArtifact, setPreviewArtifact] = useState<
+    components["schemas"]["RenderArtifactResponse"] | null
+  >(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [proposal, setProposal] = useState<EditorProposal | null>(null);
   const [review, setReview] = useState<DirectorReview | null>(null);
@@ -86,14 +90,21 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     const token = await firebaseUser.getIdToken();
     const headers = { Authorization: `Bearer ${token}` };
 
-    const [productionResponse, playbackResponse, transcriptResponse, runResponse, edlResponse] =
-      await Promise.all([
-        fetch(`/api/productions/${productionId}`, { headers }),
-        fetch(`/api/productions/${productionId}/playback`, { headers }).catch(() => null),
-        fetch(`/api/productions/${productionId}/transcript`, { headers }),
-        fetch(`/api/productions/${productionId}/editorial-run`, { headers }),
-        fetch(`/api/productions/${productionId}/edl`, { headers }),
-      ]);
+    const [
+      productionResponse,
+      playbackResponse,
+      transcriptResponse,
+      runResponse,
+      edlResponse,
+      rendersResponse,
+    ] = await Promise.all([
+      fetch(`/api/productions/${productionId}`, { headers }),
+      fetch(`/api/productions/${productionId}/playback`, { headers }).catch(() => null),
+      fetch(`/api/productions/${productionId}/transcript`, { headers }),
+      fetch(`/api/productions/${productionId}/editorial-run`, { headers }),
+      fetch(`/api/productions/${productionId}/edl`, { headers }),
+      fetch(`/api/productions/${productionId}/renders`, { headers }).catch(() => null),
+    ]);
 
     if (!productionResponse.ok) {
       throw new Error(`Production '${productionId}' not found`);
@@ -106,7 +117,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       edlResponse,
       "Edit plan",
     );
-
+    const rendersData = rendersResponse
+      ? await readOptionalJson<components["schemas"]["RenderListResponse"]>(
+          rendersResponse,
+          "Renders",
+        )
+      : null;
     setProduction(productionData);
     setTranscript(transcriptData);
     setProposal(runData?.proposal ?? null);
@@ -124,6 +140,15 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       setPlaybackUrl(playbackData.playback_url);
     }
 
+    const completedPreview =
+      rendersData?.renders?.find(
+        (r) => r.artifact_type === "PREVIEW" && r.status === "completed",
+      ) ?? null;
+    setPreviewArtifact(completedPreview);
+    if (completedPreview?.playback_url) {
+      setRenderedPreviewUrl(completedPreview.playback_url);
+    }
+
     return {
       runDetail: runData,
       productionRun: {
@@ -133,6 +158,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
         editorialRun: runData?.run,
         activities: runData?.activities,
         edlCreatedAt: loadedEdl?.created_at,
+        renderCompletedAt: completedPreview?.completed_at,
+        renderStatus: completedPreview?.status,
+        renderDurationMs: completedPreview?.duration_ms,
       },
     };
   }, [firebaseUser, productionId]);
@@ -230,8 +258,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
               ? "transcribe"
               : nextStage === "leo-edit"
                 ? "analyze"
-                : "edl";
-
+                : nextStage === "edit-plan"
+                  ? "edl"
+                  : "renders/preview";
           if (nextStage === "leo-edit") {
             pollTimer = window.setInterval(() => {
               void refreshEditorialRun(headers);
@@ -379,12 +408,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     "leo-edit": "Leo is reviewing the footage…",
     "maya-review": "Maya is reviewing Leo's edit…",
     "edit-plan": "Preparing edit plan…",
+    render: "Rendering preview video…",
   };
   const processingFailureMessage: Record<ProcessingStage, string> = {
     transcript: "Transcription failed",
     "leo-edit": "Leo analysis failed",
     "maya-review": "Director review failed",
     "edit-plan": "Edit plan failed",
+    render: "Preview render failed",
   };
 
   if (isLoading) {
@@ -475,6 +506,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
           {/* Video Stage */}
           <VideoStage
             playbackUrl={playbackUrl}
+            renderedPreviewUrl={renderedPreviewUrl}
             currentTimeMs={currentTimeMs}
             durationMs={durationMs}
             isPlaying={isPlaying}

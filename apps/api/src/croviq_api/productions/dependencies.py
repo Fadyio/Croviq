@@ -8,6 +8,12 @@ from croviq_agents.client import FakeGenAIClient, GenAIClient, GoogleGenAIClient
 from croviq_api.config import Settings, get_settings
 from croviq_api.media.dependencies import get_media_inspector
 from croviq_media.inspector import MediaInspector
+from croviq_media.render import FakeRenderService, FFmpegRenderService, RenderService
+from croviq_api.productions.render_repository import (
+    RenderRepository,
+    get_render_repository,
+    set_render_repository,
+)
 from croviq_api.memory.dependencies import get_memory_store
 from croviq_api.memory.store import ChannelMemoryStore
 from croviq_api.productions.editorial_repository import (
@@ -28,6 +34,9 @@ from croviq_api.productions.transcript_repository import (
     TranscriptRepository,
     get_transcript_repository,
 )
+
+_custom_render_service: RenderService | None = None
+_default_render_service: RenderService | None = None
 
 _custom_genai_client: GenAIClient | None = None
 _default_genai_client: GenAIClient | None = None
@@ -94,3 +103,23 @@ def get_edl_service(
         edl_repo=edl_repo,
         media_inspector=media_inspector,
     )
+
+
+def get_render_service(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RenderService:
+    """Resolve active RenderService implementation."""
+    global _custom_render_service, _default_render_service
+    if _custom_render_service is not None:
+        return _custom_render_service
+
+    if _default_render_service is None:
+        _default_render_service = FFmpegRenderService()
+
+    return _default_render_service
+
+
+def set_render_service(service: RenderService | None) -> None:
+    """Override RenderService instance for test isolation."""
+    global _custom_render_service
+    _custom_render_service = service

@@ -89,9 +89,12 @@ class GoogleMediaStorage(MediaStorage):
             kwargs["credentials"] = credentials
             if hasattr(credentials, "token") and credentials.token:
                 kwargs["access_token"] = credentials.token
-
-        signed_url = blob.generate_signed_url(**kwargs)
-
+        try:
+            signed_url = blob.generate_signed_url(**kwargs)
+        except Exception as exc:
+            raise MediaStorageError(
+                f"Failed to generate signed V4 upload URL for gs://{bucket}/{object_name}: {exc}"
+            ) from exc
         return SignedUploadTarget(
             upload_url=signed_url,
             method="PUT",
@@ -151,9 +154,12 @@ class GoogleMediaStorage(MediaStorage):
             kwargs["credentials"] = credentials
             if hasattr(credentials, "token") and credentials.token:
                 kwargs["access_token"] = credentials.token
-
-        signed_url = blob.generate_signed_url(**kwargs)
-
+        try:
+            signed_url = blob.generate_signed_url(**kwargs)
+        except Exception as exc:
+            raise MediaStorageError(
+                f"Failed to generate signed V4 read URL for gs://{bucket}/{object_name}: {exc}"
+            ) from exc
         return SignedReadTarget(
             read_url=signed_url,
             expires_at=expires_at,
@@ -227,3 +233,42 @@ class GoogleMediaStorage(MediaStorage):
         target_path.parent.mkdir(parents=True, exist_ok=True)
         blob.download_to_filename(str(target_path))
         return target_path
+
+    async def upload_object_from_path(
+        self,
+        bucket: str,
+        object_name: str,
+        source_path: Path,
+        content_type: str = "video/mp4",
+    ) -> ObjectMetadata:
+        """Upload a local file to private Google Cloud Storage."""
+        return await asyncio.to_thread(
+            self._upload_object_from_path_sync,
+            bucket,
+            object_name,
+            source_path,
+            content_type,
+        )
+
+    def _upload_object_from_path_sync(
+        self,
+        bucket_name: str,
+        object_name: str,
+        source_path: Path,
+        content_type: str,
+    ) -> ObjectMetadata:
+        if not source_path.exists() or not source_path.is_file():
+            raise MediaStorageError(f"Source file not found for upload: {source_path}")
+        client = self._get_client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+        blob.upload_from_filename(str(source_path), content_type=content_type)
+        blob.reload()
+        return ObjectMetadata(
+            bucket=bucket_name,
+            object_name=object_name,
+            exists=True,
+            size_bytes=blob.size if blob.size is not None else source_path.stat().st_size,
+            content_type=blob.content_type or content_type,
+            updated_at=blob.updated or datetime.now(timezone.utc),
+        )

@@ -850,6 +850,144 @@
           }
         }
       }
+    },
+    "/api/productions/{production_id}/renders/preview": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Render Fast Preview Video",
+        "description": "Deterministically render a fast preview MP4 from the canonical Edit Decision List.",
+        "operationId": "render_preview_video_api_productions__production_id__renders_preview_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderArtifactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/renders/master": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Render High Quality Master Video",
+        "description": "Deterministically render a high quality YouTube master MP4 from the canonical Edit Decision List.",
+        "operationId": "render_master_video_api_productions__production_id__renders_master_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderArtifactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/renders": {
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "List Production Render Artifacts",
+        "description": "Retrieve all rendered artifacts (preview and master) for a production.",
+        "operationId": "list_production_renders_api_productions__production_id__renders_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -996,6 +1134,18 @@
         "required": ["run_id", "production_id", "status", "started_at"],
         "title": "AnalyzeProductionResponse",
         "description": "Response returned when editorial analysis is completed."
+      },
+      "ArtifactStatus": {
+        "type": "string",
+        "enum": ["pending", "rendering", "completed", "failed"],
+        "title": "ArtifactStatus",
+        "description": "Lifecycle status of a render artifact."
+      },
+      "ArtifactType": {
+        "type": "string",
+        "enum": ["PREVIEW", "MASTER"],
+        "title": "ArtifactType",
+        "description": "Supported render artifact types."
       },
       "AssembleEDLResponse": {
         "properties": {
@@ -2779,6 +2929,213 @@
         "type": "string",
         "enum": ["pending", "uploading", "uploaded", "failed"],
         "title": "ProductionStatus"
+      },
+      "RenderArtifactResponse": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "title": "Artifact Id",
+            "description": "Canonical unique render artifact identifier"
+          },
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Identifier of the associated production"
+          },
+          "edl_id": {
+            "type": "string",
+            "title": "Edl Id",
+            "description": "Identifier of the source Edit Decision List"
+          },
+          "artifact_type": {
+            "$ref": "#/components/schemas/ArtifactType",
+            "description": "Type of rendered artifact: PREVIEW or MASTER"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ArtifactStatus",
+            "description": "Lifecycle status: pending, rendering, completed, failed"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "description": "MIME content type of the rendered media file",
+            "default": "video/mp4"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes",
+            "description": "Verified file size in bytes"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms",
+            "description": "Verified media duration in milliseconds"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width",
+            "description": "Video stream width in pixels"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height",
+            "description": "Video stream height in pixels"
+          },
+          "frame_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Rate",
+            "description": "Video stream frame rate (fps)"
+          },
+          "video_codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Codec",
+            "description": "Video codec name (e.g. h264)"
+          },
+          "audio_codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Codec",
+            "description": "Audio codec name (e.g. aac)"
+          },
+          "playback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playback Url",
+            "description": "Short-lived keyless signed GET URL for browser video playback if completed"
+          },
+          "playback_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playback Expires At",
+            "description": "UTC expiration timestamp of the signed playback URL if available"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the render record was initialized in UTC"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "Timestamp when rendering completed in UTC"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code",
+            "description": "Error code or failure reason if render failed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "artifact_id",
+          "production_id",
+          "edl_id",
+          "artifact_type",
+          "status",
+          "created_at"
+        ],
+        "title": "RenderArtifactResponse",
+        "description": "Product-level response for a rendered media artifact."
+      },
+      "RenderListResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Canonical unique production identifier"
+          },
+          "renders": {
+            "items": {
+              "$ref": "#/components/schemas/RenderArtifactResponse"
+            },
+            "type": "array",
+            "title": "Renders",
+            "description": "List of all render artifacts associated with the production"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id", "renders"],
+        "title": "RenderListResponse",
+        "description": "Response returning all render artifacts for a production."
       },
       "ShortCandidate": {
         "properties": {

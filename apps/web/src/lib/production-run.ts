@@ -3,7 +3,7 @@ import type { components } from "../api/generated";
 export type RunStageId =
   "uploaded" | "transcript" | "leo-edit" | "maya-review" | "edit-plan" | "render";
 export type RunStageStatus = "completed" | "active" | "pending" | "failed";
-export type ProcessingStage = "transcript" | "leo-edit" | "maya-review" | "edit-plan";
+export type ProcessingStage = "transcript" | "leo-edit" | "maya-review" | "edit-plan" | "render";
 
 type EditorialRun = components["schemas"]["EditorialRun"];
 type AgentActivity = components["schemas"]["AgentActivity"];
@@ -15,6 +15,9 @@ export interface PersistedProductionRun {
   activities?: AgentActivity[];
   uploaded: boolean;
   edlCreatedAt?: string | null;
+  renderCompletedAt?: string | null;
+  renderStatus?: "pending" | "rendering" | "completed" | "failed" | null;
+  renderDurationMs?: number | null;
 }
 
 export interface ProductionRunStage {
@@ -87,7 +90,19 @@ export const deriveProductionRunStages = (
       status: run.edlCreatedAt ? "completed" : "pending",
       durationMs: elapsed(run.editorialRun?.completed_at, run.edlCreatedAt),
     },
-    { id: "render", label: "Render", status: "pending" },
+    {
+      id: "render",
+      label: "Render",
+      status:
+        run.renderStatus === "completed" || Boolean(run.renderCompletedAt)
+          ? "completed"
+          : run.renderStatus === "rendering"
+            ? "active"
+            : run.renderStatus === "failed"
+              ? "failed"
+              : "pending",
+      durationMs: run.renderDurationMs ?? elapsed(run.edlCreatedAt, run.renderCompletedAt),
+    },
   ];
 
   if (overrides.active) {
@@ -109,6 +124,7 @@ export const nextMissingProcessingStage = (
   if (!run.transcriptCreatedAt) return "transcript";
   if (run.editorialRun?.status !== "completed") return "leo-edit";
   if (!run.edlCreatedAt) return "edit-plan";
+  if (run.renderStatus !== "completed" && !run.renderCompletedAt) return "render";
   return null;
 };
 

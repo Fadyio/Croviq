@@ -97,6 +97,81 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
       await route.continue();
     }
   });
+
+  await page.route("**/api/productions/**", async (route) => {
+    if (route.request().method() === "GET") {
+      const url = route.request().url();
+      if (url.endsWith("/renders")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            production_id: "prod_test_001",
+            renders: [],
+          }),
+        });
+        return;
+      }
+      if (url.endsWith("/playback")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            production_id: "prod_test_001",
+            playback_url: "http://localhost:8080/mock-storage/source.mp4",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+        });
+        return;
+      }
+      if (url.endsWith("/transcript") || url.endsWith("/editorial-run") || url.endsWith("/edl")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(null),
+        });
+        return;
+      }
+      if (
+        url.endsWith("/transcribe") ||
+        url.endsWith("/analyze") ||
+        url.endsWith("/renders/preview")
+      ) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "completed" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          production_id: "prod_test_001",
+          workspace_id: "ws_demo",
+          channel_id: "croviq_syn_ai_eng_01",
+          owner_user_id: "demo_user_123",
+          status: "uploaded",
+          source_media: {
+            upload_id: "upl_test_001",
+            original_filename: "raw_tutorial.mp4",
+            content_type: "video/mp4",
+            size_bytes: 1048576,
+            gcs_bucket: "croviq-506602-croviq-media-raw",
+            gcs_object:
+              "workspaces/ws_demo/productions/prod_test_001/source/upl_test_001/raw_tutorial.mp4",
+            status: "uploaded",
+            created_at: new Date().toISOString(),
+            uploaded_at: new Date().toISOString(),
+          },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
 };
 
 const login = async (page: Page) => {

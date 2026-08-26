@@ -14,6 +14,7 @@ from croviq_domain.edl import EditDecisionList
 
 from croviq_domain.production import Production
 from croviq_domain.transcript import Transcript
+from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
 
 class CreateUploadRequest(BaseModel):
     """Request payload to initiate a direct GCS media upload."""
@@ -287,4 +288,131 @@ class ProductionPlaybackResponse(BaseModel):
     expires_at: datetime = Field(
         ...,
         description="UTC expiration timestamp of the signed playback URL",
+    )
+
+
+class RenderArtifactResponse(BaseModel):
+    """Product-level response for a rendered media artifact."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    artifact_id: str = Field(
+        ...,
+        description="Canonical unique render artifact identifier",
+    )
+    production_id: str = Field(
+        ...,
+        description="Identifier of the associated production",
+    )
+    edl_id: str = Field(
+        ...,
+        description="Identifier of the source Edit Decision List",
+    )
+    artifact_type: ArtifactType = Field(
+        ...,
+        description="Type of rendered artifact: PREVIEW or MASTER",
+    )
+    status: ArtifactStatus = Field(
+        ...,
+        description="Lifecycle status: pending, rendering, completed, failed",
+    )
+    content_type: str = Field(
+        default="video/mp4",
+        description="MIME content type of the rendered media file",
+    )
+    size_bytes: int | None = Field(
+        default=None,
+        description="Verified file size in bytes",
+    )
+    duration_ms: int | None = Field(
+        default=None,
+        description="Verified media duration in milliseconds",
+    )
+    width: int | None = Field(
+        default=None,
+        description="Video stream width in pixels",
+    )
+    height: int | None = Field(
+        default=None,
+        description="Video stream height in pixels",
+    )
+    frame_rate: float | None = Field(
+        default=None,
+        description="Video stream frame rate (fps)",
+    )
+    video_codec: str | None = Field(
+        default=None,
+        description="Video codec name (e.g. h264)",
+    )
+    audio_codec: str | None = Field(
+        default=None,
+        description="Audio codec name (e.g. aac)",
+    )
+    playback_url: str | None = Field(
+        default=None,
+        description="Short-lived keyless signed GET URL for browser video playback if completed",
+    )
+    playback_expires_at: datetime | None = Field(
+        default=None,
+        description="UTC expiration timestamp of the signed playback URL if available",
+    )
+    created_at: datetime = Field(
+        ...,
+        description="Timestamp when the render record was initialized in UTC",
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        description="Timestamp when rendering completed in UTC",
+    )
+    failure_code: str | None = Field(
+        default=None,
+        description="Error code or failure reason if render failed",
+    )
+
+    @classmethod
+    def from_domain(
+        cls,
+        artifact: RenderArtifact,
+        playback_url: str | None = None,
+        playback_expires_at: datetime | None = None,
+    ) -> "RenderArtifactResponse":
+        """Construct a product-level response from a canonical RenderArtifact domain model."""
+        return cls(
+            artifact_id=artifact.artifact_id,
+            production_id=artifact.production_id,
+            edl_id=artifact.edl_id,
+            artifact_type=artifact.artifact_type,
+            status=artifact.status,
+            content_type=artifact.content_type,
+            size_bytes=artifact.size_bytes,
+            duration_ms=artifact.duration_ms,
+            width=artifact.width,
+            height=artifact.height,
+            frame_rate=artifact.frame_rate,
+            video_codec=artifact.video_codec,
+            audio_codec=artifact.audio_codec,
+            playback_url=playback_url,
+            playback_expires_at=playback_expires_at,
+            created_at=artifact.created_at,
+            completed_at=artifact.completed_at,
+            failure_code=artifact.failure_code,
+        )
+
+
+class RenderListResponse(BaseModel):
+    """Response returning all render artifacts for a production."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    production_id: str = Field(
+        ...,
+        description="Canonical unique production identifier",
+    )
+    renders: list[RenderArtifactResponse] = Field(
+        ...,
+        description="List of all render artifacts associated with the production",
     )

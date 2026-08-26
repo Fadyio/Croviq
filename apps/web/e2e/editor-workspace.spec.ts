@@ -169,8 +169,8 @@ const createMockWords = (count = 314) => {
 
 interface MockEditorOptions {
   customEdl?: unknown;
-  initialState?: Partial<Record<"transcript" | "editorialRun" | "edl", boolean>>;
-  failStage?: "transcript" | "editorialRun" | "edl";
+  initialState?: Partial<Record<"transcript" | "editorialRun" | "edl" | "render", boolean>>;
+  failStage?: "transcript" | "editorialRun" | "edl" | "render";
   editorialStatus?: "analyzing" | "reviewing" | "completed" | "failed";
   completeEditorialAfterGets?: number;
   analyzeDelayMs?: number;
@@ -183,10 +183,16 @@ const delay = (milliseconds: number): Promise<void> => {
   return promise;
 };
 const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
+  const initialTranscript = options.initialState?.transcript ?? true;
+  const initialEditorial = initialTranscript && (options.initialState?.editorialRun ?? true);
+  const initialEdl = initialEditorial && (options.initialState?.edl ?? true);
+  const initialRender = initialEdl && (options.initialState?.render ?? true);
+
   const state = {
-    transcript: options.initialState?.transcript ?? true,
-    editorialRun: options.initialState?.editorialRun ?? true,
-    edl: options.initialState?.edl ?? true,
+    transcript: initialTranscript,
+    editorialRun: initialEditorial,
+    edl: initialEdl,
+    render: initialRender,
     editorialStatus: options.editorialStatus ?? "completed",
     editorialGetCount: 0,
   };
@@ -585,6 +591,82 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
       }),
     });
   });
+
+  // Mock Render List and Preview Render
+  await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/renders`, async (route) => {
+    if (!state.render) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          renders: [],
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        production_id: FAIRPHONE_PRODUCTION_ID,
+        renders: [
+          {
+            artifact_id: "art_preview_001",
+            production_id: FAIRPHONE_PRODUCTION_ID,
+            edl_id: defaultFairphoneEdl.edl_id,
+            artifact_type: "PREVIEW",
+            status: "completed",
+            duration_ms: 113824,
+            size_bytes: 1542000,
+            width: 1280,
+            height: 720,
+            frame_rate: 30.0,
+            video_codec: "h264",
+            audio_codec: "aac",
+            playback_url: "https://storage.googleapis.com/fake-preview.mp4",
+            playback_expires_at: "2026-08-27T00:00:00Z",
+            created_at: "2026-08-26T00:02:45Z",
+            completed_at: "2026-08-26T00:02:50Z",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route(
+    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/renders/preview`,
+    async (route) => {
+      options.requests?.push("renders/preview");
+      if (options.failStage === "render") {
+        await route.fulfill({ status: 500, body: "render preview failed" });
+        return;
+      }
+      state.render = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          artifact_id: "art_preview_001",
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          edl_id: defaultFairphoneEdl.edl_id,
+          artifact_type: "PREVIEW",
+          status: "completed",
+          duration_ms: 113824,
+          size_bytes: 1542000,
+          width: 1280,
+          height: 720,
+          frame_rate: 30.0,
+          video_codec: "h264",
+          audio_codec: "aac",
+          playback_url: "https://storage.googleapis.com/fake-preview.mp4",
+          playback_expires_at: "2026-08-27T00:00:00Z",
+          created_at: "2026-08-26T00:02:45Z",
+          completed_at: "2026-08-26T00:02:50Z",
+        }),
+      });
+    },
+  );
 };
 
 const loginAndNavigateToEditor = async (page: Page, options: MockEditorOptions = {}) => {
@@ -616,27 +698,31 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
   const resumeCases = [
     {
-      name: "runs transcript, analysis, and edit plan for a new upload",
-      initialState: { transcript: false, editorialRun: false, edl: false },
-      expected: ["transcribe", "analyze", "edl"],
+      name: "runs transcript, analysis, edit plan, and render for a new upload",
+      initialState: { transcript: false, editorialRun: false, edl: false, render: false },
+      expected: ["transcribe", "analyze", "edl", "renders/preview"],
     },
     {
       name: "resumes at analysis when transcript already exists",
-      initialState: { transcript: true, editorialRun: false, edl: false },
-      expected: ["analyze", "edl"],
+      initialState: { transcript: true, editorialRun: false, edl: false, render: false },
+      expected: ["analyze", "edl", "renders/preview"],
     },
     {
       name: "resumes at edit plan when editorial review already exists",
-      initialState: { transcript: true, editorialRun: true, edl: false },
-      expected: ["edl"],
+      initialState: { transcript: true, editorialRun: true, edl: false, render: false },
+      expected: ["edl", "renders/preview"],
+    },
+    {
+      name: "resumes at render when edit plan already exists",
+      initialState: { transcript: true, editorialRun: true, edl: true, render: false },
+      expected: ["renders/preview"],
     },
     {
       name: "makes no processing calls for a completed production",
-      initialState: { transcript: true, editorialRun: true, edl: true },
+      initialState: { transcript: true, editorialRun: true, edl: true, render: true },
       expected: [],
     },
   ] as const;
-
   for (const resumeCase of resumeCases) {
     test(resumeCase.name, async ({ page }) => {
       const requests: string[] = [];
@@ -667,7 +753,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     await expect(page.getByText("Maya is reviewing Leo's edit…")).toBeVisible();
     expect(requests).toEqual([]);
-    await expect.poll(() => requests, { timeout: 4000 }).toEqual(["edl"]);
+    await expect.poll(() => requests, { timeout: 4000 }).toEqual(["edl", "renders/preview"]);
   });
 
   test("shows Leo and Maya only while their persisted analysis stages are active", async ({
@@ -722,6 +808,13 @@ test.describe("Editor Workspace (Issue #28)", () => {
       failStage: "edl",
       message: "Edit plan failed",
       expectedRequests: ["edl", "edl"],
+    },
+    {
+      name: "preview render",
+      initialState: { transcript: true, editorialRun: true, edl: true, render: false },
+      failStage: "render",
+      message: "Preview render failed",
+      expectedRequests: ["renders/preview", "renders/preview"],
     },
   ] as const;
 
