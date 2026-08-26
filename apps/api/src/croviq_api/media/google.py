@@ -56,21 +56,27 @@ class GoogleMediaStorage(MediaStorage):
 
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=expiry_seconds)
 
-        credentials = client.credentials
+        credentials = getattr(client, "_credentials", None)
+        if credentials is None:
+            try:
+                credentials, _ = google.auth.default()
+            except Exception:
+                credentials = None
+
         sa_email = self.service_account_email
 
         # If credentials need refreshing, refresh them
-        if hasattr(credentials, "refresh") and hasattr(credentials, "valid") and not credentials.valid:
+        if credentials and hasattr(credentials, "refresh") and hasattr(credentials, "valid") and not credentials.valid:
             try:
                 request = auth_requests.Request()
                 credentials.refresh(request)
             except Exception:
                 pass
 
-        if not sa_email and hasattr(credentials, "service_account_email") and credentials.service_account_email != "default":
+        if not sa_email and credentials and hasattr(credentials, "service_account_email") and credentials.service_account_email != "default":
             sa_email = credentials.service_account_email
 
-        kwargs = {
+        kwargs: dict = {
             "version": "v4",
             "expiration": timedelta(seconds=expiry_seconds),
             "method": "PUT",
@@ -79,6 +85,8 @@ class GoogleMediaStorage(MediaStorage):
 
         if sa_email:
             kwargs["service_account_email"] = sa_email
+        if credentials:
+            kwargs["credentials"] = credentials
             if hasattr(credentials, "token") and credentials.token:
                 kwargs["access_token"] = credentials.token
 
