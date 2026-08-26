@@ -375,6 +375,21 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name  = "GENAI_BACKEND_PROVIDER"
+        value = "google"
+      }
+
+      env {
+        name  = "GEMINI_MODEL_ID"
+        value = "gemini-3.7-flash"
+      }
+
+      env {
+        name  = "VERTEXAI_LOCATION"
+        value = var.region
+      }
+
+      env {
         name = "GROQ_API_KEY"
 
         value_source {
@@ -455,6 +470,13 @@ resource "google_project_iam_member" "api_runtime_firestore_user" {
 resource "google_project_iam_member" "api_runtime_aiplatform_memory_user" {
   project = var.project_id
   role    = "roles/aiplatform.memoryUser"
+  member  = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
+# Allow API runtime service account to invoke Vertex AI foundation models (Gemini 3.7 Flash)
+resource "google_project_iam_member" "api_runtime_aiplatform_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
   member  = "serviceAccount:${google_service_account.api_runtime.email}"
 }
 
