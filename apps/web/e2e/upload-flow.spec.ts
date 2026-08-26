@@ -202,7 +202,8 @@ test.describe("Production Home and Raw Media Upload", () => {
             content_type: "video/mp4",
             size_bytes: 1048576,
             gcs_bucket: "croviq-506602-croviq-media-raw",
-            gcs_object: "workspaces/ws_demo/productions/prod_test_001/source/upl_test_001/raw_tutorial.mp4",
+            gcs_object:
+              "workspaces/ws_demo/productions/prod_test_001/source/upl_test_001/raw_tutorial.mp4",
             status: "uploaded",
             created_at: new Date().toISOString(),
             uploaded_at: new Date().toISOString(),

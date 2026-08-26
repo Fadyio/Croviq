@@ -11,81 +11,88 @@
 
 export interface paths {
   "/api/health": {
-      get: {
-        responses: {
-          200: components['schemas']['HealthResponse'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["HealthResponse"];
       };
+    };
   };
   "/api/client-events": {
-      post: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/auth/me": {
-      get: {
-        responses: {
-          200: components['schemas']['User'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["User"];
       };
+    };
   };
   "/api/auth/logout": {
-      post: {
-        responses: {
-          200: unknown;
-        };
+    post: {
+      responses: {
+        200: unknown;
       };
+    };
   };
   "/api/workspace": {
-      get: {
-        responses: {
-          200: components['schemas']['Workspace'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["Workspace"];
       };
+    };
   };
   "/api/channel/memory/profile": {
-      get: {
-        responses: {
-          200: components['schemas']['ChannelMemoryProfile']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ChannelMemoryProfile"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channel/memory/lessons": {
-      get: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/uploads": {
-      post: {
-        responses: {
-          201: components['schemas']['CreateUploadResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        201: components["schemas"]["CreateUploadResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/uploads/{upload_id}/complete": {
-      post: {
-        responses: {
-          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["Production"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions": {
-      get: {
-        responses: {
-          200: components['schemas']['ProductionListResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ProductionListResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}": {
-      get: {
-        responses: {
-          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["Production"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
 }
 
@@ -116,7 +123,7 @@ export interface components {
       /** Actionable instruction for the agent. */
       directive: string;
       /** Agent role this lesson directs (director, editor, packaging, qa). */
-      target_agent: components['schemas']['TargetAgent'];
+      target_agent: components["schemas"]["TargetAgent"];
       /** Statistical or qualitative summary of evidence supporting this directive. */
       evidence_summary: string;
       /** Confidence score for this lesson (0.0 to 1.0). */
@@ -186,7 +193,7 @@ export interface components {
       expires_at: string;
     };
     HTTPValidationError: {
-      detail?: components['schemas']['ValidationError'][];
+      detail?: components["schemas"]["ValidationError"][];
     };
     HealthResponse: {
       /** Service health status */
@@ -206,9 +213,9 @@ export interface components {
       /** Identifier of the user who owns this production */
       owner_user_id: string;
       /** Raw source media metadata associated with this production */
-      source_media?: components['schemas']['SourceMedia'] | null;
+      source_media?: components["schemas"]["SourceMedia"] | null;
       /** Current production status */
-      status?: components['schemas']['ProductionStatus'];
+      status?: components["schemas"]["ProductionStatus"];
       /** Timestamp when the production was created (UTC) */
       created_at: string;
       /** Timestamp when the production was last updated (UTC) */
@@ -216,7 +223,7 @@ export interface components {
     };
     ProductionListResponse: {
       /** List of recent Production records */
-      productions?: components['schemas']['Production'][];
+      productions?: components["schemas"]["Production"][];
       /** Total number of productions returned */
       total: number;
     };
@@ -235,7 +242,7 @@ export interface components {
       /** Target Google Cloud Storage object path */
       gcs_object: string;
       /** Upload lifecycle status */
-      status?: components['schemas']['SourceMediaStatus'];
+      status?: components["schemas"]["SourceMediaStatus"];
       /** Timestamp when the upload record was created (UTC) */
       created_at: string;
       /** Timestamp when the media upload was verified and completed (UTC) */
@@ -274,7 +281,7 @@ export interface components {
       /** Description of the YouTube channel or production context */
       channel_description?: string | null;
       /** Workspace brand kit configuration */
-      brand_kit?: components['schemas']['BrandKit'];
+      brand_kit?: components["schemas"]["BrandKit"];
       /** Timestamp when the workspace was created (UTC) */
       created_at: string;
       /** Timestamp when the workspace was last updated (UTC) */
