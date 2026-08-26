@@ -20,15 +20,29 @@ from croviq_observability.redaction import sanitize_payload
 from croviq_observability.schemas import LogSeverity, StandardLogEvent
 
 
-def determine_severity(status_code: int | None = None, default: LogSeverity = "INFO") -> LogSeverity:
-    """Map HTTP status code to canonical Cloud Logging severity."""
+def determine_severity(status_code: Any = None, default: LogSeverity = "INFO") -> LogSeverity:
+    """Map status code (int or string) to canonical Cloud Logging severity."""
     if status_code is None:
         return default
-    if status_code >= 500:
-        return "ERROR"
-    if status_code >= 400:
-        return "WARNING"
-    return "INFO"
+    if isinstance(status_code, str):
+        status_lower = status_code.lower()
+        if status_lower in ("failed", "error"):
+            return "ERROR"
+        if status_lower in ("warning", "warn"):
+            return "WARNING"
+        if status_lower in ("success", "ok", "completed"):
+            return "INFO"
+        try:
+            status_code = int(status_code)
+        except ValueError:
+            return default
+    if isinstance(status_code, (int, float)):
+        if status_code >= 500:
+            return "ERROR"
+        if status_code >= 400:
+            return "WARNING"
+        return "INFO"
+    return default
 
 
 class StructuredLogger:

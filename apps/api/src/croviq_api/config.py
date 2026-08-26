@@ -87,7 +87,7 @@ class Settings:
             "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
         )
         self.gemini_model_id: str = os.getenv("GEMINI_MODEL_ID", "gemini-3.7-flash")
-        self.vertexai_location: str = os.getenv("VERTEXAI_LOCATION") or os.getenv("GCP_REGION", "us-central1")
+        self.vertexai_location: str = os.getenv("VERTEXAI_LOCATION", "global")
 
 
 @lru_cache(maxsize=1)

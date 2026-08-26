@@ -218,7 +218,7 @@ class GoogleGenAIClient(GenAIClient):
     def __init__(
         self,
         project_id: str | None = None,
-        location: str = "us-central1",
+        location: str = "global",
         model_id: str = "gemini-3.7-flash",
     ) -> None:
         self._project_id = project_id
