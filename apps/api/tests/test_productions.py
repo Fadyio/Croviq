@@ -194,20 +194,38 @@ def test_create_upload_mismatched_extension(app_and_client):
     assert "does not match" in response.json()["detail"]
 
 
-def test_create_upload_size_limit_exceeded(app_and_client):
+def test_create_upload_boundary_1gb_accepted(app_and_client):
     client, _, _, _ = app_and_client
 
     response = client.post(
         "/api/uploads",
         json={
-            "filename": "huge.mp4",
+            "filename": "max_boundary.mp4",
             "content_type": "video/mp4",
-            "size_bytes": MAX_UPLOAD_SIZE_BYTES + 1000,
+            "size_bytes": 1_073_741_824,  # Exactly 1 GB (1,073,741,824 bytes)
+            "channel_id": "croviq_syn_ai_eng_01",
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert "upload_url" in data
+    assert "upload_id" in data
+
+
+def test_create_upload_boundary_over_1gb_rejected(app_and_client):
+    client, _, _, _ = app_and_client
+
+    response = client.post(
+        "/api/uploads",
+        json={
+            "filename": "over_boundary.mp4",
+            "content_type": "video/mp4",
+            "size_bytes": 1_073_741_825,  # 1 GB + 1 byte (1,073,741,825 bytes)
             "channel_id": "croviq_syn_ai_eng_01",
         },
     )
     assert response.status_code == 400
-    assert "exceeds maximum allowed size" in response.json()["detail"]
+    assert "exceeds maximum allowed size of 1073741824 bytes (1 GB)" in response.json()["detail"]
 
 
 def test_create_upload_path_traversal_sanitization(app_and_client):
@@ -298,8 +316,72 @@ def test_complete_upload_idempotency(app_and_client):
     resp2 = client.post(f"/api/uploads/{upload_id}/complete")
     assert resp2.status_code == 200
     assert resp2.json()["production_id"] == prod_id
-    assert resp2.json()["status"] == "uploaded"
+    assert resp2.json()["source_media"]["status"] == "uploaded"
 
+
+def test_complete_upload_boundary_1gb_accepted(app_and_client):
+    client, _, prod_repo, fake_storage = app_and_client
+
+    # Create upload at 1 GB
+    create_resp = client.post(
+        "/api/uploads",
+        json={
+            "filename": "full_boundary.mp4",
+            "content_type": "video/mp4",
+            "size_bytes": 1_073_741_824,
+            "channel_id": "croviq_syn_ai_eng_01",
+        },
+    )
+    assert create_resp.status_code == 201
+    create_data = create_resp.json()
+    upload_id = create_data["upload_id"]
+    prod_id = create_data["production_id"]
+
+    prod = prod_repo._productions[prod_id]
+    fake_storage.simulate_uploaded_object(
+        bucket=prod.source_media.gcs_bucket,
+        object_name=prod.source_media.gcs_object,
+        size_bytes=1_073_741_824,
+        content_type="video/mp4",
+    )
+
+    comp_resp = client.post(f"/api/uploads/{upload_id}/complete")
+    assert comp_resp.status_code == 200
+    comp_data = comp_resp.json()
+    assert comp_data["source_media"]["size_bytes"] == 1_073_741_824
+    assert comp_data["source_media"]["status"] == "uploaded"
+
+
+def test_complete_upload_boundary_over_1gb_rejected(app_and_client):
+    client, _, prod_repo, fake_storage = app_and_client
+
+    # Create initial upload within limit
+    create_resp = client.post(
+        "/api/uploads",
+        json={
+            "filename": "spoofed_boundary.mp4",
+            "content_type": "video/mp4",
+            "size_bytes": 100_000_000,
+            "channel_id": "croviq_syn_ai_eng_01",
+        },
+    )
+    assert create_resp.status_code == 201
+    create_data = create_resp.json()
+    upload_id = create_data["upload_id"]
+    prod_id = create_data["production_id"]
+
+    # Simulate GCS object uploaded with size > 1 GB
+    prod = prod_repo._productions[prod_id]
+    fake_storage.simulate_uploaded_object(
+        bucket=prod.source_media.gcs_bucket,
+        object_name=prod.source_media.gcs_object,
+        size_bytes=1_073_741_825,
+        content_type="video/mp4",
+    )
+
+    comp_resp = client.post(f"/api/uploads/{upload_id}/complete")
+    assert comp_resp.status_code == 400
+    assert "exceeds maximum limit of 1073741824 bytes" in comp_resp.json()["detail"]
 
 def test_complete_upload_missing_gcs_object(app_and_client):
     client, _, _, fake_storage = app_and_client

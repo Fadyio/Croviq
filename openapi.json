@@ -798,7 +798,7 @@
             "type": "integer",
             "exclusiveMinimum": 0.0,
             "title": "Size Bytes",
-            "description": "Declared size of the file in bytes (must be <= 2 GB)",
+            "description": "Declared size of the file in bytes (must be <= 1 GB)",
             "examples": [104857600]
           },
           "channel_id": {
