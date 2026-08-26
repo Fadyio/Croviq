@@ -11,12 +11,15 @@ from croviq_media.inspector import (
     MediaInspector,
 )
 from croviq_media.transcript import (
+    DEFAULT_GROQ_PROMPT,
+    GROQ_TRANSCRIPTION_ENDPOINT,
+    GROQ_WHISPER_MODEL,
     FakeTranscriptionService,
-    GoogleSpeechTranscriptionService,
+    GroqTranscriptionService,
     TranscriptionError,
     TranscriptionService,
     parse_duration_to_ms,
-    parse_google_speech_response,
+    parse_groq_transcription_response,
 )
 
 __all__ = [
@@ -26,14 +29,17 @@ __all__ = [
     "FFmpegAudioExtractor",
     "FakeMediaInspector",
     "FFprobeMediaInspector",
+    "DEFAULT_GROQ_PROMPT",
+    "GROQ_TRANSCRIPTION_ENDPOINT",
+    "GROQ_WHISPER_MODEL",
     "FakeTranscriptionService",
-    "GoogleSpeechTranscriptionService",
+    "GroqTranscriptionService",
     "MediaInspectionError",
     "MediaInspector",
     "TranscriptionError",
     "TranscriptionService",
     "parse_duration_to_ms",
-    "parse_google_speech_response",
+    "parse_groq_transcription_response",
 ]
 
 __version__ = "0.1.0"

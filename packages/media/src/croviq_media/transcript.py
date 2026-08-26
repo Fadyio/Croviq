@@ -1,4 +1,4 @@
-"""TranscriptionService abstraction and Google Cloud Speech-to-Text v2 implementation."""
+"""TranscriptionService abstraction and Groq Whisper implementation."""
 
 from abc import ABC, abstractmethod
 import asyncio
@@ -7,176 +7,189 @@ from pathlib import Path
 from typing import Any, Callable
 import uuid
 
-from croviq_domain.transcript import (
-    Transcript,
-    TranscriptSegment,
-    TranscriptWord,
+from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
+
+GROQ_TRANSCRIPTION_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
+GROQ_WHISPER_MODEL = "whisper-large-v3"
+DEFAULT_GROQ_PROMPT = (
+    "Croviq, GitHub Actions, GitHub, YAML, workflow, runner, CI/CD, "
+    "Cloud Run, Terraform, Docker, Google Cloud, repository, commit, deployment"
 )
+SOURCE_DURATION_TOLERANCE_MS = 2_000
 
 
 class TranscriptionError(Exception):
     """Raised when speech transcription fails or speech service returns an error."""
+
     pass
 
 
 def parse_duration_to_ms(offset: Any) -> int:
-    """Safely convert protobuf Duration, timedelta, or numeric seconds/nanos to integer milliseconds."""
+    """Convert seconds-like offsets to integer milliseconds."""
     if offset is None:
         return 0
-
-    # If it has total_seconds() method (e.g. google.protobuf.Duration or timedelta)
     if hasattr(offset, "total_seconds") and callable(offset.total_seconds):
         try:
             return max(0, int(round(offset.total_seconds() * 1000)))
         except Exception:
             pass
-
-    # If it has seconds and nanos attributes (google.protobuf.Duration)
     if hasattr(offset, "seconds") or hasattr(offset, "nanos"):
         seconds = getattr(offset, "seconds", 0) or 0
         nanos = getattr(offset, "nanos", 0) or 0
         return max(0, int(round(seconds * 1000 + nanos / 1_000_000)))
-
-    # If it's a numeric value representing seconds
     if isinstance(offset, (int, float)):
         return max(0, int(round(offset * 1000)))
+    raise TranscriptionError(f"Unsupported timestamp value: {offset!r}")
 
-    return 0
+
+def _get_text(value: Any, *names: str) -> str:
+    for name in names:
+        if isinstance(value, dict) and name in value:
+            candidate = value[name]
+        else:
+            candidate = getattr(value, name, None)
+        if candidate is not None:
+            return str(candidate).strip()
+    return ""
 
 
-def parse_google_speech_response(
-    file_result: Any,
+def _get_value(value: Any, name: str, default: Any = None) -> Any:
+    if isinstance(value, dict):
+        return value.get(name, default)
+    return getattr(value, name, default)
+
+
+def _require_reasonable_source_duration(last_timestamp_ms: int, source_duration_ms: int | None) -> None:
+    if source_duration_ms is None:
+        return
+    if source_duration_ms < 0:
+        raise TranscriptionError("source duration must be non-negative")
+    if last_timestamp_ms > source_duration_ms + SOURCE_DURATION_TOLERANCE_MS:
+        raise TranscriptionError(
+            f"last transcript timestamp {last_timestamp_ms}ms is inconsistent with source duration {source_duration_ms}ms"
+        )
+
+
+def _map_segment_word_indexes(
+    words: list[TranscriptWord],
+    start_ms: int,
+    end_ms: int,
+) -> tuple[int, int]:
+    matching = [
+        word.index
+        for word in words
+        if word.start_ms >= start_ms and word.end_ms <= end_ms
+    ]
+    if matching:
+        return matching[0], matching[-1]
+
+    overlapping = [
+        word.index
+        for word in words
+        if word.end_ms > start_ms and word.start_ms < end_ms
+    ]
+    if overlapping:
+        return overlapping[0], overlapping[-1]
+
+    raise TranscriptionError("segment boundaries do not align with word timestamps")
+
+
+def parse_groq_transcription_response(
+    payload: Any,
     production_id: str,
     language_code: str = "en-US",
-    transcript_id: str | None = None,
+    source_duration_ms: int | None = None,
 ) -> Transcript:
-    """Parse a Google Cloud Speech-to-Text v2 recognition result into a canonical domain Transcript.
-
-    Extracts word-level timestamps (start_ms, end_ms), confidence scores, speaker tags,
-    and constructs segments while enforcing monotonicity and timing invariants.
-    """
-    t_id = transcript_id or f"tr_{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc)
-
-    # In Google STT v2, file_result contains transcript with results list
-    transcript_obj = getattr(file_result, "transcript", file_result)
-    results_list = getattr(transcript_obj, "results", [])
+    """Map Groq Whisper verbose JSON into the canonical Croviq Transcript."""
+    words_payload = _get_value(payload, "words", []) or []
+    segments_payload = _get_value(payload, "segments", []) or []
 
     words: list[TranscriptWord] = []
-    segments: list[TranscriptSegment] = []
-
-    current_word_index = 0
-    last_end_ms = 0
-
-    for seg_idx, res in enumerate(results_list):
-        alternatives = getattr(res, "alternatives", [])
-        if not alternatives:
-            continue
-        # Take the top alternative
-        top_alt = alternatives[0]
-        alt_transcript = getattr(top_alt, "transcript", "").strip()
-        alt_words = getattr(top_alt, "words", [])
-
-        seg_start_idx = current_word_index
-        seg_start_ms: int | None = None
-        seg_end_ms: int | None = None
-
-        for w in alt_words:
-            word_text = getattr(w, "word", "").strip()
-            if not word_text:
-                continue
-
-            raw_start = getattr(w, "start_offset", None)
-            raw_end = getattr(w, "end_offset", None)
-
-            start_ms = parse_duration_to_ms(raw_start)
-            end_ms = parse_duration_to_ms(raw_end)
-
-            # Ensure start_ms is monotonic with previous word
-            if start_ms < last_end_ms and words:
-                start_ms = last_end_ms
-
-            # Ensure end_ms > start_ms
-            if end_ms <= start_ms:
-                end_ms = start_ms + 50  # minimum 50ms duration if STT produced identical offsets
-
-            confidence_val = getattr(w, "confidence", None)
-            if confidence_val is not None:
-                try:
-                    confidence = float(confidence_val)
-                    if confidence < 0.0 or confidence > 1.0:
-                        confidence = None
-                except (ValueError, TypeError):
-                    confidence = None
-            else:
-                confidence = None
-
-            speaker_id_val = getattr(w, "speaker_label", None) or getattr(w, "speaker_tag", None)
-            speaker_id = str(speaker_id_val) if speaker_id_val is not None else None
-
-            word_obj = TranscriptWord(
-                index=current_word_index,
-                text=word_text,
+    previous_start_ms = -1
+    previous_end_ms = -1
+    for index, raw_word in enumerate(words_payload):
+        text = _get_text(raw_word, "word", "text")
+        if not text:
+            raise TranscriptionError(f"word {index} is missing text")
+        start_ms = parse_duration_to_ms(_get_value(raw_word, "start"))
+        end_ms = parse_duration_to_ms(_get_value(raw_word, "end"))
+        if start_ms < previous_start_ms or start_ms < previous_end_ms and end_ms <= previous_end_ms:
+            raise TranscriptionError("Groq word timestamps must be monotonic")
+        words.append(
+            TranscriptWord(
+                index=index,
+                text=text,
                 start_ms=start_ms,
                 end_ms=end_ms,
-                confidence=confidence,
-                speaker_id=speaker_id,
+                confidence=None,
             )
-            words.append(word_obj)
+        )
+        previous_start_ms = start_ms
+        previous_end_ms = end_ms
 
-            if seg_start_ms is None or start_ms < seg_start_ms:
-                seg_start_ms = start_ms
-            if seg_end_ms is None or end_ms > seg_end_ms:
-                seg_end_ms = end_ms
-
-            last_end_ms = end_ms
-            current_word_index += 1
-
-        if current_word_index > seg_start_idx:
-            seg_end_idx = current_word_index - 1
-            if seg_start_ms is not None and seg_end_ms is not None:
-                # Segment text
-                segment_text = alt_transcript or " ".join(
-                    words[i].text for i in range(seg_start_idx, seg_end_idx + 1)
-                )
-                segments.append(
-                    TranscriptSegment(
-                        segment_id=f"seg_{seg_idx:03d}",
-                        start_ms=seg_start_ms,
-                        end_ms=seg_end_ms,
-                        text=segment_text,
-                        word_start_index=seg_start_idx,
-                        word_end_index=seg_end_idx,
-                    )
-                )
-
-    # Overall duration
-    total_duration_ms = last_end_ms
     if not words:
-        total_duration_ms = 0
+        raise TranscriptionError("Groq transcription response did not include word timestamps")
+
+    segments: list[TranscriptSegment] = []
+    for segment_index, raw_segment in enumerate(segments_payload):
+        start_ms = parse_duration_to_ms(_get_value(raw_segment, "start"))
+        end_ms = parse_duration_to_ms(_get_value(raw_segment, "end"))
+        text = _get_text(raw_segment, "text")
+        if not text:
+            raise TranscriptionError(f"segment {segment_index} is missing text")
+        word_start_index, word_end_index = _map_segment_word_indexes(words, start_ms, end_ms)
+        segments.append(
+            TranscriptSegment(
+                segment_id=f"seg_{segment_index:03d}",
+                start_ms=start_ms,
+                end_ms=end_ms,
+                text=text,
+                word_start_index=word_start_index,
+                word_end_index=word_end_index,
+            )
+        )
+
+    if not segments:
+        word_start_index, word_end_index = 0, len(words) - 1
+        segments.append(
+            TranscriptSegment(
+                segment_id="seg_000",
+                start_ms=words[0].start_ms,
+                end_ms=words[-1].end_ms,
+                text=_get_text(payload, "text") or " ".join(word.text for word in words),
+                word_start_index=word_start_index,
+                word_end_index=word_end_index,
+            )
+        )
+
+    last_timestamp_ms = max(words[-1].end_ms, max(segment.end_ms for segment in segments))
+    response_duration_ms = parse_duration_to_ms(_get_value(payload, "duration")) if _get_value(payload, "duration") is not None else 0
+    duration_ms = max(response_duration_ms, last_timestamp_ms)
+    _require_reasonable_source_duration(last_timestamp_ms, source_duration_ms)
 
     return Transcript(
-        transcript_id=t_id,
-        production_id=production_id,
+        transcript_id=f"tr_{uuid.uuid4().hex[:12]}",
+        production_id=production_id or f"prod_{uuid.uuid4().hex[:8]}",
         language_code=language_code,
-        duration_ms=total_duration_ms,
+        duration_ms=duration_ms,
         words=words,
         segments=segments,
-        created_at=now,
+        created_at=datetime.now(timezone.utc),
     )
 
 
 class TranscriptionService(ABC):
-    """Abstract interface for word-aligned speech transcription."""
+    """Abstract interface for word-aligned speech transcription from extracted audio."""
 
     @abstractmethod
-    async def transcribe_gcs_uri(
+    async def transcribe_audio_file(
         self,
-        gcs_uri: str,
+        audio_path: Path | str,
         language_code: str = "en-US",
         production_id: str = "",
+        source_duration_ms: int | None = None,
     ) -> Transcript:
-        """Transcribe an audio or video file located in GCS and return a canonical Transcript."""
+        """Transcribe a local speech-optimized audio file into a canonical Transcript."""
         pass
 
 
@@ -187,25 +200,25 @@ class FakeTranscriptionService(TranscriptionService):
         self._preset_transcripts: dict[str, Transcript] = {}
         self._errors: dict[str, str] = {}
 
-    def set_transcript(self, gcs_uri: str, transcript: Transcript) -> None:
-        self._preset_transcripts[gcs_uri] = transcript
+    def set_transcript(self, key: str, transcript: Transcript) -> None:
+        self._preset_transcripts[key] = transcript
 
-    def set_error(self, gcs_uri: str, error_message: str) -> None:
-        self._errors[gcs_uri] = error_message
+    def set_error(self, key: str, error_message: str) -> None:
+        self._errors[key] = error_message
 
-    async def transcribe_gcs_uri(
+    async def transcribe_audio_file(
         self,
-        gcs_uri: str,
+        audio_path: Path | str,
         language_code: str = "en-US",
         production_id: str = "",
+        source_duration_ms: int | None = None,
     ) -> Transcript:
-        if gcs_uri in self._errors:
-            raise TranscriptionError(self._errors[gcs_uri])
+        key = str(audio_path)
+        if key in self._errors:
+            raise TranscriptionError(self._errors[key])
+        if key in self._preset_transcripts:
+            return self._preset_transcripts[key]
 
-        if gcs_uri in self._preset_transcripts:
-            return self._preset_transcripts[gcs_uri]
-
-        # Generate realistic synthetic word-aligned transcript
         now = datetime.now(timezone.utc)
         sample_phrases = [
             "Welcome back to the channel.",
@@ -223,40 +236,37 @@ class FakeTranscriptionService(TranscriptionService):
             seg_start_idx = word_idx
             seg_start_ms = current_time_ms
 
-            for pw in phrase_words:
-                clean_pw = pw.strip()
-                w_duration = max(180, len(clean_pw) * 55)
-                w_start = current_time_ms
-                w_end = w_start + w_duration
+            for phrase_word in phrase_words:
+                clean_word = phrase_word.strip()
+                duration_ms = max(180, len(clean_word) * 55)
+                start_ms = current_time_ms
+                end_ms = start_ms + duration_ms
                 words.append(
                     TranscriptWord(
                         index=word_idx,
-                        text=clean_pw,
-                        start_ms=w_start,
-                        end_ms=w_end,
+                        text=clean_word,
+                        start_ms=start_ms,
+                        end_ms=end_ms,
                         confidence=0.96,
                         speaker_id="speaker_0",
                     )
                 )
                 word_idx += 1
-                current_time_ms = w_end + 120  # 120ms gap between words
+                current_time_ms = end_ms + 120
 
-            seg_end_idx = word_idx - 1
-            seg_end_ms = words[-1].end_ms
             segments.append(
                 TranscriptSegment(
                     segment_id=f"seg_{seg_i:03d}",
                     start_ms=seg_start_ms,
-                    end_ms=seg_end_ms,
+                    end_ms=words[-1].end_ms,
                     text=phrase,
                     word_start_index=seg_start_idx,
-                    word_end_index=seg_end_idx,
+                    word_end_index=word_idx - 1,
                 )
             )
-            current_time_ms += 400  # 400ms gap between segments
+            current_time_ms += 400
 
-        total_duration = max(current_time_ms, words[-1].end_ms if words else 0)
-
+        total_duration = max(source_duration_ms or 0, current_time_ms, words[-1].end_ms if words else 0)
         return Transcript(
             transcript_id=f"tr_{uuid.uuid4().hex[:12]}",
             production_id=production_id or f"prod_{uuid.uuid4().hex[:8]}",
@@ -268,113 +278,118 @@ class FakeTranscriptionService(TranscriptionService):
         )
 
 
-class GoogleSpeechTranscriptionService(TranscriptionService):
-    """Production implementation of TranscriptionService using Google Cloud Speech-to-Text v2."""
+def _default_http_post(**kwargs: Any) -> Any:
+    import httpx
+
+    data = kwargs.pop("data")
+    flattened_data: list[tuple[str, str]] = []
+    for key, value in data.items():
+        if isinstance(value, list):
+            flattened_data.extend((key, str(item)) for item in value)
+        else:
+            flattened_data.append((key, str(value)))
+    with httpx.Client() as client:
+        return client.post(data=flattened_data, **kwargs)
+
+
+class GroqTranscriptionService(TranscriptionService):
+    """Thin HTTP adapter for Groq Whisper audio transcription."""
 
     def __init__(
         self,
-        project_id: str,
-        location: str = "global",
-        recognizer_id: str = "_",
-        client_factory: Callable[[], Any] | None = None,
+        api_key: str,
+        endpoint_url: str = GROQ_TRANSCRIPTION_ENDPOINT,
+        model: str = GROQ_WHISPER_MODEL,
+        prompt: str | None = DEFAULT_GROQ_PROMPT,
+        timeout_seconds: float = 120.0,
+        http_post: Callable[..., Any] | None = None,
     ) -> None:
-        self.project_id = project_id
-        self.location = location
-        self.recognizer_id = recognizer_id
-        self._client_factory = client_factory
-        self._client: Any | None = None
+        cleaned_key = api_key.strip()
+        if not cleaned_key:
+            raise TranscriptionError("GROQ_API_KEY is required for Groq transcription")
+        self.api_key = cleaned_key
+        self.endpoint_url = endpoint_url
+        self.model = model
+        self.prompt = prompt.strip() if prompt else None
+        self.timeout_seconds = timeout_seconds
+        self._http_post = http_post or _default_http_post
+        self.last_request_id: str | None = None
 
-    def _get_client(self) -> Any:
-        if self._client is None:
-            if self._client_factory:
-                self._client = self._client_factory()
-            else:
-                from google.cloud import speech_v2
-                self._client = speech_v2.SpeechClient()
-        return self._client
-
-    def _get_recognizer_path(self) -> str:
-        return f"projects/{self.project_id}/locations/{self.location}/recognizers/{self.recognizer_id}"
-
-    async def transcribe_gcs_uri(
+    async def transcribe_audio_file(
         self,
-        gcs_uri: str,
+        audio_path: Path | str,
         language_code: str = "en-US",
         production_id: str = "",
+        source_duration_ms: int | None = None,
     ) -> Transcript:
-        """Call Google Cloud Speech-to-Text v2 BatchRecognize with word-level timestamps enabled."""
-        if not gcs_uri.startswith("gs://"):
-            raise TranscriptionError(f"Invalid GCS URI: '{gcs_uri}'. Must start with gs://")
+        path = Path(audio_path)
+        if not path.exists() or path.stat().st_size <= 0:
+            raise TranscriptionError("transcription_invalid_media")
 
         loop = asyncio.get_running_loop()
         try:
             return await loop.run_in_executor(
                 None,
-                self._transcribe_gcs_sync,
-                gcs_uri,
+                self._transcribe_audio_file_sync,
+                path,
                 language_code,
                 production_id,
+                source_duration_ms,
             )
         except TranscriptionError:
             raise
-        except Exception as e:
-            raise TranscriptionError(f"Google Speech-to-Text v2 failed: {e}") from e
+        except Exception as exc:
+            raise TranscriptionError(f"Groq transcription failed: {type(exc).__name__}") from exc
 
-    def _transcribe_gcs_sync(
+    def _transcribe_audio_file_sync(
         self,
-        gcs_uri: str,
+        path: Path,
         language_code: str,
         production_id: str,
+        source_duration_ms: int | None,
     ) -> Transcript:
-        from google.cloud.speech_v2.types import cloud_speech
+        data: dict[str, Any] = {
+            "model": self.model,
+            "response_format": "verbose_json",
+            "timestamp_granularities[]": ["word", "segment"],
+            "temperature": "0",
+        }
+        if language_code:
+            data["language"] = language_code.split("-")[0].lower()
+        if self.prompt:
+            data["prompt"] = self.prompt
 
-        client = self._get_client()
-        recognizer_path = self._get_recognizer_path()
-
-        config = cloud_speech.RecognitionConfig(
-            features=cloud_speech.RecognitionFeatures(
-                enable_word_time_offsets=True,
-                enable_word_confidence=True,
-                enable_automatic_punctuation=True,
-            ),
-            auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
-            language_codes=[language_code],
-            model="long",
-        )
-
-        output_config = cloud_speech.RecognitionOutputConfig(
-            inline_response_config=cloud_speech.InlineOutputConfig()
-        )
-
-        file_metadata = cloud_speech.BatchRecognizeFileMetadata(uri=gcs_uri)
-
-        request = cloud_speech.BatchRecognizeRequest(
-            recognizer=recognizer_path,
-            config=config,
-            files=[file_metadata],
-            recognition_output_config=output_config,
-        )
-
-        try:
-            operation = client.batch_recognize(request=request)
-            response = operation.result()
-        except Exception as e:
-            raise TranscriptionError(f"Google Speech-to-Text API operation failed: {e}") from e
-
-        # Extract file result from response.results dictionary
-        results_map = getattr(response, "results", {})
-        file_result = results_map.get(gcs_uri)
-        if not file_result and results_map:
-            # Fallback to first available result in map
-            file_result = next(iter(results_map.values()))
-
-        if not file_result:
-            raise TranscriptionError(
-                f"Google Speech-to-Text returned no results for audio '{gcs_uri}'"
+        with path.open("rb") as audio_file:
+            response = self._http_post(
+                url=self.endpoint_url,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                data=data,
+                files={"file": (path.name, audio_file, "audio/wav")},
+                timeout=self.timeout_seconds,
             )
 
-        return parse_google_speech_response(
-            file_result=file_result,
+        self.last_request_id = getattr(response, "headers", {}).get("x-request-id") or getattr(response, "headers", {}).get("x-groq-id")
+        status_code = getattr(response, "status_code", 0)
+        if status_code < 200 or status_code >= 300:
+            error_code = "unknown"
+            try:
+                body = response.json()
+                error_obj = body.get("error", {}) if isinstance(body, dict) else {}
+                error_code = str(error_obj.get("code") or error_obj.get("type") or "unknown")
+            except Exception:
+                pass
+            raise TranscriptionError(
+                f"Groq transcription failed status={status_code} code={error_code} request_id={self.last_request_id or 'unknown'}"
+            )
+
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise TranscriptionError("Groq transcription failed: invalid JSON response") from exc
+
+        return parse_groq_transcription_response(
+            payload,
             production_id=production_id,
             language_code=language_code,
+            source_duration_ms=source_duration_ms,
         )

@@ -5,6 +5,7 @@ from croviq_api.config import get_settings
 from croviq_api.media.fake import FakeMediaStorage
 from croviq_api.media.google import GoogleMediaStorage
 from croviq_api.media.storage import MediaStorage
+from croviq_media.audio import AudioExtractor, FFmpegAudioExtractor
 from croviq_media.inspector import (
     FakeMediaInspector,
     FFprobeMediaInspector,
@@ -12,7 +13,7 @@ from croviq_media.inspector import (
 )
 from croviq_media.transcript import (
     FakeTranscriptionService,
-    GoogleSpeechTranscriptionService,
+    GroqTranscriptionService,
     TranscriptionService,
 )
 _fake_media_storage_instance: FakeMediaStorage | None = None
@@ -46,6 +47,7 @@ def get_media_storage() -> MediaStorage:
 
 _custom_transcription_service: TranscriptionService | None = None
 _custom_media_inspector: MediaInspector | None = None
+_custom_audio_extractor: AudioExtractor | None = None
 
 
 def get_transcription_service() -> TranscriptionService:
@@ -55,11 +57,15 @@ def get_transcription_service() -> TranscriptionService:
         return _custom_transcription_service
 
     settings = get_settings()
-    if settings.speech_service_provider == "google" and settings.gcp_project_id:
-        return GoogleSpeechTranscriptionService(
-            project_id=settings.gcp_project_id,
-            location=settings.speech_location,
-            recognizer_id=settings.speech_recognizer_id,
+    if settings.speech_service_provider == "groq":
+        if not settings.groq_api_key:
+            raise RuntimeError("GROQ_API_KEY is required for Groq transcription")
+        return GroqTranscriptionService(
+            api_key=settings.groq_api_key,
+            endpoint_url=settings.groq_transcription_endpoint,
+            model=settings.groq_transcription_model,
+            prompt=settings.groq_transcription_prompt,
+            timeout_seconds=settings.groq_timeout_seconds,
         )
     return FakeTranscriptionService()
 
@@ -82,3 +88,17 @@ def set_media_inspector(inspector: MediaInspector | None) -> None:
     """Override media inspector instance for tests."""
     global _custom_media_inspector
     _custom_media_inspector = inspector
+
+
+def get_audio_extractor() -> AudioExtractor:
+    """Resolve active AudioExtractor provider."""
+    global _custom_audio_extractor
+    if _custom_audio_extractor is not None:
+        return _custom_audio_extractor
+    return FFmpegAudioExtractor()
+
+
+def set_audio_extractor(extractor: AudioExtractor | None) -> None:
+    """Override audio extractor instance for tests."""
+    global _custom_audio_extractor
+    _custom_audio_extractor = extractor

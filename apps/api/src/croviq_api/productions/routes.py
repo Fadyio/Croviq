@@ -1,7 +1,10 @@
 """API routes for Production lifecycle and direct GCS media upload."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated
+import tempfile
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -9,12 +12,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from croviq_api.auth.dependencies import get_current_user
 from croviq_api.config import get_settings
 from croviq_api.media.dependencies import (
+    get_audio_extractor,
     get_media_inspector,
     get_media_storage,
     get_transcription_service,
 )
 from croviq_api.media.logging import log_media_upload_event
-from croviq_api.media.storage import MediaStorage
+from croviq_api.media.storage import MediaStorage, MediaStorageError
 from croviq_api.productions.repository import (
     ProductionRepository,
     get_production_repository,
@@ -47,8 +51,9 @@ from croviq_domain.production import (
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import Transcript
 from croviq_domain.user import User
-from croviq_media.inspector import MediaInspector
-from croviq_media.transcript import TranscriptionService
+from croviq_media.audio import AudioExtractionError, AudioExtractor
+from croviq_media.inspector import MediaInspector, MediaInspectionError
+from croviq_media.transcript import TranscriptionError, TranscriptionService
 from croviq_observability import (
     log_media_inspect_event,
     log_transcription_event,
@@ -461,7 +466,7 @@ async def get_production(
     "/productions/{production_id}/transcribe",
     response_model=TranscribeProductionResponse,
     summary="Transcribe Production Source Media",
-    description="Trigger word-aligned speech recognition on uploaded source media via Speech-to-Text v2.",
+    description="Extract 16 kHz mono WAV audio from uploaded source media and transcribe it with Groq Whisper.",
 )
 async def transcribe_production(
     production_id: str,
@@ -470,6 +475,9 @@ async def transcribe_production(
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
     transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
     transcription_service: Annotated[TranscriptionService, Depends(get_transcription_service)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+    audio_extractor: Annotated[AudioExtractor, Depends(get_audio_extractor)],
+    media_inspector: Annotated[MediaInspector, Depends(get_media_inspector)],
 ) -> TranscribeProductionResponse:
     request_id = getattr(request.state, "request_id", "unknown")
     prod = await _get_owned_production(production_id, current_user, production_repo)
@@ -518,25 +526,43 @@ async def transcribe_production(
             transcript=existing,
         )
 
-    gcs_uri = f"gs://{source.gcs_bucket}/{source.gcs_object}"
-    start_time = datetime.now(timezone.utc)
-    import time
     perf_start = time.perf_counter()
+    provider = "groq"
+    model = get_settings().groq_transcription_model
 
     log_transcription_event(
         event_type="transcription.started",
         status="in_progress",
         request_id=request_id,
         production_id=production_id,
-        message="Initiating word-aligned speech recognition",
+        provider=provider,
+        model=model,
+        message="Initiating Groq Whisper transcription",
     )
 
     try:
-        transcript = await transcription_service.transcribe_gcs_uri(
-            gcs_uri=gcs_uri,
-            language_code="en-US",
-            production_id=production_id,
-        )
+        suffix = Path(source.original_filename).suffix or Path(source.gcs_object).suffix or ".video"
+        with tempfile.TemporaryDirectory(prefix="croviq_transcribe_") as temp_dir:
+            source_path = Path(temp_dir) / f"source{suffix}"
+            await media_storage.download_object_to_path(
+                bucket=source.gcs_bucket,
+                object_name=source.gcs_object,
+                target_path=source_path,
+            )
+            media_metadata = media_inspector.inspect_media(source_path)
+
+            extraction_started = time.perf_counter()
+            with audio_extractor.temporary_speech_audio(source_path, sample_rate=16000) as audio_path:
+                extraction_latency_ms = (time.perf_counter() - extraction_started) * 1000
+                groq_started = time.perf_counter()
+                transcript = await transcription_service.transcribe_audio_file(
+                    audio_path=audio_path,
+                    language_code="en-US",
+                    production_id=production_id,
+                    source_duration_ms=media_metadata.duration_ms,
+                )
+                groq_latency_ms = (time.perf_counter() - groq_started) * 1000
+
         saved_transcript = await transcript_repo.save_transcript(transcript)
         latency_ms = (time.perf_counter() - perf_start) * 1000
 
@@ -551,7 +577,12 @@ async def transcribe_production(
             segment_count=saved_transcript.segment_count,
             language_code=saved_transcript.language_code,
             latency_ms=latency_ms,
-            message="Word-aligned speech recognition completed",
+            provider=provider,
+            model=model,
+            extraction_latency_ms=extraction_latency_ms,
+            groq_latency_ms=groq_latency_ms,
+            request_provider_id=getattr(transcription_service, "last_request_id", None),
+            message="Groq Whisper transcription completed",
         )
 
         return TranscribeProductionResponse(
@@ -564,6 +595,40 @@ async def transcribe_production(
             language_code=saved_transcript.language_code,
             transcript=saved_transcript,
         )
+    except (MediaStorageError, AudioExtractionError, MediaInspectionError) as exc:
+        latency_ms = (time.perf_counter() - perf_start) * 1000
+        log_transcription_event(
+            event_type="transcription.failed",
+            status=400,
+            request_id=request_id,
+            production_id=production_id,
+            latency_ms=latency_ms,
+            provider=provider,
+            model=model,
+            error_code="transcription_invalid_media",
+            message=f"Transcription media preparation failed: {type(exc).__name__}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="transcription_invalid_media",
+        )
+    except TranscriptionError as exc:
+        latency_ms = (time.perf_counter() - perf_start) * 1000
+        log_transcription_event(
+            event_type="transcription.failed",
+            status=502,
+            request_id=request_id,
+            production_id=production_id,
+            latency_ms=latency_ms,
+            provider=provider,
+            model=model,
+            error_code="transcription_provider_error",
+            message=f"Transcription provider failed: {type(exc).__name__}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="transcription_provider_error",
+        )
     except Exception as exc:
         latency_ms = (time.perf_counter() - perf_start) * 1000
         log_transcription_event(
@@ -572,13 +637,14 @@ async def transcribe_production(
             request_id=request_id,
             production_id=production_id,
             latency_ms=latency_ms,
+            provider=provider,
+            model=model,
             error_code="transcription_failed",
-            exception=exc,
             message=f"Transcription failed: {type(exc).__name__}",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Speech transcription failed: {str(exc)}",
+            detail="transcription_failed",
         )
 
 

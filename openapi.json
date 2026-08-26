@@ -469,7 +469,7 @@
       "post": {
         "tags": ["Productions & Uploads"],
         "summary": "Transcribe Production Source Media",
-        "description": "Trigger word-aligned speech recognition on uploaded source media via Speech-to-Text v2.",
+        "description": "Extract 16 kHz mono WAV audio from uploaded source media and transcribe it with Groq Whisper.",
         "operationId": "transcribe_production_api_productions__production_id__transcribe_post",
         "security": [
           {

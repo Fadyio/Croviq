@@ -3,6 +3,14 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+
+
+class MediaStorageError(Exception):
+    """Raised when private media storage cannot provide a requested object."""
+
+    pass
+
 
 
 @dataclass(frozen=True)
@@ -48,4 +56,14 @@ class MediaStorage(ABC):
         object_name: str,
     ) -> ObjectMetadata:
         """Inspect and return metadata for an object in storage."""
+        pass
+
+    @abstractmethod
+    async def download_object_to_path(
+        self,
+        bucket: str,
+        object_name: str,
+        target_path: Path,
+    ) -> Path:
+        """Download a private storage object into a local temporary file."""
         pass
