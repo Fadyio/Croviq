@@ -7,7 +7,13 @@ from google.cloud import storage
 import google.auth
 from google.auth.transport import requests as auth_requests
 
-from croviq_api.media.storage import MediaStorage, MediaStorageError, ObjectMetadata, SignedUploadTarget
+from croviq_api.media.storage import (
+    MediaStorage,
+    MediaStorageError,
+    ObjectMetadata,
+    SignedReadTarget,
+    SignedUploadTarget,
+)
 
 
 class GoogleMediaStorage(MediaStorage):
@@ -90,6 +96,66 @@ class GoogleMediaStorage(MediaStorage):
             upload_url=signed_url,
             method="PUT",
             required_headers={"Content-Type": content_type},
+            expires_at=expires_at,
+        )
+
+    async def generate_signed_read_target(
+        self,
+        bucket: str,
+        object_name: str,
+        expiry_seconds: int = 3600,
+    ) -> SignedReadTarget:
+        """Generate a short-lived V4 signed GET URL for browser playback via Cloud Run identity."""
+        return await asyncio.to_thread(
+            self._generate_signed_read_target_sync,
+            bucket,
+            object_name,
+            expiry_seconds,
+        )
+
+    def _generate_signed_read_target_sync(
+        self,
+        bucket: str,
+        object_name: str,
+        expiry_seconds: int,
+    ) -> SignedReadTarget:
+        client = self._get_client()
+        bucket_obj = client.bucket(bucket)
+        blob = bucket_obj.blob(object_name)
+
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expiry_seconds)
+
+        try:
+            credentials, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            if hasattr(credentials, "refresh") and hasattr(credentials, "valid") and not credentials.valid:
+                request = auth_requests.Request()
+                credentials.refresh(request)
+        except Exception:
+            credentials = getattr(client, "_credentials", None)
+
+        sa_email = self.service_account_email
+        if not sa_email and credentials and hasattr(credentials, "service_account_email") and credentials.service_account_email != "default":
+            sa_email = credentials.service_account_email
+
+        kwargs: dict = {
+            "version": "v4",
+            "expiration": timedelta(seconds=expiry_seconds),
+            "method": "GET",
+        }
+
+        if sa_email:
+            kwargs["service_account_email"] = sa_email
+        if credentials:
+            kwargs["credentials"] = credentials
+            if hasattr(credentials, "token") and credentials.token:
+                kwargs["access_token"] = credentials.token
+
+        signed_url = blob.generate_signed_url(**kwargs)
+
+        return SignedReadTarget(
+            read_url=signed_url,
             expires_at=expires_at,
         )
 

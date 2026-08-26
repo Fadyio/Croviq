@@ -148,6 +148,14 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/playback": {
+    get: {
+      responses: {
+        200: components["schemas"]["ProductionPlaybackResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
 }
 
 export interface components {
@@ -560,6 +568,14 @@ export interface components {
       productions?: components["schemas"]["Production"][];
       /** Total number of productions returned */
       total: number;
+    };
+    ProductionPlaybackResponse: {
+      /** Canonical unique production identifier */
+      production_id: string;
+      /** Short-lived keyless signed GET URL for browser video playback */
+      playback_url: string;
+      /** UTC expiration timestamp of the signed playback URL */
+      expires_at: string;
     };
     ProductionStatus: "pending" | "uploading" | "uploaded" | "failed";
     ShortCandidate: {

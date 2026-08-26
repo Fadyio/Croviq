@@ -24,6 +24,13 @@ class SignedUploadTarget:
 
 
 @dataclass(frozen=True)
+class SignedReadTarget:
+    """Represents a pre-signed direct read target for browser playback."""
+
+    read_url: str
+    expires_at: datetime
+
+@dataclass(frozen=True)
 class ObjectMetadata:
     """Represents inspected metadata of an object in storage."""
 
@@ -66,4 +73,14 @@ class MediaStorage(ABC):
         target_path: Path,
     ) -> Path:
         """Download a private storage object into a local temporary file."""
+        pass
+
+    @abstractmethod
+    async def generate_signed_read_target(
+        self,
+        bucket: str,
+        object_name: str,
+        expiry_seconds: int = 3600,
+    ) -> SignedReadTarget:
+        """Generate a short-lived V4 signed GET URL for browser playback."""
         pass

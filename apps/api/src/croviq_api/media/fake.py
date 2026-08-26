@@ -2,7 +2,13 @@
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from croviq_api.media.storage import MediaStorage, MediaStorageError, ObjectMetadata, SignedUploadTarget
+from croviq_api.media.storage import (
+    MediaStorage,
+    MediaStorageError,
+    ObjectMetadata,
+    SignedReadTarget,
+    SignedUploadTarget,
+)
 
 
 class FakeMediaStorage(MediaStorage):
@@ -46,6 +52,19 @@ class FakeMediaStorage(MediaStorage):
             upload_url=upload_url,
             method="PUT",
             required_headers={"Content-Type": content_type},
+            expires_at=expires_at,
+        )
+
+    async def generate_signed_read_target(
+        self,
+        bucket: str,
+        object_name: str,
+        expiry_seconds: int = 3600,
+    ) -> SignedReadTarget:
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expiry_seconds)
+        read_url = f"{self.base_url}/{bucket}/{object_name}?token=mock_v4_signed_read"
+        return SignedReadTarget(
+            read_url=read_url,
             expires_at=expires_at,
         )
 

@@ -120,26 +120,14 @@ test.describe("Production Home and Raw Media Upload", () => {
     await login(page);
 
     // Verify main headings
-    await expect(page.getByRole("heading", { name: "Croviq" })).toBeVisible();
-    await expect(page.getByText(/DevOps for YouTube Creators/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Productions", exact: true })).toBeVisible();
+    // Verify Channel
+    await expect(page.getByText("Modern AI Engineering", { exact: true })).toBeVisible();
 
-    // Verify Channel Choice cards
-    await expect(page.getByText("Synthetic AI Engineering", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Use Sample Channel" })).toBeVisible();
-
-    // Verify honest Connect YouTube state
-    await expect(page.getByText("Connect YouTube Channel")).toBeVisible();
-    const connectYtButton = page.getByRole("button", {
-      name: /Coming soon/i,
-    });
-    await expect(connectYtButton).toBeVisible();
-    await expect(connectYtButton).toBeDisabled();
-
-    // Verify "What are we making?" upload dropzone
-    await expect(page.getByRole("heading", { name: "What are we making?" })).toBeVisible();
+    // Verify upload dropzone
+    await expect(page.getByRole("heading", { name: "Upload video footage" })).toBeVisible();
     await expect(page.getByText(/Drop your raw video here/i)).toBeVisible();
     await expect(page.getByText(/Up to 1 GB/i)).toBeVisible();
-
     // Verify "Recent productions" section
     await expect(page.getByRole("heading", { name: "Recent productions" })).toBeVisible();
     await expect(page.getByText("No productions recorded yet")).toBeVisible();
@@ -232,10 +220,10 @@ test.describe("Production Home and Raw Media Upload", () => {
     // Click upload
     await uploadBtn.click();
 
-    // Verify uploaded state and production ID banner
+    // Verify uploaded state and Open in Editor button
     await expect(page.getByText("Uploaded")).toBeVisible();
-    await expect(page.getByText("Production recorded and ready for analysis")).toBeVisible();
-    await expect(page.getByText("Production ID: prod_test_001")).toBeVisible();
+    await expect(page.getByText("Upload complete and production recorded")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open in Editor" })).toBeVisible();
     await page.screenshot({ path: "e2e/screenshots/studio-cockpit-uploaded.png", fullPage: true });
     expect(consoleErrors).toEqual([]);
   });
@@ -246,8 +234,7 @@ test.describe("Production Home and Raw Media Upload", () => {
     await mockBackendApis(page);
     await login(page);
 
-    await expect(page.getByRole("heading", { name: "Croviq" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "What are we making?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Productions", exact: true })).toBeVisible();
     await page.screenshot({ path: "e2e/screenshots/studio-cockpit-390px.png", fullPage: true });
   });
 
