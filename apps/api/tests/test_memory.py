@@ -192,7 +192,7 @@ async def test_fake_store_lessons_lifecycle(fake_store: FakeChannelMemoryStore) 
 
 @pytest.mark.asyncio
 async def test_google_store_retrieve_profile_success() -> None:
-    """Google adapter successfully parses 200 retrieveProfiles response."""
+    """Google adapter successfully retrieves and parses profile memories."""
     store = GoogleMemoryBankStore(
         project_id="croviq-test-project",
         location="us-central1",
@@ -201,7 +201,7 @@ async def test_google_store_retrieve_profile_success() -> None:
 
     fake_profile_data = {
         "channel_id": "croviq_syn_ai_eng_01",
-        "channel_name": "AI Engineering",
+        "channel_name": "Modern AI Engineering",
         "primary_topics": ["AI Agents"],
         "content_pillars": ["Architecture"],
         "language": "en",
@@ -216,54 +216,52 @@ async def test_google_store_retrieve_profile_success() -> None:
         "updated_at": "2026-08-26T12:00:00Z",
     }
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {"profiles": [{"fields": fake_profile_data}]}
+    mock_memory = MagicMock()
+    mock_memory.scope = {"channel_id": "croviq_syn_ai_eng_01"}
+    mock_memory.fact = json.dumps(fake_profile_data)
 
-    with patch.object(store, "_get_auth_headers", return_value={"Authorization": "Bearer mock-token"}), \
-         patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp):
+    mock_client = MagicMock()
+    mock_client.list_memories.return_value = [mock_memory]
+
+    with patch.object(store, "_get_client", return_value=mock_client):
         profile = await store.get_profile("croviq_syn_ai_eng_01")
         assert profile is not None
         assert profile.channel_id == "croviq_syn_ai_eng_01"
-        assert profile.channel_name == "AI Engineering"
+        assert profile.channel_name == "Modern AI Engineering"
 
 
 @pytest.mark.asyncio
-async def test_google_store_retrieve_profile_404_returns_none() -> None:
-    """Google adapter returns None when Memory Bank returns 404."""
+async def test_google_store_retrieve_profile_empty_returns_none() -> None:
+    """Google adapter returns None when no memories match scope."""
     store = GoogleMemoryBankStore(
         project_id="croviq-test-project",
         location="us-central1",
         memory_bank_id="test-bank",
     )
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 404
+    mock_client = MagicMock()
+    mock_client.list_memories.return_value = []
 
-    with patch.object(store, "_get_auth_headers", return_value={"Authorization": "Bearer mock-token"}), \
-         patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp):
+    with patch.object(store, "_get_client", return_value=mock_client):
         profile = await store.get_profile("nonexistent_channel")
         assert profile is None
 
 
 @pytest.mark.asyncio
-async def test_google_store_retrieve_profile_500_raises_memory_store_error() -> None:
-    """Google adapter translates 500 error into MemoryStoreError."""
+async def test_google_store_retrieve_profile_error_raises_memory_store_error() -> None:
+    """Google adapter translates client exceptions into MemoryStoreError."""
     store = GoogleMemoryBankStore(
         project_id="croviq-test-project",
         location="us-central1",
         memory_bank_id="test-bank",
     )
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 500
-    mock_resp.text = "Internal Server Error"
+    mock_client = MagicMock()
+    mock_client.list_memories.side_effect = RuntimeError("GCP connection failure")
 
-    with patch.object(store, "_get_auth_headers", return_value={"Authorization": "Bearer mock-token"}), \
-         patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_resp):
-        with pytest.raises(MemoryStoreError, match="retrieveProfiles failed"):
+    with patch.object(store, "_get_client", return_value=mock_client):
+        with pytest.raises(MemoryStoreError, match="retrieval error"):
             await store.get_profile("chan_01")
-
 
 # -----------------------------------------------------------------------------
 # 3. FastAPI Endpoint Tests
