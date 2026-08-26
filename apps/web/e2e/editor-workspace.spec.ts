@@ -879,12 +879,19 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByText("No dialogue cuts")).toBeVisible();
     await expect(page.getByText("Natural dialogue rhythm fully preserved")).toHaveCount(0);
     await expect(page.getByTestId("production-run-strip")).toBeVisible();
-    for (const stage of ["Uploaded", "Transcript", "Leo Edit", "Maya Review", "Edit Plan"]) {
+    for (const stage of [
+      "Uploaded",
+      "Transcript",
+      "Leo Edit",
+      "Maya Review",
+      "Edit Plan",
+      "Render",
+    ]) {
       await expect(
         page.getByTestId(`run-stage-${stage.toLowerCase().replaceAll(" ", "-")}`),
       ).toHaveAttribute("data-status", "completed");
     }
-    await expect(page.getByTestId("run-stage-render")).toHaveAttribute("data-status", "pending");
+    await expect(page.getByTestId("run-stage-render")).toHaveAttribute("title", "Render 113.8s");
     await expect(page.getByTestId("run-stage-transcript")).toHaveAttribute(
       "title",
       "Transcript 30.0s",
@@ -990,5 +997,74 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     // Verify Edited Preview button has active cut count badge "1"
     await expect(page.getByRole("button", { name: /Edited Preview 1/i })).toBeVisible();
+  });
+
+  test("verifies bounded 100dvh desktop layout at 1440x900 without document scroll", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginAndNavigateToEditor(page);
+
+    // Verify Editor container fills viewport and document does not vertically overflow
+    const isDocumentScrollable = await page.evaluate(() => {
+      return document.documentElement.scrollHeight > window.innerHeight;
+    });
+    expect(
+      isDocumentScrollable,
+      "Page must not have vertical document overflow at 1440x900",
+    ).toBeFalsy();
+
+    // Verify video stage and timeline are both visible without scrolling
+    const videoStage = page.locator("[data-testid='video-stage']");
+    const timeline = page.locator("[data-testid='editor-timeline']");
+    await expect(videoStage).toBeVisible();
+    await expect(timeline).toBeVisible();
+
+    // Verify right rail width is bounded (~360-400px)
+    const rightRail = page.locator("aside");
+    const railBox = await rightRail.boundingBox();
+    expect(railBox?.width).toBeGreaterThanOrEqual(360);
+    expect(railBox?.width).toBeLessThanOrEqual(400);
+
+    // Verify transcript panel occupies majority of rail height
+    const transcriptPanel = page.locator("[data-testid='transcript-panel']");
+    const transcriptBox = await transcriptPanel.boundingBox();
+    if (railBox && transcriptBox) {
+      expect(transcriptBox.height / railBox.height).toBeGreaterThan(0.55);
+    }
+    // Verify agent avatars render
+    await expect(page.getByTestId("agent-presence-leo").locator("img")).toBeVisible();
+    await expect(page.getByTestId("agent-presence-maya").locator("img")).toBeVisible();
+
+    // Capture screenshot at 1440x900
+    await page.screenshot({ path: "e2e/screenshots/editor-1440x900.png" });
+  });
+
+  test("verifies bounded 100dvh desktop layout at 1280x800 without document scroll", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await loginAndNavigateToEditor(page);
+
+    // Verify Editor container fills viewport and document does not vertically overflow
+    const isDocumentScrollable = await page.evaluate(() => {
+      return document.documentElement.scrollHeight > window.innerHeight;
+    });
+    expect(
+      isDocumentScrollable,
+      "Page must not have vertical document overflow at 1280x800",
+    ).toBeFalsy();
+
+    // Verify video stage and timeline are both visible without scrolling
+    await expect(page.locator("[data-testid='video-stage']")).toBeVisible();
+    await expect(page.locator("[data-testid='editor-timeline']")).toBeVisible();
+
+    // Verify right rail width is bounded (~360-400px)
+    const railBox = await page.locator("aside").boundingBox();
+    expect(railBox?.width).toBeGreaterThanOrEqual(360);
+    expect(railBox?.width).toBeLessThanOrEqual(400);
+
+    // Capture screenshot at 1280x800
+    await page.screenshot({ path: "e2e/screenshots/editor-1280x800.png" });
   });
 });

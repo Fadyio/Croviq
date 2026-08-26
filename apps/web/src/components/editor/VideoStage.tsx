@@ -210,14 +210,14 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       data-testid="video-stage"
     >
       {/* Video Viewport Container */}
-      <div className="relative flex-1 bg-black flex items-center justify-center min-h-[280px] max-h-[580px] overflow-hidden">
+      <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden">
         {activeVideoUrl ? (
           <video
             ref={videoRef}
             src={activeVideoUrl}
             playsInline
             crossOrigin="anonymous"
-            className="w-full h-full object-contain max-h-[580px]"
+            className="w-full h-full object-contain max-h-full"
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={() => onPlayPause()}

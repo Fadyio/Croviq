@@ -300,20 +300,20 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
       </header>
 
       {/* Main Viewport */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-8 flex flex-col gap-8">
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-5 sm:px-6 sm:py-6 flex flex-col gap-5">
         {/* Intro */}
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-0.5">
           <h1 className="text-xl font-bold tracking-tight text-text-primary">Croviq</h1>
           <p className="text-xs text-text-secondary">Your autonomous video production team.</p>
         </div>
 
         {/* Upload Station */}
-        <section className="p-6 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
+        <section className="p-4 sm:p-5 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-3 shadow-sm">
           <div>
-            <h2 className="text-sm font-semibold tracking-tight text-text-primary">
+            <h2 className="text-xs font-semibold tracking-tight text-text-primary uppercase">
               Drop your raw video
             </h2>
-            <p className="text-xs text-text-muted mt-0.5">
+            <p className="text-[11px] text-text-muted mt-0.5 font-mono">
               MP4 &middot; MOV &middot; WebM &middot; MKV &middot; up to 1 GB
             </p>
           </div>
@@ -336,13 +336,13 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onClick={() => fileInputRef.current?.click()}
-              className={`border border-dashed rounded-lg p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-150 ${
+              className={`border border-dashed rounded-lg py-7 px-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-150 ${
                 isDragOver
                   ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                   : "border-border-strong hover:border-text-secondary bg-surface-2/40 hover:bg-surface-2/70"
               }`}
             >
-              <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center mb-3 text-text-secondary border border-border-subtle">
+              <div className="w-9 h-9 rounded-full bg-surface-3 flex items-center justify-center mb-2.5 text-text-secondary border border-border-subtle">
                 <Upload className="w-4 h-4 text-primary" />
               </div>
               <p className="text-xs font-medium text-text-primary">
@@ -504,9 +504,9 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
         </section>
 
         {/* Recent Productions */}
-        <section className="p-6 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
+        <section className="p-4 sm:p-5 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-3 shadow-sm">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold tracking-tight text-text-primary">
+            <h2 className="text-xs font-semibold tracking-tight text-text-primary uppercase">
               Recent productions
             </h2>
           </div>
@@ -516,7 +516,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
               Loading recent productions...
             </div>
           ) : productions.length === 0 ? (
-            <div className="py-10 px-4 rounded-lg bg-surface-2/30 border border-border-subtle text-center flex flex-col items-center justify-center gap-2">
+            <div className="py-8 px-4 rounded-lg bg-surface-2/30 border border-border-subtle text-center flex flex-col items-center justify-center gap-2">
               <div className="w-8 h-8 rounded-full bg-surface-3 flex items-center justify-center text-text-muted">
                 <Video className="w-4 h-4" />
               </div>
@@ -524,17 +524,17 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
               <p className="text-xs text-text-muted">Drop a video above to begin.</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2.5" data-testid="productions-list">
+            <div className="flex flex-col gap-2" data-testid="productions-list">
               {productions.map((prod) => (
                 <div
                   key={prod.production_id}
                   onClick={() => handleOpenProduction(prod.production_id)}
-                  className="p-3.5 rounded-lg bg-surface-2/70 hover:bg-surface-2 border border-border-subtle hover:border-primary/40 transition-all flex items-center justify-between gap-3 cursor-pointer group"
+                  className="p-3 rounded-lg bg-surface-2/70 hover:bg-surface-2 border border-border-subtle hover:border-primary/40 transition-all flex items-center justify-between gap-3 cursor-pointer group"
                   data-testid={`production-row-${prod.production_id}`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0 group-hover:border-primary/40 transition-colors">
-                      <FileVideo className="w-5 h-5 text-primary" />
+                    <div className="size-9 rounded-lg bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0 group-hover:border-primary/40 transition-colors">
+                      <FileVideo className="size-4 text-primary" />
                     </div>
                     <div className="min-w-0 flex flex-col">
                       <span className="text-xs font-semibold text-text-primary truncate group-hover:text-primary transition-colors">
@@ -560,18 +560,17 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border ${
-                        prod.status === "uploaded"
-                          ? "bg-success/10 text-success border-success/20"
-                          : prod.status === "failed"
-                            ? "bg-danger/10 text-danger border-danger/20"
-                            : "bg-primary/10 text-primary border-primary/20"
-                      }`}
-                    >
-                      {prod.status}
-                    </span>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    {prod.status === "failed" && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border bg-danger/10 text-danger border-danger/20">
+                        Failed
+                      </span>
+                    )}
+                    {prod.status === "uploading" && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border bg-primary/10 text-primary border-primary/20">
+                        Uploading
+                      </span>
+                    )}
 
                     <button
                       type="button"
@@ -579,7 +578,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                         e.stopPropagation();
                         handleOpenProduction(prod.production_id);
                       }}
-                      className="px-3 py-1.5 bg-surface-3 hover:bg-primary hover:text-white text-text-secondary text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 border border-border-subtle hover:border-transparent"
+                      className="px-2.5 py-1.5 bg-surface-3 hover:bg-primary hover:text-white text-text-secondary text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 border border-border-subtle hover:border-transparent"
                     >
                       <span>Open Editor</span>
                       <ArrowRight className="w-3.5 h-3.5" />

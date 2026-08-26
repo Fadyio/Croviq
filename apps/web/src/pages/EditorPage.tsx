@@ -399,6 +399,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       editorialRun,
       activities,
       edlCreatedAt: edl?.created_at,
+      renderCompletedAt: previewArtifact?.completed_at,
+      renderStatus: previewArtifact?.status,
+      renderDurationMs: previewArtifact?.duration_ms,
     },
     { active: activeProcessingStage, failed: failedProcessingStage },
   );
@@ -451,7 +454,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
 
   return (
     <div
-      className="min-h-screen bg-background text-text-primary flex flex-col font-sans selection:bg-primary/25"
+      className="h-[100dvh] max-h-[100dvh] bg-background text-text-primary flex flex-col font-sans selection:bg-primary/25 overflow-hidden"
       data-testid="editor-workspace"
     >
       {/* Editor Header Bar */}
@@ -501,8 +504,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       </header>
       <ProductionRunStrip stages={runStages} />
 
-      <main className="flex-1 p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start max-w-[1920px] w-full mx-auto">
-        <div className="lg:col-span-9 flex flex-col gap-4 min-w-0">
+      <main className="flex-1 min-h-0 p-3 sm:p-4 flex flex-col lg:flex-row gap-3 sm:gap-4 max-w-[1920px] w-full mx-auto overflow-hidden">
+        {/* Main Editor Column (flexible remaining width) */}
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col gap-3 overflow-hidden">
           {/* Video Stage */}
           <VideoStage
             playbackUrl={playbackUrl}
@@ -516,6 +520,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             onPlayPause={handlePlayPause}
             onSeek={handleSeek}
             onDurationChange={setDurationMs}
+            className="flex-1 min-h-0"
           />
 
           {/* Twick Timeline */}
@@ -527,19 +532,18 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             onSelectBlock={handleSelectBlock}
             onSeek={handleSeek}
             isPlaying={isPlaying}
+            className="h-[220px] shrink-0"
           />
         </div>
 
-        <aside className="lg:col-span-3 flex min-w-0 flex-col gap-3">
-          <section className="border-b border-border-subtle pb-3">
-            <h2 className="mb-2 text-xs font-semibold text-text-primary">
-              {activeAgent ? "Active agent" : "Production activity"}
-            </h2>
+        {/* Right Rail (fixed 380px, bounded height to workspace, 25-30% activity / 70-75% transcript) */}
+        <aside className="w-full lg:w-[380px] shrink-0 h-full min-h-0 flex flex-col gap-2.5 overflow-hidden bg-surface-1/40 rounded-xl border border-border-subtle p-3">
+          <section className="shrink-0 flex flex-col gap-2 border-b border-border-subtle pb-2.5 max-h-[36%] overflow-y-auto">
             <AgentPresence activeAgent={activeAgent} />
 
             {failedProcessingStage && (
               <div
-                className="mt-2 flex items-center justify-between gap-3 rounded-md bg-danger/10 px-2.5 py-2"
+                className="mt-1 flex items-center justify-between gap-3 rounded-md bg-danger/10 px-2.5 py-1.5"
                 role="alert"
               >
                 <span className="flex items-center gap-2 text-[11px] font-medium text-danger">
@@ -548,7 +552,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
                 </span>
                 <button
                   type="button"
-                  className="rounded px-2 py-1 text-[10px] font-semibold text-text-primary ring-1 ring-border-strong transition-colors hover:bg-surface-3 focus-visible:outline-none focus-visible:ring-primary"
+                  className="rounded px-2 py-0.5 text-[10px] font-semibold text-text-primary ring-1 ring-border-strong transition-colors hover:bg-surface-3 focus-visible:outline-none focus-visible:ring-primary"
                   onClick={() => beginProductionRun(false, true)}
                 >
                   Retry
@@ -556,7 +560,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
               </div>
             )}
 
-            <div className="mt-3">
+            <div className="min-h-0">
               {selectedDecision || selectedBlock ? (
                 <DecisionInspector
                   decision={selectedDecision}
@@ -591,6 +595,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             selectedDecisionId={selectedDecisionId}
             onSelectDecision={handleSelectDecision}
             onSeek={handleSeek}
+            className="flex-1 min-h-0"
           />
         </aside>
       </main>
