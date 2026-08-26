@@ -133,10 +133,22 @@ class DirectorEditorService:
                     )
 
 
-        # 4. Load Channel Memory (profile and lessons)
-        channel_profile = await self._memory_store.get_profile(prod.channel_id)
-        lessons = await self._memory_store.get_lessons(prod.channel_id)
+        # 4. Load Channel Memory (profile and lessons with sample fallback)
+        channel_profile = None
+        lessons = None
+        try:
+            channel_profile = await self._memory_store.get_profile(prod.channel_id)
+            lessons = await self._memory_store.get_lessons(prod.channel_id)
+        except Exception:
+            pass
+        if not channel_profile:
+            from croviq_domain.channel_provider import SampleChannelDataProvider
+            from croviq_domain.memory import ChannelProfileBuilder
 
+            provider = SampleChannelDataProvider()
+            channel = await provider.get_channel()
+            channel_profile = ChannelProfileBuilder.build_profile(channel)
+            lessons = ChannelProfileBuilder.build_lessons(channel)
         # 5. Build MediaMetadata and SourceVideoAnalysisInput
         try:
             media_metadata = self._media_inspector.inspect_media(prod.source_media.original_filename)
