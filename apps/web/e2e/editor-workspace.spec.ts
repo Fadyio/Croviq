@@ -171,12 +171,12 @@ interface MockEditorOptions {
   customEdl?: unknown;
   initialState?: Partial<Record<"transcript" | "editorialRun" | "edl" | "render", boolean>>;
   failStage?: "transcript" | "editorialRun" | "edl" | "render";
+  failRendersList?: boolean;
   editorialStatus?: "analyzing" | "reviewing" | "completed" | "failed";
   completeEditorialAfterGets?: number;
   analyzeDelayMs?: number;
   requests?: string[];
 }
-
 const delay = (milliseconds: number): Promise<void> => {
   const { promise, resolve } = Promise.withResolvers<void>();
   setTimeout(resolve, milliseconds);
@@ -603,6 +603,14 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
 
   // Mock Render List and Preview Render
   await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/renders`, async (route) => {
+    if (options.failRendersList) {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Internal server error: AttributeError" }),
+      });
+      return;
+    }
     if (!state.render) {
       await route.fulfill({
         status: 200,
@@ -845,6 +853,31 @@ test.describe("Editor Workspace (Issue #28)", () => {
       await expect.poll(() => requests).toEqual(failureCase.expectedRequests);
     });
   }
+  test("degrades gracefully when renders endpoint returns 500 without failing Editor loading", async ({
+    page,
+  }) => {
+    await loginAndNavigateToEditor(page, {
+      initialState: { transcript: true, editorialRun: true, edl: true, render: true },
+      failRendersList: true,
+    });
+
+    // 1. Verify editor workspace opens without fatal error screen
+    await expect(page.getByTestId("editor-workspace")).toBeVisible();
+    await expect(page.getByText("Unable to load production")).not.toBeVisible();
+    await expect(page.getByText("Renders could not be loaded")).not.toBeVisible();
+
+    // 2. Verify source playback is functional
+    const video = page.locator("video");
+    await expect(video).toBeVisible();
+    await expect(video).toHaveAttribute("src", /mock-signed-video\.mp4/);
+    // 3. Verify timeline, transcript, and agent presence are all loaded
+    await expect(page.getByTestId("editor-timeline")).toBeVisible();
+    await expect(page.getByTestId("transcript-panel")).toBeVisible();
+    await expect(page.getByTestId("agent-presence-leo")).toBeVisible();
+    await expect(page.getByTestId("agent-presence-maya")).toBeVisible();
+    await expect(page.getByTestId("rendered-preview-badge")).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "Edited Preview" })).toBeVisible();
+  });
 
   test("loads real Fairphone workspace with synchronized transcript, Twick timeline, and Leo/Maya activity", async ({
     page,

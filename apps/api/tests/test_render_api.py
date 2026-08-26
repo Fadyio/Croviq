@@ -426,3 +426,55 @@ async def test_render_master_and_list_renders(test_setup, auth_user):
     for item in list_data["renders"]:
         assert item["status"] == "completed"
         assert item["playback_url"] is not None
+@pytest.mark.asyncio
+async def test_get_default_render_repository_production_mode(monkeypatch):
+    """Factory must instantiate FirestoreRenderRepository in production without AttributeError."""
+    from croviq_api.productions.render_repository import (
+        FirestoreRenderRepository,
+        get_default_render_repository,
+        set_render_repository,
+    )
+    from croviq_api.config import get_settings
+
+    set_render_repository(None)
+    monkeypatch.setenv("CROVIQ_ENV", "production")
+    monkeypatch.setenv("GCP_PROJECT_ID", "croviq-506602")
+    get_settings.cache_clear()
+
+    try:
+        repo = get_default_render_repository()
+        assert isinstance(repo, FirestoreRenderRepository)
+        assert repo._project_id == "croviq-506602"
+    finally:
+        set_render_repository(None)
+        get_settings.cache_clear()
+
+
+def test_render_artifact_deserialization_backward_compatibility():
+    """Deserialization must tolerate lowercase enum variants, string timestamps, and extra fields."""
+    from croviq_api.productions.render_repository import FirestoreRenderRepository
+    from croviq_domain.render import ArtifactStatus, ArtifactType
+
+    repo = FirestoreRenderRepository(project_id="test-proj")
+    raw_data = {
+        "artifact_id": "art_prev_001",
+        "production_id": "prod_123",
+        "edl_id": "edl_123",
+        "artifact_type": "preview",  # lowercase legacy variant
+        "status": "COMPLETED",  # uppercase legacy variant
+        "gcs_bucket": "croviq-media-raw",
+        "gcs_object": "workspaces/ws1/productions/prod_123/renders/edl_123/preview.mp4",
+        "content_type": "video/mp4",
+        "created_at": "2026-08-26T22:00:00Z",
+        "completed_at": "2026-08-26T22:01:00+00:00",
+        "extra_legacy_field": "ignore_me",
+        "frame_rate": 30.0,
+    }
+
+    artifact = repo._deserialize_render_artifact(raw_data)
+    assert artifact.artifact_id == "art_prev_001"
+    assert artifact.artifact_type == ArtifactType.PREVIEW
+    assert artifact.status == ArtifactStatus.completed
+    assert artifact.created_at == datetime(2026, 8, 26, 22, 0, 0, tzinfo=timezone.utc)
+    assert artifact.completed_at == datetime(2026, 8, 26, 22, 1, 0, tzinfo=timezone.utc)
+    assert artifact.frame_rate == 30.0
