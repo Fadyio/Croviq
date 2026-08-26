@@ -14,10 +14,10 @@ Croviq is **DevOps for YouTube creators**: an autonomous, visible production tea
 1. **Sign in** at `https://app.croviq.app` using `demo@croviq.app`.
 2. **First-use choice**: Select **Use Sample Channel** (~50k subs AI engineering channel loaded).
 3. **Channel Memory initialized**: Google Agent Platform Memory Bank loads the `ChannelProfile` and active `ChannelLesson` rules.
-4. **Drop raw video**: Creator uploads a 3–8 minute raw recording (e.g. GitHub Actions tutorial with false starts, filler words, dead air, and screen demos).
+4. **Drop raw video**: Creator uploads a 3–8 minute raw recording (the owner's real GitHub Actions tutorial with false starts, filler words, dead air, and screen demos).
 5. **Editor workspace opens** (80/20 split):
    - **Maya (Director)** inspects source video + Memory Bank and announces editorial strategy ("The hook starts at 00:31; handing dialogue pass to Leo").
-   - **Leo (Editor)** performs the full dialogue pass.
+   - **Leo (Editor)** performs the full dialogue pass using Gemini 3.7 Flash semantic decisions anchored to Google Cloud Speech-to-Text v2 word timestamps.
    - **Live workspace updates**: Twick timeline and synchronized transcript visibly update (red strikethrough for removals, amber for review, green for preserved key takes).
    - **Natural cut safety**: Speech boundaries are respected, micro-crossfades are inserted, and talking-head jump cuts are covered with screen demonstration footage.
    - **Leo reports batch**: Summary of cuts, duration saved, and edits applied.
@@ -31,14 +31,17 @@ Croviq is **DevOps for YouTube creators**: an autonomous, visible production tea
 
 ### 2.1 Channel Data Provider Boundary
 ```text
-ChannelDataProvider (Abstract Base Class)
-  ├── YouTubeChannelDataProvider (Real YouTube Data & Analytics APIs via OAuth)
-  └── SampleChannelDataProvider (Deterministic synthetic dataset: 'ai-engineering-v1')
+scripts/generate_sample_channel.py (Deterministic Seed / Math)
+                    ↓
+packages/domain/src/croviq_domain/fixtures/sample_channel_ai_engineering_v1.json
+                    ↓
+SampleChannelDataProvider (FastAPI / Domain Service)
 ```
 
-**Canonical Schema (`packages/domain/src/croviq_domain/channel.py`)**:
-- `ChannelMetadata`: `channel_id`, `title`, `description`, `subscriber_count`, `video_count`, `total_views`, `content_pillars[]`.
-- `VideoAnalyticsSummary`: `video_id`, `views`, `watch_time_minutes`, `avg_view_duration_seconds`, `avg_view_percentage`, `ctr_percentage`, `retention_curve[]`.
+- **Production/Sample Mode**: Reads the pre-computed static JSON fixture for zero runtime latency and 100% test reproducibility.
+- **Canonical Schema (`packages/domain/src/croviq_domain/channel.py`)**:
+  - `ChannelMetadata`: `channel_id`, `title`, `description`, `subscriber_count`, `video_count`, `total_views`, `content_pillars[]`.
+  - `VideoAnalyticsSummary`: `video_id`, `views`, `watch_time_minutes`, `avg_view_duration_seconds`, `avg_view_percentage`, `ctr_percentage`, `retention_curve[]`.
 
 ### 2.2 Shared Channel Memory (Memory Bank)
 - Backed by **Google Agent Platform Memory Bank**.
@@ -53,14 +56,17 @@ ChannelDataProvider (Abstract Base Class)
 - **Client Direct Upload**: Frontend uploads raw video directly to private GCS bucket (`croviq-media-raw`).
 - **Completion Hook**: `POST /api/productions/{id}/upload-complete` → transitions `Production` to `PROCESSING`, registers raw `Artifact`, and kicks off analysis.
 
-### 2.4 Multimodal Agents (Google GenAI SDK)
-- Standardized on `google-genai` in Python 3.12 targeting Gemini 3.7 Flash (`GEMINI_MODEL_ID`).
+### 2.4 Multimodal Agents & Audio Word Alignment
+- **Division of Labor**:
+  - **Gemini 3.7 Flash** (via Google GenAI SDK `google-genai`): Understands video/audio narrative, identifies semantic redundancy, filler words, false starts, and Short candidate range.
+  - **Google Cloud Speech-to-Text v2 API**: Provides frame-accurate word-level start/end time offsets.
+  - **FFmpeg**: Silence envelope detection and deterministic cut rendering.
 - **Maya (Director Agent)**:
   - Input: Raw video artifact, transcript, `ChannelProfile`, relevant `ChannelLesson` records.
   - Output (`DirectorStrategy`): `summary`, `editorial_notes[]`, `suggested_pacing`, `hand_off_instructions`.
   - Review Output (`DirectorReview`): `approved: bool`, `feedback: str`, `adjustments: list[EditAdjustment]`.
 - **Leo (Editor Agent)**:
-  - Input: Raw video, word-timed transcript, `DirectorStrategy`.
+  - Input: Raw video, word-timed transcript from STT v2, `DirectorStrategy`.
   - Output (`DialoguePassReport`): `edits: list[EditDecision]`, `cuts_count`, `duration_saved_ms`, `short_candidate_range`, `batch_notes`.
 
 ### 2.5 Canonical Edit Decision List (EDL) Schema
@@ -103,8 +109,8 @@ ChannelDataProvider (Abstract Base Class)
 ```
 
 ### 2.6 Natural Cut Safety Pipeline
-1. **Phonetic / Word Alignment**: Extract exact start/end millisecond timestamps for each spoken word.
-2. **Boundary Padding**: Ensure cutpoints snap to inter-word silence intervals rather than mid-phoneme.
+1. **Word-Level Timing (STT v2)**: Extract millisecond start/end timestamps for each spoken word.
+2. **Boundary Padding & Silence Envelope**: Ensure cutpoints snap to inter-word silence intervals rather than mid-phoneme.
 3. **Audio Smoothing**: Apply 20ms audio micro-crossfades to prevent clicks.
 4. **Visual Discontinuity Mitigation**: When speech cuts cause a jarring talking-head jump, prioritize screen demo / terminal B-roll footage as an overlay.
 
@@ -134,7 +140,7 @@ ChannelDataProvider (Abstract Base Class)
 - Real Chrome automated test (`apps/web/e2e/hero-editor.spec.ts`):
   1. Sign in with `demo@croviq.app`.
   2. Select sample channel.
-  3. Upload sample raw GitHub Actions video.
+  3. Upload raw GitHub Actions demo video.
   4. Verify Maya handoff to Leo.
   5. Verify synchronized timeline and transcript updates.
   6. Verify batch review correction and approval.
@@ -149,7 +155,7 @@ ChannelDataProvider (Abstract Base Class)
 
 ### Seam 3: Media & EDL Seam
 - Pytest suite in `packages/media/tests/`:
-  - Validate EDL execution against synthetic video fixture.
+  - Validate EDL execution against real source video.
   - Validate duration math and natural cut safety padding.
   - Validate 9:16 vertical aspect ratio and caption burn-in for Short.
 
@@ -162,6 +168,7 @@ ChannelDataProvider (Abstract Base Class)
 
 - [ ] Deterministic sample AI engineering channel loaded without external credentials.
 - [ ] Raw video upload to GCS succeeds with signed URLs.
+- [ ] Speech-to-Text v2 generates word-timed transcript offsets.
 - [ ] Maya reviews source footage + Channel Memory and hands off to Leo.
 - [ ] Leo performs dialogue pass with live transcript and timeline synchronization.
 - [ ] Natural speech boundaries respected with zero mid-word audio clipping.
