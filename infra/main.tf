@@ -340,8 +340,8 @@ resource "google_cloud_run_v2_service" "api" {
         }
         initial_delay_seconds = 0
         period_seconds        = 5
-        failure_threshold     = 3
-        timeout_seconds       = 2
+        failure_threshold     = 10
+        timeout_seconds       = 4
       }
 
       liveness_probe {
