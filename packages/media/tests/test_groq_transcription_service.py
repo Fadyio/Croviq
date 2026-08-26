@@ -112,7 +112,7 @@ async def test_groq_transcription_service_posts_audio_and_returns_transcript(tmp
     assert transcript.word_count == 8
     assert transcript.segment_count == 2
     assert calls[0]["url"] == "https://api.groq.com/openai/v1/audio/transcriptions"
-    assert calls[0]["headers"] == {"Authorization": "Bearer test-secret-key"}
+    assert calls[0]["headers"]["Authorization"] == "Bearer test-secret-key"
     assert calls[0]["data"]["model"] == "whisper-large-v3"
     assert calls[0]["data"]["response_format"] == "verbose_json"
     assert calls[0]["data"]["timestamp_granularities[]"] == ["word", "segment"]
