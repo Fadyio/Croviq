@@ -156,6 +156,30 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/renders/preview": {
+    post: {
+      responses: {
+        200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/renders/master": {
+    post: {
+      responses: {
+        200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/renders": {
+    get: {
+      responses: {
+        200: components["schemas"]["RenderListResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
 }
 
 export interface components {
@@ -196,6 +220,8 @@ export interface components {
       /** Run completion timestamp in UTC */
       completed_at?: string | null;
     };
+    ArtifactStatus: "pending" | "rendering" | "completed" | "failed";
+    ArtifactType: "PREVIEW" | "MASTER";
     AssembleEDLResponse: {
       /** Unique identifier for the assembled Edit Decision List */
       edl_id: string;
@@ -611,6 +637,50 @@ export interface components {
       expires_at: string;
     };
     ProductionStatus: "pending" | "uploading" | "uploaded" | "failed";
+    RenderArtifactResponse: {
+      /** Canonical unique render artifact identifier */
+      artifact_id: string;
+      /** Identifier of the associated production */
+      production_id: string;
+      /** Identifier of the source Edit Decision List */
+      edl_id: string;
+      /** Type of rendered artifact: PREVIEW or MASTER */
+      artifact_type: components["schemas"]["ArtifactType"];
+      /** Lifecycle status: pending, rendering, completed, failed */
+      status: components["schemas"]["ArtifactStatus"];
+      /** MIME content type of the rendered media file */
+      content_type?: string;
+      /** Verified file size in bytes */
+      size_bytes?: number | null;
+      /** Verified media duration in milliseconds */
+      duration_ms?: number | null;
+      /** Video stream width in pixels */
+      width?: number | null;
+      /** Video stream height in pixels */
+      height?: number | null;
+      /** Video stream frame rate (fps) */
+      frame_rate?: number | null;
+      /** Video codec name (e.g. h264) */
+      video_codec?: string | null;
+      /** Audio codec name (e.g. aac) */
+      audio_codec?: string | null;
+      /** Short-lived keyless signed GET URL for browser video playback if completed */
+      playback_url?: string | null;
+      /** UTC expiration timestamp of the signed playback URL if available */
+      playback_expires_at?: string | null;
+      /** Timestamp when the render record was initialized in UTC */
+      created_at: string;
+      /** Timestamp when rendering completed in UTC */
+      completed_at?: string | null;
+      /** Error code or failure reason if render failed */
+      failure_code?: string | null;
+    };
+    RenderListResponse: {
+      /** Canonical unique production identifier */
+      production_id: string;
+      /** List of all render artifacts associated with the production */
+      renders: components["schemas"]["RenderArtifactResponse"][];
+    };
     ShortCandidate: {
       /** Start timestamp in source video milliseconds */
       start_ms: number;

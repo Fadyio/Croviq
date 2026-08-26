@@ -188,6 +188,8 @@ class CutInstruction(BaseModel):
             raise ValueError(
                 f"safe_end_ms ({self.safe_end_ms}) must be >= safe_start_ms ({self.safe_start_ms})"
             )
+        if self.removed_duration_ms == 0:
+            self.removed_duration_ms = self.safe_end_ms - self.safe_start_ms
         return self
 
 

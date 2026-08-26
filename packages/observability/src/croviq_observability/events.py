@@ -73,6 +73,11 @@ class EventType(StrEnum):
     EDL_ASSEMBLY_FAILED = "edl.assembly.failed"
     CUT_SAFETY_EVALUATED = "cut.safety.evaluated"
 
+    # Media Rendering events
+    RENDER_STARTED = "render.started"
+    RENDER_COMPLETED = "render.completed"
+    RENDER_FAILED = "render.failed"
+
 
 # Normalized set of all standard event names
 NORMALIZED_EVENT_TYPES: frozenset[str] = frozenset(e.value for e in EventType)

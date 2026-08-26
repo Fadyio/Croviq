@@ -21,6 +21,7 @@ import type { PreviewMode } from "./PreviewToggle";
 
 interface VideoStageProps {
   playbackUrl: string | null;
+  renderedPreviewUrl?: string | null;
   currentTimeMs: number;
   durationMs: number;
   isPlaying: boolean;
@@ -35,6 +36,7 @@ interface VideoStageProps {
 
 export const VideoStage: React.FC<VideoStageProps> = ({
   playbackUrl,
+  renderedPreviewUrl,
   currentTimeMs,
   durationMs,
   isPlaying,
@@ -83,6 +85,24 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
   }, [currentTimeMs]);
 
+  const isUsingRenderedArtifact = previewMode === "edited" && Boolean(renderedPreviewUrl);
+  const activeVideoUrl = isUsingRenderedArtifact ? renderedPreviewUrl : playbackUrl;
+
+  // Preserve playback position across source switches (e.g. Original vs Edited Preview)
+  const prevActiveUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !activeVideoUrl) return;
+    if (prevActiveUrlRef.current && prevActiveUrlRef.current !== activeVideoUrl) {
+      const targetSec = currentTimeMs / 1000;
+      video.currentTime = targetSec;
+      if (isPlaying && video.paused) {
+        video.play().catch(() => {});
+      }
+    }
+    prevActiveUrlRef.current = activeVideoUrl;
+  }, [activeVideoUrl, currentTimeMs, isPlaying]);
+
   // Handle time update from video element & execute Edited Preview cut skipping
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
@@ -90,8 +110,8 @@ export const VideoStage: React.FC<VideoStageProps> = ({
 
     const currentMs = Math.round(video.currentTime * 1000);
 
-    // If Edited Preview is active, check if playhead just entered an executable cut
-    if (previewMode === "edited" && edl) {
+    // If Edited Preview is active and falling back to client simulation (no real render yet)
+    if (previewMode === "edited" && !isUsingRenderedArtifact && edl) {
       const skipInterval = findExecutableSkipInterval(currentMs, edl);
       if (skipInterval) {
         const jumpToSec = skipInterval.safe_end_ms / 1000;
@@ -114,8 +134,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
 
     onSeek(currentMs);
-  }, [edl, onSeek, previewMode]);
-
+  }, [edl, onSeek, previewMode, isUsingRenderedArtifact]);
   // Handle loaded metadata for duration
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
@@ -192,10 +211,10 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     >
       {/* Video Viewport Container */}
       <div className="relative flex-1 bg-black flex items-center justify-center min-h-[280px] max-h-[580px] overflow-hidden">
-        {playbackUrl ? (
+        {activeVideoUrl ? (
           <video
             ref={videoRef}
-            src={playbackUrl}
+            src={activeVideoUrl}
             playsInline
             crossOrigin="anonymous"
             className="w-full h-full object-contain max-h-[580px]"
@@ -218,6 +237,16 @@ export const VideoStage: React.FC<VideoStageProps> = ({
           </div>
         )}
 
+        {/* Rendered Preview Active Badge Overlay */}
+        {isUsingRenderedArtifact && (
+          <div
+            className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-1/90 backdrop-blur-md text-text-primary text-[11px] font-medium shadow-md border border-border-subtle"
+            data-testid="rendered-preview-badge"
+          >
+            <span className="size-1.5 rounded-full bg-success" />
+            <span>Rendered Preview</span>
+          </div>
+        )}
         {/* Video Loading or Network Error Overlay */}
         {videoError && (
           <div className="absolute inset-0 bg-surface-1/90 flex flex-col items-center justify-center p-6 text-center gap-2">

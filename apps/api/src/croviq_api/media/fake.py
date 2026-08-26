@@ -103,6 +103,29 @@ class FakeMediaStorage(MediaStorage):
         target_path.write_bytes(content)
         return target_path
 
+    async def upload_object_from_path(
+        self,
+        bucket: str,
+        object_name: str,
+        source_path: Path,
+        content_type: str = "video/mp4",
+    ) -> ObjectMetadata:
+        if not source_path.exists() or not source_path.is_file():
+            raise MediaStorageError(f"Source file not found for upload: {source_path}")
+        content = source_path.read_bytes()
+        key = f"{bucket}/{object_name}"
+        metadata = ObjectMetadata(
+            bucket=bucket,
+            object_name=object_name,
+            exists=True,
+            size_bytes=len(content),
+            content_type=content_type,
+            updated_at=datetime.now(timezone.utc),
+        )
+        self._objects[key] = metadata
+        self._contents[key] = content
+        return metadata
+
     def clear(self) -> None:
         """Clear all stored in-memory mock objects."""
         self._objects.clear()

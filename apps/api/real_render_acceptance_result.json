@@ -1,0 +1,43 @@
+{
+  "production_id": "prod_0b7657f515ae",
+  "edl_id": "edl_6cfe6b3bf3f2",
+  "source_duration_ms": 113824,
+  "cuts_count": 0,
+  "active_cuts_count": 0,
+  "coverage_markers_count": 1,
+  "keep_segments": [[0, 113824]],
+  "preview_artifact": {
+    "artifact_id": "art_prev_6b3bf3f2",
+    "gcs_bucket": "croviq-506602-croviq-media-raw",
+    "gcs_object": "workspaces/ws_27iEBUMcu6ToDYwp2OdEIHBuwIA3/productions/prod_0b7657f515ae/renders/edl_6cfe6b3bf3f2/preview.mp4",
+    "size_bytes": 6478588,
+    "duration_ms": 113824,
+    "width": 360,
+    "height": 640,
+    "frame_rate": 25.0,
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "render_time_ms": 3843.2929160189815,
+    "signed_playback_available": true
+  },
+  "master_artifact": {
+    "artifact_id": "art_mast_6b3bf3f2",
+    "gcs_bucket": "croviq-506602-croviq-media-raw",
+    "gcs_object": "workspaces/ws_27iEBUMcu6ToDYwp2OdEIHBuwIA3/productions/prod_0b7657f515ae/renders/edl_6cfe6b3bf3f2/master.mp4",
+    "size_bytes": 11895040,
+    "duration_ms": 113824,
+    "width": 360,
+    "height": 640,
+    "frame_rate": 25.0,
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "render_time_ms": 7494.535583013203,
+    "signed_playback_available": true
+  },
+  "model_calls": {
+    "gemini_transcribe": 0,
+    "gemini_leo": 0,
+    "gemini_maya": 0,
+    "groq": 0
+  }
+}

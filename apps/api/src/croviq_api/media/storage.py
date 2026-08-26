@@ -84,3 +84,14 @@ class MediaStorage(ABC):
     ) -> SignedReadTarget:
         """Generate a short-lived V4 signed GET URL for browser playback."""
         pass
+
+    @abstractmethod
+    async def upload_object_from_path(
+        self,
+        bucket: str,
+        object_name: str,
+        source_path: Path,
+        content_type: str = "video/mp4",
+    ) -> ObjectMetadata:
+        """Upload a local file to private media storage."""
+        pass

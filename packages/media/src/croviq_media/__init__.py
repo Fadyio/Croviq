@@ -16,6 +16,13 @@ from croviq_media.inspector import (
     MediaInspectionError,
     MediaInspector,
 )
+from croviq_media.render import (
+    FakeRenderService,
+    FFmpegRenderService,
+    RenderError,
+    RenderExecutionResult,
+    RenderService,
+)
 from croviq_media.transcript import (
     DEFAULT_CUSTOM_VOCABULARY,
     DEFAULT_GEMINI_LOCATION,
@@ -50,6 +57,11 @@ __all__ = [
     "TranscriptionService",
     "parse_duration_to_ms",
     "parse_gemini_transcription_response",
+    "RenderError",
+    "RenderExecutionResult",
+    "RenderService",
+    "FFmpegRenderService",
+    "FakeRenderService",
 ]
 
 __version__ = "0.1.0"

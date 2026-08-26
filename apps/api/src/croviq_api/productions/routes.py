@@ -28,6 +28,18 @@ from croviq_api.productions.transcript_repository import (
     TranscriptRepository,
     get_transcript_repository,
 )
+from croviq_api.productions.render_repository import (
+    RenderRepository,
+    get_render_repository,
+)
+from croviq_api.productions.edl_repository import (
+    EDLRepository,
+    get_edl_repository,
+)
+from croviq_api.productions.dependencies import (
+    get_render_service,
+)
+from croviq_media.render import RenderError, RenderService
 from croviq_api.productions.dependencies import (
     get_editorial_service,
     get_edl_service,
@@ -48,6 +60,8 @@ from croviq_api.productions.schemas import (
     ProductionListResponse,
     TranscribeProductionResponse,
     ProductionPlaybackResponse,
+    RenderArtifactResponse,
+    RenderListResponse,
 )
 from croviq_api.workspaces.repository import (
     WorkspaceRepository,
@@ -64,6 +78,12 @@ from croviq_domain.production import (
     build_source_media_gcs_object_path,
     validate_media_file,
 )
+from croviq_domain.render import (
+    ArtifactStatus,
+    ArtifactType,
+    RenderArtifact,
+    build_render_artifact_gcs_object_path,
+)
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import Transcript
 from croviq_domain.user import User
@@ -71,7 +91,9 @@ from croviq_media.audio import AudioExtractionError, AudioExtractor
 from croviq_media.inspector import MediaInspector, MediaInspectionError
 from croviq_media.transcript import TranscriptionError, TranscriptionService
 from croviq_observability import (
+    EventType,
     log_media_inspect_event,
+    log_render_event,
     log_transcription_event,
 )
 
@@ -906,4 +928,283 @@ async def get_production_playback(
         production_id=prod.production_id,
         playback_url=signed_target.read_url,
         expires_at=signed_target.expires_at,
+    )
+
+
+async def _execute_render_for_production(
+    production_id: str,
+    artifact_type: ArtifactType,
+    request: Request,
+    current_user: User,
+    production_repo: ProductionRepository,
+    edl_repo: EDLRepository,
+    render_repo: RenderRepository,
+    render_service: RenderService,
+    media_storage: MediaStorage,
+) -> RenderArtifactResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    if not prod.source_media or not prod.source_media.gcs_bucket or not prod.source_media.gcs_object:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Production '{production_id}' has no uploaded source media to render",
+        )
+
+    edl = await edl_repo.get_latest_edl(production_id)
+    if not edl:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Production '{production_id}' has no assembled EDL. Assemble an EDL before rendering.",
+        )
+
+    # 1. Idempotency check: return cached completed artifact if object exists in storage
+    existing_artifact = await render_repo.get_render_artifact_by_type(
+        production_id=production_id,
+        edl_id=edl.edl_id,
+        artifact_type=artifact_type,
+    )
+    if existing_artifact and existing_artifact.status == ArtifactStatus.completed:
+        meta = await media_storage.get_object_metadata(
+            existing_artifact.gcs_bucket,
+            existing_artifact.gcs_object,
+        )
+        if meta.exists:
+            signed_target = await media_storage.generate_signed_read_target(
+                bucket=existing_artifact.gcs_bucket,
+                object_name=existing_artifact.gcs_object,
+                expiry_seconds=3600,
+            )
+            return RenderArtifactResponse.from_domain(
+                artifact=existing_artifact,
+                playback_url=signed_target.read_url,
+                playback_expires_at=signed_target.expires_at,
+            )
+
+    # 2. Execute deterministic render
+    artifact_id = f"art_{uuid.uuid4().hex[:12]}"
+    gcs_bucket = prod.source_media.gcs_bucket
+    gcs_object = build_render_artifact_gcs_object_path(
+        workspace_id=prod.workspace_id,
+        production_id=prod.production_id,
+        edl_id=edl.edl_id,
+        artifact_type=artifact_type,
+    )
+    now = datetime.now(timezone.utc)
+    settings = get_settings()
+
+    log_render_event(
+        event_type=EventType.RENDER_STARTED,
+        production_id=prod.production_id,
+        edl_id=edl.edl_id,
+        artifact_id=artifact_id,
+        artifact_type=artifact_type.value,
+        status="rendering",
+        source_duration_ms=edl.source_duration_ms,
+        target_duration_ms=edl.estimated_target_duration_ms,
+        request_id=request_id,
+        git_sha=settings.git_sha,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        local_src = tmp_path / "source.mp4"
+        local_out = tmp_path / f"{artifact_type.value.lower()}.mp4"
+
+        try:
+            await media_storage.download_object_to_path(
+                bucket=gcs_bucket,
+                object_name=prod.source_media.gcs_object,
+                target_path=local_src,
+            )
+
+            if artifact_type == ArtifactType.PREVIEW:
+                render_res = render_service.render_preview(
+                    source_path=local_src,
+                    edl=edl,
+                    output_path=local_out,
+                )
+            else:
+                render_res = render_service.render_master(
+                    source_path=local_src,
+                    edl=edl,
+                    output_path=local_out,
+                )
+
+            await media_storage.upload_object_from_path(
+                bucket=gcs_bucket,
+                object_name=gcs_object,
+                source_path=local_out,
+                content_type="video/mp4",
+            )
+
+            completed_at = datetime.now(timezone.utc)
+            artifact = RenderArtifact(
+                artifact_id=artifact_id,
+                production_id=prod.production_id,
+                edl_id=edl.edl_id,
+                artifact_type=artifact_type,
+                status=ArtifactStatus.completed,
+                gcs_bucket=gcs_bucket,
+                gcs_object=gcs_object,
+                content_type="video/mp4",
+                size_bytes=render_res.size_bytes,
+                duration_ms=render_res.duration_ms,
+                width=render_res.width,
+                height=render_res.height,
+                frame_rate=render_res.frame_rate,
+                video_codec=render_res.video_codec,
+                audio_codec=render_res.audio_codec,
+                created_at=now,
+                completed_at=completed_at,
+                failure_code=None,
+            )
+            await render_repo.save_render_artifact(artifact)
+
+            log_render_event(
+                event_type=EventType.RENDER_COMPLETED,
+                production_id=prod.production_id,
+                edl_id=edl.edl_id,
+                artifact_id=artifact_id,
+                artifact_type=artifact_type.value,
+                status="completed",
+                source_duration_ms=edl.source_duration_ms,
+                target_duration_ms=edl.estimated_target_duration_ms,
+                rendered_duration_ms=render_res.duration_ms,
+                render_time_ms=render_res.render_time_ms,
+                size_bytes=render_res.size_bytes,
+                request_id=request_id,
+                git_sha=settings.git_sha,
+            )
+
+            signed_target = await media_storage.generate_signed_read_target(
+                bucket=gcs_bucket,
+                object_name=gcs_object,
+                expiry_seconds=3600,
+            )
+
+            return RenderArtifactResponse.from_domain(
+                artifact=artifact,
+                playback_url=signed_target.read_url,
+                playback_expires_at=signed_target.expires_at,
+            )
+        except Exception as exc:
+            sanitized_err = str(exc)
+            log_render_event(
+                event_type=EventType.RENDER_FAILED,
+                production_id=prod.production_id,
+                edl_id=edl.edl_id,
+                artifact_id=artifact_id,
+                artifact_type=artifact_type.value,
+                status="failed",
+                source_duration_ms=edl.source_duration_ms,
+                target_duration_ms=edl.estimated_target_duration_ms,
+                request_id=request_id,
+                git_sha=settings.git_sha,
+                error_code=sanitized_err,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Rendering {artifact_type.value} failed: {sanitized_err}",
+            )
+
+
+@router.post(
+    "/productions/{production_id}/renders/preview",
+    response_model=RenderArtifactResponse,
+    summary="Render Fast Preview Video",
+    description="Deterministically render a fast preview MP4 from the canonical Edit Decision List.",
+)
+async def render_preview_video(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    render_service: Annotated[RenderService, Depends(get_render_service)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> RenderArtifactResponse:
+    return await _execute_render_for_production(
+        production_id=production_id,
+        artifact_type=ArtifactType.PREVIEW,
+        request=request,
+        current_user=current_user,
+        production_repo=production_repo,
+        edl_repo=edl_repo,
+        render_repo=render_repo,
+        render_service=render_service,
+        media_storage=media_storage,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/renders/master",
+    response_model=RenderArtifactResponse,
+    summary="Render High Quality Master Video",
+    description="Deterministically render a high quality YouTube master MP4 from the canonical Edit Decision List.",
+)
+async def render_master_video(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    render_service: Annotated[RenderService, Depends(get_render_service)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> RenderArtifactResponse:
+    return await _execute_render_for_production(
+        production_id=production_id,
+        artifact_type=ArtifactType.MASTER,
+        request=request,
+        current_user=current_user,
+        production_repo=production_repo,
+        edl_repo=edl_repo,
+        render_repo=render_repo,
+        render_service=render_service,
+        media_storage=media_storage,
+    )
+
+
+@router.get(
+    "/productions/{production_id}/renders",
+    response_model=RenderListResponse,
+    summary="List Production Render Artifacts",
+    description="Retrieve all rendered artifacts (preview and master) for a production.",
+)
+async def list_production_renders(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> RenderListResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    artifacts = await render_repo.list_render_artifacts(production_id)
+    responses: list[RenderArtifactResponse] = []
+    for art in artifacts:
+        playback_url = None
+        playback_expires_at = None
+        if art.status == ArtifactStatus.completed:
+            try:
+                target = await media_storage.generate_signed_read_target(
+                    bucket=art.gcs_bucket,
+                    object_name=art.gcs_object,
+                    expiry_seconds=3600,
+                )
+                playback_url = target.read_url
+                playback_expires_at = target.expires_at
+            except Exception:
+                pass
+        responses.append(
+            RenderArtifactResponse.from_domain(
+                artifact=art,
+                playback_url=playback_url,
+                playback_expires_at=playback_expires_at,
+            )
+        )
+    return RenderListResponse(
+        production_id=prod.production_id,
+        renders=responses,
     )
