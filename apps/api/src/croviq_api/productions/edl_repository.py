@@ -240,8 +240,8 @@ def get_default_edl_repository() -> EDLRepository:
     global _global_edl_repo
     if _global_edl_repo is None:
         settings = get_settings()
-        if settings.firestore_emulator_host or settings.gcp_project_id:
-            _global_edl_repo = FirestoreEDLRepository()
+        if settings.environment in ("production", "staging") or os.getenv("USE_FIRESTORE") == "true":
+            _global_edl_repo = FirestoreEDLRepository(project_id=settings.gcp_project_id)
         else:
             _global_edl_repo = InMemoryEDLRepository()
     return _global_edl_repo
