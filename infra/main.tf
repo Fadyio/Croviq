@@ -340,6 +340,11 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
         name  = "CROVIQ_ALLOWED_EMAILS"
         value = var.allowed_emails
       }

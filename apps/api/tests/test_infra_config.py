@@ -43,6 +43,9 @@ def test_api_cloud_run_has_required_production_env_vars() -> None:
     assert "CROVIQ_ALLOWED_EMAILS" in env_vars, "CROVIQ_ALLOWED_EMAILS missing from Cloud Run API service in infra/main.tf"
     assert env_vars["CROVIQ_ALLOWED_EMAILS"] == "var.allowed_emails"
 
+    assert "GCP_PROJECT_ID" in env_vars, "GCP_PROJECT_ID missing from Cloud Run API service in infra/main.tf"
+    assert env_vars["GCP_PROJECT_ID"] == "var.project_id"
+
     assert "MEMORY_STORE_PROVIDER" in env_vars, "MEMORY_STORE_PROVIDER missing from Cloud Run API service in infra/main.tf"
     assert env_vars["MEMORY_STORE_PROVIDER"] == "google"
 

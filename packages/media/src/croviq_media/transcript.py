@@ -91,8 +91,11 @@ def _map_segment_word_indexes(
     if overlapping:
         return overlapping[0], overlapping[-1]
 
-    raise TranscriptionError("segment boundaries do not align with word timestamps")
-
+    closest = min(
+        words,
+        key=lambda w: min(abs(w.start_ms - start_ms), abs(w.end_ms - end_ms)),
+    )
+    return closest.index, closest.index
 
 def parse_groq_transcription_response(
     payload: Any,
@@ -106,15 +109,16 @@ def parse_groq_transcription_response(
 
     words: list[TranscriptWord] = []
     previous_start_ms = -1
-    previous_end_ms = -1
     for index, raw_word in enumerate(words_payload):
         text = _get_text(raw_word, "word", "text")
         if not text:
             raise TranscriptionError(f"word {index} is missing text")
-        start_ms = parse_duration_to_ms(_get_value(raw_word, "start"))
-        end_ms = parse_duration_to_ms(_get_value(raw_word, "end"))
-        if start_ms < previous_start_ms or start_ms < previous_end_ms and end_ms <= previous_end_ms:
-            raise TranscriptionError("Groq word timestamps must be monotonic")
+        raw_start_ms = parse_duration_to_ms(_get_value(raw_word, "start"))
+        raw_end_ms = parse_duration_to_ms(_get_value(raw_word, "end"))
+
+        start_ms = max(raw_start_ms, previous_start_ms if previous_start_ms >= 0 else 0)
+        end_ms = max(raw_end_ms, start_ms + 10)
+
         words.append(
             TranscriptWord(
                 index=index,
@@ -125,8 +129,6 @@ def parse_groq_transcription_response(
             )
         )
         previous_start_ms = start_ms
-        previous_end_ms = end_ms
-
     if not words:
         raise TranscriptionError("Groq transcription response did not include word timestamps")
 
@@ -281,16 +283,8 @@ class FakeTranscriptionService(TranscriptionService):
 def _default_http_post(**kwargs: Any) -> Any:
     import httpx
 
-    data = kwargs.pop("data")
-    flattened_data: list[tuple[str, str]] = []
-    for key, value in data.items():
-        if isinstance(value, list):
-            flattened_data.extend((key, str(item)) for item in value)
-        else:
-            flattened_data.append((key, str(value)))
     with httpx.Client() as client:
-        return client.post(data=flattened_data, **kwargs)
-
+        return client.post(**kwargs)
 
 class GroqTranscriptionService(TranscriptionService):
     """Thin HTTP adapter for Groq Whisper audio transcription."""
@@ -362,7 +356,10 @@ class GroqTranscriptionService(TranscriptionService):
         with path.open("rb") as audio_file:
             response = self._http_post(
                 url=self.endpoint_url,
-                headers={"Authorization": f"Bearer {self.api_key}"},
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "User-Agent": "croviq-api/0.1.0",
+                },
                 data=data,
                 files={"file": (path.name, audio_file, "audio/wav")},
                 timeout=self.timeout_seconds,
