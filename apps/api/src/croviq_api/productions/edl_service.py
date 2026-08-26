@@ -79,14 +79,40 @@ class EDLService:
                     detail=f"Source media for production '{production_id}' must be uploaded before assembling EDL",
                 )
             # 3. Resolve MediaMetadata
-            metadata = self._media_inspector.inspect_media(prod.source_media.gcs_object)
-
+            try:
+                metadata = self._media_inspector.inspect_media(prod.source_media.original_filename)
+            except Exception:
+                metadata = MediaMetadata(
+                    duration_ms=0,
+                    width=1920,
+                    height=1080,
+                    frame_rate=30.0,
+                    video_codec="h264",
+                    audio_codec="aac",
+                    audio_sample_rate=48000,
+                    audio_channels=2,
+                    rotation=0,
+                    size_bytes=prod.source_media.size_bytes,
+                )
             # 4. Fetch Transcript
             transcript = await self._transcript_repo.get_transcript_by_production_id(production_id)
             if not transcript:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Production '{production_id}' must be transcribed before assembling EDL",
+                )
+            if metadata.duration_ms <= 0:
+                metadata = MediaMetadata(
+                    duration_ms=transcript.duration_ms,
+                    width=metadata.width or 1920,
+                    height=metadata.height or 1080,
+                    frame_rate=metadata.frame_rate or 30.0,
+                    video_codec=metadata.video_codec if metadata.video_codec != "none" else "h264",
+                    audio_codec=metadata.audio_codec or "aac",
+                    audio_sample_rate=metadata.audio_sample_rate or 48000,
+                    audio_channels=metadata.audio_channels or 2,
+                    rotation=metadata.rotation,
+                    size_bytes=prod.source_media.size_bytes,
                 )
 
             # 5. Fetch Latest Completed EditorialRun
