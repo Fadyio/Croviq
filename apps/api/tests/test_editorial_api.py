@@ -291,6 +291,51 @@ async def test_analyze_production_success(app_and_deps, test_user: User):
 
 
 @pytest.mark.asyncio
+async def test_analyze_completed_run_is_idempotent(app_and_deps, test_user: User):
+    client, prod_repo, transcript_repo, _, _, fake_genai = app_and_deps
+    prod_id = "prod_completed_idempotent"
+    await prod_repo.create_production(_make_uploaded_production(prod_id, test_user.user_id))
+    await transcript_repo.save_transcript(_make_transcript(prod_id))
+
+    first_response = client.post(f"/api/productions/{prod_id}/analyze")
+    assert first_response.status_code == 200
+    first_run_id = first_response.json()["run_id"]
+    fake_genai.call_history.clear()
+
+    second_response = client.post(f"/api/productions/{prod_id}/analyze")
+
+    assert second_response.status_code == 200
+    assert second_response.json()["run_id"] == first_run_id
+    assert fake_genai.call_history == []
+
+
+@pytest.mark.asyncio
+async def test_analyze_retry_after_maya_failure_reuses_leo_proposal(
+    app_and_deps, test_user: User
+):
+    client, prod_repo, transcript_repo, editorial_repo, _, _ = app_and_deps
+    prod_id = "prod_retry_maya"
+    await prod_repo.create_production(_make_uploaded_production(prod_id, test_user.user_id))
+    await transcript_repo.save_transcript(_make_transcript(prod_id))
+
+    failing_director = FakeGenAIClient(fail_on_director=True)
+    set_genai_client(failing_director)
+    first_response = client.post(f"/api/productions/{prod_id}/analyze")
+    assert first_response.status_code == 500
+    failed_run = await editorial_repo.get_latest_editorial_run(prod_id)
+    assert failed_run is not None
+    assert failed_run.editor_proposal_id is not None
+
+    retry_client = FakeGenAIClient()
+    set_genai_client(retry_client)
+    retry_response = client.post(f"/api/productions/{prod_id}/analyze")
+
+    assert retry_response.status_code == 200
+    assert retry_response.json()["run_id"] == failed_run.run_id
+    assert [call["agent"] for call in retry_client.call_history] == ["maya"]
+
+
+@pytest.mark.asyncio
 async def test_analyze_production_with_director_rejections_and_modifications(
     app_and_deps, test_user: User
 ):

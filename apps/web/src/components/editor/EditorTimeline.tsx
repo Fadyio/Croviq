@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ZoomIn, ZoomOut, Maximize, Scissors, Layers, Video, Info } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize, Scissors, Layers, Video } from "lucide-react";
 import {
   formatTimecode,
   type TwickTimelineRepresentation,
@@ -172,23 +172,20 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
       {/* Main Track Workspace Viewport (Left Track Headers + Right Scrollable Tracks) */}
       <div className="flex flex-1 overflow-hidden min-h-[190px]">
         {/* Left Track Headers Column (Fixed Width 140px) */}
-        <div className="w-36 shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col pt-7 z-10">
-          {/* Track 1 Header: SOURCE VIDEO */}
+        <div className="w-28 shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col pt-7 z-10">
           <div className="h-12 px-3 flex items-center gap-2 border-b border-border-subtle/40 text-[11px] font-medium text-text-secondary">
             <Video className="w-3.5 h-3.5 text-text-muted shrink-0" />
-            <span className="truncate">SOURCE VIDEO</span>
+            <span className="truncate">Source</span>
           </div>
 
-          {/* Track 2 Header: DIALOGUE EDITS */}
           <div className="h-12 px-3 flex items-center gap-2 border-b border-border-subtle/40 text-[11px] font-medium text-text-secondary">
             <Scissors className="w-3.5 h-3.5 text-primary shrink-0" />
-            <span className="truncate">DIALOGUE EDITS</span>
+            <span className="truncate">Edits</span>
           </div>
 
-          {/* Track 3 Header: COVERAGE */}
           <div className="h-12 px-3 flex items-center gap-2 text-[11px] font-medium text-text-secondary">
             <Layers className="w-3.5 h-3.5 text-info shrink-0" />
-            <span className="truncate">COVERAGE</span>
+            <span className="truncate">Coverage</span>
           </div>
         </div>
 
@@ -243,9 +240,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             {/* 3. Track 2 Content: DIALOGUE EDITS */}
             <div className="h-12 border-b border-border-subtle/40 relative flex items-center px-1 bg-surface-2/20">
               {dialogueCutBlocks.length === 0 ? (
-                <div className="absolute inset-0 flex items-center px-4 text-[11px] text-text-muted italic pointer-events-none">
-                  <Info className="w-3 h-3 mr-1.5 opacity-60" />
-                  <span>0 cuts &middot; Natural dialogue rhythm fully preserved</span>
+                <div className="absolute inset-0 flex items-center px-4 text-[11px] text-text-muted pointer-events-none">
+                  <span>No dialogue cuts</span>
                 </div>
               ) : (
                 dialogueCutBlocks.map((cut) => {

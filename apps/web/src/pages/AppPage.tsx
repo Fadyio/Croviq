@@ -230,7 +230,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
             setUploadStatus("uploaded");
             setUploadProgress(100);
             setActiveProductionId(finalProduction.production_id);
-            fetchProductions();
+            handleOpenProduction(finalProduction.production_id);
           } catch (err: unknown) {
             setUploadStatus("failed");
             setErrorMessage(err instanceof Error ? err.message : "Verification failed");

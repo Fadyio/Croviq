@@ -84,6 +84,54 @@ class DirectorEditorService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Production '{production_id}' must be transcribed before running editorial analysis",
             )
+        # Reuse canonical persisted work before loading memory or invoking either model.
+        existing_run = await self._editorial_repo.get_latest_editorial_run(production_id)
+        resume_proposal: EditorProposal | None = None
+        existing_activities: list[AgentActivity] = []
+        if existing_run is not None:
+            if existing_run.status == EditorialRunStatus.COMPLETED:
+                proposal = (
+                    await self._editorial_repo.get_editor_proposal(
+                        production_id, existing_run.editor_proposal_id
+                    )
+                    if existing_run.editor_proposal_id
+                    else None
+                )
+                review = (
+                    await self._editorial_repo.get_director_review(
+                        production_id, existing_run.director_review_id
+                    )
+                    if existing_run.director_review_id
+                    else None
+                )
+                if proposal is None or review is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Completed editorial run '{existing_run.run_id}' is missing persisted output",
+                    )
+                activities = await self._editorial_repo.list_activities(
+                    production_id, run_id=existing_run.run_id
+                )
+                return existing_run, proposal, review, activities
+
+            if existing_run.status in {
+                EditorialRunStatus.ANALYZING,
+                EditorialRunStatus.REVIEWING,
+            }:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Editorial run '{existing_run.run_id}' is already in progress",
+                )
+
+            if existing_run.editor_proposal_id:
+                resume_proposal = await self._editorial_repo.get_editor_proposal(
+                    production_id, existing_run.editor_proposal_id
+                )
+                if resume_proposal is not None:
+                    existing_activities = await self._editorial_repo.list_activities(
+                        production_id, run_id=existing_run.run_id
+                    )
+
 
         # 4. Load Channel Memory (profile and lessons)
         channel_profile = await self._memory_store.get_profile(prod.channel_id)
@@ -128,39 +176,48 @@ class DirectorEditorService:
             channel_id=prod.channel_id,
         )
 
-        # 6. Initialize EditorialRun
-        run_id = f"run_{uuid.uuid4().hex[:12]}"
-        run = EditorialRun(
-            run_id=run_id,
-            production_id=production_id,
-            status=EditorialRunStatus.ANALYZING,
-            started_at=datetime.now(timezone.utc),
-        )
-        await self._editorial_repo.save_editorial_run(run)
-
-        all_activities: list[AgentActivity] = []
+        # 6. Initialize a new run, or resume Maya from Leo's persisted proposal.
+        if resume_proposal is not None and existing_run is not None:
+            run = existing_run
+            run.status = EditorialRunStatus.REVIEWING
+            run.failure_code = None
+            await self._editorial_repo.save_editorial_run(run)
+            all_activities = existing_activities
+        else:
+            run_id = f"run_{uuid.uuid4().hex[:12]}"
+            run = EditorialRun(
+                run_id=run_id,
+                production_id=production_id,
+                status=EditorialRunStatus.ANALYZING,
+                started_at=datetime.now(timezone.utc),
+            )
+            await self._editorial_repo.save_editorial_run(run)
+            all_activities: list[AgentActivity] = []
 
         try:
-            # 7. Leo (Dialogue Editor) analysis pass
-            editor = LeoDialogueEditor(client=self._genai_client)
-            proposal, leo_usage, leo_activities = await editor.analyze(
-                analysis_input=analysis_input,
-                channel_profile=channel_profile,
-                lessons=lessons,
-                run_id=run_id,
-                request_id=request_id,
-            )
+            if resume_proposal is not None:
+                proposal = resume_proposal
+            else:
+                # 7. Leo (Dialogue Editor) analysis pass
+                editor = LeoDialogueEditor(client=self._genai_client)
+                proposal, leo_usage, leo_activities = await editor.analyze(
+                    analysis_input=analysis_input,
+                    channel_profile=channel_profile,
+                    lessons=lessons,
+                    run_id=run.run_id,
+                    request_id=request_id,
+                )
 
-            # Persist proposal and Leo activities
-            proposal_id = f"prop_{uuid.uuid4().hex[:12]}"
-            await self._editorial_repo.save_editor_proposal(proposal, proposal_id=proposal_id)
-            await self._editorial_repo.save_activities(leo_activities)
-            all_activities.extend(leo_activities)
+                # Persist proposal and Leo activities
+                proposal_id = f"prop_{uuid.uuid4().hex[:12]}"
+                await self._editorial_repo.save_editor_proposal(proposal, proposal_id=proposal_id)
+                await self._editorial_repo.save_activities(leo_activities)
+                all_activities.extend(leo_activities)
 
-            # 8. Update run to REVIEWING
-            run.status = EditorialRunStatus.REVIEWING
-            run.editor_proposal_id = proposal_id
-            await self._editorial_repo.save_editorial_run(run)
+                # 8. Update run to REVIEWING
+                run.status = EditorialRunStatus.REVIEWING
+                run.editor_proposal_id = proposal_id
+                await self._editorial_repo.save_editorial_run(run)
 
             # 9. Maya (Director) review pass
             director = MayaDirector(client=self._genai_client)
@@ -169,7 +226,7 @@ class DirectorEditorService:
                 proposal=proposal,
                 channel_profile=channel_profile,
                 lessons=lessons,
-                run_id=run_id,
+                run_id=run.run_id,
                 request_id=request_id,
             )
 
@@ -191,7 +248,7 @@ class DirectorEditorService:
                 model=review.model,
                 status="success",
                 production_id=production_id,
-                run_id=run_id,
+                run_id=run.run_id,
                 request_id=request_id,
             )
 
@@ -205,11 +262,11 @@ class DirectorEditorService:
 
             log_ai_event(
                 event_type=EventType.EDITORIAL_RUN_FAILED,
-                agent="leo",
+                agent="maya" if run.editor_proposal_id else "leo",
                 model="gemini-3.7-flash",
                 status="failed",
                 production_id=production_id,
-                run_id=run_id,
+                run_id=run.run_id,
                 request_id=request_id,
                 error_code=run.failure_code,
                 message=str(exc),

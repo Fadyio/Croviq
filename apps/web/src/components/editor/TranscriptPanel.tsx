@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
-import { FileText, Search, Layers, CheckCircle, Scissors, Sparkles } from "lucide-react";
+import React, { useEffect, useMemo, useRef } from "react";
+import { FileText, Layers, ShieldCheck } from "lucide-react";
 import {
   formatTimecode,
-  type Transcript,
-  type TranscriptWord,
-  type TranscriptSegment,
   type EditorDecision,
+  type Transcript,
+  type TranscriptSegment,
 } from "../../lib/edl-adapter";
 
 interface TranscriptPanelProps {
@@ -27,223 +26,174 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   onSeek,
   className = "",
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const activeWordRef = useRef<HTMLSpanElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const activeWordRef = useRef<HTMLButtonElement>(null);
+  const manualScrollUntilRef = useRef(0);
+  const programmaticScrollRef = useRef(false);
 
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [autoScroll, setAutoScroll] = useState<boolean>(true);
-
-  // Map each word index to its associated editorial decision (if any)
   const wordDecisionMap = useMemo(() => {
     const map = new Map<number, EditorDecision>();
-    for (const dec of decisions) {
-      for (let w = dec.transcript_start_word; w <= dec.transcript_end_word; w++) {
-        map.set(w, dec);
+    for (const decision of decisions) {
+      for (
+        let wordIndex = decision.transcript_start_word;
+        wordIndex <= decision.transcript_end_word;
+        wordIndex += 1
+      ) {
+        map.set(wordIndex, decision);
       }
     }
     return map;
   }, [decisions]);
 
-  // Find active word index based on currentTimeMs
   const activeWordIndex = useMemo(() => {
     if (!transcript?.words) return -1;
-    const word = transcript.words.find(
-      (w) => currentTimeMs >= w.start_ms && currentTimeMs <= w.end_ms,
+    return (
+      transcript.words.find(
+        (word) => currentTimeMs >= word.start_ms && currentTimeMs <= word.end_ms,
+      )?.index ?? -1
     );
-    return word ? word.index : -1;
   }, [currentTimeMs, transcript?.words]);
 
-  // Smoothly auto-scroll active word into view during playback
+  const transcriptSegments = useMemo<TranscriptSegment[]>(() => {
+    if (!transcript) return [];
+    if (transcript.segments?.length) return transcript.segments;
+    const words = transcript.words ?? [];
+    if (words.length === 0) return [];
+    return [
+      {
+        segment_id: "transcript",
+        start_ms: words[0].start_ms,
+        end_ms: words.at(-1)?.end_ms ?? words[0].end_ms,
+        text: words.map((word) => word.text).join(" "),
+        word_start_index: words[0].index,
+        word_end_index: words.at(-1)?.index ?? words[0].index,
+      },
+    ];
+  }, [transcript]);
+
   useEffect(() => {
-    if (!autoScroll || activeWordIndex === -1 || !activeWordRef.current) return;
-    activeWordRef.current.scrollIntoView({
-      block: "nearest",
-      behavior: "smooth",
-    });
-  }, [activeWordIndex, autoScroll]);
+    manualScrollUntilRef.current = 0;
+  }, [selectedDecisionId]);
 
-  // Filter words/segments if user searches
-  const filteredSegments = useMemo(() => {
-    if (!transcript?.segments) return [];
-    if (!searchQuery.trim()) return transcript.segments;
+  useEffect(() => {
+    const container = scrollRef.current;
+    const activeWord = activeWordRef.current;
+    if (!container || !activeWord || activeWordIndex < 0) return;
+    if (Date.now() < manualScrollUntilRef.current) return;
 
-    const q = searchQuery.toLowerCase();
-    return transcript.segments.filter((s) => s.text.toLowerCase().includes(q));
-  }, [searchQuery, transcript?.segments]);
+    const containerRect = container.getBoundingClientRect();
+    const wordRect = activeWord.getBoundingClientRect();
+    const readingTop = containerRect.top + containerRect.height * 0.18;
+    const readingBottom = containerRect.bottom - containerRect.height * 0.18;
+    if (wordRect.top >= readingTop && wordRect.bottom <= readingBottom) return;
+
+    programmaticScrollRef.current = true;
+    activeWord.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => {
+      programmaticScrollRef.current = false;
+    }, 500);
+  }, [activeWordIndex]);
 
   return (
-    <div
-      ref={containerRef}
-      className={`flex flex-col bg-surface-1 rounded-xl border border-border-subtle overflow-hidden shadow-md ${className}`}
+    <section
+      className={`flex min-h-0 flex-col border-t border-border-subtle pt-3 ${className}`}
       data-testid="transcript-panel"
     >
-      {/* Transcript Header Bar with Word Count & Search */}
-      <div className="p-3 bg-surface-2 border-b border-border-subtle flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
-          <span className="text-xs font-semibold text-text-primary tracking-tight">Transcript</span>
-          {transcript?.words && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-text-muted bg-surface-3 border border-border-subtle">
-              {transcript.words.length} words
-            </span>
-          )}
-        </div>
+      <h2 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-text-primary">
+        <FileText className="size-3.5 text-text-muted" />
+        Transcript
+      </h2>
 
-        {/* Search & Auto-scroll Toggle */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center">
-            <Search className="w-3 h-3 text-text-muted absolute left-2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search words..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-6 pr-2 py-0.5 text-[11px] rounded bg-surface-3 text-text-primary placeholder:text-text-muted border border-border-subtle focus:border-primary focus:outline-none w-28 sm:w-36"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setAutoScroll(!autoScroll)}
-            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
-              autoScroll
-                ? "bg-primary/10 text-primary border-primary/20"
-                : "bg-surface-3 text-text-muted border-border-subtle"
-            }`}
-            title="Auto-scroll transcript with playhead"
-          >
-            Auto-scroll
-          </button>
-        </div>
-      </div>
-
-      {/* Transcript Content Area */}
-      <div className="flex-1 p-3.5 overflow-y-auto max-h-[380px] space-y-3.5 text-xs leading-relaxed selection:bg-primary/25">
+      <div
+        ref={scrollRef}
+        className="max-h-[44vh] min-h-40 overflow-y-auto pr-2 text-[13px] leading-[1.72] text-text-secondary selection:bg-primary/25"
+        onScroll={() => {
+          if (!programmaticScrollRef.current) {
+            manualScrollUntilRef.current = Date.now() + 3000;
+          }
+        }}
+      >
         {!transcript ? (
-          <div className="p-8 text-center text-text-muted text-xs">Loading transcript...</div>
-        ) : filteredSegments.length === 0 ? (
-          <div className="p-8 text-center text-text-muted text-xs">
-            No matching phrases found for &ldquo;{searchQuery}&rdquo;
-          </div>
+          <p className="py-5 text-[11px] text-text-muted">Preparing transcript…</p>
+        ) : transcriptSegments.length === 0 ? (
+          <p className="py-5 text-[11px] text-text-muted">No spoken transcript available.</p>
         ) : (
-          filteredSegments.map((segment) => {
-            const segmentWords = (transcript.words || []).filter(
-              (w) => w.index >= segment.word_start_index && w.index <= segment.word_end_index,
-            );
-
-            return (
-              <div
-                key={segment.segment_id}
-                className="flex flex-col gap-1 p-2 rounded-lg bg-surface-2/40 hover:bg-surface-2/70 transition-colors border border-border-subtle/50"
-              >
-                {/* Segment Timestamp Header */}
-                <div className="flex items-center justify-between text-[10px] font-mono text-text-muted">
+          <div className="space-y-4">
+            {transcriptSegments.map((segment) => {
+              const segmentWords = (transcript.words ?? []).filter(
+                (word) =>
+                  word.index >= segment.word_start_index && word.index <= segment.word_end_index,
+              );
+              return (
+                <p key={segment.segment_id}>
                   <button
                     type="button"
+                    className="mr-2 align-baseline text-[9px] tabular-nums text-text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                     onClick={() => onSeek(segment.start_ms)}
-                    className="hover:text-primary transition-colors flex items-center gap-1 font-medium"
-                    title="Seek to sentence start"
+                    title="Seek to paragraph"
                   >
-                    <span>{formatTimecode(segment.start_ms)}</span>
+                    {formatTimecode(segment.start_ms)}
                   </button>
-                </div>
-
-                {/* Spoken Words Flow */}
-                <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-text-primary text-[12px] leading-relaxed">
                   {segmentWords.map((word) => {
+                    const decision = wordDecisionMap.get(word.index);
                     const isActive = word.index === activeWordIndex;
-                    const dec = wordDecisionMap.get(word.index);
-                    const isSelectedDec = dec && selectedDecisionId === dec.decision_id;
-                    const isDecisionStart = dec && dec.transcript_start_word === word.index;
-
-                    let wordBadge = null;
-                    if (isDecisionStart) {
-                      if (dec.decision_type === "BROLL_COVER_CANDIDATE") {
-                        wordBadge = (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectDecision(dec);
-                            }}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-medium uppercase tracking-wider bg-info/15 text-info border border-info/30 hover:bg-info/25 transition-all mr-1 align-middle"
-                            title="B-Roll Coverage Region"
-                          >
-                            <Layers className="w-2.5 h-2.5" />
-                            <span>B-Roll</span>
-                          </button>
-                        );
-                      } else if (dec.decision_type === "KEEP_FOR_CLARITY") {
-                        wordBadge = (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectDecision(dec);
-                            }}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-medium uppercase tracking-wider bg-success/15 text-success border border-success/30 hover:bg-success/25 transition-all mr-1 align-middle"
-                            title="Preserved for clarity"
-                          >
-                            <CheckCircle className="w-2.5 h-2.5" />
-                            <span>Preserved</span>
-                          </button>
-                        );
-                      } else if (dec.decision_type.startsWith("REMOVE_")) {
-                        wordBadge = (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectDecision(dec);
-                            }}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-medium uppercase tracking-wider bg-danger/15 text-danger border border-danger/30 hover:bg-danger/25 transition-all mr-1 align-middle"
-                            title="Proposed removal"
-                          >
-                            <Scissors className="w-2.5 h-2.5" />
-                            <span>Cut</span>
-                          </button>
-                        );
-                      }
-                    }
-
-                    // Word styling based on active playback state and decision annotation
-                    let wordClass = "cursor-pointer rounded px-0.5 py-0.2 transition-all ";
-                    if (isActive) {
-                      wordClass += "bg-primary text-white font-semibold shadow-sm ";
-                    } else if (isSelectedDec) {
-                      wordClass += "bg-primary/20 text-text-primary ring-1 ring-primary/40 ";
-                    } else if (dec?.decision_type === "BROLL_COVER_CANDIDATE") {
-                      wordClass += "bg-info/10 text-info/90 hover:bg-info/20 ";
-                    } else if (dec?.decision_type.startsWith("REMOVE_")) {
-                      wordClass += "line-through opacity-60 text-danger/80 hover:opacity-100 ";
-                    } else {
-                      wordClass += "hover:bg-surface-3 hover:text-text-primary ";
-                    }
+                    const isSelected = decision?.decision_id === selectedDecisionId;
+                    const isDecisionStart = decision?.transcript_start_word === word.index;
+                    const isCoverage = decision?.decision_type === "BROLL_COVER_CANDIDATE";
+                    const isProtected = decision?.decision_type === "KEEP_FOR_CLARITY";
+                    const isRemoved =
+                      decision?.decision_type.startsWith("REMOVE_") ||
+                      decision?.decision_type === "TRIM_PAUSE" ||
+                      decision?.decision_type === "TIGHTEN_EXPLANATION";
 
                     return (
-                      <React.Fragment key={`word-${word.index}`}>
-                        {wordBadge}
-                        <span
+                      <React.Fragment key={word.index}>
+                        {isDecisionStart && isCoverage && (
+                          <Layers
+                            className="mr-0.5 inline size-3 align-[-0.12em] text-info/75"
+                            aria-label="Visual coverage"
+                          />
+                        )}
+                        {isDecisionStart && isProtected && (
+                          <ShieldCheck
+                            className="mr-0.5 inline size-3 align-[-0.12em] text-success/75"
+                            aria-label="Preserved for clarity"
+                          />
+                        )}
+                        <button
                           ref={isActive ? activeWordRef : undefined}
+                          type="button"
                           onClick={() => {
                             onSeek(word.start_ms);
-                            if (dec) onSelectDecision(dec);
+                            if (decision) onSelectDecision(decision);
                           }}
-                          className={wordClass}
-                          title={`${word.text} (${formatTimecode(word.start_ms)})`}
+                          className={`rounded-[3px] px-px text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+                            isActive
+                              ? "bg-primary text-white"
+                              : isSelected
+                                ? "bg-primary/20 text-text-primary"
+                                : isRemoved
+                                  ? "text-danger/65 line-through decoration-danger/70"
+                                  : isCoverage
+                                    ? "text-text-primary underline decoration-info/55 decoration-1 underline-offset-4 hover:bg-info/10"
+                                    : isProtected
+                                      ? "text-text-primary underline decoration-success/45 decoration-dotted underline-offset-4 hover:bg-success/10"
+                                      : "hover:bg-surface-3 hover:text-text-primary"
+                          }`}
                           data-word-index={word.index}
+                          title={`${formatTimecode(word.start_ms)}${decision ? ` · ${decision.concise_reason}` : ""}`}
                         >
                           {word.text}
-                        </span>
+                        </button>{" "}
                       </React.Fragment>
                     );
                   })}
-                </div>
-              </div>
-            );
-          })
+                </p>
+              );
+            })}
+          </div>
         )}
       </div>
-    </div>
+    </section>
   );
 };

@@ -167,7 +167,29 @@ const createMockWords = (count = 314) => {
   return words;
 };
 
-const mockEditorApis = async (page: Page, options?: { customEdl?: unknown }) => {
+interface MockEditorOptions {
+  customEdl?: unknown;
+  initialState?: Partial<Record<"transcript" | "editorialRun" | "edl", boolean>>;
+  failStage?: "transcript" | "editorialRun" | "edl";
+  editorialStatus?: "analyzing" | "reviewing" | "completed" | "failed";
+  completeEditorialAfterGets?: number;
+  analyzeDelayMs?: number;
+  requests?: string[];
+}
+
+const delay = (milliseconds: number): Promise<void> => {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, milliseconds);
+  return promise;
+};
+const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
+  const state = {
+    transcript: options.initialState?.transcript ?? true,
+    editorialRun: options.initialState?.editorialRun ?? true,
+    edl: options.initialState?.edl ?? true,
+    editorialStatus: options.editorialStatus ?? "completed",
+    editorialGetCount: 0,
+  };
   const allWords = createMockWords(314);
   const segments = [
     {
@@ -284,8 +306,34 @@ const mockEditorApis = async (page: Page, options?: { customEdl?: unknown }) => 
     });
   });
 
+  await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/transcribe`, async (route) => {
+    options.requests?.push("transcribe");
+    if (options.failStage === "transcript") {
+      await route.fulfill({ status: 500, body: "transcription failed" });
+      return;
+    }
+    state.transcript = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "completed",
+        transcript_id: FAIRPHONE_TRANSCRIPT_ID,
+        production_id: FAIRPHONE_PRODUCTION_ID,
+        duration_ms: 113824,
+        word_count: 314,
+        segment_count: 2,
+        language_code: "en",
+      }),
+    });
+  });
+
   // Mock Transcript (314 words, 18 segments)
   await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/transcript`, async (route) => {
+    if (!state.transcript) {
+      await route.fulfill({ status: 404, body: "not found" });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -302,8 +350,46 @@ const mockEditorApis = async (page: Page, options?: { customEdl?: unknown }) => 
     });
   });
 
+  await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/analyze`, async (route) => {
+    options.requests?.push("analyze");
+    if (options.failStage === "editorialRun") {
+      await route.fulfill({ status: 500, body: "analysis failed" });
+      return;
+    }
+    state.editorialRun = true;
+    state.editorialStatus = "analyzing";
+    if (options.analyzeDelayMs) {
+      await delay(options.analyzeDelayMs / 4);
+      state.editorialStatus = "reviewing";
+      await delay((options.analyzeDelayMs * 3) / 4);
+    }
+    state.editorialStatus = "completed";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        run_id: FAIRPHONE_RUN_ID,
+        production_id: FAIRPHONE_PRODUCTION_ID,
+        status: "completed",
+        started_at: "2026-08-26T00:02:00Z",
+        completed_at: "2026-08-26T00:02:35Z",
+      }),
+    });
+  });
+
   // Mock Editorial Run (Leo proposals, Maya reviews, AgentActivities)
   await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/editorial-run`, async (route) => {
+    if (!state.editorialRun) {
+      await route.fulfill({ status: 404, body: "not found" });
+      return;
+    }
+    state.editorialGetCount += 1;
+    if (
+      options.completeEditorialAfterGets &&
+      state.editorialGetCount >= options.completeEditorialAfterGets
+    ) {
+      state.editorialStatus = "completed";
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -312,7 +398,7 @@ const mockEditorApis = async (page: Page, options?: { customEdl?: unknown }) => 
           run_id: FAIRPHONE_RUN_ID,
           production_id: FAIRPHONE_PRODUCTION_ID,
           transcript_id: FAIRPHONE_TRANSCRIPT_ID,
-          status: "completed",
+          status: state.editorialStatus,
           started_at: "2026-08-26T00:02:00Z",
           completed_at: "2026-08-26T00:02:35Z",
         },
@@ -419,7 +505,8 @@ const mockEditorApis = async (page: Page, options?: { customEdl?: unknown }) => 
             run_id: FAIRPHONE_RUN_ID,
             agent: "leo",
             activity_type: "editorial_proposal",
-            message: "Found a section that would benefit from visual coverage.",
+            message: "[BROLL_COVER_CANDIDATE] At 00:26.2, use close-up visual coverage.",
+            related_decision_id: "dec_002",
             created_at: "2026-08-26T00:02:15Z",
           },
           {
@@ -428,7 +515,8 @@ const mockEditorApis = async (page: Page, options?: { customEdl?: unknown }) => 
             run_id: FAIRPHONE_RUN_ID,
             agent: "maya",
             activity_type: "director_review",
-            message: "Approved. The close-up can support this section without changing dialogue.",
+            message: "[APPROVE] Approved Leo's coverage decision.",
+            related_decision_id: "dec_002",
             created_at: "2026-08-26T00:02:30Z",
           },
         ],
@@ -459,6 +547,35 @@ const mockEditorApis = async (page: Page, options?: { customEdl?: unknown }) => 
   const activeEdl = options?.customEdl || defaultFairphoneEdl;
 
   await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/edl`, async (route) => {
+    if (route.request().method() === "POST") {
+      options.requests?.push("edl");
+      if (options.failStage === "edl") {
+        await route.fulfill({ status: 500, body: "edit plan failed" });
+        return;
+      }
+      state.edl = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          edl_id: defaultFairphoneEdl.edl_id,
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          version: 1,
+          cut_count: 0,
+          coverage_marker_count: 1,
+          source_duration_ms: 113824,
+          total_removed_duration_ms: 0,
+          estimated_target_duration_ms: 113824,
+          status: "ready",
+          created_at: defaultFairphoneEdl.created_at,
+        }),
+      });
+      return;
+    }
+    if (!state.edl) {
+      await route.fulfill({ status: 404, body: "not found" });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -470,7 +587,7 @@ const mockEditorApis = async (page: Page, options?: { customEdl?: unknown }) => 
   });
 };
 
-const loginAndNavigateToEditor = async (page: Page, options?: { customEdl?: unknown }) => {
+const loginAndNavigateToEditor = async (page: Page, options: MockEditorOptions = {}) => {
   await mockFirebasePasswordSignIn(page);
   await mockEditorApis(page, options);
 
@@ -497,6 +614,136 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
+  const resumeCases = [
+    {
+      name: "runs transcript, analysis, and edit plan for a new upload",
+      initialState: { transcript: false, editorialRun: false, edl: false },
+      expected: ["transcribe", "analyze", "edl"],
+    },
+    {
+      name: "resumes at analysis when transcript already exists",
+      initialState: { transcript: true, editorialRun: false, edl: false },
+      expected: ["analyze", "edl"],
+    },
+    {
+      name: "resumes at edit plan when editorial review already exists",
+      initialState: { transcript: true, editorialRun: true, edl: false },
+      expected: ["edl"],
+    },
+    {
+      name: "makes no processing calls for a completed production",
+      initialState: { transcript: true, editorialRun: true, edl: true },
+      expected: [],
+    },
+  ] as const;
+
+  for (const resumeCase of resumeCases) {
+    test(resumeCase.name, async ({ page }) => {
+      const requests: string[] = [];
+      await loginAndNavigateToEditor(page, {
+        initialState: resumeCase.initialState,
+        requests,
+      });
+
+      if (resumeCase.expected.length > 0) {
+        await expect.poll(() => requests).toEqual(resumeCase.expected);
+      } else {
+        await page.waitForTimeout(250);
+        expect(requests).toEqual([]);
+      }
+    });
+  }
+
+  test("polls a persisted in-progress review without starting duplicate analysis", async ({
+    page,
+  }) => {
+    const requests: string[] = [];
+    await loginAndNavigateToEditor(page, {
+      initialState: { transcript: true, editorialRun: true, edl: false },
+      editorialStatus: "reviewing",
+      completeEditorialAfterGets: 3,
+      requests,
+    });
+
+    await expect(page.getByText("Maya is reviewing Leo's edit…")).toBeVisible();
+    expect(requests).toEqual([]);
+    await expect.poll(() => requests, { timeout: 4000 }).toEqual(["edl"]);
+  });
+
+  test("shows Leo and Maya only while their persisted analysis stages are active", async ({
+    page,
+  }) => {
+    await loginAndNavigateToEditor(page, {
+      initialState: { transcript: true, editorialRun: false, edl: true },
+      analyzeDelayMs: 1600,
+    });
+
+    await expect(page.getByText("Leo is reviewing the footage…")).toBeVisible();
+    await expect(page.getByTestId("agent-presence-leo")).toHaveAttribute("data-active", "true");
+    await expect(page.getByText("Maya is reviewing Leo's edit…")).toBeVisible({ timeout: 2500 });
+    await expect(page.getByTestId("agent-presence-maya")).toHaveAttribute("data-active", "true");
+    await expect(page.getByTestId("run-stage-maya-review")).toHaveAttribute(
+      "data-status",
+      "active",
+    );
+    await expect(page.getByTestId("run-stage-maya-review")).toHaveAttribute(
+      "data-status",
+      "completed",
+      { timeout: 3000 },
+    );
+  });
+
+  const failureCases = [
+    {
+      name: "transcription",
+      initialState: { transcript: false, editorialRun: false, edl: false },
+      failStage: "transcript",
+      message: "Transcription failed",
+      expectedRequests: ["transcribe", "transcribe"],
+    },
+    {
+      name: "Leo analysis",
+      initialState: { transcript: true, editorialRun: false, edl: false },
+      failStage: "editorialRun",
+      message: "Leo analysis failed",
+      expectedRequests: ["analyze", "analyze"],
+    },
+    {
+      name: "director review",
+      initialState: { transcript: true, editorialRun: true, edl: false },
+      editorialStatus: "failed",
+      failStage: "editorialRun",
+      message: "Director review failed",
+      expectedRequests: ["analyze"],
+    },
+    {
+      name: "edit plan",
+      initialState: { transcript: true, editorialRun: true, edl: false },
+      failStage: "edl",
+      message: "Edit plan failed",
+      expectedRequests: ["edl", "edl"],
+    },
+  ] as const;
+
+  for (const failureCase of failureCases) {
+    test(`${failureCase.name} failure stays in Editor and Retry invokes only that stage`, async ({
+      page,
+    }) => {
+      const requests: string[] = [];
+      await loginAndNavigateToEditor(page, {
+        initialState: failureCase.initialState,
+        editorialStatus: "editorialStatus" in failureCase ? failureCase.editorialStatus : undefined,
+        failStage: failureCase.failStage,
+        requests,
+      });
+
+      await expect(page.getByText(failureCase.message)).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/productions/${FAIRPHONE_PRODUCTION_ID}/editor`));
+      await page.getByRole("button", { name: "Retry" }).click();
+      await expect.poll(() => requests).toEqual(failureCase.expectedRequests);
+    });
+  }
+
   test("loads real Fairphone workspace with synchronized transcript, Twick timeline, and Leo/Maya activity", async ({
     page,
   }) => {
@@ -522,47 +769,72 @@ test.describe("Editor Workspace (Issue #28)", () => {
     // 1. Header Verification
     await expect(page.getByText("Fairphone 6 Plus teardown.mp4")).toBeVisible();
     await expect(page.getByRole("group", { name: "Preview Mode Selection" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Original" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Edited Preview/i })).toBeVisible();
+    const previewMode = page.getByRole("group", { name: "Preview Mode Selection" });
+    await expect(previewMode.getByRole("button", { name: "Original", exact: true })).toBeVisible();
+    await expect(previewMode.getByRole("button", { name: /Edited Preview/i })).toBeVisible();
 
     // 2. Video Stage Verification
     await expect(page.locator("[data-testid='video-stage']")).toBeVisible();
     await expect(page.locator("[data-testid='video-stage']").getByText("00:00.00")).toBeVisible();
     await expect(page.locator("[data-testid='video-stage']").getByText("01:53.82")).toBeVisible();
 
-    // 3. Twick Timeline Verification
+    // 3. Compact timeline and truthful production execution strip.
     await expect(page.locator("[data-testid='editor-timeline']")).toBeVisible();
-    await expect(page.getByText("SOURCE VIDEO", { exact: true })).toBeVisible();
-    await expect(page.getByText("DIALOGUE EDITS", { exact: true })).toBeVisible();
-    await expect(page.getByText("COVERAGE", { exact: true })).toBeVisible();
-    await expect(page.getByText("0 cuts · Natural dialogue rhythm fully preserved")).toBeVisible();
-    await expect(page.getByText("B-Roll Candidate")).toBeVisible();
+    await expect(page.getByText("Source", { exact: true })).toBeVisible();
+    await expect(page.getByText("Edits", { exact: true })).toBeVisible();
+    await expect(page.getByText("Coverage", { exact: true })).toBeVisible();
+    await expect(page.getByText("No dialogue cuts")).toBeVisible();
+    await expect(page.getByText("Natural dialogue rhythm fully preserved")).toHaveCount(0);
+    await expect(page.getByTestId("production-run-strip")).toBeVisible();
+    for (const stage of ["Uploaded", "Transcript", "Leo Edit", "Maya Review", "Edit Plan"]) {
+      await expect(
+        page.getByTestId(`run-stage-${stage.toLowerCase().replaceAll(" ", "-")}`),
+      ).toHaveAttribute("data-status", "completed");
+    }
+    await expect(page.getByTestId("run-stage-render")).toHaveAttribute("data-status", "pending");
+    await expect(page.getByTestId("run-stage-transcript")).toHaveAttribute(
+      "title",
+      "Transcript 30.0s",
+    );
+    await expect(page.getByTestId("run-stage-leo-edit")).toHaveAttribute("title", "Leo Edit 15.0s");
+    await expect(page.getByTestId("run-stage-maya-review")).toHaveAttribute(
+      "title",
+      "Maya Review 5.0s",
+    );
 
-    // 4. Transcript Panel Verification
+    // 4. Continuous transcript: no search, count badge, or segment cards.
     await expect(page.locator("[data-testid='transcript-panel']")).toBeVisible();
-    await expect(page.getByText("314 words")).toBeVisible();
+    await expect(page.getByText("314 words")).toHaveCount(0);
+    await expect(page.getByPlaceholder("Search words...")).toHaveCount(0);
+    await expect(page.locator("[data-testid='transcript-segment']")).toHaveCount(0);
     await expect(page.locator("[data-word-index='0']")).toHaveText("The");
     await expect(page.locator("[data-word-index='1']")).toHaveText("Fairphone");
-    await expect(page.getByRole("button", { name: "B-Roll" })).toBeVisible();
-    // 5. Production Team & Agent Activity Verification
-    await expect(page.locator("[data-testid='production-team']")).toBeVisible();
-    await expect(page.locator("[data-testid='agent-card-leo']")).toBeVisible();
-    await expect(page.locator("[data-testid='agent-card-maya']")).toBeVisible();
+
+    // 5. Compact agent presence and product-facing production activity.
+    await expect(page.locator("[data-testid='production-team']")).toHaveCount(0);
+    await expect(page.getByText("Autonomous Editorial Team")).toHaveCount(0);
+    await expect(page.getByText("Review Completed")).toHaveCount(0);
+    await expect(page.getByText(/editorial decisions|decisions approved/i)).toHaveCount(0);
+    await expect(page.getByTestId("agent-presence-leo")).toBeVisible();
+    await expect(page.getByTestId("agent-presence-maya")).toBeVisible();
     await expect(page.locator("[data-testid='agent-activity-feed']")).toBeVisible();
     await expect(
       page.getByText("Found a section that would benefit from visual coverage."),
     ).toBeVisible();
-    await expect(
-      page.getByText("Approved. The close-up can support this section without changing dialogue."),
-    ).toBeVisible();
-
-    // 6. Decision Inspector Verification on Selection
-    await page.getByText("B-Roll Candidate").click();
+    await expect(page.getByText("Approved Leo's edit.")).toBeVisible();
+    await expect(page.getByText(/\[(KEEP|BROLL_COVER_CANDIDATE|APPROVE)\]/)).toHaveCount(0);
+    // 6. Activity selection seeks the media and opens concise decision details.
+    await page
+      .getByRole("button", {
+        name: /Found a section that would benefit from visual coverage\. Seek to 00:26\.16/,
+      })
+      .click();
     await expect(page.locator("[data-testid='decision-inspector']")).toBeVisible();
-    await expect(page.getByText("Leo · Dialogue Proposal")).toBeVisible();
-    await expect(page.getByText("Maya · Director Verdict")).toBeVisible();
+    await expect(page.locator("[data-testid='active-coverage-overlay']")).toBeVisible();
+    await expect(page.getByText("Leo · Dialogue Editor")).toBeVisible();
+    await expect(page.getByText("Maya · Director")).toBeVisible();
     await expect(
-      page.locator("[data-testid='decision-inspector']").getByText("APPROVE"),
+      page.locator("[data-testid='decision-inspector']").getByText("Approved", { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByText(/Covering the modular plate swap with detailed close-up B-roll/i),
