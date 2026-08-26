@@ -34,10 +34,14 @@ from croviq_observability.logger import (
     log_transcription_event,
     log_media_inspect_event,
 )
-from croviq_observability.middleware import (
-    StructuredLoggingMiddleware,
-    register_error_handlers,
-)
+try:
+    from croviq_observability.middleware import (
+        StructuredLoggingMiddleware,
+        register_error_handlers,
+    )
+except ImportError:
+    StructuredLoggingMiddleware = None  # type: ignore[assignment, misc]
+    register_error_handlers = None  # type: ignore[assignment]
 from croviq_observability.redaction import redact_string, sanitize_payload
 from croviq_observability.schemas import ClientEventPayload, LogSeverity, StandardLogEvent
 

@@ -3,6 +3,13 @@
 from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
+from croviq_domain.editorial import (
+    AgentActivity,
+    DirectorReview,
+    EditorProposal,
+    EditorialRun,
+    EditorialRunStatus,
+)
 
 from croviq_domain.production import Production
 from croviq_domain.transcript import Transcript
@@ -129,4 +136,66 @@ class TranscribeProductionResponse(BaseModel):
     transcript: Transcript = Field(
         ...,
         description="Full word-aligned transcript object",
+    )
+
+
+class AnalyzeProductionResponse(BaseModel):
+    """Response returned when editorial analysis is completed."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    run_id: str = Field(
+        ...,
+        description="Unique identifier for the editorial run",
+    )
+    production_id: str = Field(
+        ...,
+        description="Associated production entity identifier",
+    )
+    status: EditorialRunStatus = Field(
+        ...,
+        description="Operational status of the run",
+    )
+    editor_proposal_id: str | None = Field(
+        default=None,
+        description="Identifier of the generated EditorProposal record",
+    )
+    director_review_id: str | None = Field(
+        default=None,
+        description="Identifier of the generated DirectorReview record",
+    )
+    started_at: datetime = Field(
+        ...,
+        description="Run start timestamp in UTC",
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        description="Run completion timestamp in UTC",
+    )
+
+
+class EditorialRunDetailResponse(BaseModel):
+    """Detailed response for inspecting an editorial run, including proposal, review, and activities."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    run: EditorialRun = Field(
+        ...,
+        description="Operational record for the editorial run",
+    )
+    proposal: EditorProposal | None = Field(
+        default=None,
+        description="Leo's structured dialogue proposal",
+    )
+    review: DirectorReview | None = Field(
+        default=None,
+        description="Maya's structured director review",
+    )
+    activities: list[AgentActivity] = Field(
+        default_factory=list,
+        description="Product-facing agent activities generated during the run",
     )

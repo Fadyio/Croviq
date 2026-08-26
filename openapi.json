@@ -602,10 +602,245 @@
           }
         }
       }
+    },
+    "/api/productions/{production_id}/analyze": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Run Director + Editor Editorial Analysis",
+        "description": "Execute Leo dialogue editing pass and Maya director review sequence using Gemini 3.7 Flash.",
+        "operationId": "analyze_production_api_productions__production_id__analyze_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeProductionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/editorial-run": {
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get Latest Editorial Run Details",
+        "description": "Retrieve the latest EditorialRun, EditorProposal, DirectorReview, and AgentActivities.",
+        "operationId": "get_editorial_run_api_productions__production_id__editorial_run_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorialRunDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AgentActivity": {
+        "properties": {
+          "activity_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Activity Id",
+            "description": "Unique identifier for the activity item"
+          },
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated production identifier"
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Run Id",
+            "description": "Associated editorial run identifier"
+          },
+          "agent": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent",
+            "description": "Agent name (e.g. Leo, Maya)"
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Role",
+            "description": "Agent role (e.g. Dialogue Editor, Director)"
+          },
+          "activity_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Activity Type",
+            "description": "Activity category (e.g. proposal, review, note, decision)"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message",
+            "description": "Clean product-facing message (no hidden chain-of-thought)"
+          },
+          "related_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Decision Id",
+            "description": "Referenced EditorDecision ID if applicable"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the activity occurred"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "activity_id",
+          "production_id",
+          "run_id",
+          "agent",
+          "role",
+          "activity_type",
+          "message"
+        ],
+        "title": "AgentActivity",
+        "description": "Product-facing persisted activity message from Maya or Leo."
+      },
+      "AnalyzeProductionResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Unique identifier for the editorial run"
+          },
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Associated production entity identifier"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EditorialRunStatus",
+            "description": "Operational status of the run"
+          },
+          "editor_proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editor Proposal Id",
+            "description": "Identifier of the generated EditorProposal record"
+          },
+          "director_review_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Director Review Id",
+            "description": "Identifier of the generated DirectorReview record"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At",
+            "description": "Run start timestamp in UTC"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "Run completion timestamp in UTC"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["run_id", "production_id", "status", "started_at"],
+        "title": "AnalyzeProductionResponse",
+        "description": "Response returned when editorial analysis is completed."
+      },
       "AuthLoginAttemptEvent": {
         "properties": {
           "event_type": {
@@ -997,6 +1232,495 @@
         "title": "CreateUploadResponse",
         "description": "Response returned upon successfully registering an upload and generating a signed PUT URL."
       },
+      "DirectorDecision": {
+        "properties": {
+          "editor_decision_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Editor Decision Id",
+            "description": "ID of the EditorDecision being reviewed"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/DirectorVerdict",
+            "description": "Verdict: APPROVE, REJECT, or MODIFY"
+          },
+          "concise_reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Concise Reason",
+            "description": "Short editorial reason for the verdict"
+          },
+          "modified_action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified Action",
+            "description": "Corrected action if verdict is MODIFY"
+          },
+          "modified_transcript_start_word": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified Transcript Start Word",
+            "description": "Corrected start word index if verdict is MODIFY"
+          },
+          "modified_transcript_end_word": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified Transcript End Word",
+            "description": "Corrected end word index if verdict is MODIFY"
+          },
+          "modified_source_start_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified Source Start Ms",
+            "description": "Corrected start time in ms if verdict is MODIFY"
+          },
+          "modified_source_end_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified Source End Ms",
+            "description": "Corrected end time in ms if verdict is MODIFY"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["editor_decision_id", "verdict", "concise_reason"],
+        "title": "DirectorDecision",
+        "description": "Director (Maya) review verdict for an individual EditorDecision."
+      },
+      "DirectorReview": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated Production entity identifier"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent",
+            "description": "Agent identifier",
+            "default": "maya"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model",
+            "description": "Model identifier used for review"
+          },
+          "overall_assessment": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Overall Assessment",
+            "description": "Director's overall assessment of Leo's proposal"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/DirectorDecision"
+            },
+            "type": "array",
+            "title": "Decisions",
+            "description": "Per-decision review verdicts"
+          },
+          "editor_feedback": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Editor Feedback",
+            "description": "Direct feedback to Leo for adjustments or approval"
+          },
+          "approved_for_edl": {
+            "type": "boolean",
+            "title": "Approved For Edl",
+            "description": "Whether the proposal is approved to proceed to EDL assembly"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Director's confidence in the review"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "production_id",
+          "model",
+          "overall_assessment",
+          "editor_feedback",
+          "approved_for_edl",
+          "confidence"
+        ],
+        "title": "DirectorReview",
+        "description": "Complete review output emitted by Director (Maya)."
+      },
+      "DirectorVerdict": {
+        "type": "string",
+        "enum": ["APPROVE", "REJECT", "MODIFY"],
+        "title": "DirectorVerdict",
+        "description": "Review verdicts issued by Director (Maya)."
+      },
+      "EditorDecision": {
+        "properties": {
+          "decision_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Decision Id",
+            "description": "Unique identifier for the decision within the proposal"
+          },
+          "decision_type": {
+            "$ref": "#/components/schemas/EditorDecisionType",
+            "description": "Semantic category of the editing decision"
+          },
+          "transcript_start_word": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transcript Start Word",
+            "description": "Canonical 0-indexed transcript start word index"
+          },
+          "transcript_end_word": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transcript End Word",
+            "description": "Canonical 0-indexed transcript end word index"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms",
+            "description": "Start time in milliseconds (derived from transcript timing)"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source End Ms",
+            "description": "End time in milliseconds (derived from transcript timing)"
+          },
+          "original_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Original Text",
+            "description": "Exact spoken text corresponding to the word interval"
+          },
+          "action": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Action",
+            "description": "Semantic action (e.g. remove, keep, trim, cover)"
+          },
+          "concise_reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Concise Reason",
+            "description": "Short editorial rationale for the suggested action"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence score for this decision"
+          },
+          "visual_context": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visual Context",
+            "description": "Visual context on screen (e.g. talking head, terminal, slides)"
+          },
+          "preserve_context": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preserve Context",
+            "description": "Surrounding context that must be preserved"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk",
+            "description": "Potential editorial or audio risk associated with the cut"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision_id",
+          "decision_type",
+          "transcript_start_word",
+          "transcript_end_word",
+          "source_start_ms",
+          "source_end_ms",
+          "original_text",
+          "action",
+          "concise_reason",
+          "confidence"
+        ],
+        "title": "EditorDecision",
+        "description": "Individual editorial decision proposed by Leo (Dialogue Editor)."
+      },
+      "EditorDecisionType": {
+        "type": "string",
+        "enum": [
+          "KEEP",
+          "REMOVE_FILLER",
+          "REMOVE_FALSE_START",
+          "REMOVE_REPETITION",
+          "TRIM_PAUSE",
+          "TIGHTEN_EXPLANATION",
+          "KEEP_FOR_CLARITY",
+          "BROLL_COVER_CANDIDATE",
+          "SHORT_CANDIDATE"
+        ],
+        "title": "EditorDecisionType",
+        "description": "Semantic action types supported by Dialogue Editor (Leo)."
+      },
+      "EditorProposal": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated Production entity identifier"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent",
+            "description": "Agent name identifier",
+            "default": "leo"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model",
+            "description": "Model identifier used for generation (e.g. gemini-3.7-flash)"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Summary",
+            "description": "High-level summary of dialogue pass findings and proposed improvements"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/EditorDecision"
+            },
+            "type": "array",
+            "title": "Decisions",
+            "description": "List of proposed editorial decisions"
+          },
+          "short_candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShortCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional Short candidate excerpt identified during analysis"
+          },
+          "overall_confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Overall Confidence",
+            "description": "Overall confidence in the proposal"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id", "model", "summary", "overall_confidence"],
+        "title": "EditorProposal",
+        "description": "Complete batch proposal emitted by Dialogue Editor (Leo)."
+      },
+      "EditorialRun": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Run Id",
+            "description": "Unique identifier for the editorial run"
+          },
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated production entity identifier"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EditorialRunStatus",
+            "description": "Current operational status of the run",
+            "default": "pending"
+          },
+          "editor_proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editor Proposal Id",
+            "description": "Identifier of the generated EditorProposal record"
+          },
+          "director_review_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Director Review Id",
+            "description": "Identifier of the generated DirectorReview record"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At",
+            "description": "Run start timestamp in UTC"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "Run completion timestamp in UTC"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code",
+            "description": "Sanitized failure code if run status is FAILED"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["run_id", "production_id"],
+        "title": "EditorialRun",
+        "description": "Operational record representing an editorial analysis run lifecycle."
+      },
+      "EditorialRunDetailResponse": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/EditorialRun",
+            "description": "Operational record for the editorial run"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditorProposal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Leo's structured dialogue proposal"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DirectorReview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Maya's structured director review"
+          },
+          "activities": {
+            "items": {
+              "$ref": "#/components/schemas/AgentActivity"
+            },
+            "type": "array",
+            "title": "Activities",
+            "description": "Product-facing agent activities generated during the run"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["run"],
+        "title": "EditorialRunDetailResponse",
+        "description": "Detailed response for inspecting an editorial run, including proposal, review, and activities."
+      },
+      "EditorialRunStatus": {
+        "type": "string",
+        "enum": ["pending", "analyzing", "reviewing", "completed", "failed"],
+        "title": "EditorialRunStatus",
+        "description": "Operational state of an editorial analysis run."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1220,6 +1944,68 @@
         "type": "string",
         "enum": ["pending", "uploading", "uploaded", "failed"],
         "title": "ProductionStatus"
+      },
+      "ShortCandidate": {
+        "properties": {
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Start timestamp in source video milliseconds"
+          },
+          "end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "End Ms",
+            "description": "End timestamp in source video milliseconds"
+          },
+          "transcript_start_word": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transcript Start Word",
+            "description": "Canonical 0-indexed transcript word start boundary"
+          },
+          "transcript_end_word": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transcript End Word",
+            "description": "Canonical 0-indexed transcript word end boundary"
+          },
+          "hook_title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Hook Title",
+            "description": "Short hook / title proposition"
+          },
+          "concise_reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Concise Reason",
+            "description": "Editorial justification for why this segment works as a standalone Short"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Model confidence score for the candidate excerpt"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start_ms",
+          "end_ms",
+          "transcript_start_word",
+          "transcript_end_word",
+          "hook_title",
+          "concise_reason",
+          "confidence"
+        ],
+        "title": "ShortCandidate",
+        "description": "Identified 20-60s candidate segment suitable for vertical Short extraction."
       },
       "SilenceInterval": {
         "properties": {

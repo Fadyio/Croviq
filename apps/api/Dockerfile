@@ -15,6 +15,7 @@ WORKDIR /app
 COPY packages/domain/ /app/packages/domain/
 COPY packages/observability/ /app/packages/observability/
 COPY packages/media/ /app/packages/media/
+COPY packages/agents/ /app/packages/agents/
 COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/
 WORKDIR /app/apps/api
 
@@ -51,6 +52,7 @@ COPY --from=builder /app/apps/api/src /app/apps/api/src
 COPY --from=builder /app/packages/domain /app/packages/domain
 COPY --from=builder /app/packages/observability /app/packages/observability
 COPY --from=builder /app/packages/media /app/packages/media
+COPY --from=builder /app/packages/agents /app/packages/agents
 RUN useradd -u 1000 -U -m -s /bin/bash appuser && \
     chown -R appuser:appuser /app
 

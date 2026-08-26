@@ -112,6 +112,18 @@ jobs:
         working-directory: packages/domain
         run: uv run pytest
 
+      - name: Run observability pytest
+        working-directory: packages/observability
+        run: uv run pytest
+
+      - name: Run media pytest
+        working-directory: packages/media
+        run: uv run pytest
+
+      - name: Run agents pytest
+        working-directory: packages/agents
+        run: uv run pytest
+
       - name: Run backend pytest
         working-directory: apps/api
         run: uv run pytest

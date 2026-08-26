@@ -21,6 +21,18 @@ from croviq_domain.channel_provider import (
     ChannelDataProvider,
     SampleChannelDataProvider,
 )
+from croviq_domain.editorial import (
+    AgentActivity,
+    DirectorDecision,
+    DirectorReview,
+    DirectorVerdict,
+    EditorDecision,
+    EditorDecisionType,
+    EditorProposal,
+    EditorialRun,
+    EditorialRunStatus,
+    ShortCandidate,
+)
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.memory import (
     ChannelLesson,
@@ -51,6 +63,16 @@ from croviq_domain.user import User
 from croviq_domain.workspace import Workspace
 
 __all__ = [
+    "AgentActivity",
+    "DirectorDecision",
+    "DirectorReview",
+    "DirectorVerdict",
+    "EditorDecision",
+    "EditorDecisionType",
+    "EditorProposal",
+    "EditorialRun",
+    "EditorialRunStatus",
+    "ShortCandidate",
     "BrandKit",
     "Channel",
     "ChannelDataProvider",

@@ -116,7 +116,9 @@ def parse_groq_transcription_response(
         raw_start_ms = parse_duration_to_ms(_get_value(raw_word, "start"))
         raw_end_ms = parse_duration_to_ms(_get_value(raw_word, "end"))
 
-        start_ms = max(raw_start_ms, previous_start_ms if previous_start_ms >= 0 else 0)
+        if previous_start_ms >= 0 and raw_start_ms < previous_start_ms:
+            raise TranscriptionError(f"Word timestamps must be monotonic (got {raw_start_ms}ms after {previous_start_ms}ms)")
+        start_ms = raw_start_ms
         end_ms = max(raw_end_ms, start_ms + 10)
 
         words.append(

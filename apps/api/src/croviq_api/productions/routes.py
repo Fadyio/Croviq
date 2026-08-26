@@ -27,9 +27,17 @@ from croviq_api.productions.transcript_repository import (
     TranscriptRepository,
     get_transcript_repository,
 )
+from croviq_api.productions.dependencies import get_editorial_service
+from croviq_api.productions.editorial_repository import (
+    EditorialRepository,
+    get_editorial_repository,
+)
+from croviq_api.productions.editorial_service import DirectorEditorService
 from croviq_api.productions.schemas import (
+    AnalyzeProductionResponse,
     CreateUploadRequest,
     CreateUploadResponse,
+    EditorialRunDetailResponse,
     ProductionListResponse,
     TranscribeProductionResponse,
 )
@@ -737,4 +745,73 @@ async def get_source_analysis_input(
         media_metadata=media_metadata,
         transcript=transcript,
         channel_id=prod.channel_id,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/analyze",
+    response_model=AnalyzeProductionResponse,
+    summary="Run Director + Editor Editorial Analysis",
+    description="Execute Leo dialogue editing pass and Maya director review sequence using Gemini 3.7 Flash.",
+)
+async def analyze_production(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    editorial_service: Annotated[DirectorEditorService, Depends(get_editorial_service)],
+) -> AnalyzeProductionResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    run, proposal, review, activities = await editorial_service.run_editorial_analysis(
+        production_id=production_id,
+        current_user=current_user,
+        request_id=request_id,
+    )
+    return AnalyzeProductionResponse(
+        run_id=run.run_id,
+        production_id=run.production_id,
+        status=run.status,
+        editor_proposal_id=run.editor_proposal_id,
+        director_review_id=run.director_review_id,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+    )
+
+
+@router.get(
+    "/productions/{production_id}/editorial-run",
+    response_model=EditorialRunDetailResponse,
+    summary="Get Latest Editorial Run Details",
+    description="Retrieve the latest EditorialRun, EditorProposal, DirectorReview, and AgentActivities.",
+)
+async def get_editorial_run(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)],
+) -> EditorialRunDetailResponse:
+    await _get_owned_production(production_id, current_user, production_repo)
+
+    run = await editorial_repo.get_latest_editorial_run(production_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No editorial run found for production '{production_id}'",
+        )
+
+    proposal = None
+    if run.editor_proposal_id:
+        proposal = await editorial_repo.get_editor_proposal(production_id, run.editor_proposal_id)
+
+    review = None
+    if run.director_review_id:
+        review = await editorial_repo.get_director_review(production_id, run.director_review_id)
+
+    activities = await editorial_repo.list_activities(production_id, run_id=run.run_id)
+
+    return EditorialRunDetailResponse(
+        run=run,
+        proposal=proposal,
+        review=review,
+        activities=activities,
     )

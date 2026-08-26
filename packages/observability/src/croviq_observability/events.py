@@ -49,10 +49,24 @@ class EventType(StrEnum):
     # Client browser events (allowlisted)
     CLIENT_ERROR = "client.error"
 
-    # Future AI / Agent events (defined for future agent & model telemetry)
+    # AI and Agent telemetry events
     AI_CALL_STARTED = "ai.call.started"
     AI_CALL_COMPLETED = "ai.call.completed"
     AI_CALL_FAILED = "ai.call.failed"
+
+    # Editor / Leo events
+    EDITOR_ANALYSIS_STARTED = "editor.analysis.started"
+    EDITOR_ANALYSIS_COMPLETED = "editor.analysis.completed"
+    EDITOR_ANALYSIS_FAILED = "editor.analysis.failed"
+
+    # Director / Maya events
+    DIRECTOR_REVIEW_STARTED = "director.review.started"
+    DIRECTOR_REVIEW_COMPLETED = "director.review.completed"
+    DIRECTOR_REVIEW_FAILED = "director.review.failed"
+
+    # Editorial Run lifecycle events
+    EDITORIAL_RUN_COMPLETED = "editorial.run.completed"
+    EDITORIAL_RUN_FAILED = "editorial.run.failed"
 
 
 # Normalized set of all standard event names

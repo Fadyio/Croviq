@@ -118,10 +118,62 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/analyze": {
+    post: {
+      responses: {
+        200: components["schemas"]["AnalyzeProductionResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/editorial-run": {
+    get: {
+      responses: {
+        200: components["schemas"]["EditorialRunDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
 }
 
 export interface components {
   schemas: {
+    AgentActivity: {
+      /** Unique identifier for the activity item */
+      activity_id: string;
+      /** Associated production identifier */
+      production_id: string;
+      /** Associated editorial run identifier */
+      run_id: string;
+      /** Agent name (e.g. Leo, Maya) */
+      agent: string;
+      /** Agent role (e.g. Dialogue Editor, Director) */
+      role: string;
+      /** Activity category (e.g. proposal, review, note, decision) */
+      activity_type: string;
+      /** Clean product-facing message (no hidden chain-of-thought) */
+      message: string;
+      /** Referenced EditorDecision ID if applicable */
+      related_decision_id?: string | null;
+      /** Timestamp when the activity occurred */
+      created_at?: string;
+    };
+    AnalyzeProductionResponse: {
+      /** Unique identifier for the editorial run */
+      run_id: string;
+      /** Associated production entity identifier */
+      production_id: string;
+      /** Operational status of the run */
+      status: components["schemas"]["EditorialRunStatus"];
+      /** Identifier of the generated EditorProposal record */
+      editor_proposal_id?: string | null;
+      /** Identifier of the generated DirectorReview record */
+      director_review_id?: string | null;
+      /** Run start timestamp in UTC */
+      started_at: string;
+      /** Run completion timestamp in UTC */
+      completed_at?: string | null;
+    };
     AuthLoginAttemptEvent: {
       event_type: "auth.login_attempt";
     };
@@ -216,6 +268,126 @@ export interface components {
       /** Timestamp when the pre-signed upload URL expires (UTC) */
       expires_at: string;
     };
+    DirectorDecision: {
+      /** ID of the EditorDecision being reviewed */
+      editor_decision_id: string;
+      /** Verdict: APPROVE, REJECT, or MODIFY */
+      verdict: components["schemas"]["DirectorVerdict"];
+      /** Short editorial reason for the verdict */
+      concise_reason: string;
+      /** Corrected action if verdict is MODIFY */
+      modified_action?: string | null;
+      /** Corrected start word index if verdict is MODIFY */
+      modified_transcript_start_word?: number | null;
+      /** Corrected end word index if verdict is MODIFY */
+      modified_transcript_end_word?: number | null;
+      /** Corrected start time in ms if verdict is MODIFY */
+      modified_source_start_ms?: number | null;
+      /** Corrected end time in ms if verdict is MODIFY */
+      modified_source_end_ms?: number | null;
+    };
+    DirectorReview: {
+      /** Associated Production entity identifier */
+      production_id: string;
+      /** Agent identifier */
+      agent?: string;
+      /** Model identifier used for review */
+      model: string;
+      /** Director's overall assessment of Leo's proposal */
+      overall_assessment: string;
+      /** Per-decision review verdicts */
+      decisions?: components["schemas"]["DirectorDecision"][];
+      /** Direct feedback to Leo for adjustments or approval */
+      editor_feedback: string;
+      /** Whether the proposal is approved to proceed to EDL assembly */
+      approved_for_edl: boolean;
+      /** Director's confidence in the review */
+      confidence: number;
+    };
+    DirectorVerdict: "APPROVE" | "REJECT" | "MODIFY";
+    EditorDecision: {
+      /** Unique identifier for the decision within the proposal */
+      decision_id: string;
+      /** Semantic category of the editing decision */
+      decision_type: components["schemas"]["EditorDecisionType"];
+      /** Canonical 0-indexed transcript start word index */
+      transcript_start_word: number;
+      /** Canonical 0-indexed transcript end word index */
+      transcript_end_word: number;
+      /** Start time in milliseconds (derived from transcript timing) */
+      source_start_ms: number;
+      /** End time in milliseconds (derived from transcript timing) */
+      source_end_ms: number;
+      /** Exact spoken text corresponding to the word interval */
+      original_text: string;
+      /** Semantic action (e.g. remove, keep, trim, cover) */
+      action: string;
+      /** Short editorial rationale for the suggested action */
+      concise_reason: string;
+      /** Confidence score for this decision */
+      confidence: number;
+      /** Visual context on screen (e.g. talking head, terminal, slides) */
+      visual_context?: string | null;
+      /** Surrounding context that must be preserved */
+      preserve_context?: string | null;
+      /** Potential editorial or audio risk associated with the cut */
+      risk?: string | null;
+    };
+    EditorDecisionType:
+      | "KEEP"
+      | "REMOVE_FILLER"
+      | "REMOVE_FALSE_START"
+      | "REMOVE_REPETITION"
+      | "TRIM_PAUSE"
+      | "TIGHTEN_EXPLANATION"
+      | "KEEP_FOR_CLARITY"
+      | "BROLL_COVER_CANDIDATE"
+      | "SHORT_CANDIDATE";
+    EditorProposal: {
+      /** Associated Production entity identifier */
+      production_id: string;
+      /** Agent name identifier */
+      agent?: string;
+      /** Model identifier used for generation (e.g. gemini-3.7-flash) */
+      model: string;
+      /** High-level summary of dialogue pass findings and proposed improvements */
+      summary: string;
+      /** List of proposed editorial decisions */
+      decisions?: components["schemas"]["EditorDecision"][];
+      /** Optional Short candidate excerpt identified during analysis */
+      short_candidate?: components["schemas"]["ShortCandidate"] | null;
+      /** Overall confidence in the proposal */
+      overall_confidence: number;
+    };
+    EditorialRun: {
+      /** Unique identifier for the editorial run */
+      run_id: string;
+      /** Associated production entity identifier */
+      production_id: string;
+      /** Current operational status of the run */
+      status?: components["schemas"]["EditorialRunStatus"];
+      /** Identifier of the generated EditorProposal record */
+      editor_proposal_id?: string | null;
+      /** Identifier of the generated DirectorReview record */
+      director_review_id?: string | null;
+      /** Run start timestamp in UTC */
+      started_at?: string;
+      /** Run completion timestamp in UTC */
+      completed_at?: string | null;
+      /** Sanitized failure code if run status is FAILED */
+      failure_code?: string | null;
+    };
+    EditorialRunDetailResponse: {
+      /** Operational record for the editorial run */
+      run: components["schemas"]["EditorialRun"];
+      /** Leo's structured dialogue proposal */
+      proposal?: components["schemas"]["EditorProposal"] | null;
+      /** Maya's structured director review */
+      review?: components["schemas"]["DirectorReview"] | null;
+      /** Product-facing agent activities generated during the run */
+      activities?: components["schemas"]["AgentActivity"][];
+    };
+    EditorialRunStatus: "pending" | "analyzing" | "reviewing" | "completed" | "failed";
     HTTPValidationError: {
       detail?: components["schemas"]["ValidationError"][];
     };
@@ -274,6 +446,22 @@ export interface components {
       total: number;
     };
     ProductionStatus: "pending" | "uploading" | "uploaded" | "failed";
+    ShortCandidate: {
+      /** Start timestamp in source video milliseconds */
+      start_ms: number;
+      /** End timestamp in source video milliseconds */
+      end_ms: number;
+      /** Canonical 0-indexed transcript word start boundary */
+      transcript_start_word: number;
+      /** Canonical 0-indexed transcript word end boundary */
+      transcript_end_word: number;
+      /** Short hook / title proposition */
+      hook_title: string;
+      /** Editorial justification for why this segment works as a standalone Short */
+      concise_reason: string;
+      /** Model confidence score for the candidate excerpt */
+      confidence: number;
+    };
     SilenceInterval: {
       /** Silence interval start offset in milliseconds */
       start_ms: number;

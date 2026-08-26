@@ -82,6 +82,12 @@ class Settings:
             "Croviq, GitHub Actions, GitHub, YAML, workflow, runner, CI/CD, Cloud Run, Terraform, Docker, Google Cloud, repository, commit, deployment",
         )
         self.groq_timeout_seconds: float = float(os.getenv("GROQ_TIMEOUT_SECONDS", "120"))
+        self.genai_backend_provider: str = os.getenv(
+            "GENAI_BACKEND_PROVIDER",
+            "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
+        )
+        self.gemini_model_id: str = os.getenv("GEMINI_MODEL_ID", "gemini-3.7-flash")
+        self.vertexai_location: str = os.getenv("VERTEXAI_LOCATION") or os.getenv("GCP_REGION", "us-central1")
 
 
 @lru_cache(maxsize=1)

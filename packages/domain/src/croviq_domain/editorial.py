@@ -1,0 +1,468 @@
+"""Canonical Editorial domain models for Leo (Dialogue Editor) and Maya (Director) agents."""
+
+from datetime import datetime, timezone
+from enum import StrEnum
+from typing import Any
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from croviq_domain.validators import validate_timezone_aware
+
+
+class EditorDecisionType(StrEnum):
+    """Semantic action types supported by Dialogue Editor (Leo)."""
+
+    KEEP = "KEEP"
+    REMOVE_FILLER = "REMOVE_FILLER"
+    REMOVE_FALSE_START = "REMOVE_FALSE_START"
+    REMOVE_REPETITION = "REMOVE_REPETITION"
+    TRIM_PAUSE = "TRIM_PAUSE"
+    TIGHTEN_EXPLANATION = "TIGHTEN_EXPLANATION"
+    KEEP_FOR_CLARITY = "KEEP_FOR_CLARITY"
+    BROLL_COVER_CANDIDATE = "BROLL_COVER_CANDIDATE"
+    SHORT_CANDIDATE = "SHORT_CANDIDATE"
+
+
+class DirectorVerdict(StrEnum):
+    """Review verdicts issued by Director (Maya)."""
+
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    MODIFY = "MODIFY"
+
+
+class EditorialRunStatus(StrEnum):
+    """Operational state of an editorial analysis run."""
+
+    PENDING = "pending"
+    ANALYZING = "analyzing"
+    REVIEWING = "reviewing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ShortCandidate(BaseModel):
+    """Identified 20-60s candidate segment suitable for vertical Short extraction."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    start_ms: int = Field(
+        ...,
+        ge=0,
+        description="Start timestamp in source video milliseconds",
+    )
+    end_ms: int = Field(
+        ...,
+        gt=0,
+        description="End timestamp in source video milliseconds",
+    )
+    transcript_start_word: int = Field(
+        ...,
+        ge=0,
+        description="Canonical 0-indexed transcript word start boundary",
+    )
+    transcript_end_word: int = Field(
+        ...,
+        ge=0,
+        description="Canonical 0-indexed transcript word end boundary",
+    )
+    hook_title: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Short hook / title proposition",
+    )
+    concise_reason: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Editorial justification for why this segment works as a standalone Short",
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Model confidence score for the candidate excerpt",
+    )
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "ShortCandidate":
+        if self.end_ms <= self.start_ms:
+            raise ValueError(f"end_ms ({self.end_ms}) must be greater than start_ms ({self.start_ms})")
+        if self.transcript_end_word < self.transcript_start_word:
+            raise ValueError(
+                f"transcript_end_word ({self.transcript_end_word}) must be >= transcript_start_word ({self.transcript_start_word})"
+            )
+        return self
+
+
+class EditorDecision(BaseModel):
+    """Individual editorial decision proposed by Leo (Dialogue Editor)."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    decision_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Unique identifier for the decision within the proposal",
+    )
+    decision_type: EditorDecisionType = Field(
+        ...,
+        description="Semantic category of the editing decision",
+    )
+    transcript_start_word: int = Field(
+        ...,
+        ge=0,
+        description="Canonical 0-indexed transcript start word index",
+    )
+    transcript_end_word: int = Field(
+        ...,
+        ge=0,
+        description="Canonical 0-indexed transcript end word index",
+    )
+    source_start_ms: int = Field(
+        ...,
+        ge=0,
+        description="Start time in milliseconds (derived from transcript timing)",
+    )
+    source_end_ms: int = Field(
+        ...,
+        ge=0,
+        description="End time in milliseconds (derived from transcript timing)",
+    )
+    original_text: str = Field(
+        ...,
+        min_length=1,
+        description="Exact spoken text corresponding to the word interval",
+    )
+    action: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Semantic action (e.g. remove, keep, trim, cover)",
+    )
+    concise_reason: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Short editorial rationale for the suggested action",
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for this decision",
+    )
+    visual_context: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Visual context on screen (e.g. talking head, terminal, slides)",
+    )
+    preserve_context: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Surrounding context that must be preserved",
+    )
+    risk: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Potential editorial or audio risk associated with the cut",
+    )
+
+    @model_validator(mode="after")
+    def validate_indexes_and_times(self) -> "EditorDecision":
+        if self.transcript_end_word < self.transcript_start_word:
+            raise ValueError(
+                f"transcript_end_word ({self.transcript_end_word}) must be >= "
+                f"transcript_start_word ({self.transcript_start_word})"
+            )
+        if self.source_end_ms < self.source_start_ms:
+            raise ValueError(
+                f"source_end_ms ({self.source_end_ms}) must be >= "
+                f"source_start_ms ({self.source_start_ms})"
+            )
+        return self
+
+
+class EditorProposal(BaseModel):
+    """Complete batch proposal emitted by Dialogue Editor (Leo)."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    production_id: str = Field(
+        ...,
+        min_length=1,
+        description="Associated Production entity identifier",
+    )
+    agent: str = Field(
+        default="leo",
+        description="Agent name identifier",
+    )
+    model: str = Field(
+        ...,
+        min_length=1,
+        description="Model identifier used for generation (e.g. gemini-3.7-flash)",
+    )
+    summary: str = Field(
+        ...,
+        min_length=1,
+        description="High-level summary of dialogue pass findings and proposed improvements",
+    )
+    decisions: list[EditorDecision] = Field(
+        default_factory=list,
+        description="List of proposed editorial decisions",
+    )
+    short_candidate: ShortCandidate | None = Field(
+        default=None,
+        description="Optional Short candidate excerpt identified during analysis",
+    )
+    overall_confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Overall confidence in the proposal",
+    )
+
+
+class DirectorDecision(BaseModel):
+    """Director (Maya) review verdict for an individual EditorDecision."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    editor_decision_id: str = Field(
+        ...,
+        min_length=1,
+        description="ID of the EditorDecision being reviewed",
+    )
+    verdict: DirectorVerdict = Field(
+        ...,
+        description="Verdict: APPROVE, REJECT, or MODIFY",
+    )
+    concise_reason: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Short editorial reason for the verdict",
+    )
+    modified_action: str | None = Field(
+        default=None,
+        max_length=50,
+        description="Corrected action if verdict is MODIFY",
+    )
+    modified_transcript_start_word: int | None = Field(
+        default=None,
+        ge=0,
+        description="Corrected start word index if verdict is MODIFY",
+    )
+    modified_transcript_end_word: int | None = Field(
+        default=None,
+        ge=0,
+        description="Corrected end word index if verdict is MODIFY",
+    )
+    modified_source_start_ms: int | None = Field(
+        default=None,
+        ge=0,
+        description="Corrected start time in ms if verdict is MODIFY",
+    )
+    modified_source_end_ms: int | None = Field(
+        default=None,
+        ge=0,
+        description="Corrected end time in ms if verdict is MODIFY",
+    )
+
+    @model_validator(mode="after")
+    def validate_modification_fields(self) -> "DirectorDecision":
+        if self.verdict == DirectorVerdict.MODIFY:
+            if (
+                self.modified_transcript_start_word is not None
+                and self.modified_transcript_end_word is not None
+                and self.modified_transcript_end_word < self.modified_transcript_start_word
+            ):
+                raise ValueError(
+                    f"modified_transcript_end_word ({self.modified_transcript_end_word}) must be >= "
+                    f"modified_transcript_start_word ({self.modified_transcript_start_word})"
+                )
+            if (
+                self.modified_source_start_ms is not None
+                and self.modified_source_end_ms is not None
+                and self.modified_source_end_ms < self.modified_source_start_ms
+            ):
+                raise ValueError(
+                    f"modified_source_end_ms ({self.modified_source_end_ms}) must be >= "
+                    f"modified_source_start_ms ({self.modified_source_start_ms})"
+                )
+        return self
+
+
+class DirectorReview(BaseModel):
+    """Complete review output emitted by Director (Maya)."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    production_id: str = Field(
+        ...,
+        min_length=1,
+        description="Associated Production entity identifier",
+    )
+    agent: str = Field(
+        default="maya",
+        description="Agent identifier",
+    )
+    model: str = Field(
+        ...,
+        min_length=1,
+        description="Model identifier used for review",
+    )
+    overall_assessment: str = Field(
+        ...,
+        min_length=1,
+        description="Director's overall assessment of Leo's proposal",
+    )
+    decisions: list[DirectorDecision] = Field(
+        default_factory=list,
+        description="Per-decision review verdicts",
+    )
+    editor_feedback: str = Field(
+        ...,
+        min_length=1,
+        description="Direct feedback to Leo for adjustments or approval",
+    )
+    approved_for_edl: bool = Field(
+        ...,
+        description="Whether the proposal is approved to proceed to EDL assembly",
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Director's confidence in the review",
+    )
+
+
+class AgentActivity(BaseModel):
+    """Product-facing persisted activity message from Maya or Leo."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    activity_id: str = Field(
+        ...,
+        min_length=1,
+        description="Unique identifier for the activity item",
+    )
+    production_id: str = Field(
+        ...,
+        min_length=1,
+        description="Associated production identifier",
+    )
+    run_id: str = Field(
+        ...,
+        min_length=1,
+        description="Associated editorial run identifier",
+    )
+    agent: str = Field(
+        ...,
+        min_length=1,
+        description="Agent name (e.g. Leo, Maya)",
+    )
+    role: str = Field(
+        ...,
+        min_length=1,
+        description="Agent role (e.g. Dialogue Editor, Director)",
+    )
+    activity_type: str = Field(
+        ...,
+        min_length=1,
+        description="Activity category (e.g. proposal, review, note, decision)",
+    )
+    message: str = Field(
+        ...,
+        min_length=1,
+        description="Clean product-facing message (no hidden chain-of-thought)",
+    )
+    related_decision_id: str | None = Field(
+        default=None,
+        description="Referenced EditorDecision ID if applicable",
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Timestamp when the activity occurred",
+    )
+
+    @field_validator("created_at", mode="after")
+    @classmethod
+    def validate_created_at(cls, v: datetime) -> datetime:
+        return validate_timezone_aware(v)
+
+
+class EditorialRun(BaseModel):
+    """Operational record representing an editorial analysis run lifecycle."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    run_id: str = Field(
+        ...,
+        min_length=1,
+        description="Unique identifier for the editorial run",
+    )
+    production_id: str = Field(
+        ...,
+        min_length=1,
+        description="Associated production entity identifier",
+    )
+    status: EditorialRunStatus = Field(
+        default=EditorialRunStatus.PENDING,
+        description="Current operational status of the run",
+    )
+    editor_proposal_id: str | None = Field(
+        default=None,
+        description="Identifier of the generated EditorProposal record",
+    )
+    director_review_id: str | None = Field(
+        default=None,
+        description="Identifier of the generated DirectorReview record",
+    )
+    started_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Run start timestamp in UTC",
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        description="Run completion timestamp in UTC",
+    )
+    failure_code: str | None = Field(
+        default=None,
+        description="Sanitized failure code if run status is FAILED",
+    )
+
+    @field_validator("started_at", "completed_at", mode="after")
+    @classmethod
+    def validate_run_datetimes(cls, v: datetime | None) -> datetime | None:
+        return validate_timezone_aware(v)
