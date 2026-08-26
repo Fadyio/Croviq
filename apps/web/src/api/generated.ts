@@ -11,135 +11,150 @@
 
 export interface paths {
   "/api/health": {
-      get: {
-        responses: {
-          200: components['schemas']['HealthResponse'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["HealthResponse"];
       };
+    };
   };
   "/api/client-events": {
-      post: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/auth/me": {
-      get: {
-        responses: {
-          200: components['schemas']['User'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["User"];
       };
+    };
   };
   "/api/auth/logout": {
-      post: {
-        responses: {
-          200: unknown;
-        };
+    post: {
+      responses: {
+        200: unknown;
       };
+    };
   };
   "/api/workspace": {
-      get: {
-        responses: {
-          200: components['schemas']['Workspace'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["Workspace"];
       };
+    };
   };
   "/api/channel/memory/profile": {
-      get: {
-        responses: {
-          200: components['schemas']['ChannelMemoryProfile']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ChannelMemoryProfile"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channel/memory/lessons": {
-      get: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/uploads": {
-      post: {
-        responses: {
-          201: components['schemas']['CreateUploadResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        201: components["schemas"]["CreateUploadResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/uploads/{upload_id}/complete": {
-      post: {
-        responses: {
-          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["Production"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions": {
-      get: {
-        responses: {
-          200: components['schemas']['ProductionListResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ProductionListResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}": {
-      get: {
-        responses: {
-          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["Production"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/transcribe": {
-      post: {
-        responses: {
-          200: components['schemas']['TranscribeProductionResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["TranscribeProductionResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/transcript": {
-      get: {
-        responses: {
-          200: components['schemas']['Transcript']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["Transcript"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/source-analysis-input": {
-      get: {
-        responses: {
-          200: components['schemas']['SourceVideoAnalysisInput']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["SourceVideoAnalysisInput"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/analyze": {
-      post: {
-        responses: {
-          200: components['schemas']['AnalyzeProductionResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["AnalyzeProductionResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/editorial-run": {
-      get: {
-        responses: {
-          200: components['schemas']['EditorialRunDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["EditorialRunDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/edl": {
-      post: {
-        responses: {
-          200: components['schemas']['AssembleEDLResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["AssembleEDLResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      get: {
-        responses: {
-          200: components['schemas']['EDLDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    get: {
+      responses: {
+        200: components["schemas"]["EDLDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/playback": {
-      get: {
-        responses: {
-          200: components['schemas']['ProductionPlaybackResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ProductionPlaybackResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
 }
 
@@ -171,7 +186,7 @@ export interface components {
       /** Associated production entity identifier */
       production_id: string;
       /** Operational status of the run */
-      status: components['schemas']['EditorialRunStatus'];
+      status: components["schemas"]["EditorialRunStatus"];
       /** Identifier of the generated EditorProposal record */
       editor_proposal_id?: string | null;
       /** Identifier of the generated DirectorReview record */
@@ -259,7 +274,7 @@ export interface components {
       /** Actionable instruction for the agent. */
       directive: string;
       /** Agent role this lesson directs (director, editor, packaging, qa). */
-      target_agent: components['schemas']['TargetAgent'];
+      target_agent: components["schemas"]["TargetAgent"];
       /** Statistical or qualitative summary of evidence supporting this directive. */
       evidence_summary: string;
       /** Confidence score for this lesson (0.0 to 1.0). */
@@ -316,7 +331,7 @@ export interface components {
       /** End timestamp in source video milliseconds */
       source_end_ms: number;
       /** Coverage category (e.g. SOURCE_SCREEN, BROLL_CANDIDATE) */
-      coverage_type: components['schemas']['CoverageType'];
+      coverage_type: components["schemas"]["CoverageType"];
       /** Editorial justification for the visual coverage */
       reason: string;
     };
@@ -351,7 +366,7 @@ export interface components {
       /** Originating Editor/Director decision identifier */
       decision_id: string;
       /** Semantic decision type (e.g. REMOVE_FILLER, REMOVE_FALSE_START, etc.) */
-      decision_type: components['schemas']['EditorDecisionType'];
+      decision_type: components["schemas"]["EditorDecisionType"];
       /** 0-indexed start word boundary in canonical transcript */
       transcript_start_word: number;
       /** 0-indexed end word boundary in canonical transcript */
@@ -373,7 +388,7 @@ export interface components {
       /** Micro-crossfade transition duration in milliseconds (canonical 20ms) */
       transition_ms?: number;
       /** Cut safety classification: SAFE, NEEDS_COVERAGE, or REJECTED_UNSAFE */
-      safety_status: components['schemas']['CutSafetyStatus'];
+      safety_status: components["schemas"]["CutSafetyStatus"];
       /** Deterministic explanation for safety status determination */
       safety_reason: string;
       /** Confidence score for this cut instruction */
@@ -388,7 +403,7 @@ export interface components {
       /** ID of the EditorDecision being reviewed */
       editor_decision_id: string;
       /** Verdict: APPROVE, REJECT, or MODIFY */
-      verdict: components['schemas']['DirectorVerdict'];
+      verdict: components["schemas"]["DirectorVerdict"];
       /** Short editorial reason for the verdict */
       concise_reason: string;
       /** Corrected action if verdict is MODIFY */
@@ -412,7 +427,7 @@ export interface components {
       /** Director's overall assessment of Leo's proposal */
       overall_assessment: string;
       /** Per-decision review verdicts */
-      decisions?: components['schemas']['DirectorDecision'][];
+      decisions?: components["schemas"]["DirectorDecision"][];
       /** Direct feedback to Leo for adjustments or approval */
       editor_feedback: string;
       /** Whether the proposal is approved to proceed to EDL assembly */
@@ -423,7 +438,7 @@ export interface components {
     DirectorVerdict: "APPROVE" | "REJECT" | "MODIFY";
     EDLDetailResponse: {
       /** Canonical EditDecisionList domain entity */
-      edl: components['schemas']['EditDecisionList'];
+      edl: components["schemas"]["EditDecisionList"];
       /** Ordered list of contiguous (start_ms, end_ms) media intervals to KEEP for master video render */
       keep_segments: unknown[][];
     };
@@ -441,9 +456,9 @@ export interface components {
       /** Monotonically increasing version number for this production's EDL */
       version?: number;
       /** Ordered list of deterministic cut instructions */
-      cuts?: components['schemas']['CutInstruction'][];
+      cuts?: components["schemas"]["CutInstruction"][];
       /** Visual coverage markers for B-roll and screen recordings */
-      coverage_markers?: components['schemas']['CoverageMarker'][];
+      coverage_markers?: components["schemas"]["CoverageMarker"][];
       /** Timestamp when the EDL was generated (UTC) */
       created_at: string;
     };
@@ -451,7 +466,7 @@ export interface components {
       /** Unique identifier for the decision within the proposal */
       decision_id: string;
       /** Semantic category of the editing decision */
-      decision_type: components['schemas']['EditorDecisionType'];
+      decision_type: components["schemas"]["EditorDecisionType"];
       /** Canonical 0-indexed transcript start word index */
       transcript_start_word: number;
       /** Canonical 0-indexed transcript end word index */
@@ -475,7 +490,16 @@ export interface components {
       /** Potential editorial or audio risk associated with the cut */
       risk?: string | null;
     };
-    EditorDecisionType: "KEEP" | "REMOVE_FILLER" | "REMOVE_FALSE_START" | "REMOVE_REPETITION" | "TRIM_PAUSE" | "TIGHTEN_EXPLANATION" | "KEEP_FOR_CLARITY" | "BROLL_COVER_CANDIDATE" | "SHORT_CANDIDATE";
+    EditorDecisionType:
+      | "KEEP"
+      | "REMOVE_FILLER"
+      | "REMOVE_FALSE_START"
+      | "REMOVE_REPETITION"
+      | "TRIM_PAUSE"
+      | "TIGHTEN_EXPLANATION"
+      | "KEEP_FOR_CLARITY"
+      | "BROLL_COVER_CANDIDATE"
+      | "SHORT_CANDIDATE";
     EditorProposal: {
       /** Associated Production entity identifier */
       production_id: string;
@@ -486,9 +510,9 @@ export interface components {
       /** High-level summary of dialogue pass findings and proposed improvements */
       summary: string;
       /** List of proposed editorial decisions */
-      decisions?: components['schemas']['EditorDecision'][];
+      decisions?: components["schemas"]["EditorDecision"][];
       /** Optional Short candidate excerpt identified during analysis */
-      short_candidate?: components['schemas']['ShortCandidate'] | null;
+      short_candidate?: components["schemas"]["ShortCandidate"] | null;
       /** Overall confidence in the proposal */
       overall_confidence: number;
     };
@@ -498,7 +522,7 @@ export interface components {
       /** Associated production entity identifier */
       production_id: string;
       /** Current operational status of the run */
-      status?: components['schemas']['EditorialRunStatus'];
+      status?: components["schemas"]["EditorialRunStatus"];
       /** Identifier of the generated EditorProposal record */
       editor_proposal_id?: string | null;
       /** Identifier of the generated DirectorReview record */
@@ -512,17 +536,17 @@ export interface components {
     };
     EditorialRunDetailResponse: {
       /** Operational record for the editorial run */
-      run: components['schemas']['EditorialRun'];
+      run: components["schemas"]["EditorialRun"];
       /** Leo's structured dialogue proposal */
-      proposal?: components['schemas']['EditorProposal'] | null;
+      proposal?: components["schemas"]["EditorProposal"] | null;
       /** Maya's structured director review */
-      review?: components['schemas']['DirectorReview'] | null;
+      review?: components["schemas"]["DirectorReview"] | null;
       /** Product-facing agent activities generated during the run */
-      activities?: components['schemas']['AgentActivity'][];
+      activities?: components["schemas"]["AgentActivity"][];
     };
     EditorialRunStatus: "pending" | "analyzing" | "reviewing" | "completed" | "failed";
     HTTPValidationError: {
-      detail?: components['schemas']['ValidationError'][];
+      detail?: components["schemas"]["ValidationError"][];
     };
     HealthResponse: {
       /** Service health status */
@@ -564,9 +588,9 @@ export interface components {
       /** Identifier of the user who owns this production */
       owner_user_id: string;
       /** Raw source media metadata associated with this production */
-      source_media?: components['schemas']['SourceMedia'] | null;
+      source_media?: components["schemas"]["SourceMedia"] | null;
       /** Current production status */
-      status?: components['schemas']['ProductionStatus'];
+      status?: components["schemas"]["ProductionStatus"];
       /** Timestamp when the production was created (UTC) */
       created_at: string;
       /** Timestamp when the production was last updated (UTC) */
@@ -574,7 +598,7 @@ export interface components {
     };
     ProductionListResponse: {
       /** List of recent Production records */
-      productions?: components['schemas']['Production'][];
+      productions?: components["schemas"]["Production"][];
       /** Total number of productions returned */
       total: number;
     };
@@ -625,7 +649,7 @@ export interface components {
       /** Target Google Cloud Storage object path */
       gcs_object: string;
       /** Upload lifecycle status */
-      status?: components['schemas']['SourceMediaStatus'];
+      status?: components["schemas"]["SourceMediaStatus"];
       /** Timestamp when the upload record was created (UTC) */
       created_at: string;
       /** Timestamp when the media upload was verified and completed (UTC) */
@@ -636,11 +660,11 @@ export interface components {
       /** Associated Production entity identifier */
       production_id: string;
       /** Source media upload metadata and GCS reference */
-      source_media: components['schemas']['SourceMedia'];
+      source_media: components["schemas"]["SourceMedia"];
       /** Deterministic FFprobe media technical parameters */
-      media_metadata: components['schemas']['MediaMetadata'];
+      media_metadata: components["schemas"]["MediaMetadata"];
       /** Word-aligned transcript with millisecond timestamps */
-      transcript: components['schemas']['Transcript'];
+      transcript: components["schemas"]["Transcript"];
       /** Associated channel identifier */
       channel_id: string;
       /** Reference identifier to ChannelMemoryProfile in Memory Bank */
@@ -663,7 +687,7 @@ export interface components {
       /** Language code used for transcription */
       language_code: string;
       /** Full word-aligned transcript object */
-      transcript: components['schemas']['Transcript'];
+      transcript: components["schemas"]["Transcript"];
     };
     Transcript: {
       /** Unique identifier for the transcript entity */
@@ -675,11 +699,11 @@ export interface components {
       /** Total duration of the audio/speech stream in milliseconds */
       duration_ms: number;
       /** Ordered list of word-level timestamped tokens */
-      words?: components['schemas']['TranscriptWord'][];
+      words?: components["schemas"]["TranscriptWord"][];
       /** Ordered list of sentence/phrase segments */
-      segments?: components['schemas']['TranscriptSegment'][];
+      segments?: components["schemas"]["TranscriptSegment"][];
       /** Identified inter-word silence intervals */
-      silence_intervals?: components['schemas']['SilenceInterval'][];
+      silence_intervals?: components["schemas"]["SilenceInterval"][];
       /** Timestamp when the transcript was generated (UTC) */
       created_at: string;
     };
@@ -742,7 +766,7 @@ export interface components {
       /** Description of the YouTube channel or production context */
       channel_description?: string | null;
       /** Workspace brand kit configuration */
-      brand_kit?: components['schemas']['BrandKit'];
+      brand_kit?: components["schemas"]["BrandKit"];
       /** Timestamp when the workspace was created (UTC) */
       created_at: string;
       /** Timestamp when the workspace was last updated (UTC) */
