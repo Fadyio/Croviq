@@ -23,6 +23,7 @@ def test_constants():
     assert "video/mp4" in ALLOWED_MEDIA_TYPES
     assert "video/quicktime" in ALLOWED_MEDIA_TYPES
     assert "video/webm" in ALLOWED_MEDIA_TYPES
+    assert "video/x-matroska" in ALLOWED_MEDIA_TYPES
 
 def test_sanitize_filename():
     assert sanitize_filename("my_video.mp4") == "my_video.mp4"
@@ -57,6 +58,14 @@ def test_validate_media_file_valid():
     )
     assert mime == "video/webm"
     assert ext == ".webm"
+
+    mime, ext = validate_media_file(
+        filename="terminal_demo.mkv",
+        content_type="video/x-matroska",
+        size_bytes=100_000_000,
+    )
+    assert mime == "video/x-matroska"
+    assert ext == ".mkv"
 
 
 def test_validate_media_file_invalid_type():

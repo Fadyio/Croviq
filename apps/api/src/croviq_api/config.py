@@ -69,10 +69,19 @@ class Settings:
         )
         self.speech_service_provider: str = os.getenv(
             "SPEECH_SERVICE_PROVIDER",
-            "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
+            "groq" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
         )
-        self.speech_location: str = os.getenv("SPEECH_LOCATION", "global")
-        self.speech_recognizer_id: str = os.getenv("SPEECH_RECOGNIZER_ID", "_")
+        self.groq_api_key: str | None = os.getenv("GROQ_API_KEY")
+        self.groq_transcription_endpoint: str = os.getenv(
+            "GROQ_TRANSCRIPTION_ENDPOINT",
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+        )
+        self.groq_transcription_model: str = os.getenv("GROQ_TRANSCRIPTION_MODEL", "whisper-large-v3")
+        self.groq_transcription_prompt: str | None = os.getenv(
+            "GROQ_TRANSCRIPTION_PROMPT",
+            "Croviq, GitHub Actions, GitHub, YAML, workflow, runner, CI/CD, Cloud Run, Terraform, Docker, Google Cloud, repository, commit, deployment",
+        )
+        self.groq_timeout_seconds: float = float(os.getenv("GROQ_TIMEOUT_SECONDS", "120"))
 
 
 @lru_cache(maxsize=1)

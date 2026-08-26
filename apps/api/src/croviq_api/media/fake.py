@@ -1,7 +1,8 @@
 """In-memory fake implementation of MediaStorage for unit testing and local development."""
 
 from datetime import datetime, timedelta, timezone
-from croviq_api.media.storage import MediaStorage, ObjectMetadata, SignedUploadTarget
+from pathlib import Path
+from croviq_api.media.storage import MediaStorage, MediaStorageError, ObjectMetadata, SignedUploadTarget
 
 
 class FakeMediaStorage(MediaStorage):
@@ -10,6 +11,7 @@ class FakeMediaStorage(MediaStorage):
     def __init__(self, base_url: str = "http://localhost:8080/fake-media-storage") -> None:
         self.base_url = base_url
         self._objects: dict[str, ObjectMetadata] = {}
+        self._contents: dict[str, bytes] = {}
 
     def simulate_uploaded_object(
         self,
@@ -17,6 +19,7 @@ class FakeMediaStorage(MediaStorage):
         object_name: str,
         size_bytes: int,
         content_type: str,
+        content: bytes | None = None,
     ) -> None:
         """Test helper to simulate an object successfully uploaded directly to storage."""
         key = f"{bucket}/{object_name}"
@@ -28,6 +31,7 @@ class FakeMediaStorage(MediaStorage):
             content_type=content_type,
             updated_at=datetime.now(timezone.utc),
         )
+        self._contents[key] = content if content is not None else b"fake private source media"
 
     async def generate_signed_upload_target(
         self,
@@ -62,6 +66,25 @@ class FakeMediaStorage(MediaStorage):
             updated_at=None,
         )
 
+    async def download_object_to_path(
+        self,
+        bucket: str,
+        object_name: str,
+        target_path: Path,
+    ) -> Path:
+        key = f"{bucket}/{object_name}"
+        content = self._contents.get(key)
+        if content is None:
+            metadata = self._objects.get(key)
+            if metadata is None:
+                content = b"fake private source media"
+            else:
+                content = b"fake private source media"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(content)
+        return target_path
+
     def clear(self) -> None:
         """Clear all stored in-memory mock objects."""
         self._objects.clear()
+        self._contents.clear()

@@ -20,6 +20,7 @@ locals {
     "certificatemanager.googleapis.com",
     "aiplatform.googleapis.com",
     "speech.googleapis.com",
+    "secretmanager.googleapis.com",
   ]
 }
 
@@ -216,6 +217,34 @@ resource "google_project_iam_member" "deployer_storage_admin" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
+# Allow the deployment service account to create Secret Manager metadata and
+# maintain the secret-level runtime IAM policy. Secret payloads are never
+# managed by Terraform.
+resource "google_project_iam_member" "deployer_secretmanager_admin" {
+  project = var.project_id
+  role    = "roles/secretmanager.admin"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Groq key metadata only. The owner creates secret versions outside Terraform.
+resource "google_secret_manager_secret" "groq_api_key" {
+  project   = var.project_id
+  secret_id = "groq-api-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_secret_manager_secret_iam_member" "api_runtime_groq_accessor" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.groq_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
 
 
 
@@ -340,6 +369,19 @@ resource "google_cloud_run_v2_service" "api" {
         value = "google"
       }
 
+      env {
+        name = "GROQ_API_KEY"
+
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.groq_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+
+
 
       startup_probe {
         http_get {
@@ -372,7 +414,9 @@ resource "google_cloud_run_v2_service" "api" {
   depends_on = [
     google_project_service.required_services,
     google_artifact_registry_repository.api_repo,
-    google_service_account.api_runtime
+    google_service_account.api_runtime,
+    google_secret_manager_secret.groq_api_key,
+    google_secret_manager_secret_iam_member.api_runtime_groq_accessor,
   ]
 
   lifecycle {
@@ -489,6 +533,10 @@ resource "google_identity_platform_config" "default" {
     }
 
     anonymous {
+      enabled = false
+    }
+
+    phone_number {
       enabled = false
     }
   }

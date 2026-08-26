@@ -2,11 +2,12 @@
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from google.cloud import storage
 import google.auth
 from google.auth.transport import requests as auth_requests
 
-from croviq_api.media.storage import MediaStorage, ObjectMetadata, SignedUploadTarget
+from croviq_api.media.storage import MediaStorage, MediaStorageError, ObjectMetadata, SignedUploadTarget
 
 
 class GoogleMediaStorage(MediaStorage):
@@ -131,3 +132,32 @@ class GoogleMediaStorage(MediaStorage):
             content_type=blob.content_type or "",
             updated_at=blob.updated,
         )
+
+    async def download_object_to_path(
+        self,
+        bucket: str,
+        object_name: str,
+        target_path: Path,
+    ) -> Path:
+        """Download a private GCS object to a local temporary file using Cloud Run identity."""
+        return await asyncio.to_thread(
+            self._download_object_to_path_sync,
+            bucket,
+            object_name,
+            target_path,
+        )
+
+    def _download_object_to_path_sync(
+        self,
+        bucket: str,
+        object_name: str,
+        target_path: Path,
+    ) -> Path:
+        client = self._get_client()
+        bucket_obj = client.bucket(bucket)
+        blob = bucket_obj.blob(object_name)
+        if not blob.exists():
+            raise MediaStorageError(f"storage object not found: gs://{bucket}/{object_name}")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        blob.download_to_filename(str(target_path))
+        return target_path

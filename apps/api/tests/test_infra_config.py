@@ -68,9 +68,60 @@ def test_api_cloud_run_has_required_production_env_vars() -> None:
     assert env_vars["MEDIA_BUCKET_NAME"] == "google_storage_bucket.media_raw.name"
 
 
+
 def test_deployer_has_serviceusage_consumer_role() -> None:
     """Assert presence of roles/serviceusage.serviceUsageConsumer IAM role for deployment service account."""
     content = get_infra_main_content()
     assert (
         'role    = "roles/serviceusage.serviceUsageConsumer"' in content
     ), "roles/serviceusage.serviceUsageConsumer missing from infra/main.tf"
+
+
+def test_identity_platform_keeps_phone_auth_disabled() -> None:
+    """Pin the deployed disabled phone-auth block so Terraform cannot remove it."""
+    content = get_infra_main_content()
+
+    identity_platform = re.search(
+        r'resource\s+"google_identity_platform_config"\s+"default"\s*{(.*?)\n}\n\n# -+',
+        content,
+        re.DOTALL,
+    )
+    assert identity_platform is not None
+    assert re.search(
+        r"phone_number\s*{\s*enabled\s*=\s*false\s*}",
+        identity_platform.group(1),
+        re.DOTALL,
+    )
+
+def test_groq_secret_manager_phase_two_injects_scoped_runtime_secret() -> None:
+    """Require the API Cloud Run service to reference Groq's latest secret version."""
+    content = get_infra_main_content()
+
+    assert '"secretmanager.googleapis.com"' in content
+    assert '"speech.googleapis.com"' in content
+    assert 'resource "google_project_iam_member" "deployer_secretmanager_admin"' in content
+    assert 'role    = "roles/secretmanager.admin"' in content
+    assert 'member  = "serviceAccount:${google_service_account.github_deployer.email}"' in content
+    secret_resource = re.search(
+        r'resource\s+"google_secret_manager_secret"\s+"groq_api_key"\s*{(.*?)\n}',
+        content,
+        re.DOTALL,
+    )
+    assert secret_resource is not None
+    assert 'secret_id = "groq-api-key"' in secret_resource.group(1)
+    assert "depends_on = [google_project_service.required_services]" in secret_resource.group(1)
+
+    assert 'resource "google_secret_manager_secret_iam_member" "api_runtime_groq_accessor"' in content
+    assert 'secret_id = google_secret_manager_secret.groq_api_key.id' in content
+    assert 'role      = "roles/secretmanager.secretAccessor"' in content
+    assert 'member    = "serviceAccount:${google_service_account.api_runtime.email}"' in content
+
+    api_service = re.search(
+        r'resource\s+"google_cloud_run_v2_service"\s+"api"\s*{(.*?)\n}\n\n# Public invoker',
+        content,
+        re.DOTALL,
+    )
+    assert api_service is not None
+    assert 'name = "GROQ_API_KEY"' in api_service.group(1)
+    assert 'secret  = google_secret_manager_secret.groq_api_key.secret_id' in api_service.group(1)
+    assert 'version = "latest"' in api_service.group(1)
