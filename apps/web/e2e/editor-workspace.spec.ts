@@ -300,8 +300,17 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
       }),
     });
   });
-  // Mock signed media video playback stream
   await page.route("**/mock-signed-video.mp4*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "video/mp4",
+      headers: {
+        "access-control-allow-origin": "*",
+      },
+      body: Buffer.from(""),
+    });
+  });
+  await page.route("**/fake-preview.mp4*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "video/mp4",
