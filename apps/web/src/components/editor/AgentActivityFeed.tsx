@@ -1,7 +1,9 @@
-import React from "react";
-import { Loader2 } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { formatTimecode } from "../../lib/edl-adapter";
 import type { AgentActivity, DirectorReview, EditorDecision } from "../../lib/edl-adapter";
+import leoAvatar from "../../assets/agents/leo.webp";
+import mayaAvatar from "../../assets/agents/maya.webp";
 
 interface AgentActivityFeedProps {
   activities?: AgentActivity[];
@@ -12,6 +14,11 @@ interface AgentActivityFeedProps {
   className?: string;
 }
 
+const avatarMap: Record<"leo" | "maya", string> = {
+  leo: leoAvatar,
+  maya: mayaAvatar,
+};
+
 const leoMessages: Partial<Record<EditorDecision["decision_type"], string>> = {
   KEEP: "Preserved this section.",
   KEEP_FOR_CLARITY: "Kept this section for technical clarity.",
@@ -21,7 +28,7 @@ const leoMessages: Partial<Record<EditorDecision["decision_type"], string>> = {
   REMOVE_REPETITION: "Removed a repeated point.",
   TRIM_PAUSE: "Tightened a pause.",
   TIGHTEN_EXPLANATION: "Tightened this explanation.",
-  SHORT_CANDIDATE: "Marked a strong standalone moment.",
+  SHORT_CANDIDATE: "Selected a strong Short candidate.",
 };
 
 const mayaMessages = {
@@ -30,33 +37,73 @@ const mayaMessages = {
   MODIFY: "Adjusted Leo's proposed edit.",
 } as const;
 
+interface PresentedItem {
+  activity: AgentActivity;
+  isLeo: boolean;
+  agentName: string;
+  message: string;
+  decision?: EditorDecision;
+  timecode?: string;
+}
+
 const presentActivity = (
   activity: AgentActivity,
   decisions: EditorDecision[],
   review: DirectorReview | null,
-): { message: string; decision?: EditorDecision } => {
+): PresentedItem => {
+  const isLeo = activity.agent.toLowerCase() === "leo";
   const decision = activity.related_decision_id
     ? decisions.find((candidate) => candidate.decision_id === activity.related_decision_id)
     : undefined;
 
-  if (activity.agent.toLowerCase() === "maya" && decision) {
+  let message = "";
+  if (!isLeo && decision) {
     const verdict = review?.decisions?.find(
       (candidate) => candidate.editor_decision_id === decision.decision_id,
     )?.verdict;
-    if (verdict) return { message: mayaMessages[verdict], decision };
+    if (verdict) message = mayaMessages[verdict];
   }
-  if (decision) {
-    return {
-      message: leoMessages[decision.decision_type] ?? "Reviewed this section.",
-      decision,
-    };
+  if (!message && decision) {
+    message = leoMessages[decision.decision_type] ?? "Reviewed this section.";
+  }
+  if (!message) {
+    message =
+      activity.message
+        .replace(/^\[[A-Z_]+\]\s*/u, "")
+        .replace(/^At \d{2}:\d{2}(?:\.\d+)?,?\s*/u, "")
+        .trim() || "Updated the production.";
   }
 
-  const sanitized = activity.message
-    .replace(/^\[[A-Z_]+\]\s*/u, "")
-    .replace(/^At \d{2}:\d{2}(?:\.\d+)?,?\s*/u, "")
-    .trim();
-  return { message: sanitized || "Updated the production." };
+  const timecode = decision ? formatTimecode(decision.source_start_ms) : undefined;
+
+  return {
+    activity,
+    isLeo,
+    agentName: isLeo ? "Leo" : "Maya",
+    message,
+    decision,
+    timecode,
+  };
+};
+
+const RowAvatar: React.FC<{ isLeo: boolean; name: string }> = ({ isLeo, name }) => {
+  const [failed, setFailed] = useState(false);
+  const src = avatarMap[isLeo ? "leo" : "maya"];
+
+  return (
+    <span
+      className={`relative z-10 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-surface-2 text-[10px] font-semibold ${
+        isLeo ? "border-primary/40 text-primary" : "border-info/40 text-info"
+      }`}
+      aria-hidden="true"
+    >
+      {src && !failed ? (
+        <img src={src} alt="" className="size-full object-cover" onError={() => setFailed(true)} />
+      ) : (
+        <span>{isLeo ? "L" : "M"}</span>
+      )}
+    </span>
+  );
 };
 
 export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
@@ -66,91 +113,119 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
   statusMessage = null,
   onSelectActivity,
   className = "",
-}) => (
-  <div className={className} data-testid="agent-activity-feed">
-    {statusMessage && (
-      <div
-        className="mb-2 flex items-center gap-2 rounded-md bg-surface-2/70 px-2.5 py-2 text-[11px] text-text-secondary"
-        role="status"
-      >
-        <Loader2 className="size-3.5 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
-        <span>{statusMessage}</span>
-      </div>
-    )}
+}) => {
+  const [showFullHistory, setShowFullHistory] = useState(false);
 
-    {activities.length === 0 && !statusMessage ? (
-      <p className="py-3 text-[11px] text-text-muted">Activity will appear as work completes.</p>
-    ) : (
-      <ol className="relative">
-        {activities.map((activity, index) => {
-          const isLeo = activity.agent.toLowerCase() === "leo";
-          const presented = presentActivity(activity, decisions, review);
-          const clickable = Boolean(presented.decision && onSelectActivity);
-          const content = (
-            <>
-              <span
-                className={`relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border bg-surface-2 text-[9px] font-semibold ${
-                  isLeo ? "border-primary/30 text-primary" : "border-info/30 text-info"
-                }`}
-                aria-hidden="true"
-              >
-                {isLeo ? "L" : "M"}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-baseline justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-text-primary">
-                    {isLeo ? "Leo" : "Maya"}
+  // Process and dedupe activities
+  const presentedItems = useMemo<PresentedItem[]>(() => {
+    const items: PresentedItem[] = [];
+    for (const act of activities) {
+      const presented = presentActivity(act, decisions, review);
+      // Dedupe identical consecutive messages for the same agent
+      const last = items.at(-1);
+      if (
+        last &&
+        last.agentName === presented.agentName &&
+        last.message === presented.message &&
+        last.timecode === presented.timecode
+      ) {
+        continue;
+      }
+      items.push(presented);
+    }
+    return items;
+  }, [activities, decisions, review]);
+
+  // Display latest 4 items by default unless expanded
+  const displayedItems = useMemo(() => {
+    if (showFullHistory || presentedItems.length <= 4) {
+      return presentedItems;
+    }
+    return presentedItems.slice(-4);
+  }, [presentedItems, showFullHistory]);
+
+  return (
+    <div className={className} data-testid="agent-activity-feed">
+      {statusMessage && (
+        <div
+          className="mb-2 flex items-center gap-2 rounded-md bg-surface-2/80 px-2.5 py-1.5 text-[11px] text-text-secondary border border-border-subtle"
+          role="status"
+        >
+          <Loader2 className="size-3.5 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
+          <span>{statusMessage}</span>
+        </div>
+      )}
+
+      {presentedItems.length === 0 && !statusMessage ? (
+        <p className="py-2 text-[11px] text-text-muted">Activity will appear as work completes.</p>
+      ) : (
+        <div className="flex flex-col">
+          <ol className="relative flex flex-col gap-2">
+            {displayedItems.map((item) => {
+              const clickable = Boolean(item.decision && onSelectActivity);
+              const content = (
+                <>
+                  <RowAvatar isLeo={item.isLeo} name={item.agentName} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-1.5">
+                      <span className="text-[11px] font-semibold text-text-primary">
+                        {item.agentName}
+                      </span>
+                      {item.timecode && (
+                        <span className="font-mono text-[9px] tabular-nums text-text-muted">
+                          {item.timecode}
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-4 text-text-secondary">
+                      {item.message}
+                    </span>
                   </span>
-                  {activity.created_at && (
-                    <time
-                      className="shrink-0 text-[9px] tabular-nums text-text-muted"
-                      dateTime={activity.created_at}
+                </>
+              );
+
+              return (
+                <li key={item.activity.activity_id} className="relative flex gap-2">
+                  {clickable ? (
+                    <button
+                      type="button"
+                      className="-mx-1 -my-0.5 flex w-[calc(100%+0.5rem)] gap-2 rounded-md p-1 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                      onClick={() => onSelectActivity?.(item.activity)}
+                      aria-label={`${item.message}${
+                        item.timecode ? ` Seek to ${item.timecode}` : ""
+                      }`}
                     >
-                      {new Date(activity.created_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </time>
+                      {content}
+                    </button>
+                  ) : (
+                    <div className="flex w-full gap-2 p-0.5">{content}</div>
                   )}
-                </span>
-                <span className="mt-0.5 block text-[11px] leading-4 text-text-secondary">
-                  {presented.message}
-                </span>
-                {presented.decision && (
-                  <span className="mt-1 block text-[9px] tabular-nums text-text-muted">
-                    {formatTimecode(presented.decision.source_start_ms)}
-                  </span>
-                )}
-              </span>
-            </>
-          );
+                </li>
+              );
+            })}
+          </ol>
 
-          return (
-            <li key={activity.activity_id} className="relative flex gap-2.5 pb-3 last:pb-0">
-              {index < activities.length - 1 && (
-                <span
-                  aria-hidden="true"
-                  className="absolute top-5 bottom-0 left-[11px] w-px bg-border-subtle"
-                />
-              )}
-              {clickable ? (
-                <button
-                  type="button"
-                  className="-m-1 flex w-[calc(100%+0.5rem)] gap-2.5 rounded-md p-1 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                  onClick={() => onSelectActivity?.(activity)}
-                  aria-label={`${presented.message} Seek to ${formatTimecode(
-                    presented.decision!.source_start_ms,
-                  )}`}
-                >
-                  {content}
-                </button>
+          {presentedItems.length > 4 && (
+            <button
+              type="button"
+              onClick={() => setShowFullHistory((h) => !h)}
+              className="mt-2 self-start text-[10px] font-medium text-text-muted hover:text-text-primary transition-colors flex items-center gap-1 py-0.5"
+            >
+              {showFullHistory ? (
+                <>
+                  <ChevronUp className="size-3" />
+                  <span>Show recent only</span>
+                </>
               ) : (
-                <div className="flex w-full gap-2.5">{content}</div>
+                <>
+                  <ChevronDown className="size-3" />
+                  <span>View run history ({presentedItems.length})</span>
+                </>
               )}
-            </li>
-          );
-        })}
-      </ol>
-    )}
-  </div>
-);
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};

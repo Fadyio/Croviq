@@ -83,8 +83,8 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
 
     const containerRect = container.getBoundingClientRect();
     const wordRect = activeWord.getBoundingClientRect();
-    const readingTop = containerRect.top + containerRect.height * 0.18;
-    const readingBottom = containerRect.bottom - containerRect.height * 0.18;
+    const readingTop = containerRect.top + containerRect.height * 0.2;
+    const readingBottom = containerRect.bottom - containerRect.height * 0.2;
     if (wordRect.top >= readingTop && wordRect.bottom <= readingBottom) return;
 
     programmaticScrollRef.current = true;
@@ -96,17 +96,19 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
 
   return (
     <section
-      className={`flex min-h-0 flex-col border-t border-border-subtle pt-3 ${className}`}
+      className={`flex flex-1 min-h-0 flex-col border-t border-border-subtle pt-2.5 overflow-hidden ${className}`}
       data-testid="transcript-panel"
     >
-      <h2 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-text-primary">
-        <FileText className="size-3.5 text-text-muted" />
-        Transcript
-      </h2>
+      <div className="mb-2 flex items-center justify-between shrink-0">
+        <h2 className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
+          <FileText className="size-3.5 text-text-muted" />
+          Transcript
+        </h2>
+      </div>
 
       <div
         ref={scrollRef}
-        className="max-h-[44vh] min-h-40 overflow-y-auto pr-2 text-[13px] leading-[1.72] text-text-secondary selection:bg-primary/25"
+        className="flex-1 min-h-0 overflow-y-auto pr-2 text-[13px] leading-[1.8] text-text-secondary selection:bg-primary/25"
         onScroll={() => {
           if (!programmaticScrollRef.current) {
             manualScrollUntilRef.current = Date.now() + 3000;
@@ -114,21 +116,21 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
         }}
       >
         {!transcript ? (
-          <p className="py-5 text-[11px] text-text-muted">Preparing transcript…</p>
+          <p className="py-4 text-[11px] text-text-muted">Preparing transcript…</p>
         ) : transcriptSegments.length === 0 ? (
-          <p className="py-5 text-[11px] text-text-muted">No spoken transcript available.</p>
+          <p className="py-4 text-[11px] text-text-muted">No spoken transcript available.</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3.5 pb-2">
             {transcriptSegments.map((segment) => {
               const segmentWords = (transcript.words ?? []).filter(
                 (word) =>
                   word.index >= segment.word_start_index && word.index <= segment.word_end_index,
               );
               return (
-                <p key={segment.segment_id}>
+                <p key={segment.segment_id} className="text-text-secondary">
                   <button
                     type="button"
-                    className="mr-2 align-baseline text-[9px] tabular-nums text-text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                    className="mr-2.5 inline-block select-none font-mono text-[10px] tabular-nums text-text-muted/80 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                     onClick={() => onSeek(segment.start_ms)}
                     title="Seek to paragraph"
                   >
@@ -167,18 +169,18 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                             onSeek(word.start_ms);
                             if (decision) onSelectDecision(decision);
                           }}
-                          className={`rounded-[3px] px-px text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+                          className={`rounded-[3px] px-0.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
                             isActive
-                              ? "bg-primary text-white"
+                              ? "bg-primary font-medium text-white shadow-sm"
                               : isSelected
                                 ? "bg-primary/20 text-text-primary"
                                 : isRemoved
-                                  ? "text-danger/65 line-through decoration-danger/70"
+                                  ? "text-danger/70 line-through decoration-danger/60 decoration-1"
                                   : isCoverage
-                                    ? "text-text-primary underline decoration-info/55 decoration-1 underline-offset-4 hover:bg-info/10"
+                                    ? "text-text-primary underline decoration-info/60 decoration-1 underline-offset-4 hover:bg-info/10"
                                     : isProtected
-                                      ? "text-text-primary underline decoration-success/45 decoration-dotted underline-offset-4 hover:bg-success/10"
-                                      : "hover:bg-surface-3 hover:text-text-primary"
+                                      ? "text-text-primary underline decoration-success/60 decoration-dotted decoration-1 underline-offset-4 hover:bg-success/10"
+                                      : "text-text-primary/90 hover:bg-surface-3 hover:text-text-primary"
                           }`}
                           data-word-index={word.index}
                           title={`${formatTimecode(word.start_ms)}${decision ? ` · ${decision.concise_reason}` : ""}`}

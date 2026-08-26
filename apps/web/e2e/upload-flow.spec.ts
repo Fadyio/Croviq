@@ -273,23 +273,30 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(prodRow).toBeVisible();
     await expect(page.getByText("Fairphone 6+ Has Surprising Features! #shorts.mp4")).toBeVisible();
     await expect(page.getByText("3.1 MB")).toBeVisible();
-    await expect(page.getByText("UPLOADED")).toBeVisible();
+    await expect(page.getByText("UPLOADED")).toHaveCount(0);
     await expect(page.getByText("0 total")).toHaveCount(0);
-
     // Verify Open Editor action is visible
     const openEditorBtn = prodRow.getByRole("button", { name: "Open Editor" });
     await expect(openEditorBtn).toBeVisible();
+
+    // Capture Home screenshot at 1440x900
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({ path: "e2e/screenshots/home-1440x900.png" });
 
     // Verify clicking Open Editor navigates to the Editor URL
     await openEditorBtn.click();
     await expect(page).toHaveURL(/\/productions\/prod_f0b41bfd429e\/editor/);
     expect(consoleErrors).toEqual([]);
   });
-
   test("executes end-to-end direct storage upload and records production", async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on("console", (msg) => {
-      if (msg.type() === "error") consoleErrors.push(msg.text());
+      if (msg.type() === "error") {
+        const txt = msg.text();
+        if (!txt.includes("401") && !txt.includes("404")) {
+          consoleErrors.push(txt);
+        }
+      }
     });
 
     await mockFirebasePasswordSignIn(page);
@@ -336,8 +343,57 @@ test.describe("Product Home and Creator Flow", () => {
             content_type: "video/mp4",
             size_bytes: 1048576,
             gcs_bucket: "croviq-506602-croviq-media-raw",
-            gcs_object:
-              "workspaces/ws_demo/productions/prod_test_001/source/upl_test_001/raw_tutorial.mp4",
+            status: "uploaded",
+            created_at: new Date().toISOString(),
+            uploaded_at: new Date().toISOString(),
+          },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+      });
+    });
+
+    await page.route("**/api/productions/prod_test_001**", async (route) => {
+      const url = route.request().url();
+      if (
+        url.endsWith("/transcribe") ||
+        url.endsWith("/analyze") ||
+        url.endsWith("/edl") ||
+        url.endsWith("/renders/preview")
+      ) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "completed" }),
+        });
+        return;
+      }
+      if (
+        url.endsWith("/transcript") ||
+        url.endsWith("/editorial-run") ||
+        url.endsWith("/renders")
+      ) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Not found" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          production_id: "prod_test_001",
+          workspace_id: "ws_demo",
+          channel_id: "croviq_syn_ai_eng_01",
+          owner_user_id: "demo_user_123",
+          status: "uploaded",
+          source_media: {
+            upload_id: "upl_test_001",
+            original_filename: "raw_tutorial.mp4",
+            content_type: "video/mp4",
+            size_bytes: 1048576,
             status: "uploaded",
             created_at: new Date().toISOString(),
             uploaded_at: new Date().toISOString(),

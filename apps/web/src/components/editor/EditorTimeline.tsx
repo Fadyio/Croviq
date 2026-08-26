@@ -29,12 +29,30 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const trackAreaRef = useRef<HTMLDivElement>(null);
 
-  // Zoom scale: pixels per second (default 8 px/sec for ~120s video in ~1000px, min 4, max 50)
-  const [zoomScale, setZoomScale] = useState<number>(10);
+  const [zoomScale, setZoomScale] = useState<number>(8);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
 
   const totalDurationSec = Math.max(1, durationMs / 1000);
-  const timelineContentWidth = Math.max(800, Math.round(totalDurationSec * zoomScale));
+
+  // Monitor available track width
+  useEffect(() => {
+    const updateWidth = () => {
+      if (trackAreaRef.current) {
+        const available = trackAreaRef.current.clientWidth;
+        setContainerWidth(available);
+      }
+    };
+    updateWidth();
+    window.addEventListener("resize", updateWidth);
+    return () => window.removeEventListener("resize", updateWidth);
+  }, []);
+
+  // Compute timeline width (at least container width so it doesn't show scrollbars when fit)
+  const timelineContentWidth = Math.max(
+    containerWidth || 600,
+    Math.round(totalDurationSec * zoomScale),
+  );
 
   // Calculate pixel position for a given millisecond time
   const msToPixels = useCallback(
@@ -58,15 +76,15 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   // Auto-fit zoom to available container width
   const handleZoomFit = () => {
     if (trackAreaRef.current) {
-      const availableWidth = trackAreaRef.current.clientWidth - 32;
-      const fitScale = Math.max(4, Math.min(40, availableWidth / totalDurationSec));
+      const availableWidth = trackAreaRef.current.clientWidth;
+      const fitScale = Math.max(2, availableWidth / totalDurationSec);
       setZoomScale(fitScale);
     }
   };
 
   // Zoom In / Out
   const handleZoomIn = () => setZoomScale((z) => Math.min(50, z * 1.3));
-  const handleZoomOut = () => setZoomScale((z) => Math.max(4, z / 1.3));
+  const handleZoomOut = () => setZoomScale((z) => Math.max(2, z / 1.3));
 
   // Scrubbing & seeking interaction
   const handleScrubStart = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -122,18 +140,18 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col bg-surface-1 rounded-xl border border-border-subtle overflow-hidden select-none shadow-md ${className}`}
+      className={`h-[220px] shrink-0 flex flex-col bg-surface-1 rounded-xl border border-border-subtle overflow-hidden select-none shadow-md ${className}`}
       data-testid="editor-timeline"
     >
       {/* Timeline Header Bar with Track Labels & Zoom Toolbar */}
-      <div className="h-10 px-4 bg-surface-2 border-b border-border-subtle flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="h-8 px-3.5 bg-surface-2 border-b border-border-subtle flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5">
           <span className="text-xs font-semibold text-text-primary tracking-tight">Timeline</span>
-          <div className="hidden sm:flex items-center gap-2 text-[11px] text-text-muted">
+          <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-text-muted">
             <span>&middot;</span>
             <span>{twickData.activeCutCount} cuts</span>
             <span>&middot;</span>
-            <span>{twickData.coverageMarkerCount} coverage region</span>
+            <span>{twickData.coverageMarkerCount} coverage</span>
           </div>
         </div>
 
@@ -170,20 +188,20 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
       </div>
 
       {/* Main Track Workspace Viewport (Left Track Headers + Right Scrollable Tracks) */}
-      <div className="flex flex-1 overflow-hidden min-h-[190px]">
-        {/* Left Track Headers Column (Fixed Width 140px) */}
-        <div className="w-28 shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col pt-7 z-10">
-          <div className="h-12 px-3 flex items-center gap-2 border-b border-border-subtle/40 text-[11px] font-medium text-text-secondary">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left Track Headers Column (Fixed Width 96px) */}
+        <div className="w-24 shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col pt-6 z-10">
+          <div className="h-10 px-2.5 flex items-center gap-1.5 border-b border-border-subtle/40 text-[11px] font-medium text-text-secondary">
             <Video className="w-3.5 h-3.5 text-text-muted shrink-0" />
             <span className="truncate">Source</span>
           </div>
 
-          <div className="h-12 px-3 flex items-center gap-2 border-b border-border-subtle/40 text-[11px] font-medium text-text-secondary">
+          <div className="h-10 px-2.5 flex items-center gap-1.5 border-b border-border-subtle/40 text-[11px] font-medium text-text-secondary">
             <Scissors className="w-3.5 h-3.5 text-primary shrink-0" />
             <span className="truncate">Edits</span>
           </div>
 
-          <div className="h-12 px-3 flex items-center gap-2 text-[11px] font-medium text-text-secondary">
+          <div className="h-10 px-2.5 flex items-center gap-1.5 text-[11px] font-medium text-text-secondary">
             <Layers className="w-3.5 h-3.5 text-info shrink-0" />
             <span className="truncate">Coverage</span>
           </div>
@@ -202,8 +220,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             className="relative h-full flex flex-col"
             style={{ width: `${timelineContentWidth}px` }}
           >
-            {/* 1. Time Ruler Bar (Top 28px) */}
-            <div className="h-7 border-b border-border-subtle bg-surface-2/60 relative">
+            {/* 1. Time Ruler Bar (Top 24px) */}
+            <div className="h-6 border-b border-border-subtle bg-surface-2/60 relative shrink-0">
               {rulerTicks.map((tickSec) => {
                 const tickPx = msToPixels(tickSec * 1000);
                 return (
@@ -212,17 +230,17 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                     className="absolute top-0 bottom-0 flex flex-col justify-between pointer-events-none"
                     style={{ left: `${tickPx}px` }}
                   >
-                    <span className="text-[10px] font-mono text-text-muted pl-1 select-none">
+                    <span className="text-[9px] font-mono text-text-muted pl-1 select-none">
                       {formatTimecode(tickSec * 1000).substring(0, 5)}
                     </span>
-                    <div className="w-px h-1.5 bg-border-strong" />
+                    <div className="w-px h-1 bg-border-strong" />
                   </div>
                 );
               })}
             </div>
 
-            {/* 2. Track 1 Content: SOURCE VIDEO (Continuous Bar) */}
-            <div className="h-12 border-b border-border-subtle/40 relative flex items-center px-1">
+            {/* 2. Track 1 Content: SOURCE VIDEO (Continuous Bar without label) */}
+            <div className="h-10 border-b border-border-subtle/40 relative flex items-center px-1 shrink-0">
               {sourceBlocks.map((block) => (
                 <div
                   key={block.id}
@@ -230,17 +248,15 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                     e.stopPropagation();
                     onSelectBlock(block);
                   }}
-                  className="absolute top-1.5 bottom-1.5 left-1 right-1 rounded bg-surface-3 border border-border-strong/60 flex items-center px-3 text-[11px] text-text-muted font-medium cursor-pointer hover:border-primary/40 transition-colors"
-                >
-                  <span>Continuous Source Recording</span>
-                </div>
+                  className="absolute top-1 bottom-1 left-1 right-1 rounded bg-surface-3/80 border border-border-strong/50 flex items-center px-3 cursor-pointer hover:border-primary/40 transition-colors"
+                />
               ))}
             </div>
 
             {/* 3. Track 2 Content: DIALOGUE EDITS */}
-            <div className="h-12 border-b border-border-subtle/40 relative flex items-center px-1 bg-surface-2/20">
+            <div className="h-10 border-b border-border-subtle/40 relative flex items-center px-1 bg-surface-2/20 shrink-0">
               {dialogueCutBlocks.length === 0 ? (
-                <div className="absolute inset-0 flex items-center px-4 text-[11px] text-text-muted pointer-events-none">
+                <div className="absolute inset-0 flex items-center px-3 text-[11px] text-text-muted pointer-events-none">
                   <span>No dialogue cuts</span>
                 </div>
               ) : (
@@ -256,7 +272,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                         e.stopPropagation();
                         onSelectBlock(cut);
                       }}
-                      className={`absolute top-1.5 bottom-1.5 rounded cursor-pointer transition-all flex items-center justify-center px-2 text-[10px] font-mono font-medium truncate ${
+                      className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center justify-center px-1.5 text-[10px] font-mono font-medium truncate ${
                         cut.type === "cut-safe"
                           ? "bg-danger/25 border border-danger/60 text-danger hover:bg-danger/35"
                           : cut.type === "cut-needs-coverage"
@@ -274,7 +290,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             </div>
 
             {/* 4. Track 3 Content: COVERAGE */}
-            <div className="h-12 relative flex items-center px-1">
+            <div className="h-10 relative flex items-center px-1 shrink-0">
               {coverageBlocks.map((cov) => {
                 const leftPx = msToPixels(cov.startMs);
                 const widthPx = Math.max(16, msToPixels(cov.endMs) - leftPx);
@@ -288,9 +304,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                       e.stopPropagation();
                       onSelectBlock(cov);
                     }}
-                    className={`absolute top-1.5 bottom-1.5 rounded cursor-pointer transition-all flex items-center gap-1.5 px-2.5 text-[11px] font-medium ${
+                    className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center gap-1.5 px-2 text-[10px] font-medium ${
                       cov.type === "coverage-broll"
-                        ? "bg-info/20 border border-info/60 text-info hover:bg-info/30"
+                        ? "bg-info/25 border border-info/70 text-info hover:bg-info/35"
                         : "bg-surface-3 border border-border-strong text-text-secondary hover:bg-surface-3/80"
                     } ${isSelected ? "ring-2 ring-primary shadow-lg" : ""} ${
                       isCurrentActive ? "ring-1 ring-info animate-pulse" : ""
@@ -300,7 +316,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                   >
                     <Layers className="w-3 h-3 shrink-0" />
                     <span className="truncate font-semibold">{cov.label}</span>
-                    <span className="hidden md:inline text-[10px] text-text-muted font-mono shrink-0">
+                    <span className="hidden md:inline text-[9px] text-text-muted font-mono shrink-0">
                       ({((cov.endMs - cov.startMs) / 1000).toFixed(1)}s)
                     </span>
                   </div>
@@ -314,7 +330,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               style={{ left: `${playheadPx}px` }}
             >
               {/* Playhead Handle Needle */}
-              <div className="w-3.5 h-3.5 bg-primary text-white rounded-sm -translate-x-[6px] -translate-y-1 rotate-45 flex items-center justify-center shadow-md" />
+              <div className="w-3 h-3 bg-primary text-white rounded-sm -translate-x-[5px] -translate-y-0.5 rotate-45 flex items-center justify-center shadow-md" />
             </div>
           </div>
         </div>
