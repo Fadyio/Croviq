@@ -12,6 +12,7 @@ from croviq_api.productions.repository import ProductionRepository
 from croviq_api.productions.transcript_repository import TranscriptRepository
 from croviq_domain.editorial import EditorialRunStatus
 from croviq_domain.edl import EditDecisionList, derive_keep_segments
+from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.production import SourceMediaStatus
 from croviq_domain.user import User
 from croviq_media.cut_safety import CutSafetyAnalyzer, assemble_edl_from_review
