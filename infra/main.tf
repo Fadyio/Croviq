@@ -146,6 +146,13 @@ resource "google_project_iam_member" "deployer_serviceusage_viewer" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
+# Allow deployment service account to consume Google Cloud services for Terraform state refresh and provisioning
+resource "google_project_iam_member" "deployer_serviceusage_consumer" {
+  project = var.project_id
+  role    = "roles/serviceusage.serviceUsageConsumer"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 # Allow deployment service account to inspect service accounts for Terraform state refresh
 resource "google_project_iam_member" "deployer_iam_viewer" {
   project = var.project_id
