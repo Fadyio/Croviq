@@ -195,18 +195,18 @@ class FirestoreEditorialRepository(EditorialRepository):
             docs = list(coll_ref.stream())
             latency_ms = (time.perf_counter() - start_time) * 1000
             if not docs:
-                log_firestore_event("read", "editorial_runs", None, status="success", latency_ms=latency_ms)
+                log_firestore_event("firestore.read", "editorial_runs", "query", status=200, latency_ms=latency_ms)
                 return None
             data = docs[0].to_dict()
             data["run_id"] = docs[0].id
             data["started_at"] = parse_datetime(data.get("started_at"))
             if data.get("completed_at"):
                 data["completed_at"] = parse_datetime(data["completed_at"])
-            log_firestore_event("read", "editorial_runs", docs[0].id, status="success", latency_ms=latency_ms)
+            log_firestore_event("firestore.read", "editorial_runs", "query", document_id=docs[0].id, status=200, latency_ms=latency_ms)
             return EditorialRun.model_validate(data)
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("read", "editorial_runs", None, status="failed", latency_ms=latency_ms, error=str(exc))
+            log_firestore_event("firestore.error", "editorial_runs", "query", status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
 
     async def get_editorial_run_by_id(self, production_id: str, run_id: str) -> EditorialRun | None:
@@ -217,18 +217,18 @@ class FirestoreEditorialRepository(EditorialRepository):
             doc = doc_ref.get()
             latency_ms = (time.perf_counter() - start_time) * 1000
             if not doc.exists:
-                log_firestore_event("read", "editorial_runs", run_id, status="success", latency_ms=latency_ms)
+                log_firestore_event("firestore.read", "editorial_runs", "get", document_id=run_id, status=404, latency_ms=latency_ms)
                 return None
             data = doc.to_dict() or {}
             data["run_id"] = doc.id
             data["started_at"] = parse_datetime(data.get("started_at"))
             if data.get("completed_at"):
                 data["completed_at"] = parse_datetime(data["completed_at"])
-            log_firestore_event("read", "editorial_runs", run_id, status="success", latency_ms=latency_ms)
+            log_firestore_event("firestore.read", "editorial_runs", "get", document_id=run_id, status=200, latency_ms=latency_ms)
             return EditorialRun.model_validate(data)
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("read", "editorial_runs", run_id, status="failed", latency_ms=latency_ms, error=str(exc))
+            log_firestore_event("firestore.error", "editorial_runs", "get", document_id=run_id, status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
 
     async def save_editorial_run(self, run: EditorialRun) -> EditorialRun:
@@ -239,11 +239,11 @@ class FirestoreEditorialRepository(EditorialRepository):
         try:
             doc_ref.set(payload, merge=True)
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("write", "editorial_runs", run.run_id, status="success", latency_ms=latency_ms)
+            log_firestore_event("firestore.write", "editorial_runs", "set", document_id=run.run_id, status=200, latency_ms=latency_ms)
             return run
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("write", "editorial_runs", run.run_id, status="failed", latency_ms=latency_ms, error=str(exc))
+            log_firestore_event("firestore.error", "editorial_runs", "set", document_id=run.run_id, status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
 
     async def get_editor_proposal(self, production_id: str, proposal_id: str) -> EditorProposal | None:
@@ -254,14 +254,14 @@ class FirestoreEditorialRepository(EditorialRepository):
             doc = doc_ref.get()
             latency_ms = (time.perf_counter() - start_time) * 1000
             if not doc.exists:
-                log_firestore_event("read", "editor_proposals", proposal_id, status="success", latency_ms=latency_ms)
+                log_firestore_event("firestore.read", "editor_proposals", "get", document_id=proposal_id, status=404, latency_ms=latency_ms)
                 return None
             data = doc.to_dict() or {}
-            log_firestore_event("read", "editor_proposals", proposal_id, status="success", latency_ms=latency_ms)
+            log_firestore_event("firestore.read", "editor_proposals", "get", document_id=proposal_id, status=200, latency_ms=latency_ms)
             return EditorProposal.model_validate(data)
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("read", "editor_proposals", proposal_id, status="failed", latency_ms=latency_ms, error=str(exc))
+            log_firestore_event("firestore.error", "editor_proposals", "get", document_id=proposal_id, status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
 
     async def save_editor_proposal(self, proposal: EditorProposal, proposal_id: str | None = None) -> str:
@@ -274,11 +274,11 @@ class FirestoreEditorialRepository(EditorialRepository):
         try:
             doc_ref.set(payload)
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("write", "editor_proposals", pid, status="success", latency_ms=latency_ms)
+            log_firestore_event("firestore.write", "editor_proposals", "create", document_id=pid, status=201, latency_ms=latency_ms)
             return pid
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("write", "editor_proposals", pid, status="failed", latency_ms=latency_ms, error=str(exc))
+            log_firestore_event("firestore.error", "editor_proposals", "create", document_id=pid, status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
 
     async def get_director_review(self, production_id: str, review_id: str) -> DirectorReview | None:
@@ -289,14 +289,14 @@ class FirestoreEditorialRepository(EditorialRepository):
             doc = doc_ref.get()
             latency_ms = (time.perf_counter() - start_time) * 1000
             if not doc.exists:
-                log_firestore_event("read", "director_reviews", review_id, status="success", latency_ms=latency_ms)
+                log_firestore_event("firestore.read", "director_reviews", "get", document_id=review_id, status=404, latency_ms=latency_ms)
                 return None
             data = doc.to_dict() or {}
-            log_firestore_event("read", "director_reviews", review_id, status="success", latency_ms=latency_ms)
+            log_firestore_event("firestore.read", "director_reviews", "get", document_id=review_id, status=200, latency_ms=latency_ms)
             return DirectorReview.model_validate(data)
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("read", "director_reviews", review_id, status="failed", latency_ms=latency_ms, error=str(exc))
+            log_firestore_event("firestore.error", "director_reviews", "get", document_id=review_id, status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
 
     async def save_director_review(self, review: DirectorReview, review_id: str | None = None) -> str:
@@ -309,11 +309,11 @@ class FirestoreEditorialRepository(EditorialRepository):
         try:
             doc_ref.set(payload)
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("write", "director_reviews", rid, status="success", latency_ms=latency_ms)
+            log_firestore_event("firestore.write", "director_reviews", "create", document_id=rid, status=201, latency_ms=latency_ms)
             return rid
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("write", "director_reviews", rid, status="failed", latency_ms=latency_ms, error=str(exc))
+            log_firestore_event("firestore.error", "director_reviews", "create", document_id=rid, status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
 
     async def list_activities(
@@ -335,11 +335,11 @@ class FirestoreEditorialRepository(EditorialRepository):
                 data["activity_id"] = doc.id
                 data["created_at"] = parse_datetime(data.get("created_at"))
                 activities.append(AgentActivity.model_validate(data))
-            log_firestore_event("read", "agent_activities", None, status="success", latency_ms=latency_ms)
+            log_firestore_event("firestore.read", "agent_activities", "query", status=200, latency_ms=latency_ms)
             return activities
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("read", "agent_activities", None, status="failed", latency_ms=latency_ms, error=str(exc))
+            log_firestore_event("firestore.error", "agent_activities", "query", status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
 
     async def save_activities(self, activities: list[AgentActivity]) -> None:
@@ -360,12 +360,11 @@ class FirestoreEditorialRepository(EditorialRepository):
         try:
             batch.commit()
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("write", "agent_activities", f"batch_{len(activities)}", status="success", latency_ms=latency_ms)
+            log_firestore_event("firestore.write", "agent_activities", "batch_set", document_id=f"batch_{len(activities)}", status=200, latency_ms=latency_ms)
         except Exception as exc:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("write", "agent_activities", None, status="failed", latency_ms=latency_ms, error=str(exc))
+            log_firestore_event("firestore.error", "agent_activities", "batch_set", status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
-
 
 _global_editorial_repo: EditorialRepository | None = None
 

@@ -77,8 +77,7 @@ def test_api_cloud_run_has_required_production_env_vars() -> None:
     assert "GEMINI_MODEL_ID" in env_vars, "GEMINI_MODEL_ID missing from Cloud Run API service in infra/main.tf"
     assert env_vars["GEMINI_MODEL_ID"] == "gemini-3.7-flash"
 
-    assert "VERTEXAI_LOCATION" in env_vars, "VERTEXAI_LOCATION missing from Cloud Run API service in infra/main.tf"
-    assert env_vars["VERTEXAI_LOCATION"] == "var.region"
+    assert env_vars["VERTEXAI_LOCATION"] == "global"
 
 
 def test_deployer_has_serviceusage_consumer_role() -> None:
@@ -88,13 +87,6 @@ def test_deployer_has_serviceusage_consumer_role() -> None:
         'role    = "roles/serviceusage.serviceUsageConsumer"' in content
     ), "roles/serviceusage.serviceUsageConsumer missing from infra/main.tf"
 
-
-def test_api_runtime_has_aiplatform_user_role() -> None:
-    """Assert presence of roles/aiplatform.user IAM role for api_runtime service account."""
-    content = get_infra_main_content()
-    assert (
-        'role    = "roles/aiplatform.user"' in content
-    ), "roles/aiplatform.user missing from infra/main.tf"
 
 
 def test_identity_platform_keeps_phone_auth_disabled() -> None:

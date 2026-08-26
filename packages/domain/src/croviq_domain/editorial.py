@@ -56,7 +56,7 @@ class ShortCandidate(BaseModel):
     )
     end_ms: int = Field(
         ...,
-        gt=0,
+        ge=0,
         description="End timestamp in source video milliseconds",
     )
     transcript_start_word: int = Field(
