@@ -466,6 +466,13 @@ resource "google_project_iam_member" "api_runtime_aiplatform_memory_user" {
   member  = "serviceAccount:${google_service_account.api_runtime.email}"
 }
 
+# Allow API runtime service account to invoke Vertex AI models (Gemini 3.5 Transcribe & Gemini 3.7 Flash)
+resource "google_project_iam_member" "api_runtime_aiplatform_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
 # Allow API runtime service account to sign V4 GCS upload URLs via IAM Credentials API (least privilege on itself)
 resource "google_service_account_iam_member" "api_runtime_token_creator" {
   service_account_id = google_service_account.api_runtime.name
