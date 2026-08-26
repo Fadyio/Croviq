@@ -7,7 +7,9 @@
   "paths": {
     "/api/health": {
       "get": {
-        "tags": ["Health"],
+        "tags": [
+          "Health"
+        ],
         "summary": "Service Health Check",
         "operationId": "health_check_api_health_get",
         "responses": {
@@ -26,7 +28,9 @@
     },
     "/api/client-events": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Record Sanitized Client Authentication Event",
         "description": "Record a constrained client auth event without accepting sensitive payloads.",
         "operationId": "record_client_auth_event_api_client_events_post",
@@ -89,7 +93,9 @@
     },
     "/api/auth/me": {
       "get": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Get Current Authenticated User",
         "description": "Retrieve the canonical User profile derived from verified identity.",
         "operationId": "get_me_api_auth_me_get",
@@ -114,7 +120,9 @@
     },
     "/api/auth/logout": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Record User Logout",
         "description": "Record client-side logout activity and emit operational audit log.",
         "operationId": "logout_api_auth_logout_post",
@@ -138,7 +146,9 @@
     },
     "/api/workspace": {
       "get": {
-        "tags": ["Workspaces"],
+        "tags": [
+          "Workspaces"
+        ],
         "summary": "Get or Provision Default Workspace",
         "description": "Retrieve the default workspace belonging to the verified creator. If none exists, creates exactly one default Workspace idempotently.",
         "operationId": "get_or_provision_default_workspace_api_workspace_get",
@@ -163,7 +173,9 @@
     },
     "/api/channel/memory/profile": {
       "get": {
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "summary": "Retrieve Channel Memory Profile",
         "description": "Retrieve the canonical structured ChannelMemoryProfile from Memory Bank.",
         "operationId": "get_channel_memory_profile_api_channel_memory_profile_get",
@@ -212,7 +224,9 @@
     },
     "/api/channel/memory/lessons": {
       "get": {
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "summary": "Retrieve Channel Lessons",
         "description": "Retrieve active ChannelLessons scoped to a channel, optionally filtered by target agent.",
         "operationId": "get_channel_lessons_api_channel_memory_lessons_get",
@@ -280,6 +294,198 @@
           }
         }
       }
+    },
+    "/api/uploads": {
+      "post": {
+        "tags": [
+          "Productions & Uploads"
+        ],
+        "summary": "Initiate Direct GCS Media Upload",
+        "description": "Registers an upload session, creates a pending Production record, and returns a short-lived V4 signed PUT URL for direct browser-to-GCS upload.",
+        "operationId": "create_upload_api_uploads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/uploads/{upload_id}/complete": {
+      "post": {
+        "tags": [
+          "Productions & Uploads"
+        ],
+        "summary": "Verify and Complete Media Upload",
+        "description": "Verifies the uploaded object in GCS (existence, size, content type) and transitions the Production to uploaded.",
+        "operationId": "complete_upload_api_uploads__upload_id__complete_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Upload Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Production"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions": {
+      "get": {
+        "tags": [
+          "Productions & Uploads"
+        ],
+        "summary": "List Recent Productions",
+        "description": "Retrieve a list of recent content productions belonging to the creator's workspace.",
+        "operationId": "list_productions_api_productions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductionListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}": {
+      "get": {
+        "tags": [
+          "Productions & Uploads"
+        ],
+        "summary": "Get Production by ID",
+        "description": "Retrieve a single Production record by its identifier.",
+        "operationId": "get_production_api_productions__production_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Production"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -294,7 +500,9 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["event_type"],
+        "required": [
+          "event_type"
+        ],
         "title": "AuthLoginAttemptEvent"
       },
       "AuthLoginFailedEvent": {
@@ -308,7 +516,10 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["invalid_credentials", "demo_access_restricted"]
+                "enum": [
+                  "invalid_credentials",
+                  "demo_access_restricted"
+                ]
               },
               {
                 "type": "null"
@@ -319,7 +530,9 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["event_type"],
+        "required": [
+          "event_type"
+        ],
         "title": "AuthLoginFailedEvent"
       },
       "BrandKit": {
@@ -380,19 +593,25 @@
             "type": "string",
             "title": "Lesson Id",
             "description": "Unique identifier for the lesson.",
-            "examples": ["lsn_early_demo_01"]
+            "examples": [
+              "lsn_early_demo_01"
+            ]
           },
           "channel_id": {
             "type": "string",
             "title": "Channel Id",
             "description": "Channel identifier scope.",
-            "examples": ["croviq_syn_ai_eng_01"]
+            "examples": [
+              "croviq_syn_ai_eng_01"
+            ]
           },
           "directive": {
             "type": "string",
             "title": "Directive",
             "description": "Actionable instruction for the agent.",
-            "examples": ["Reach the first concrete demonstration before 00:30."]
+            "examples": [
+              "Reach the first concrete demonstration before 00:30."
+            ]
           },
           "target_agent": {
             "$ref": "#/components/schemas/TargetAgent",
@@ -412,7 +631,9 @@
             "minimum": 0.0,
             "title": "Confidence",
             "description": "Confidence score for this lesson (0.0 to 1.0).",
-            "examples": [0.92]
+            "examples": [
+              0.92
+            ]
           },
           "status": {
             "type": "string",
@@ -445,13 +666,17 @@
             "type": "string",
             "title": "Channel Id",
             "description": "Canonical channel identifier used as memory scope.",
-            "examples": ["croviq_syn_ai_eng_01"]
+            "examples": [
+              "croviq_syn_ai_eng_01"
+            ]
           },
           "channel_name": {
             "type": "string",
             "title": "Channel Name",
             "description": "Display name of the channel.",
-            "examples": ["AI Engineering & Agent Systems"]
+            "examples": [
+              "AI Engineering & Agent Systems"
+            ]
           },
           "primary_topics": {
             "items": {
@@ -460,7 +685,13 @@
             "type": "array",
             "title": "Primary Topics",
             "description": "Top subject-matter domains covered by the channel.",
-            "examples": [["AI Agents", "LLM Systems", "DevOps & CI/CD"]]
+            "examples": [
+              [
+                "AI Agents",
+                "LLM Systems",
+                "DevOps & CI/CD"
+              ]
+            ]
           },
           "content_pillars": {
             "items": {
@@ -469,7 +700,13 @@
             "type": "array",
             "title": "Content Pillars",
             "description": "Core content themes and recurring series pillars.",
-            "examples": [["Agent Architecture", "Production Deployment", "Emerging AI Releases"]]
+            "examples": [
+              [
+                "Agent Architecture",
+                "Production Deployment",
+                "Emerging AI Releases"
+              ]
+            ]
           },
           "language": {
             "type": "string",
@@ -484,7 +721,15 @@
             "type": "array",
             "title": "Audience Geographies",
             "description": "Top audience geography ISO country codes ordered by viewership volume.",
-            "examples": [["US", "IN", "GB", "CA", "DE"]]
+            "examples": [
+              [
+                "US",
+                "IN",
+                "GB",
+                "CA",
+                "DE"
+              ]
+            ]
           },
           "audience_characteristics": {
             "items": {
@@ -494,7 +739,11 @@
             "title": "Audience Characteristics",
             "description": "Key audience behavioral and demographic attributes.",
             "examples": [
-              ["Software Engineers", "DevOps / SRE Practitioners", "High desktop viewing share"]
+              [
+                "Software Engineers",
+                "DevOps / SRE Practitioners",
+                "High desktop viewing share"
+              ]
             ]
           },
           "historical_baselines": {
@@ -512,7 +761,12 @@
             "type": "array",
             "title": "High Performing Formats",
             "description": "Video formats demonstrating above-average performance.",
-            "examples": [["agent_build", "deep_dive"]]
+            "examples": [
+              [
+                "agent_build",
+                "deep_dive"
+              ]
+            ]
           },
           "weak_formats": {
             "items": {
@@ -521,7 +775,11 @@
             "type": "array",
             "title": "Weak Formats",
             "description": "Video formats demonstrating below-average performance.",
-            "examples": [["tutorial"]]
+            "examples": [
+              [
+                "tutorial"
+              ]
+            ]
           },
           "recurring_retention_patterns": {
             "items": {
@@ -555,7 +813,10 @@
           }
         },
         "type": "object",
-        "required": ["channel_id", "channel_name"],
+        "required": [
+          "channel_id",
+          "channel_name"
+        ],
         "title": "ChannelMemoryProfile",
         "description": "Canonical structured memory profile for a channel stored in Memory Bank."
       },
@@ -591,8 +852,109 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["event_type"],
+        "required": [
+          "event_type"
+        ],
         "title": "ClientErrorEvent"
+      },
+      "CreateUploadRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename",
+            "description": "Original name of the video file to upload",
+            "examples": [
+              "github_actions_tutorial.mp4"
+            ]
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "description": "MIME content type of the video file (e.g. video/mp4, video/quicktime, video/webm)",
+            "examples": [
+              "video/mp4"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Size Bytes",
+            "description": "Declared size of the file in bytes (must be <= 2 GB)",
+            "examples": [
+              104857600
+            ]
+          },
+          "channel_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Channel Id",
+            "description": "Canonical channel identifier for this production (e.g. croviq_syn_ai_eng_01)",
+            "examples": [
+              "croviq_syn_ai_eng_01"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "filename",
+          "content_type",
+          "size_bytes",
+          "channel_id"
+        ],
+        "title": "CreateUploadRequest",
+        "description": "Request payload to initiate a direct GCS media upload."
+      },
+      "CreateUploadResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Unique identifier of the created Production record"
+          },
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id",
+            "description": "Unique identifier of the source media upload"
+          },
+          "upload_url": {
+            "type": "string",
+            "title": "Upload Url",
+            "description": "Pre-signed V4 Google Cloud Storage PUT URL for direct browser upload"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "description": "HTTP method to use when uploading media directly to storage",
+            "default": "PUT"
+          },
+          "required_headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Required Headers",
+            "description": "Required HTTP headers (such as Content-Type) to send with the upload request"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At",
+            "description": "Timestamp when the pre-signed upload URL expires (UTC)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "production_id",
+          "upload_id",
+          "upload_url",
+          "expires_at"
+        ],
+        "title": "CreateUploadResponse",
+        "description": "Response returned upon successfully registering an upload and generating a signed PUT URL."
       },
       "HTTPValidationError": {
         "properties": {
@@ -628,12 +990,207 @@
           }
         },
         "type": "object",
-        "required": ["git_sha"],
+        "required": [
+          "git_sha"
+        ],
         "title": "HealthResponse"
+      },
+      "Production": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Unique production identifier"
+          },
+          "workspace_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Workspace Id",
+            "description": "Workspace tenant identifier"
+          },
+          "channel_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Channel Id",
+            "description": "Associated YouTube or Sample Channel identifier"
+          },
+          "owner_user_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Owner User Id",
+            "description": "Identifier of the user who owns this production"
+          },
+          "source_media": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceMedia"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw source media metadata associated with this production"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProductionStatus",
+            "description": "Current production status",
+            "default": "pending"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the production was created (UTC)"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp when the production was last updated (UTC)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "production_id",
+          "workspace_id",
+          "channel_id",
+          "owner_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Production",
+        "description": "Canonical Production model representing a content production lifecycle."
+      },
+      "ProductionListResponse": {
+        "properties": {
+          "productions": {
+            "items": {
+              "$ref": "#/components/schemas/Production"
+            },
+            "type": "array",
+            "title": "Productions",
+            "description": "List of recent Production records"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of productions returned"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "total"
+        ],
+        "title": "ProductionListResponse",
+        "description": "Response returned when listing recent productions."
+      },
+      "ProductionStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "uploading",
+          "uploaded",
+          "failed"
+        ],
+        "title": "ProductionStatus"
+      },
+      "SourceMedia": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Upload Id",
+            "description": "Unique upload identifier"
+          },
+          "original_filename": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Original Filename",
+            "description": "Original user-provided filename"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "description": "MIME content type of the media file"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Size Bytes",
+            "description": "Declared or verified size of the media file in bytes"
+          },
+          "gcs_bucket": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Gcs Bucket",
+            "description": "Target Google Cloud Storage bucket name"
+          },
+          "gcs_object": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Gcs Object",
+            "description": "Target Google Cloud Storage object path"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SourceMediaStatus",
+            "description": "Upload lifecycle status",
+            "default": "pending"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the upload record was created (UTC)"
+          },
+          "uploaded_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uploaded At",
+            "description": "Timestamp when the media upload was verified and completed (UTC)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "upload_id",
+          "original_filename",
+          "content_type",
+          "size_bytes",
+          "gcs_bucket",
+          "gcs_object",
+          "created_at"
+        ],
+        "title": "SourceMedia",
+        "description": "Canonical SourceMedia model representing raw uploaded video metadata."
+      },
+      "SourceMediaStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "uploading",
+          "uploaded",
+          "failed"
+        ],
+        "title": "SourceMediaStatus"
       },
       "TargetAgent": {
         "type": "string",
-        "enum": ["director", "editor", "packaging", "qa"],
+        "enum": [
+          "director",
+          "editor",
+          "packaging",
+          "qa"
+        ],
         "title": "TargetAgent"
       },
       "User": {
@@ -683,7 +1240,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["user_id", "email", "display_name", "created_at", "updated_at"],
+        "required": [
+          "user_id",
+          "email",
+          "display_name",
+          "created_at",
+          "updated_at"
+        ],
         "title": "User",
         "description": "Canonical User identity model for Croviq."
       },
@@ -720,7 +1283,11 @@
           }
         },
         "type": "object",
-        "required": ["loc", "msg", "type"],
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
         "title": "ValidationError"
       },
       "Workspace": {
@@ -774,7 +1341,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["workspace_id", "owner_user_id", "name", "created_at", "updated_at"],
+        "required": [
+          "workspace_id",
+          "owner_user_id",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
         "title": "Workspace",
         "description": "Canonical Workspace tenant container model for Croviq."
       }

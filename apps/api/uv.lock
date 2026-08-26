@@ -308,6 +308,7 @@ dependencies = [
     { name = "firebase-admin" },
     { name = "google-api-core" },
     { name = "google-cloud-aiplatform" },
+    { name = "google-cloud-storage" },
     { name = "pydantic" },
     { name = "uvicorn" },
 ]
@@ -327,6 +328,7 @@ requires-dist = [
     { name = "firebase-admin", specifier = ">=7.5.0" },
     { name = "google-api-core", specifier = "<2.35.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.111.0" },
+    { name = "google-cloud-storage", specifier = ">=2.18.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "uvicorn", specifier = ">=0.34.0" },
 ]

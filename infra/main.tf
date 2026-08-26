@@ -11,6 +11,7 @@ locals {
     "artifactregistry.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "storage.googleapis.com",
     "sts.googleapis.com",
     "serviceusage.googleapis.com",
     "identitytoolkit.googleapis.com",
@@ -200,6 +201,13 @@ resource "google_project_iam_member" "deployer_aiplatform_user" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
+# Allow deployment service account to administer GCS storage buckets for Terraform
+resource "google_project_iam_member" "deployer_storage_admin" {
+  project = var.project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 
 
 
@@ -314,6 +322,16 @@ resource "google_cloud_run_v2_service" "api" {
         value = "google"
       }
 
+      env {
+        name  = "MEDIA_BUCKET_NAME"
+        value = google_storage_bucket.media_raw.name
+      }
+
+      env {
+        name  = "MEDIA_STORAGE_PROVIDER"
+        value = "google"
+      }
+
 
       startup_probe {
         http_get {
@@ -381,6 +399,55 @@ resource "google_project_iam_member" "api_runtime_aiplatform_memory_user" {
   project = var.project_id
   role    = "roles/aiplatform.memoryUser"
   member  = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
+# Allow API runtime service account to sign V4 GCS upload URLs via IAM Credentials API (least privilege on itself)
+resource "google_service_account_iam_member" "api_runtime_token_creator" {
+  service_account_id = google_service_account.api_runtime.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
+# -----------------------------------------------------------------------------
+# 7a. Private Media Storage Bucket & Bucket-Level IAM
+# -----------------------------------------------------------------------------
+
+resource "google_storage_bucket" "media_raw" {
+  project                     = var.project_id
+  name                        = "${var.project_id}-croviq-media-raw"
+  location                    = var.region
+  storage_class               = "STANDARD"
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = false
+
+  cors {
+    origin          = ["https://${var.app_domain}", "http://localhost:5173", "http://127.0.0.1:5173"]
+    method          = ["PUT", "OPTIONS", "HEAD"]
+    response_header = ["*"]
+    max_age_seconds = 3600
+  }
+
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+# Allow API runtime service account to create objects via signed upload URLs on the media bucket
+resource "google_storage_bucket_iam_member" "api_runtime_media_creator" {
+  bucket = google_storage_bucket.media_raw.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
+# Allow API runtime service account to inspect uploaded object metadata on the media bucket
+resource "google_storage_bucket_iam_member" "api_runtime_media_viewer" {
+  bucket = google_storage_bucket.media_raw.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.api_runtime.email}"
 }
 
 # -----------------------------------------------------------------------------

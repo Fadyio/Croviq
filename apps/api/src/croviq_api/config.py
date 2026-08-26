@@ -52,6 +52,18 @@ class Settings:
         self.memory_bank_id: str = os.getenv("MEMORY_BANK_ID", "croviq-channel-memory")
         self.memory_store_provider: str = os.getenv("MEMORY_STORE_PROVIDER", "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake")
         self.allowed_emails: list[str] = parse_allowed_emails(os.getenv("CROVIQ_ALLOWED_EMAILS"))
+        self.media_bucket_name: str = os.getenv("MEDIA_BUCKET_NAME") or (
+            f"{self.gcp_project_id}-croviq-media-raw" if self.gcp_project_id else "croviq-media-raw"
+        )
+        self.media_storage_provider: str = os.getenv(
+            "MEDIA_STORAGE_PROVIDER",
+            "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
+        )
+        self.signed_url_expiry_seconds: int = int(os.getenv("SIGNED_URL_EXPIRY_SECONDS", "1800"))
+        self.max_upload_size_bytes: int = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(2 * 1024 * 1024 * 1024)))
+        self.api_runtime_service_account: str | None = os.getenv("API_RUNTIME_SERVICE_ACCOUNT") or (
+            f"croviq-api-runtime@{self.gcp_project_id}.iam.gserviceaccount.com" if self.gcp_project_id else None
+        )
 
 
 @lru_cache(maxsize=1)

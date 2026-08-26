@@ -30,6 +30,7 @@ from croviq_observability.logger import (
     log_workspace_event,
     log_memory_event,
     set_logger,
+    log_upload_event,
 )
 from croviq_observability.middleware import (
     StructuredLoggingMiddleware,
@@ -65,6 +66,7 @@ __all__ = [
     "log_firestore_event",
     "log_memory_event",
     "log_workspace_event",
+    "log_upload_event",
     "redact_string",
     "register_error_handlers",
     "sanitize_payload",
