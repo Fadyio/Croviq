@@ -638,7 +638,7 @@ async def transcribe_production(
             provider=provider,
             model=model,
             error_code="transcription_provider_error",
-            message=f"Transcription provider failed: {type(exc).__name__}",
+            message=f"Transcription provider failed: {str(exc)}",
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
