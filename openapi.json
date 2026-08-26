@@ -7,7 +7,9 @@
   "paths": {
     "/api/health": {
       "get": {
-        "tags": ["Health"],
+        "tags": [
+          "Health"
+        ],
         "summary": "Service Health Check",
         "operationId": "health_check_api_health_get",
         "responses": {
@@ -26,7 +28,9 @@
     },
     "/api/client-events": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Record Sanitized Client Authentication Event",
         "description": "Record a constrained client auth event without accepting sensitive payloads.",
         "operationId": "record_client_auth_event_api_client_events_post",
@@ -89,7 +93,9 @@
     },
     "/api/auth/me": {
       "get": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Get Current Authenticated User",
         "description": "Retrieve the canonical User profile derived from verified identity.",
         "operationId": "get_me_api_auth_me_get",
@@ -114,7 +120,9 @@
     },
     "/api/auth/logout": {
       "post": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Record User Logout",
         "description": "Record client-side logout activity and emit operational audit log.",
         "operationId": "logout_api_auth_logout_post",
@@ -138,7 +146,9 @@
     },
     "/api/workspace": {
       "get": {
-        "tags": ["Workspaces"],
+        "tags": [
+          "Workspaces"
+        ],
         "summary": "Get or Provision Default Workspace",
         "description": "Retrieve the default workspace belonging to the verified creator. If none exists, creates exactly one default Workspace idempotently.",
         "operationId": "get_or_provision_default_workspace_api_workspace_get",
@@ -163,7 +173,9 @@
     },
     "/api/channel/memory/profile": {
       "get": {
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "summary": "Retrieve Channel Memory Profile",
         "description": "Retrieve the canonical structured ChannelMemoryProfile from Memory Bank.",
         "operationId": "get_channel_memory_profile_api_channel_memory_profile_get",
@@ -212,7 +224,9 @@
     },
     "/api/channel/memory/lessons": {
       "get": {
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "summary": "Retrieve Channel Lessons",
         "description": "Retrieve active ChannelLessons scoped to a channel, optionally filtered by target agent.",
         "operationId": "get_channel_lessons_api_channel_memory_lessons_get",
@@ -283,7 +297,9 @@
     },
     "/api/uploads": {
       "post": {
-        "tags": ["Productions & Uploads"],
+        "tags": [
+          "Productions & Uploads"
+        ],
         "summary": "Initiate Direct GCS Media Upload",
         "description": "Registers an upload session, creates a pending Production record, and returns a short-lived V4 signed PUT URL for direct browser-to-GCS upload.",
         "operationId": "create_upload_api_uploads_post",
@@ -328,7 +344,9 @@
     },
     "/api/uploads/{upload_id}/complete": {
       "post": {
-        "tags": ["Productions & Uploads"],
+        "tags": [
+          "Productions & Uploads"
+        ],
         "summary": "Verify and Complete Media Upload",
         "description": "Verifies the uploaded object in GCS (existence, size, content type) and transitions the Production to uploaded.",
         "operationId": "complete_upload_api_uploads__upload_id__complete_post",
@@ -374,7 +392,9 @@
     },
     "/api/productions": {
       "get": {
-        "tags": ["Productions & Uploads"],
+        "tags": [
+          "Productions & Uploads"
+        ],
         "summary": "List Recent Productions",
         "description": "Retrieve a list of recent content productions belonging to the creator's workspace.",
         "operationId": "list_productions_api_productions_get",
@@ -421,7 +441,9 @@
     },
     "/api/productions/{production_id}": {
       "get": {
-        "tags": ["Productions & Uploads"],
+        "tags": [
+          "Productions & Uploads"
+        ],
         "summary": "Get Production by ID",
         "description": "Retrieve a single Production record by its identifier.",
         "operationId": "get_production_api_productions__production_id__get",
@@ -464,6 +486,150 @@
           }
         }
       }
+    },
+    "/api/productions/{production_id}/transcribe": {
+      "post": {
+        "tags": [
+          "Productions & Uploads"
+        ],
+        "summary": "Transcribe Production Source Media",
+        "description": "Trigger word-aligned speech recognition on uploaded source media via Speech-to-Text v2.",
+        "operationId": "transcribe_production_api_productions__production_id__transcribe_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscribeProductionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/transcript": {
+      "get": {
+        "tags": [
+          "Productions & Uploads"
+        ],
+        "summary": "Get Production Transcript",
+        "description": "Retrieve the word-aligned transcript for a production.",
+        "operationId": "get_production_transcript_api_productions__production_id__transcript_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transcript"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/source-analysis-input": {
+      "get": {
+        "tags": [
+          "Productions & Uploads"
+        ],
+        "summary": "Get Source Video Analysis Input Contract",
+        "description": "Retrieve the complete source video analysis contract ready for Gemini reasoning (Issue #26).",
+        "operationId": "get_source_analysis_input_api_productions__production_id__source_analysis_input_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceVideoAnalysisInput"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -478,7 +644,9 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["event_type"],
+        "required": [
+          "event_type"
+        ],
         "title": "AuthLoginAttemptEvent"
       },
       "AuthLoginFailedEvent": {
@@ -492,7 +660,10 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["invalid_credentials", "demo_access_restricted"]
+                "enum": [
+                  "invalid_credentials",
+                  "demo_access_restricted"
+                ]
               },
               {
                 "type": "null"
@@ -503,7 +674,9 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["event_type"],
+        "required": [
+          "event_type"
+        ],
         "title": "AuthLoginFailedEvent"
       },
       "BrandKit": {
@@ -564,19 +737,25 @@
             "type": "string",
             "title": "Lesson Id",
             "description": "Unique identifier for the lesson.",
-            "examples": ["lsn_early_demo_01"]
+            "examples": [
+              "lsn_early_demo_01"
+            ]
           },
           "channel_id": {
             "type": "string",
             "title": "Channel Id",
             "description": "Channel identifier scope.",
-            "examples": ["croviq_syn_ai_eng_01"]
+            "examples": [
+              "croviq_syn_ai_eng_01"
+            ]
           },
           "directive": {
             "type": "string",
             "title": "Directive",
             "description": "Actionable instruction for the agent.",
-            "examples": ["Reach the first concrete demonstration before 00:30."]
+            "examples": [
+              "Reach the first concrete demonstration before 00:30."
+            ]
           },
           "target_agent": {
             "$ref": "#/components/schemas/TargetAgent",
@@ -596,7 +775,9 @@
             "minimum": 0.0,
             "title": "Confidence",
             "description": "Confidence score for this lesson (0.0 to 1.0).",
-            "examples": [0.92]
+            "examples": [
+              0.92
+            ]
           },
           "status": {
             "type": "string",
@@ -629,13 +810,17 @@
             "type": "string",
             "title": "Channel Id",
             "description": "Canonical channel identifier used as memory scope.",
-            "examples": ["croviq_syn_ai_eng_01"]
+            "examples": [
+              "croviq_syn_ai_eng_01"
+            ]
           },
           "channel_name": {
             "type": "string",
             "title": "Channel Name",
             "description": "Display name of the channel.",
-            "examples": ["AI Engineering & Agent Systems"]
+            "examples": [
+              "AI Engineering & Agent Systems"
+            ]
           },
           "primary_topics": {
             "items": {
@@ -644,7 +829,13 @@
             "type": "array",
             "title": "Primary Topics",
             "description": "Top subject-matter domains covered by the channel.",
-            "examples": [["AI Agents", "LLM Systems", "DevOps & CI/CD"]]
+            "examples": [
+              [
+                "AI Agents",
+                "LLM Systems",
+                "DevOps & CI/CD"
+              ]
+            ]
           },
           "content_pillars": {
             "items": {
@@ -653,7 +844,13 @@
             "type": "array",
             "title": "Content Pillars",
             "description": "Core content themes and recurring series pillars.",
-            "examples": [["Agent Architecture", "Production Deployment", "Emerging AI Releases"]]
+            "examples": [
+              [
+                "Agent Architecture",
+                "Production Deployment",
+                "Emerging AI Releases"
+              ]
+            ]
           },
           "language": {
             "type": "string",
@@ -668,7 +865,15 @@
             "type": "array",
             "title": "Audience Geographies",
             "description": "Top audience geography ISO country codes ordered by viewership volume.",
-            "examples": [["US", "IN", "GB", "CA", "DE"]]
+            "examples": [
+              [
+                "US",
+                "IN",
+                "GB",
+                "CA",
+                "DE"
+              ]
+            ]
           },
           "audience_characteristics": {
             "items": {
@@ -678,7 +883,11 @@
             "title": "Audience Characteristics",
             "description": "Key audience behavioral and demographic attributes.",
             "examples": [
-              ["Software Engineers", "DevOps / SRE Practitioners", "High desktop viewing share"]
+              [
+                "Software Engineers",
+                "DevOps / SRE Practitioners",
+                "High desktop viewing share"
+              ]
             ]
           },
           "historical_baselines": {
@@ -696,7 +905,12 @@
             "type": "array",
             "title": "High Performing Formats",
             "description": "Video formats demonstrating above-average performance.",
-            "examples": [["agent_build", "deep_dive"]]
+            "examples": [
+              [
+                "agent_build",
+                "deep_dive"
+              ]
+            ]
           },
           "weak_formats": {
             "items": {
@@ -705,7 +919,11 @@
             "type": "array",
             "title": "Weak Formats",
             "description": "Video formats demonstrating below-average performance.",
-            "examples": [["tutorial"]]
+            "examples": [
+              [
+                "tutorial"
+              ]
+            ]
           },
           "recurring_retention_patterns": {
             "items": {
@@ -739,7 +957,10 @@
           }
         },
         "type": "object",
-        "required": ["channel_id", "channel_name"],
+        "required": [
+          "channel_id",
+          "channel_name"
+        ],
         "title": "ChannelMemoryProfile",
         "description": "Canonical structured memory profile for a channel stored in Memory Bank."
       },
@@ -775,7 +996,9 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["event_type"],
+        "required": [
+          "event_type"
+        ],
         "title": "ClientErrorEvent"
       },
       "CreateUploadRequest": {
@@ -786,32 +1009,45 @@
             "minLength": 1,
             "title": "Filename",
             "description": "Original name of the video file to upload",
-            "examples": ["github_actions_tutorial.mp4"]
+            "examples": [
+              "github_actions_tutorial.mp4"
+            ]
           },
           "content_type": {
             "type": "string",
             "title": "Content Type",
             "description": "MIME content type of the video file (e.g. video/mp4, video/quicktime, video/webm)",
-            "examples": ["video/mp4"]
+            "examples": [
+              "video/mp4"
+            ]
           },
           "size_bytes": {
             "type": "integer",
             "exclusiveMinimum": 0.0,
             "title": "Size Bytes",
             "description": "Declared size of the file in bytes (must be <= 1 GB)",
-            "examples": [104857600]
+            "examples": [
+              104857600
+            ]
           },
           "channel_id": {
             "type": "string",
             "minLength": 1,
             "title": "Channel Id",
             "description": "Canonical channel identifier for this production (e.g. croviq_syn_ai_eng_01)",
-            "examples": ["croviq_syn_ai_eng_01"]
+            "examples": [
+              "croviq_syn_ai_eng_01"
+            ]
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["filename", "content_type", "size_bytes", "channel_id"],
+        "required": [
+          "filename",
+          "content_type",
+          "size_bytes",
+          "channel_id"
+        ],
         "title": "CreateUploadRequest",
         "description": "Request payload to initiate a direct GCS media upload."
       },
@@ -855,7 +1091,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["production_id", "upload_id", "upload_url", "expires_at"],
+        "required": [
+          "production_id",
+          "upload_id",
+          "upload_url",
+          "expires_at"
+        ],
         "title": "CreateUploadResponse",
         "description": "Response returned upon successfully registering an upload and generating a signed PUT URL."
       },
@@ -893,8 +1134,105 @@
           }
         },
         "type": "object",
-        "required": ["git_sha"],
+        "required": [
+          "git_sha"
+        ],
         "title": "HealthResponse"
+      },
+      "MediaMetadata": {
+        "properties": {
+          "duration_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Duration Ms",
+            "description": "Duration of the media in milliseconds"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Width",
+            "description": "Video frame width in pixels (0 for audio-only)",
+            "default": 0
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Height",
+            "description": "Video frame height in pixels (0 for audio-only)",
+            "default": 0
+          },
+          "frame_rate": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Frame Rate",
+            "description": "Video frame rate in frames per second (0.0 for audio-only)",
+            "default": 0.0
+          },
+          "video_codec": {
+            "type": "string",
+            "title": "Video Codec",
+            "description": "Video codec name (e.g. 'h264', 'hevc', 'vp9', or 'none')",
+            "default": "none"
+          },
+          "audio_codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Codec",
+            "description": "Audio codec name (e.g. 'aac', 'opus', 'pcm_s16le')"
+          },
+          "audio_sample_rate": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Sample Rate",
+            "description": "Audio sample rate in Hertz (e.g. 48000, 44100, 16000)"
+          },
+          "audio_channels": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Channels",
+            "description": "Audio channel count (e.g. 1 for mono, 2 for stereo)"
+          },
+          "rotation": {
+            "type": "integer",
+            "title": "Rotation",
+            "description": "Video orientation rotation in degrees (0, 90, 180, 270)",
+            "default": 0
+          },
+          "size_bytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Size Bytes",
+            "description": "Total media file size in bytes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "duration_ms",
+          "size_bytes"
+        ],
+        "title": "MediaMetadata",
+        "description": "Canonical metadata extracted from source video/audio via FFprobe."
       },
       "Production": {
         "properties": {
@@ -982,14 +1320,52 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["total"],
+        "required": [
+          "total"
+        ],
         "title": "ProductionListResponse",
         "description": "Response returned when listing recent productions."
       },
       "ProductionStatus": {
         "type": "string",
-        "enum": ["pending", "uploading", "uploaded", "failed"],
+        "enum": [
+          "pending",
+          "uploading",
+          "uploaded",
+          "failed"
+        ],
         "title": "ProductionStatus"
+      },
+      "SilenceInterval": {
+        "properties": {
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Silence interval start offset in milliseconds"
+          },
+          "end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "End Ms",
+            "description": "Silence interval end offset in milliseconds"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Duration Ms",
+            "description": "Silence interval duration in milliseconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start_ms",
+          "end_ms",
+          "duration_ms"
+        ],
+        "title": "SilenceInterval",
+        "description": "Represents a silence or non-speech interval between spoken words."
       },
       "SourceMedia": {
         "properties": {
@@ -1069,13 +1445,323 @@
       },
       "SourceMediaStatus": {
         "type": "string",
-        "enum": ["pending", "uploading", "uploaded", "failed"],
+        "enum": [
+          "pending",
+          "uploading",
+          "uploaded",
+          "failed"
+        ],
         "title": "SourceMediaStatus"
+      },
+      "SourceVideoAnalysisInput": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated Production entity identifier"
+          },
+          "source_media": {
+            "$ref": "#/components/schemas/SourceMedia",
+            "description": "Source media upload metadata and GCS reference"
+          },
+          "media_metadata": {
+            "$ref": "#/components/schemas/MediaMetadata",
+            "description": "Deterministic FFprobe media technical parameters"
+          },
+          "transcript": {
+            "$ref": "#/components/schemas/Transcript",
+            "description": "Word-aligned transcript with millisecond timestamps"
+          },
+          "channel_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Channel Id",
+            "description": "Associated channel identifier"
+          },
+          "channel_memory_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Memory Reference",
+            "description": "Reference identifier to ChannelMemoryProfile in Memory Bank"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "production_id",
+          "source_media",
+          "media_metadata",
+          "transcript",
+          "channel_id"
+        ],
+        "title": "SourceVideoAnalysisInput",
+        "description": "Canonical provider-neutral input contract consumed by Gemini agents in Issue #26."
       },
       "TargetAgent": {
         "type": "string",
-        "enum": ["director", "editor", "packaging", "qa"],
+        "enum": [
+          "director",
+          "editor",
+          "packaging",
+          "qa"
+        ],
         "title": "TargetAgent"
+      },
+      "TranscribeProductionResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "already_transcribed"
+            ],
+            "title": "Status",
+            "description": "Transcription status ('completed' or 'already_transcribed')",
+            "examples": [
+              "completed"
+            ]
+          },
+          "transcript_id": {
+            "type": "string",
+            "title": "Transcript Id",
+            "description": "Unique identifier of the generated or retrieved transcript"
+          },
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Identifier of the associated Production"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms",
+            "description": "Total duration of the transcript in milliseconds"
+          },
+          "word_count": {
+            "type": "integer",
+            "title": "Word Count",
+            "description": "Total number of word tokens in the transcript"
+          },
+          "segment_count": {
+            "type": "integer",
+            "title": "Segment Count",
+            "description": "Total number of phrase segments in the transcript"
+          },
+          "language_code": {
+            "type": "string",
+            "title": "Language Code",
+            "description": "Language code used for transcription"
+          },
+          "transcript": {
+            "$ref": "#/components/schemas/Transcript",
+            "description": "Full word-aligned transcript object"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "transcript_id",
+          "production_id",
+          "duration_ms",
+          "word_count",
+          "segment_count",
+          "language_code",
+          "transcript"
+        ],
+        "title": "TranscribeProductionResponse",
+        "description": "Response returned upon successfully transcribing a production's source media."
+      },
+      "Transcript": {
+        "properties": {
+          "transcript_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Transcript Id",
+            "description": "Unique identifier for the transcript entity"
+          },
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Identifier of the associated Production record"
+          },
+          "language_code": {
+            "type": "string",
+            "minLength": 2,
+            "title": "Language Code",
+            "description": "Language tag of the transcription (e.g. 'en-US' or 'en')"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Duration Ms",
+            "description": "Total duration of the audio/speech stream in milliseconds"
+          },
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptWord"
+            },
+            "type": "array",
+            "title": "Words",
+            "description": "Ordered list of word-level timestamped tokens"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegment"
+            },
+            "type": "array",
+            "title": "Segments",
+            "description": "Ordered list of sentence/phrase segments"
+          },
+          "silence_intervals": {
+            "items": {
+              "$ref": "#/components/schemas/SilenceInterval"
+            },
+            "type": "array",
+            "title": "Silence Intervals",
+            "description": "Identified inter-word silence intervals"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the transcript was generated (UTC)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "transcript_id",
+          "production_id",
+          "language_code",
+          "duration_ms",
+          "created_at"
+        ],
+        "title": "Transcript",
+        "description": "Canonical domain model for a word-aligned transcript."
+      },
+      "TranscriptSegment": {
+        "properties": {
+          "segment_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Segment Id",
+            "description": "Unique identifier for this segment"
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Start offset of the segment in milliseconds"
+          },
+          "end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "End Ms",
+            "description": "End offset of the segment in milliseconds"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Text",
+            "description": "Aggregated text content of the segment"
+          },
+          "word_start_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Word Start Index",
+            "description": "Inclusive start index in the transcript words list"
+          },
+          "word_end_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Word End Index",
+            "description": "Inclusive end index in the transcript words list"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "segment_id",
+          "start_ms",
+          "end_ms",
+          "text",
+          "word_start_index",
+          "word_end_index"
+        ],
+        "title": "TranscriptSegment",
+        "description": "Canonical representation of a spoken phrase or sentence segment."
+      },
+      "TranscriptWord": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Index",
+            "description": "Zero-based sequential index of the word in the transcript"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Text",
+            "description": "Spoken text of the word"
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Start offset from beginning of audio stream in milliseconds"
+          },
+          "end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "End Ms",
+            "description": "End offset from beginning of audio stream in milliseconds"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence",
+            "description": "Confidence score from speech recognizer (0.0 to 1.0)"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id",
+            "description": "Optional speaker identifier or diarization tag"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "index",
+          "text",
+          "start_ms",
+          "end_ms"
+        ],
+        "title": "TranscriptWord",
+        "description": "Canonical representation of a single spoken word with millisecond time alignment."
       },
       "User": {
         "properties": {
@@ -1124,7 +1810,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["user_id", "email", "display_name", "created_at", "updated_at"],
+        "required": [
+          "user_id",
+          "email",
+          "display_name",
+          "created_at",
+          "updated_at"
+        ],
         "title": "User",
         "description": "Canonical User identity model for Croviq."
       },
@@ -1161,7 +1853,11 @@
           }
         },
         "type": "object",
-        "required": ["loc", "msg", "type"],
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
         "title": "ValidationError"
       },
       "Workspace": {
@@ -1215,7 +1911,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["workspace_id", "owner_user_id", "name", "created_at", "updated_at"],
+        "required": [
+          "workspace_id",
+          "owner_user_id",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
         "title": "Workspace",
         "description": "Canonical Workspace tenant container model for Croviq."
       }

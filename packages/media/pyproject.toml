@@ -1,0 +1,25 @@
+[project]
+name = "croviq-media"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "croviq-domain",
+    "croviq-observability",
+    "google-cloud-speech>=2.29.0",
+    "google-cloud-storage>=2.18.0",
+    "pydantic>=2.10.0",
+]
+
+[tool.uv.sources]
+croviq-domain = { path = "../domain", editable = true }
+croviq-observability = { path = "../observability", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+]
