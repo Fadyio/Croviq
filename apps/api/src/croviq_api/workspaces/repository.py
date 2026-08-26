@@ -79,7 +79,7 @@ class WorkspaceRepository(ABC):
         ...
 
     async def get_or_create_default_workspace(
-        self, user: User, default_name: str = "Croviq Demo Workspace"
+        self, user: User, default_name: str = "Croviq"
     ) -> tuple[Workspace, bool]:
         """Look up workspace belonging to verified uid; if none exists, create default workspace.
 

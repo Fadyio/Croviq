@@ -5,7 +5,6 @@ import {
   FileVideo,
   HardDrive,
   LogOut,
-  Sparkles,
   Upload,
   Video,
   X,
@@ -19,7 +18,6 @@ type Production = components["schemas"]["Production"];
 type CreateUploadResponse = components["schemas"]["CreateUploadResponse"];
 
 const SAMPLE_CHANNEL_ID = "croviq_syn_ai_eng_01";
-const SAMPLE_CHANNEL_TITLE = "Modern AI Engineering";
 const MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB
 
 const formatBytes = (bytes: number): string => {
@@ -37,8 +35,8 @@ interface AppPageProps {
 export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
   const { user, firebaseUser, logout } = useAuth();
 
-  // Channel Selection State
-  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(SAMPLE_CHANNEL_ID);
+  // Channel Selection State - Defaulted to canonical channel automatically
+  const [selectedChannelId] = useState<string>(SAMPLE_CHANNEL_ID);
 
   // Upload Flow State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -53,9 +51,6 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeXhrRef = useRef<XMLHttpRequest | null>(null);
 
-  // Workspace State
-  const [workspaceName, setWorkspaceName] = useState<string>("Workspace");
-
   // Recent Productions List
   const [productions, setProductions] = useState<Production[]>([]);
   const [isLoadingProductions, setIsLoadingProductions] = useState<boolean>(false);
@@ -66,15 +61,10 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
     try {
       const token = await firebaseUser.getIdToken();
 
-      // Load workspace
+      // Ensure workspace is initialized in background
       fetch("/api/workspace", {
         headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((ws) => {
-          if (ws && ws.name) setWorkspaceName(ws.name);
-        })
-        .catch(() => {});
+      }).catch(() => {});
 
       // Load productions
       try {
@@ -109,7 +99,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
       return;
     }
 
-    const validExtensions = [".mp4", ".mov", ".webm", ".m4v"];
+    const validExtensions = [".mp4", ".mov", ".webm", ".mkv", ".m4v"];
     const ext = `.${file.name.split(".").pop()?.toLowerCase()}`;
     if (!validExtensions.includes(ext)) {
       setErrorMessage("Please select a valid video file (.mp4, .mov, or .webm)");
@@ -169,6 +159,8 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
         if (selectedFile.name.endsWith(".mp4")) contentType = "video/mp4";
         else if (selectedFile.name.endsWith(".mov")) contentType = "video/quicktime";
         else if (selectedFile.name.endsWith(".webm")) contentType = "video/webm";
+        else if (selectedFile.name.endsWith(".mkv")) contentType = "video/x-matroska";
+        else if (selectedFile.name.endsWith(".m4v")) contentType = "video/mp4";
         else contentType = "video/mp4";
       }
 
@@ -196,7 +188,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
       setActiveUploadId(uploadTarget.upload_id);
       setActiveProductionId(uploadTarget.production_id);
 
-      // Step 2: Upload directly to private GCS via signed PUT URL
+      // Step 2: Upload directly to storage via signed PUT URL
       setUploadStatus("uploading");
 
       const xhr = new XMLHttpRequest();
@@ -288,70 +280,54 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
   return (
     <div className="min-h-screen bg-background text-text-primary flex flex-col font-sans selection:bg-primary/25">
       {/* App Header Bar */}
-      <header className="h-12 bg-surface-1 border-b border-border-subtle px-4 sm:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30 backdrop-blur-sm">
+      <header className="h-14 bg-surface-1 border-b border-border-subtle px-4 sm:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <CroviqLogo height={24} className="h-6 w-auto" />
-          <span className="text-border-strong select-none font-light">/</span>
-          <span className="text-xs font-semibold text-text-primary tracking-tight">
-            {workspaceName}
-          </span>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-2 border border-border-subtle text-xs text-text-secondary">
-            <span className="w-1.5 h-1.5 rounded-full bg-success"></span>
-            <span className="font-mono text-text-muted text-[11px]">
-              {user?.email || "creator@croviq.app"}
-            </span>
-          </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-text-muted">
+            {user?.email || "demo@croviq.app"}
+          </span>
 
           <button
             onClick={logout}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-transparent hover:border-border-subtle"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-transparent hover:border-border-subtle"
             title="Sign out"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Logout</span>
+            <span>Logout</span>
           </button>
         </div>
       </header>
 
       {/* Main Viewport */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 flex flex-col gap-6">
-        {/* Channel Selection Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle/50">
-          <div>
-            <h1 className="text-base font-semibold tracking-tight text-text-primary">
-              Productions
-            </h1>
-            <p className="text-xs text-text-secondary mt-0.5">
-              Upload raw footage to edit with Maya and Leo.
-            </p>
-          </div>
-
-          {selectedChannelId && (
-            <div className="flex items-center gap-2 text-xs text-text-secondary bg-surface-1 px-3 py-1.5 rounded-lg border border-border-subtle">
-              <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
-              <span className="font-medium text-text-primary">{SAMPLE_CHANNEL_TITLE}</span>
-            </div>
-          )}
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-8 flex flex-col gap-8">
+        {/* Intro */}
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-bold tracking-tight text-text-primary">
+            Croviq
+          </h1>
+          <p className="text-xs text-text-secondary">
+            Your autonomous video production team.
+          </p>
         </div>
 
         {/* Upload Station */}
-        <section className="p-5 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
+        <section className="p-6 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
           <div>
             <h2 className="text-sm font-semibold tracking-tight text-text-primary">
-              Upload video footage
+              Drop your raw video
             </h2>
             <p className="text-xs text-text-muted mt-0.5">
-              Drop raw video files to initiate autonomous editing and timeline assembly.
+              MP4 &middot; MOV &middot; WebM &middot; MKV &middot; up to 1 GB
             </p>
           </div>
 
           <input
             ref={fileInputRef}
             type="file"
-            accept=".mp4,.mov,.webm,.m4v,video/mp4,video/quicktime,video/webm"
+            accept=".mp4,.mov,.webm,.mkv,.m4v,video/mp4,video/quicktime,video/webm,video/x-matroska"
             className="hidden"
             onChange={(e) => {
               if (e.target.files && e.target.files[0]) {
@@ -366,13 +342,13 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onClick={() => fileInputRef.current?.click()}
-              className={`border border-dashed rounded-lg p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-150 ${
+              className={`border border-dashed rounded-lg p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-150 ${
                 isDragOver
                   ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                   : "border-border-strong hover:border-text-secondary bg-surface-2/40 hover:bg-surface-2/70"
               }`}
             >
-              <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center mb-2.5 text-text-secondary border border-border-subtle">
+              <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center mb-3 text-text-secondary border border-border-subtle">
                 <Upload className="w-4 h-4 text-primary" />
               </div>
               <p className="text-xs font-medium text-text-primary">
@@ -380,7 +356,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                 <span className="text-primary underline font-semibold">browse</span>
               </p>
               <p className="text-[11px] text-text-muted mt-1 font-mono">
-                MP4, MOV, or WebM &middot; Up to 1 GB
+                MP4 &middot; MOV &middot; WebM &middot; MKV &middot; up to 1 GB
               </p>
             </div>
           ) : (
@@ -420,10 +396,10 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                       {uploadStatus === "uploading" && (
                         <>
                           <HardDrive className="w-3.5 h-3.5 text-primary animate-pulse" />
-                          <span>Uploading directly to storage...</span>
+                          <span>Uploading...</span>
                         </>
                       )}
-                      {uploadStatus === "verifying" && "Verifying upload in storage..."}
+                      {uploadStatus === "verifying" && "Verifying upload..."}
                       {uploadStatus === "uploaded" && (
                         <>
                           <CheckCircle2 className="w-3.5 h-3.5 text-success" />
@@ -461,14 +437,14 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                 <div className="p-3 bg-success/10 border border-success/20 rounded-md text-xs text-text-primary flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-success font-medium">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>Upload complete and production recorded</span>
+                    <span>Upload complete</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleOpenProduction(activeProductionId)}
                     className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
                   >
-                    <span>Open in Editor</span>
+                    <span>Open Editor</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -533,17 +509,12 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
           )}
         </section>
 
-        {/* Recent Productions Ledger */}
-        <section className="p-5 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-3.5 shadow-sm">
+        {/* Recent Productions */}
+        <section className="p-6 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold tracking-tight text-text-primary">
-                Recent productions
-              </h2>
-              <span className="px-2 py-0.5 text-[10px] text-text-muted font-mono bg-surface-2 rounded-full border border-border-subtle">
-                {productions.length} total
-              </span>
-            </div>
+            <h2 className="text-sm font-semibold tracking-tight text-text-primary">
+              Recent productions
+            </h2>
           </div>
 
           {isLoadingProductions ? (
@@ -551,43 +522,50 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
               Loading recent productions...
             </div>
           ) : productions.length === 0 ? (
-            <div className="py-8 px-4 rounded-lg bg-surface-2/30 border border-border-subtle text-center flex flex-col items-center justify-center gap-2">
+            <div className="py-10 px-4 rounded-lg bg-surface-2/30 border border-border-subtle text-center flex flex-col items-center justify-center gap-2">
               <div className="w-8 h-8 rounded-full bg-surface-3 flex items-center justify-center text-text-muted">
                 <Video className="w-4 h-4" />
               </div>
+              <p className="text-xs text-text-secondary font-medium">
+                No productions yet.
+              </p>
               <p className="text-xs text-text-muted">
-                No productions recorded yet. Drop a video above to start.
+                Drop a video above to begin.
               </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2" data-testid="productions-list">
+            <div className="flex flex-col gap-2.5" data-testid="productions-list">
               {productions.map((prod) => (
                 <div
                   key={prod.production_id}
                   onClick={() => handleOpenProduction(prod.production_id)}
-                  className="p-3.5 rounded-lg bg-surface-2/80 hover:bg-surface-2 border border-border-subtle hover:border-primary/50 transition-all flex items-center justify-between gap-3 cursor-pointer group"
+                  className="p-3.5 rounded-lg bg-surface-2/70 hover:bg-surface-2 border border-border-subtle hover:border-primary/40 transition-all flex items-center justify-between gap-3 cursor-pointer group"
                   data-testid={`production-row-${prod.production_id}`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0 group-hover:border-primary/40 transition-colors">
-                      <FileVideo className="w-4 h-4 text-primary" />
+                    <div className="w-10 h-10 rounded-lg bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0 group-hover:border-primary/40 transition-colors">
+                      <FileVideo className="w-5 h-5 text-primary" />
                     </div>
                     <div className="min-w-0 flex flex-col">
                       <span className="text-xs font-semibold text-text-primary truncate group-hover:text-primary transition-colors">
-                        {prod.source_media?.original_filename || prod.production_id}
+                        {prod.source_media?.original_filename || "Untitled Production"}
                       </span>
                       <div className="flex items-center gap-2 text-[11px] text-text-muted mt-0.5">
-                        <span className="font-mono">{prod.production_id}</span>
-                        {prod.source_media?.size_bytes && (
+                        {prod.source_media?.size_bytes ? (
                           <>
-                            <span>&middot;</span>
                             <span className="tabular-nums">
                               {formatBytes(prod.source_media.size_bytes)}
                             </span>
+                            <span>&middot;</span>
                           </>
-                        )}
-                        <span>&middot;</span>
-                        <span>{new Date(prod.created_at).toLocaleDateString()}</span>
+                        ) : null}
+                        <span>
+                          {new Date(prod.created_at).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -605,10 +583,17 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                       {prod.status}
                     </span>
 
-                    <span className="hidden sm:inline-flex items-center gap-1 text-xs text-text-muted group-hover:text-primary transition-colors">
-                      <span>Editor</span>
-                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenProduction(prod.production_id);
+                      }}
+                      className="px-3 py-1.5 bg-surface-3 hover:bg-primary hover:text-white text-text-secondary text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 border border-border-subtle hover:border-transparent"
+                    >
+                      <span>Open Editor</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               ))}

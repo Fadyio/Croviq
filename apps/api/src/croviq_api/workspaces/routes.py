@@ -27,7 +27,7 @@ async def get_or_provision_default_workspace(
     request_id = getattr(request.state, "request_id", "unknown")
     try:
         workspace, created = await repo.get_or_create_default_workspace(
-            current_user, default_name="Croviq Demo Workspace"
+            current_user, default_name="Croviq"
         )
     except Exception as exc:
         log_workspace_event(

@@ -52,7 +52,7 @@ const mockFirebasePasswordSignIn = async (page: Page) => {
   });
 };
 
-const mockBackendApis = async (page: Page) => {
+const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
   await page.route("**/api/auth/me", async (route) => {
     await route.fulfill({
       status: 200,
@@ -68,7 +68,7 @@ const mockBackendApis = async (page: Page) => {
       body: JSON.stringify({
         workspace_id: "ws_demo",
         owner_user_id: APPROVED_USER.user_id,
-        name: "Croviq Demo Workspace",
+        name: "Croviq",
         created_at: "2026-08-26T00:00:00Z",
         updated_at: "2026-08-26T00:00:00Z",
       }),
@@ -82,14 +82,15 @@ const mockBackendApis = async (page: Page) => {
       body: JSON.stringify({ status: "ok" }),
     });
   });
+
   await page.route("**/api/productions", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          productions: [],
-          total: 0,
+          productions,
+          total: productions.length,
         }),
       });
     } else {
@@ -106,8 +107,8 @@ const login = async (page: Page) => {
   await page.waitForURL("/app");
 };
 
-test.describe("Production Home and Raw Media Upload", () => {
-  test("renders clean Production Home with Sample Channel and direct upload UI", async ({
+test.describe("Product Home and Creator Flow", () => {
+  test("renders clean creator-facing Product Home with minimal header and no debug/engineering clutter", async ({
     page,
   }) => {
     const consoleErrors: string[] = [];
@@ -116,27 +117,99 @@ test.describe("Production Home and Raw Media Upload", () => {
     });
 
     await mockFirebasePasswordSignIn(page);
-    await mockBackendApis(page);
+    await mockBackendApis(page, []);
     await login(page);
 
-    // Verify main headings
-    await expect(page.getByRole("heading", { name: "Productions", exact: true })).toBeVisible();
-    // Verify Channel
-    await expect(page.getByText("Modern AI Engineering", { exact: true })).toBeVisible();
+    // Verify minimal header
+    await expect(page.getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByText(DEMO_EMAIL)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
+
+    // Verify main intro
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await expect(page.getByText("Your autonomous video production team.")).toBeVisible();
 
     // Verify upload dropzone
-    await expect(page.getByRole("heading", { name: "Upload video footage" })).toBeVisible();
-    await expect(page.getByText(/Drop your raw video here/i)).toBeVisible();
-    await expect(page.getByText(/Up to 1 GB/i)).toBeVisible();
-    // Verify "Recent productions" section
-    await expect(page.getByRole("heading", { name: "Recent productions" })).toBeVisible();
-    await expect(page.getByText("No productions recorded yet")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Drop your raw video" })).toBeVisible();
+    await expect(page.getByText(/MP4 · MOV · WebM · MKV · up to 1 GB/i).first()).toBeVisible();
 
-    // Verify absence of engineering clutter
+    // Verify empty Recent productions section without 0 total badge
+    await expect(page.getByRole("heading", { name: "Recent productions" })).toBeVisible();
+    await expect(page.getByText("No productions yet.")).toBeVisible();
+    await expect(page.getByText("Drop a video above to begin.")).toBeVisible();
+    await expect(page.getByText("0 total")).toHaveCount(0);
+
+    // Verify strictly NO engineering/debug clutter
+    await expect(page.getByText("Croviq Demo Workspace")).toHaveCount(0);
+    await expect(page.getByText("Synthetic AI Engineering")).toHaveCount(0);
+    await expect(page.getByText("Modern AI Engineering")).toHaveCount(0);
+    await expect(page.getByText("Day 1 testing")).toHaveCount(0);
+    await expect(page.getByText("Memory Bank")).toHaveCount(0);
+    await expect(page.getByText("Engine Online")).toHaveCount(0);
+    await expect(page.getByText("Direct GCS")).toHaveCount(0);
+    await expect(page.getByText("5 Agents Active")).toHaveCount(0);
+    await expect(page.getByText("Production Studio")).toHaveCount(0);
+    await expect(page.getByText("Use Sample Channel")).toHaveCount(0);
+    await expect(page.getByText("Connect YouTube")).toHaveCount(0);
     await expect(page.getByText("Workspace ID")).toHaveCount(0);
     await expect(page.getByText("Owner User ID")).toHaveCount(0);
     await expect(page.getByText("Git SHA")).toHaveCount(0);
+
     await page.screenshot({ path: "e2e/screenshots/studio-cockpit-1440px.png", fullPage: true });
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test("automatically loads existing persisted productions and links to Editor", async ({
+    page,
+  }) => {
+    const consoleErrors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+
+    const mockProduction = {
+      production_id: "prod_f0b41bfd429e",
+      workspace_id: "ws_demo",
+      channel_id: "croviq_syn_ai_eng_01",
+      owner_user_id: "demo_user_123",
+      status: "uploaded",
+      source_media: {
+        upload_id: "upl_0c191e28f1ee",
+        original_filename: "Fairphone 6+ Has Surprising Features! #shorts.mp4",
+        content_type: "video/mp4",
+        size_bytes: 3227778,
+        gcs_bucket: "croviq-506602-croviq-media-raw",
+        gcs_object:
+          "workspaces/ws_demo/productions/prod_f0b41bfd429e/source/upl_0c191e28f1ee/Fairphone.mp4",
+        status: "uploaded",
+        created_at: "2026-08-26T04:33:44.963857Z",
+        uploaded_at: "2026-08-26T04:33:44.963857Z",
+      },
+      created_at: "2026-08-26T04:33:44.963857Z",
+      updated_at: "2026-08-26T04:33:44.963857Z",
+    };
+
+    await mockFirebasePasswordSignIn(page);
+    await mockBackendApis(page, [mockProduction]);
+    await login(page);
+
+    // Verify production appears automatically without clicking "Use Sample Channel"
+    const prodRow = page.getByTestId("production-row-prod_f0b41bfd429e");
+    await expect(prodRow).toBeVisible();
+    await expect(
+      page.getByText("Fairphone 6+ Has Surprising Features! #shorts.mp4"),
+    ).toBeVisible();
+    await expect(page.getByText("3.1 MB")).toBeVisible();
+    await expect(page.getByText("UPLOADED")).toBeVisible();
+    await expect(page.getByText("0 total")).toHaveCount(0);
+
+    // Verify Open Editor action is visible
+    const openEditorBtn = prodRow.getByRole("button", { name: "Open Editor" });
+    await expect(openEditorBtn).toBeVisible();
+
+    // Verify clicking Open Editor navigates to the Editor URL
+    await openEditorBtn.click();
+    await expect(page).toHaveURL(/\/productions\/prod_f0b41bfd429e\/editor/);
     expect(consoleErrors).toEqual([]);
   });
 
@@ -147,7 +220,7 @@ test.describe("Production Home and Raw Media Upload", () => {
     });
 
     await mockFirebasePasswordSignIn(page);
-    await mockBackendApis(page);
+    await mockBackendApis(page, []);
 
     // Mock upload negotiation endpoint
     await page.route("**/api/uploads", async (route) => {
@@ -220,27 +293,27 @@ test.describe("Production Home and Raw Media Upload", () => {
     // Click upload
     await uploadBtn.click();
 
-    // Verify uploaded state and Open in Editor button
+    // Verify uploaded state and Open Editor button
     await expect(page.getByText("Uploaded")).toBeVisible();
-    await expect(page.getByText("Upload complete and production recorded")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Open in Editor" })).toBeVisible();
+    await expect(page.getByText("Upload complete")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open Editor" })).toBeVisible();
     await page.screenshot({ path: "e2e/screenshots/studio-cockpit-uploaded.png", fullPage: true });
     expect(consoleErrors).toEqual([]);
   });
 
-  test("renders responsive Production Home at mobile viewport (390px)", async ({ page }) => {
+  test("renders responsive Product Home at mobile viewport (390px)", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await mockFirebasePasswordSignIn(page);
-    await mockBackendApis(page);
+    await mockBackendApis(page, []);
     await login(page);
 
-    await expect(page.getByRole("heading", { name: "Productions", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.screenshot({ path: "e2e/screenshots/studio-cockpit-390px.png", fullPage: true });
   });
 
   test("rejects invalid media format with clear error", async ({ page }) => {
     await mockFirebasePasswordSignIn(page);
-    await mockBackendApis(page);
+    await mockBackendApis(page, []);
     await login(page);
 
     const fileInput = page.locator('input[type="file"]');

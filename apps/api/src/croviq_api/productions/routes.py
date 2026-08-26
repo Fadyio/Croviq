@@ -96,7 +96,7 @@ async def create_upload(
 
     # Resolve active workspace
     workspace, _ = await workspace_repo.get_or_create_default_workspace(
-        current_user, default_name="Croviq Demo Workspace"
+        current_user, default_name="Croviq"
     )
 
     # Validate file type, extension coherence, and size limit
@@ -431,7 +431,7 @@ async def list_productions(
     limit: int = 20,
 ) -> ProductionListResponse:
     workspace, _ = await workspace_repo.get_or_create_default_workspace(
-        current_user, default_name="Croviq Demo Workspace"
+        current_user, default_name="Croviq"
     )
     prods = await production_repo.list_productions(
         workspace_id=workspace.workspace_id, limit=limit
