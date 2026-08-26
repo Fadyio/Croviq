@@ -19,6 +19,7 @@ locals {
     "compute.googleapis.com",
     "certificatemanager.googleapis.com",
     "aiplatform.googleapis.com",
+    "speech.googleapis.com",
   ]
 }
 

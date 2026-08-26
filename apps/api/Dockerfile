@@ -14,8 +14,8 @@ WORKDIR /app
 # Copy dependency specifications first for layer caching
 COPY packages/domain/ /app/packages/domain/
 COPY packages/observability/ /app/packages/observability/
+COPY packages/media/ /app/packages/media/
 COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/
-
 WORKDIR /app/apps/api
 
 # Install production dependencies only using frozen lockfile
@@ -40,12 +40,17 @@ ENV PATH="/app/apps/api/.venv/bin:$PATH"
 
 WORKDIR /app/apps/api
 
+# Install ffmpeg runtime dependency
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy virtual environment and application code from builder
 COPY --from=builder /app/apps/api/.venv /app/apps/api/.venv
 COPY --from=builder /app/apps/api/src /app/apps/api/src
 COPY --from=builder /app/packages/domain /app/packages/domain
 COPY --from=builder /app/packages/observability /app/packages/observability
-# Create non-root user
+COPY --from=builder /app/packages/media /app/packages/media
 RUN useradd -u 1000 -U -m -s /bin/bash appuser && \
     chown -R appuser:appuser /app
 

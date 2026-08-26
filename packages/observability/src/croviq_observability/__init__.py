@@ -31,6 +31,8 @@ from croviq_observability.logger import (
     log_memory_event,
     set_logger,
     log_upload_event,
+    log_transcription_event,
+    log_media_inspect_event,
 )
 from croviq_observability.middleware import (
     StructuredLoggingMiddleware,
@@ -67,7 +69,8 @@ __all__ = [
     "log_memory_event",
     "log_workspace_event",
     "log_upload_event",
-    "redact_string",
+    "log_transcription_event",
+    "log_media_inspect_event",
     "register_error_handlers",
     "sanitize_payload",
     "set_logger",

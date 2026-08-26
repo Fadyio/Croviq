@@ -11,88 +11,102 @@
 
 export interface paths {
   "/api/health": {
-    get: {
-      responses: {
-        200: components["schemas"]["HealthResponse"];
+      get: {
+        responses: {
+          200: components['schemas']['HealthResponse'];
+        };
       };
-    };
   };
   "/api/client-events": {
-    post: {
-      responses: {
-        200: unknown;
-        422: components["schemas"]["HTTPValidationError"];
+      post: {
+        responses: {
+          200: unknown; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
   };
   "/api/auth/me": {
-    get: {
-      responses: {
-        200: components["schemas"]["User"];
+      get: {
+        responses: {
+          200: components['schemas']['User'];
+        };
       };
-    };
   };
   "/api/auth/logout": {
-    post: {
-      responses: {
-        200: unknown;
+      post: {
+        responses: {
+          200: unknown;
+        };
       };
-    };
   };
   "/api/workspace": {
-    get: {
-      responses: {
-        200: components["schemas"]["Workspace"];
+      get: {
+        responses: {
+          200: components['schemas']['Workspace'];
+        };
       };
-    };
   };
   "/api/channel/memory/profile": {
-    get: {
-      responses: {
-        200: components["schemas"]["ChannelMemoryProfile"];
-        422: components["schemas"]["HTTPValidationError"];
+      get: {
+        responses: {
+          200: components['schemas']['ChannelMemoryProfile']; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
   };
   "/api/channel/memory/lessons": {
-    get: {
-      responses: {
-        200: unknown;
-        422: components["schemas"]["HTTPValidationError"];
+      get: {
+        responses: {
+          200: unknown; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
   };
   "/api/uploads": {
-    post: {
-      responses: {
-        201: components["schemas"]["CreateUploadResponse"];
-        422: components["schemas"]["HTTPValidationError"];
+      post: {
+        responses: {
+          201: components['schemas']['CreateUploadResponse']; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
   };
   "/api/uploads/{upload_id}/complete": {
-    post: {
-      responses: {
-        200: components["schemas"]["Production"];
-        422: components["schemas"]["HTTPValidationError"];
+      post: {
+        responses: {
+          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
   };
   "/api/productions": {
-    get: {
-      responses: {
-        200: components["schemas"]["ProductionListResponse"];
-        422: components["schemas"]["HTTPValidationError"];
+      get: {
+        responses: {
+          200: components['schemas']['ProductionListResponse']; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
   };
   "/api/productions/{production_id}": {
-    get: {
-      responses: {
-        200: components["schemas"]["Production"];
-        422: components["schemas"]["HTTPValidationError"];
+      get: {
+        responses: {
+          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
+        };
       };
-    };
+  };
+  "/api/productions/{production_id}/transcribe": {
+      post: {
+        responses: {
+          200: components['schemas']['TranscribeProductionResponse']; 422: components['schemas']['HTTPValidationError'];
+        };
+      };
+  };
+  "/api/productions/{production_id}/transcript": {
+      get: {
+        responses: {
+          200: components['schemas']['Transcript']; 422: components['schemas']['HTTPValidationError'];
+        };
+      };
+  };
+  "/api/productions/{production_id}/source-analysis-input": {
+      get: {
+        responses: {
+          200: components['schemas']['SourceVideoAnalysisInput']; 422: components['schemas']['HTTPValidationError'];
+        };
+      };
   };
 }
 
@@ -123,7 +137,7 @@ export interface components {
       /** Actionable instruction for the agent. */
       directive: string;
       /** Agent role this lesson directs (director, editor, packaging, qa). */
-      target_agent: components["schemas"]["TargetAgent"];
+      target_agent: components['schemas']['TargetAgent'];
       /** Statistical or qualitative summary of evidence supporting this directive. */
       evidence_summary: string;
       /** Confidence score for this lesson (0.0 to 1.0). */
@@ -193,7 +207,7 @@ export interface components {
       expires_at: string;
     };
     HTTPValidationError: {
-      detail?: components["schemas"]["ValidationError"][];
+      detail?: components['schemas']['ValidationError'][];
     };
     HealthResponse: {
       /** Service health status */
@@ -202,6 +216,28 @@ export interface components {
       service?: string;
       /** Current git commit SHA or environment identifier */
       git_sha: string;
+    };
+    MediaMetadata: {
+      /** Duration of the media in milliseconds */
+      duration_ms: number;
+      /** Video frame width in pixels (0 for audio-only) */
+      width?: number;
+      /** Video frame height in pixels (0 for audio-only) */
+      height?: number;
+      /** Video frame rate in frames per second (0.0 for audio-only) */
+      frame_rate?: number;
+      /** Video codec name (e.g. 'h264', 'hevc', 'vp9', or 'none') */
+      video_codec?: string;
+      /** Audio codec name (e.g. 'aac', 'opus', 'pcm_s16le') */
+      audio_codec?: string | null;
+      /** Audio sample rate in Hertz (e.g. 48000, 44100, 16000) */
+      audio_sample_rate?: number | null;
+      /** Audio channel count (e.g. 1 for mono, 2 for stereo) */
+      audio_channels?: number | null;
+      /** Video orientation rotation in degrees (0, 90, 180, 270) */
+      rotation?: number;
+      /** Total media file size in bytes */
+      size_bytes: number;
     };
     Production: {
       /** Unique production identifier */
@@ -213,9 +249,9 @@ export interface components {
       /** Identifier of the user who owns this production */
       owner_user_id: string;
       /** Raw source media metadata associated with this production */
-      source_media?: components["schemas"]["SourceMedia"] | null;
+      source_media?: components['schemas']['SourceMedia'] | null;
       /** Current production status */
-      status?: components["schemas"]["ProductionStatus"];
+      status?: components['schemas']['ProductionStatus'];
       /** Timestamp when the production was created (UTC) */
       created_at: string;
       /** Timestamp when the production was last updated (UTC) */
@@ -223,11 +259,19 @@ export interface components {
     };
     ProductionListResponse: {
       /** List of recent Production records */
-      productions?: components["schemas"]["Production"][];
+      productions?: components['schemas']['Production'][];
       /** Total number of productions returned */
       total: number;
     };
     ProductionStatus: "pending" | "uploading" | "uploaded" | "failed";
+    SilenceInterval: {
+      /** Silence interval start offset in milliseconds */
+      start_ms: number;
+      /** Silence interval end offset in milliseconds */
+      end_ms: number;
+      /** Silence interval duration in milliseconds */
+      duration_ms: number;
+    };
     SourceMedia: {
       /** Unique upload identifier */
       upload_id: string;
@@ -242,14 +286,92 @@ export interface components {
       /** Target Google Cloud Storage object path */
       gcs_object: string;
       /** Upload lifecycle status */
-      status?: components["schemas"]["SourceMediaStatus"];
+      status?: components['schemas']['SourceMediaStatus'];
       /** Timestamp when the upload record was created (UTC) */
       created_at: string;
       /** Timestamp when the media upload was verified and completed (UTC) */
       uploaded_at?: string | null;
     };
     SourceMediaStatus: "pending" | "uploading" | "uploaded" | "failed";
+    SourceVideoAnalysisInput: {
+      /** Associated Production entity identifier */
+      production_id: string;
+      /** Source media upload metadata and GCS reference */
+      source_media: components['schemas']['SourceMedia'];
+      /** Deterministic FFprobe media technical parameters */
+      media_metadata: components['schemas']['MediaMetadata'];
+      /** Word-aligned transcript with millisecond timestamps */
+      transcript: components['schemas']['Transcript'];
+      /** Associated channel identifier */
+      channel_id: string;
+      /** Reference identifier to ChannelMemoryProfile in Memory Bank */
+      channel_memory_reference?: string | null;
+    };
     TargetAgent: "director" | "editor" | "packaging" | "qa";
+    TranscribeProductionResponse: {
+      /** Transcription status ('completed' or 'already_transcribed') */
+      status: "completed" | "already_transcribed";
+      /** Unique identifier of the generated or retrieved transcript */
+      transcript_id: string;
+      /** Identifier of the associated Production */
+      production_id: string;
+      /** Total duration of the transcript in milliseconds */
+      duration_ms: number;
+      /** Total number of word tokens in the transcript */
+      word_count: number;
+      /** Total number of phrase segments in the transcript */
+      segment_count: number;
+      /** Language code used for transcription */
+      language_code: string;
+      /** Full word-aligned transcript object */
+      transcript: components['schemas']['Transcript'];
+    };
+    Transcript: {
+      /** Unique identifier for the transcript entity */
+      transcript_id: string;
+      /** Identifier of the associated Production record */
+      production_id: string;
+      /** Language tag of the transcription (e.g. 'en-US' or 'en') */
+      language_code: string;
+      /** Total duration of the audio/speech stream in milliseconds */
+      duration_ms: number;
+      /** Ordered list of word-level timestamped tokens */
+      words?: components['schemas']['TranscriptWord'][];
+      /** Ordered list of sentence/phrase segments */
+      segments?: components['schemas']['TranscriptSegment'][];
+      /** Identified inter-word silence intervals */
+      silence_intervals?: components['schemas']['SilenceInterval'][];
+      /** Timestamp when the transcript was generated (UTC) */
+      created_at: string;
+    };
+    TranscriptSegment: {
+      /** Unique identifier for this segment */
+      segment_id: string;
+      /** Start offset of the segment in milliseconds */
+      start_ms: number;
+      /** End offset of the segment in milliseconds */
+      end_ms: number;
+      /** Aggregated text content of the segment */
+      text: string;
+      /** Inclusive start index in the transcript words list */
+      word_start_index: number;
+      /** Inclusive end index in the transcript words list */
+      word_end_index: number;
+    };
+    TranscriptWord: {
+      /** Zero-based sequential index of the word in the transcript */
+      index: number;
+      /** Spoken text of the word */
+      text: string;
+      /** Start offset from beginning of audio stream in milliseconds */
+      start_ms: number;
+      /** End offset from beginning of audio stream in milliseconds */
+      end_ms: number;
+      /** Confidence score from speech recognizer (0.0 to 1.0) */
+      confidence?: number | null;
+      /** Optional speaker identifier or diarization tag */
+      speaker_id?: string | null;
+    };
     User: {
       /** Unique user identifier (e.g. Firebase UID / Google sub) */
       user_id: string;
@@ -281,7 +403,7 @@ export interface components {
       /** Description of the YouTube channel or production context */
       channel_description?: string | null;
       /** Workspace brand kit configuration */
-      brand_kit?: components["schemas"]["BrandKit"];
+      brand_kit?: components['schemas']['BrandKit'];
       /** Timestamp when the workspace was created (UTC) */
       created_at: string;
       /** Timestamp when the workspace was last updated (UTC) */

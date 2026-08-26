@@ -32,7 +32,15 @@ class EventType(StrEnum):
     UPLOAD_COMPLETED = "upload.completed"
     UPLOAD_FAILED = "upload.failed"
 
-    # Memory Bank events
+    # Media Inspect events
+    MEDIA_INSPECT_COMPLETED = "media.inspect.completed"
+    MEDIA_INSPECT_FAILED = "media.inspect.failed"
+
+    # Transcription events
+    TRANSCRIPTION_STARTED = "transcription.started"
+    TRANSCRIPTION_COMPLETED = "transcription.completed"
+    TRANSCRIPTION_FAILED = "transcription.failed"
+
     MEMORY_PROFILE_GENERATE_STARTED = "memory.profile.generate.started"
     MEMORY_PROFILE_GENERATE_COMPLETED = "memory.profile.generate.completed"
     MEMORY_PROFILE_RETRIEVE = "memory.profile.retrieve"

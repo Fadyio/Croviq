@@ -1,10 +1,11 @@
 """API schemas for Production and Media Upload operations."""
 
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from croviq_domain.production import Production
-
+from croviq_domain.transcript import Transcript
 
 class CreateUploadRequest(BaseModel):
     """Request payload to initiate a direct GCS media upload."""
@@ -87,4 +88,45 @@ class ProductionListResponse(BaseModel):
     total: int = Field(
         ...,
         description="Total number of productions returned",
+    )
+
+
+class TranscribeProductionResponse(BaseModel):
+    """Response returned upon successfully transcribing a production's source media."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    status: Literal["completed", "already_transcribed"] = Field(
+        ...,
+        description="Transcription status ('completed' or 'already_transcribed')",
+        examples=["completed"],
+    )
+    transcript_id: str = Field(
+        ...,
+        description="Unique identifier of the generated or retrieved transcript",
+    )
+    production_id: str = Field(
+        ...,
+        description="Identifier of the associated Production",
+    )
+    duration_ms: int = Field(
+        ...,
+        description="Total duration of the transcript in milliseconds",
+    )
+    word_count: int = Field(
+        ...,
+        description="Total number of word tokens in the transcript",
+    )
+    segment_count: int = Field(
+        ...,
+        description="Total number of phrase segments in the transcript",
+    )
+    language_code: str = Field(
+        ...,
+        description="Language code used for transcription",
+    )
+    transcript: Transcript = Field(
+        ...,
+        description="Full word-aligned transcript object",
     )

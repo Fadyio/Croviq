@@ -385,3 +385,117 @@ def log_upload_event(
         **extra,
         **kwargs,
     )
+
+
+def log_transcription_event(
+    event_type: str,
+    status: int | str,
+    request_id: str,
+    production_id: str,
+    transcript_id: str | None = None,
+    duration_ms: int | None = None,
+    word_count: int | None = None,
+    segment_count: int | None = None,
+    language_code: str | None = None,
+    latency_ms: float | None = None,
+    message: str | None = None,
+    error_code: str | None = None,
+    exception: BaseException | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Log structured speech transcription event for Google Cloud Logging ingestion.
+
+    Guarantees:
+    - Never logs full transcript, signed URLs, authorization tokens, or GCP credentials.
+    """
+    severity: LogSeverity = "ERROR" if (str(status).startswith("4") or str(status).startswith("5") or status == "failed" or exception is not None) else "INFO"
+    status_code: int | None = None
+    if isinstance(status, int):
+        status_code = status
+    elif isinstance(status, str) and status.isdigit():
+        status_code = int(status)
+
+    extra: dict[str, Any] = {
+        "production_id": production_id,
+    }
+    if not isinstance(status, int):
+        extra["execution_status"] = str(status)
+    if transcript_id is not None:
+        extra["transcript_id"] = transcript_id
+    if duration_ms is not None:
+        extra["duration_ms"] = duration_ms
+    if word_count is not None:
+        extra["word_count"] = word_count
+    if segment_count is not None:
+        extra["segment_count"] = segment_count
+    if language_code is not None:
+        extra["language_code"] = language_code
+    if latency_ms is not None:
+        extra["latency_ms"] = latency_ms
+
+    return _default_logger.log(
+        event_type=event_type,
+        severity=severity,
+        status=status_code,
+        request_id=request_id,
+        message=message,
+        error_code=error_code,
+        exception=exception,
+        **extra,
+        **kwargs,
+    )
+
+
+def log_media_inspect_event(
+    event_type: str,
+    status: int | str,
+    request_id: str,
+    production_id: str,
+    duration_ms: int | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    video_codec: str | None = None,
+    audio_codec: str | None = None,
+    latency_ms: float | None = None,
+    message: str | None = None,
+    error_code: str | None = None,
+    exception: BaseException | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Log structured media inspection event for Google Cloud Logging ingestion."""
+    severity: LogSeverity = "ERROR" if (str(status).startswith("4") or str(status).startswith("5") or status == "failed" or exception is not None) else "INFO"
+    status_code: int | None = None
+    if isinstance(status, int):
+        status_code = status
+    elif isinstance(status, str) and status.isdigit():
+        status_code = int(status)
+
+    extra: dict[str, Any] = {
+        "production_id": production_id,
+    }
+    if not isinstance(status, int):
+        extra["execution_status"] = str(status)
+    if duration_ms is not None:
+        extra["duration_ms"] = duration_ms
+    if width is not None:
+        extra["width"] = width
+    if height is not None:
+        extra["height"] = height
+    if video_codec is not None:
+        extra["video_codec"] = video_codec
+    if audio_codec is not None:
+        extra["audio_codec"] = audio_codec
+    if latency_ms is not None:
+        extra["latency_ms"] = latency_ms
+
+    return _default_logger.log(
+        event_type=event_type,
+        severity=severity,
+        status=status_code,
+        request_id=request_id,
+        message=message,
+        error_code=error_code,
+        exception=exception,
+        **extra,
+        **kwargs,
+    )

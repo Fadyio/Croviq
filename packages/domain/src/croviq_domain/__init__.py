@@ -21,13 +21,13 @@ from croviq_domain.channel_provider import (
     ChannelDataProvider,
     SampleChannelDataProvider,
 )
+from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.memory import (
     ChannelLesson,
     ChannelMemoryProfile,
     ChannelProfileBuilder,
     TargetAgent,
 )
-from croviq_domain.user import User
 from croviq_domain.production import (
     ALLOWED_MEDIA_TYPES,
     DEFAULT_SIGNED_URL_EXPIRY_SECONDS,
@@ -40,6 +40,14 @@ from croviq_domain.production import (
     sanitize_filename,
     validate_media_file,
 )
+from croviq_domain.source_analysis import SourceVideoAnalysisInput
+from croviq_domain.transcript import (
+    SilenceInterval,
+    Transcript,
+    TranscriptSegment,
+    TranscriptWord,
+)
+from croviq_domain.user import User
 from croviq_domain.workspace import Workspace
 
 __all__ = [
@@ -57,11 +65,17 @@ __all__ = [
     "DerivedVideoFeatures",
     "DeviceMetric",
     "GeographyMetric",
+    "MediaMetadata",
     "RetentionPoint",
     "SampleChannelDataProvider",
     "SampleChannelFixture",
+    "SilenceInterval",
+    "SourceVideoAnalysisInput",
     "TitleStyle",
     "TrafficSourceMetric",
+    "Transcript",
+    "TranscriptSegment",
+    "TranscriptWord",
     "User",
     "VideoFormat",
     "VideoPrivateAnalytics",

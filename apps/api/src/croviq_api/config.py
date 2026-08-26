@@ -67,6 +67,12 @@ class Settings:
         self.api_runtime_service_account: str | None = os.getenv("API_RUNTIME_SERVICE_ACCOUNT") or (
             f"croviq-api-runtime@{self.gcp_project_id}.iam.gserviceaccount.com" if self.gcp_project_id else None
         )
+        self.speech_service_provider: str = os.getenv(
+            "SPEECH_SERVICE_PROVIDER",
+            "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
+        )
+        self.speech_location: str = os.getenv("SPEECH_LOCATION", "global")
+        self.speech_recognizer_id: str = os.getenv("SPEECH_RECOGNIZER_ID", "_")
 
 
 @lru_cache(maxsize=1)
