@@ -104,6 +104,11 @@ jobs:
           enable-cache: true
           python-version: "3.12"
 
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
       - name: Install backend dependencies
         working-directory: apps/api
         run: uv sync --frozen
