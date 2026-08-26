@@ -323,9 +323,9 @@ class FirestoreEditorialRepository(EditorialRepository):
         db = self._get_client()
         coll_ref = db.collection("productions").document(production_id).collection("agent_activities")
         if run_id:
-            query = coll_ref.where("run_id", "==", run_id).order_by("created_at")
+            query = coll_ref.where("run_id", "==", run_id)
         else:
-            query = coll_ref.order_by("created_at")
+            query = coll_ref
         try:
             docs = list(query.stream())
             latency_ms = (time.perf_counter() - start_time) * 1000
@@ -335,6 +335,7 @@ class FirestoreEditorialRepository(EditorialRepository):
                 data["activity_id"] = doc.id
                 data["created_at"] = parse_datetime(data.get("created_at"))
                 activities.append(AgentActivity.model_validate(data))
+            activities.sort(key=lambda a: a.created_at)
             log_firestore_event("firestore.read", "agent_activities", "query", status=200, latency_ms=latency_ms)
             return activities
         except Exception as exc:
