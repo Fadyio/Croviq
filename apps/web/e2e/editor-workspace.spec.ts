@@ -272,6 +272,17 @@ const mockEditorApis = async (page: Page, options?: { customEdl?: unknown }) => 
       }),
     });
   });
+  // Mock signed media video playback stream
+  await page.route("**/mock-signed-video.mp4*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "video/mp4",
+      headers: {
+        "access-control-allow-origin": "*",
+      },
+      body: Buffer.from(""),
+    });
+  });
 
   // Mock Transcript (314 words, 18 segments)
   await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/transcript`, async (route) => {
