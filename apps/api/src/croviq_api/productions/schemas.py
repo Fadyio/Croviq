@@ -267,3 +267,24 @@ class EDLDetailResponse(BaseModel):
         ...,
         description="Ordered list of contiguous (start_ms, end_ms) media intervals to KEEP for master video render",
     )
+
+
+class ProductionPlaybackResponse(BaseModel):
+    """Response containing a short-lived signed GET URL for browser source video playback."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    production_id: str = Field(
+        ...,
+        description="Canonical unique production identifier",
+    )
+    playback_url: str = Field(
+        ...,
+        description="Short-lived keyless signed GET URL for browser video playback",
+    )
+    expires_at: datetime = Field(
+        ...,
+        description="UTC expiration timestamp of the signed playback URL",
+    )

@@ -784,6 +784,52 @@
           }
         }
       }
+    },
+    "/api/productions/{production_id}/playback": {
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get Short-Lived Signed URL for Source Video Playback",
+        "description": "Retrieve a short-lived keyless signed GET URL for browser source video playback.",
+        "operationId": "get_production_playback_api_productions__production_id__playback_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductionPlaybackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2420,6 +2466,31 @@
         "required": ["total"],
         "title": "ProductionListResponse",
         "description": "Response returned when listing recent productions."
+      },
+      "ProductionPlaybackResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Canonical unique production identifier"
+          },
+          "playback_url": {
+            "type": "string",
+            "title": "Playback Url",
+            "description": "Short-lived keyless signed GET URL for browser video playback"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At",
+            "description": "UTC expiration timestamp of the signed playback URL"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id", "playback_url", "expires_at"],
+        "title": "ProductionPlaybackResponse",
+        "description": "Response containing a short-lived signed GET URL for browser source video playback."
       },
       "ProductionStatus": {
         "type": "string",

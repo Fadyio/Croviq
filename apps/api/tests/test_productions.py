@@ -462,3 +462,72 @@ def test_list_productions(app_and_client):
     data = list_resp.json()
     assert data["total"] == 2
     assert len(data["productions"]) == 2
+
+
+def test_get_production_playback_success(app_and_client):
+    client, _, prod_repo, fake_storage = app_and_client
+
+    create_resp = client.post(
+        "/api/uploads",
+        json={
+            "filename": "test_video.mp4",
+            "content_type": "video/mp4",
+            "size_bytes": 10_000_000,
+            "channel_id": "croviq_syn_ai_eng_01",
+        },
+    )
+    assert create_resp.status_code == 201
+    upload_data = create_resp.json()
+    upload_id = upload_data["upload_id"]
+    production_id = upload_data["production_id"]
+
+    prod = prod_repo._productions[production_id]
+    fake_storage.simulate_uploaded_object(
+        bucket=prod.source_media.gcs_bucket,
+        object_name=prod.source_media.gcs_object,
+        size_bytes=10_000_000,
+        content_type="video/mp4",
+    )
+
+    comp_resp = client.post(f"/api/uploads/{upload_id}/complete")
+    assert comp_resp.status_code == 200
+
+    playback_resp = client.get(f"/api/productions/{production_id}/playback")
+    assert playback_resp.status_code == 200
+    playback_data = playback_resp.json()
+    assert playback_data["production_id"] == production_id
+    assert "token=mock_v4_signed_read" in playback_data["playback_url"]
+    assert "expires_at" in playback_data
+
+
+def test_get_production_playback_forbidden_for_other_user(app_and_client, unauthorized_user):
+    client, _, prod_repo, fake_storage = app_and_client
+
+    create_resp = client.post(
+        "/api/uploads",
+        json={
+            "filename": "secret_video.mp4",
+            "content_type": "video/mp4",
+            "size_bytes": 10_000_000,
+            "channel_id": "croviq_syn_ai_eng_01",
+        },
+    )
+    upload_data = create_resp.json()
+    upload_id = upload_data["upload_id"]
+    production_id = upload_data["production_id"]
+
+    prod = prod_repo._productions[production_id]
+    fake_storage.simulate_uploaded_object(
+        bucket=prod.source_media.gcs_bucket,
+        object_name=prod.source_media.gcs_object,
+        size_bytes=10_000_000,
+        content_type="video/mp4",
+    )
+    client.post(f"/api/uploads/{upload_id}/complete")
+
+    app = client.app
+    app.dependency_overrides[get_current_user] = lambda: unauthorized_user
+
+    playback_resp = client.get(f"/api/productions/{production_id}/playback")
+    assert playback_resp.status_code == 403
+    assert "do not own" in playback_resp.json()["detail"]

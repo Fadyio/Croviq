@@ -46,6 +46,7 @@ from croviq_api.productions.schemas import (
     EditorialRunDetailResponse,
     ProductionListResponse,
     TranscribeProductionResponse,
+    ProductionPlaybackResponse,
 )
 from croviq_api.workspaces.repository import (
     WorkspaceRepository,
@@ -874,4 +875,35 @@ async def get_production_edl(
     return EDLDetailResponse(
         edl=edl,
         keep_segments=keep_segments,
+    )
+
+
+@router.get(
+    "/productions/{production_id}/playback",
+    response_model=ProductionPlaybackResponse,
+    summary="Get Short-Lived Signed URL for Source Video Playback",
+    description="Retrieve a short-lived keyless signed GET URL for browser source video playback.",
+)
+async def get_production_playback(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> ProductionPlaybackResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    if not prod.source_media or not prod.source_media.gcs_bucket or not prod.source_media.gcs_object:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Production '{production_id}' has no source media in storage",
+        )
+    signed_target = await media_storage.generate_signed_read_target(
+        bucket=prod.source_media.gcs_bucket,
+        object_name=prod.source_media.gcs_object,
+        expiry_seconds=3600,
+    )
+    return ProductionPlaybackResponse(
+        production_id=prod.production_id,
+        playback_url=signed_target.read_url,
+        expires_at=signed_target.expires_at,
     )
