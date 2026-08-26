@@ -26,6 +26,12 @@ class EventType(StrEnum):
     FIRESTORE_WRITE = "firestore.write"
     FIRESTORE_ERROR = "firestore.error"
 
+    # Memory Bank events
+    MEMORY_PROFILE_GENERATE_STARTED = "memory.profile.generate.started"
+    MEMORY_PROFILE_GENERATE_COMPLETED = "memory.profile.generate.completed"
+    MEMORY_PROFILE_RETRIEVE = "memory.profile.retrieve"
+    MEMORY_PROFILE_FAILED = "memory.profile.failed"
+
     # Client browser events (allowlisted)
     CLIENT_ERROR = "client.error"
 

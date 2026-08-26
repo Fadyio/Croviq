@@ -21,6 +21,12 @@ from croviq_domain.channel_provider import (
     ChannelDataProvider,
     SampleChannelDataProvider,
 )
+from croviq_domain.memory import (
+    ChannelLesson,
+    ChannelMemoryProfile,
+    ChannelProfileBuilder,
+    TargetAgent,
+)
 from croviq_domain.user import User
 from croviq_domain.workspace import Workspace
 
@@ -28,6 +34,9 @@ __all__ = [
     "BrandKit",
     "Channel",
     "ChannelDataProvider",
+    "ChannelLesson",
+    "ChannelMemoryProfile",
+    "ChannelProfileBuilder",
     "ChannelPrivateAnalytics",
     "ChannelPublicMetadata",
     "ChannelVideo",
@@ -45,6 +54,7 @@ __all__ = [
     "VideoFormat",
     "VideoPrivateAnalytics",
     "VideoPublicMetadata",
+    "TargetAgent",
     "Workspace",
 ]
 

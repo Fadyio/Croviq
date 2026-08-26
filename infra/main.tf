@@ -17,6 +17,7 @@ locals {
     "firestore.googleapis.com",
     "compute.googleapis.com",
     "certificatemanager.googleapis.com",
+    "aiplatform.googleapis.com",
   ]
 }
 
@@ -192,6 +193,13 @@ resource "google_project_iam_member" "deployer_cert_manager_owner" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
+# Allow deployment service account to provision/update Agent Platform Memory Bank (least privilege)
+resource "google_project_iam_member" "deployer_aiplatform_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 
 
 
@@ -291,6 +299,21 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.allowed_emails
       }
 
+      env {
+        name  = "MEMORY_BANK_LOCATION"
+        value = var.region
+      }
+
+      env {
+        name  = "MEMORY_BANK_ID"
+        value = var.memory_bank_id
+      }
+
+      env {
+        name  = "MEMORY_STORE_PROVIDER"
+        value = "google"
+      }
+
 
       startup_probe {
         http_get {
@@ -350,6 +373,13 @@ resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
 resource "google_project_iam_member" "api_runtime_firestore_user" {
   project = var.project_id
   role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
+# Allow API runtime service account to access Agent Platform Memory Bank (least privilege)
+resource "google_project_iam_member" "api_runtime_aiplatform_memory_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.memoryUser"
   member  = "serviceAccount:${google_service_account.api_runtime.email}"
 }
 

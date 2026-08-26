@@ -8,6 +8,7 @@ from croviq_api.config import get_settings
 from croviq_api.logging import StructuredLoggingMiddleware
 from croviq_observability import register_error_handlers
 from croviq_api.schemas import ClientAuthEvent, HealthResponse
+from croviq_api.memory import memory_router
 from croviq_api.workspaces import workspace_router
 # via Google Cloud Load Balancer, eliminating cross-origin browser CORS dependencies.
 # Local development origins are retained for local developer tooling and API test harnesses.
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
 
     api_router.include_router(auth_router)
     api_router.include_router(workspace_router)
+    api_router.include_router(memory_router)
 
     app.include_router(api_router)
     return app

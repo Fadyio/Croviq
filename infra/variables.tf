@@ -118,3 +118,9 @@ variable "firestore_location" {
   description = "The location ID for the Firestore database (e.g. us-central1)."
   default     = "us-central1"
 }
+
+variable "memory_bank_id" {
+  type        = string
+  description = "The identifier for the Google Agent Platform Memory Bank."
+  default     = "croviq-channel-memory"
+}

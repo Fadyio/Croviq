@@ -303,3 +303,33 @@ def log_ai_event(
         message=message,
         **kwargs,
     )
+
+
+def log_memory_event(
+    event_type: str,
+    channel_id: str,
+    status: int | str = 200,
+    request_id: str = "unknown",
+    latency_ms: float | None = None,
+    memory_schema_id: str = "channel-profile",
+    memory_bank_resource: str | None = None,
+    message: str | None = None,
+    error_code: str | None = None,
+    exception: BaseException | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    severity: LogSeverity = "ERROR" if (str(status).startswith("5") or status == "failed" or exception is not None) else "INFO"
+    return _default_logger.log(
+        event_type=event_type,
+        severity=severity,
+        channel_id=channel_id,
+        status=status,
+        request_id=request_id,
+        latency_ms=latency_ms,
+        memory_schema_id=memory_schema_id,
+        memory_bank_resource=memory_bank_resource,
+        message=message,
+        error_code=error_code,
+        exception=exception,
+        **kwargs,
+    )

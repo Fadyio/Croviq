@@ -48,6 +48,9 @@ class Settings:
             or os.getenv("GCLOUD_PROJECT")
             or os.getenv("PROJECT_ID")
         )
+        self.memory_bank_location: str = os.getenv("MEMORY_BANK_LOCATION") or os.getenv("GCP_REGION", "us-central1")
+        self.memory_bank_id: str = os.getenv("MEMORY_BANK_ID", "croviq-channel-memory")
+        self.memory_store_provider: str = os.getenv("MEMORY_STORE_PROVIDER", "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake")
         self.allowed_emails: list[str] = parse_allowed_emails(os.getenv("CROVIQ_ALLOWED_EMAILS"))
 
 
