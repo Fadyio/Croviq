@@ -78,8 +78,8 @@ def test_api_cloud_run_has_required_production_env_vars() -> None:
     assert env_vars["GEMINI_MODEL_ID"] == "gemini-3.7-flash"
 
     assert env_vars["VERTEXAI_LOCATION"] == "global"
-
-
+    assert env_vars["SPEECH_SERVICE_PROVIDER"] == "google"
+    assert env_vars["GEMINI_TRANSCRIPTION_MODEL"] == "gemini-3.5-transcribe-preview"
 def test_deployer_has_serviceusage_consumer_role() -> None:
     """Assert presence of roles/serviceusage.serviceUsageConsumer IAM role for deployment service account."""
     content = get_infra_main_content()
@@ -105,8 +105,8 @@ def test_identity_platform_keeps_phone_auth_disabled() -> None:
         re.DOTALL,
     )
 
-def test_groq_secret_manager_phase_two_injects_scoped_runtime_secret() -> None:
-    """Require the API Cloud Run service to reference Groq's latest secret version."""
+def test_groq_secret_manager_metadata_retained_without_cloud_run_injection() -> None:
+    """Verify Groq secret metadata is retained for rollback safety without Cloud Run secret injection."""
     content = get_infra_main_content()
 
     assert '"secretmanager.googleapis.com"' in content
@@ -134,6 +134,4 @@ def test_groq_secret_manager_phase_two_injects_scoped_runtime_secret() -> None:
         re.DOTALL,
     )
     assert api_service is not None
-    assert 'name = "GROQ_API_KEY"' in api_service.group(1)
-    assert 'secret  = google_secret_manager_secret.groq_api_key.secret_id' in api_service.group(1)
-    assert 'version = "latest"' in api_service.group(1)
+    assert 'name = "GROQ_API_KEY"' not in api_service.group(1)
