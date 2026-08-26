@@ -15,6 +15,7 @@ from croviq_domain.edl import EditDecisionList
 from croviq_domain.production import Production
 from croviq_domain.transcript import Transcript
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
+from croviq_domain.render_review import RenderReview
 
 class CreateUploadRequest(BaseModel):
     """Request payload to initiate a direct GCS media upload."""
@@ -415,4 +416,62 @@ class RenderListResponse(BaseModel):
     renders: list[RenderArtifactResponse] = Field(
         ...,
         description="List of all render artifacts associated with the production",
+    )
+
+
+class ReviewPreviewResponse(BaseModel):
+    """Response returned upon completing post-render preview review and Master render gating."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    production_id: str = Field(
+        ...,
+        description="Canonical unique production identifier",
+    )
+    review: RenderReview = Field(
+        ...,
+        description="Maya's post-render review record",
+    )
+    master_artifact: RenderArtifactResponse | None = Field(
+        default=None,
+        description="Master render artifact if approved and rendered",
+    )
+    second_review: RenderReview | None = Field(
+        default=None,
+        description="Second post-render review if bounded correction was performed",
+    )
+    status: str = Field(
+        ...,
+        description="Current workflow status (complete, needs_manual_review, correcting, approved)",
+    )
+    activities: list[AgentActivity] = Field(
+        default_factory=list,
+        description="Product-facing agent activity messages emitted during review and correction",
+    )
+
+
+class RenderReviewDetailResponse(BaseModel):
+    """Response containing latest and historical post-render reviews for a production."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    production_id: str = Field(
+        ...,
+        description="Canonical unique production identifier",
+    )
+    review: RenderReview | None = Field(
+        default=None,
+        description="Most recent post-render review record",
+    )
+    reviews: list[RenderReview] = Field(
+        default_factory=list,
+        description="All post-render review records for this production",
+    )
+    needs_manual_review: bool = Field(
+        default=False,
+        description="Whether production requires manual human review after exhausted bounded correction",
     )

@@ -66,6 +66,13 @@ from croviq_domain.render import (
     RenderArtifact,
     build_render_artifact_gcs_object_path,
 )
+from croviq_domain.render_review import (
+    RenderReview,
+    RenderReviewIssue,
+    RenderReviewIssueType,
+    RenderReviewSeverity,
+    RenderReviewVerdict,
+)
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import (
     SilenceInterval,
@@ -138,6 +145,11 @@ __all__ = [
     "ArtifactType",
     "RenderArtifact",
     "build_render_artifact_gcs_object_path",
+    "RenderReview",
+    "RenderReviewIssue",
+    "RenderReviewIssueType",
+    "RenderReviewSeverity",
+    "RenderReviewVerdict",
 ]
 
 __version__ = "0.1.0"

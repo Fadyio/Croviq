@@ -12,6 +12,13 @@ from croviq_domain.editorial import (
     EditorialRunStatus,
     ShortCandidate,
 )
+from croviq_domain.render_review import (
+    RenderReview,
+    RenderReviewIssue,
+    RenderReviewIssueType,
+    RenderReviewSeverity,
+    RenderReviewVerdict,
+)
 
 __all__ = [
     "AgentActivity",
@@ -24,4 +31,9 @@ __all__ = [
     "EditorialRun",
     "EditorialRunStatus",
     "ShortCandidate",
+    "RenderReview",
+    "RenderReviewIssue",
+    "RenderReviewIssueType",
+    "RenderReviewSeverity",
+    "RenderReviewVerdict",
 ]

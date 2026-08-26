@@ -79,6 +79,19 @@ class EventType(StrEnum):
     RENDER_FAILED = "render.failed"
 
 
+    # Director Render Review events (Issue #30)
+    DIRECTOR_RENDER_REVIEW_STARTED = "director.render_review.started"
+    DIRECTOR_RENDER_REVIEW_COMPLETED = "director.render_review.completed"
+    DIRECTOR_RENDER_REVIEW_FAILED = "director.render_review.failed"
+
+    # Editor Correction events (Issue #30)
+    EDITOR_CORRECTION_STARTED = "editor.correction.started"
+    EDITOR_CORRECTION_COMPLETED = "editor.correction.completed"
+    EDITOR_CORRECTION_FAILED = "editor.correction.failed"
+
+    # Master render approval event (Issue #30)
+    MASTER_APPROVED = "master.approved"
+
 # Normalized set of all standard event names
 NORMALIZED_EVENT_TYPES: frozenset[str] = frozenset(e.value for e in EventType)
 

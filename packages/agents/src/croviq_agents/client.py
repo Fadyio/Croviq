@@ -11,7 +11,17 @@ from typing import Any
 
 from croviq_agents.prompts import (
     build_director_prompt,
+    build_director_render_review_prompt,
+    build_editor_correction_prompt,
     build_editor_prompt,
+)
+from croviq_domain.edl import EditDecisionList
+from croviq_domain.render_review import (
+    RenderReview,
+    RenderReviewIssue,
+    RenderReviewIssueType,
+    RenderReviewSeverity,
+    RenderReviewVerdict,
 )
 from croviq_domain.editorial import (
     DirectorDecision,
@@ -176,6 +186,50 @@ def reconcile_director_review_with_transcript(
     )
 
 
+def reconcile_render_review_with_transcript(
+    review: RenderReview,
+    transcript: Transcript,
+) -> RenderReview:
+    """Ensure Maya's post-render review issues have valid bounded timestamps and consistent verdict states."""
+    max_duration = transcript.duration_ms if transcript.duration_ms > 0 else 3600000
+    reconciled_issues: list[RenderReviewIssue] = []
+
+    for idx, issue in enumerate(review.issues):
+        start_ms = max(0, min(issue.source_start_ms, max_duration))
+        end_ms = max(start_ms, min(issue.source_end_ms, max_duration))
+        issue_id = issue.issue_id or f"issue_{idx + 1:02d}"
+        reconciled_issues.append(
+            RenderReviewIssue(
+                issue_id=issue_id,
+                issue_type=issue.issue_type,
+                source_start_ms=start_ms,
+                source_end_ms=end_ms,
+                related_decision_id=issue.related_decision_id,
+                severity=issue.severity,
+                message=issue.message,
+                suggested_action=issue.suggested_action,
+            )
+        )
+
+    is_approved = review.verdict == RenderReviewVerdict.APPROVE
+    final_issues = [] if is_approved else reconciled_issues
+
+    return RenderReview(
+        review_id=review.review_id,
+        production_id=review.production_id,
+        edl_id=review.edl_id,
+        preview_artifact_id=review.preview_artifact_id,
+        agent="maya",
+        model=review.model,
+        verdict=review.verdict,
+        summary=review.summary,
+        issues=final_issues,
+        approved_for_master=is_approved,
+        confidence=review.confidence,
+        created_at=review.created_at,
+    )
+
+
 class GenAIClient(ABC):
     """Abstract interface for GenAI model invocation."""
 
@@ -209,6 +263,42 @@ class GenAIClient(ABC):
         request_id: str = "unknown",
     ) -> tuple[DirectorReview, AgentUsageMetadata]:
         """Invoke Maya (Director) to review Leo's editorial proposal."""
+        pass
+
+    @abstractmethod
+    async def generate_render_review(
+        self,
+        preview_video_uri: str,
+        preview_mime_type: str,
+        transcript: Transcript,
+        proposal: EditorProposal,
+        director_review: DirectorReview | None,
+        edl: EditDecisionList,
+        production_id: str,
+        preview_artifact_id: str,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[RenderReview, AgentUsageMetadata]:
+        """Invoke Maya (Director) to review rendered preview video output."""
+        pass
+
+    @abstractmethod
+    async def generate_editor_correction(
+        self,
+        video_uri: str,
+        mime_type: str,
+        transcript: Transcript,
+        proposal: EditorProposal,
+        render_review: RenderReview,
+        production_id: str,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[EditorProposal, AgentUsageMetadata]:
+        """Invoke Leo (Dialogue Editor) to perform a targeted correction pass based on Maya's post-render review."""
         pass
 
 
@@ -475,6 +565,250 @@ class GoogleGenAIClient(GenAIClient):
             cause=last_error,
         )
 
+    async def generate_render_review(
+        self,
+        preview_video_uri: str,
+        preview_mime_type: str,
+        transcript: Transcript,
+        proposal: EditorProposal,
+        director_review: DirectorReview | None,
+        edl: EditDecisionList,
+        production_id: str,
+        preview_artifact_id: str,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[RenderReview, AgentUsageMetadata]:
+        from google.genai import types
+
+        client = self._get_client()
+        prompt = build_director_render_review_prompt(
+            transcript=transcript,
+            proposal=proposal,
+            director_review=director_review,
+            edl=edl,
+            production_id=production_id,
+            preview_artifact_id=preview_artifact_id,
+            channel_profile=channel_profile,
+            lessons=lessons,
+        )
+
+        video_part = types.Part.from_uri(file_uri=preview_video_uri, mime_type=preview_mime_type)
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=RenderReview,
+            temperature=0.2,
+        )
+
+        log_ai_event(
+            event_type=EventType.DIRECTOR_RENDER_REVIEW_STARTED,
+            agent="maya",
+            model=self._model_id,
+            status="started",
+            production_id=production_id,
+            run_id=run_id,
+            request_id=request_id,
+        )
+
+        start_time = time.perf_counter()
+        last_error: Exception | None = None
+
+        for attempt in range(2):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=self._model_id,
+                    contents=[video_part, prompt],
+                    config=config,
+                )
+
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                input_tokens = 0
+                output_tokens = 0
+                if hasattr(response, "usage_metadata") and response.usage_metadata:
+                    input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                    output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+
+                raw_review: RenderReview
+                if hasattr(response, "parsed") and response.parsed is not None and isinstance(response.parsed, RenderReview):
+                    raw_review = response.parsed
+                elif hasattr(response, "text") and response.text:
+                    raw_review = RenderReview.model_validate_json(response.text)
+                else:
+                    raise GenAIError("Gemini response did not include parsed RenderReview or text payload")
+
+                reconciled = reconcile_render_review_with_transcript(raw_review, transcript)
+
+                usage = AgentUsageMetadata(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                log_ai_event(
+                    event_type=EventType.DIRECTOR_RENDER_REVIEW_COMPLETED,
+                    agent="maya",
+                    model=self._model_id,
+                    status="success",
+                    production_id=production_id,
+                    run_id=run_id,
+                    request_id=request_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                return reconciled, usage
+
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "Maya director post-render review attempt %d failed: %s",
+                    attempt + 1,
+                    str(exc),
+                )
+                if attempt == 0:
+                    time.sleep(1.0)
+
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+        log_ai_event(
+            event_type=EventType.DIRECTOR_RENDER_REVIEW_FAILED,
+            agent="maya",
+            model=self._model_id,
+            status="failed",
+            production_id=production_id,
+            run_id=run_id,
+            request_id=request_id,
+            latency_ms=latency_ms,
+            error_code="DIRECTOR_RENDER_REVIEW_FAILURE",
+        )
+        raise GenAIError(
+            f"Maya director post-render review generation failed after retry: {last_error}",
+            error_code="DIRECTOR_RENDER_REVIEW_FAILURE",
+            cause=last_error,
+        )
+
+    async def generate_editor_correction(
+        self,
+        video_uri: str,
+        mime_type: str,
+        transcript: Transcript,
+        proposal: EditorProposal,
+        render_review: RenderReview,
+        production_id: str,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[EditorProposal, AgentUsageMetadata]:
+        from google.genai import types
+
+        client = self._get_client()
+        prompt = build_editor_correction_prompt(
+            transcript=transcript,
+            proposal=proposal,
+            render_review=render_review,
+            production_id=production_id,
+            channel_profile=channel_profile,
+            lessons=lessons,
+        )
+
+        video_part = types.Part.from_uri(file_uri=video_uri, mime_type=mime_type)
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=EditorProposal,
+            temperature=0.2,
+        )
+
+        log_ai_event(
+            event_type=EventType.EDITOR_CORRECTION_STARTED,
+            agent="leo",
+            model=self._model_id,
+            status="started",
+            production_id=production_id,
+            run_id=run_id,
+            request_id=request_id,
+        )
+
+        start_time = time.perf_counter()
+        last_error: Exception | None = None
+
+        for attempt in range(2):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=self._model_id,
+                    contents=[video_part, prompt],
+                    config=config,
+                )
+
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                input_tokens = 0
+                output_tokens = 0
+                if hasattr(response, "usage_metadata") and response.usage_metadata:
+                    input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                    output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+
+                raw_proposal: EditorProposal
+                if hasattr(response, "parsed") and response.parsed is not None and isinstance(response.parsed, EditorProposal):
+                    raw_proposal = response.parsed
+                elif hasattr(response, "text") and response.text:
+                    raw_proposal = EditorProposal.model_validate_json(response.text)
+                else:
+                    raise GenAIError("Gemini response did not include parsed EditorProposal or text payload")
+
+                reconciled = reconcile_editor_proposal_with_transcript(raw_proposal, transcript)
+
+                usage = AgentUsageMetadata(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                log_ai_event(
+                    event_type=EventType.EDITOR_CORRECTION_COMPLETED,
+                    agent="leo",
+                    model=self._model_id,
+                    status="success",
+                    production_id=production_id,
+                    run_id=run_id,
+                    request_id=request_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                return reconciled, usage
+
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "Leo dialogue editor correction attempt %d failed: %s",
+                    attempt + 1,
+                    str(exc),
+                )
+                if attempt == 0:
+                    time.sleep(1.0)
+
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+        log_ai_event(
+            event_type=EventType.EDITOR_CORRECTION_FAILED,
+            agent="leo",
+            model=self._model_id,
+            status="failed",
+            production_id=production_id,
+            run_id=run_id,
+            request_id=request_id,
+            latency_ms=latency_ms,
+            error_code="EDITOR_CORRECTION_FAILURE",
+        )
+        raise GenAIError(
+            f"Leo dialogue editor correction failed after retry: {last_error}",
+            error_code="EDITOR_CORRECTION_FAILURE",
+            cause=last_error,
+        )
+
 
 class FakeGenAIClient(GenAIClient):
     """Deterministic fake GenAI client for unit tests and local non-cloud execution."""
@@ -483,15 +817,24 @@ class FakeGenAIClient(GenAIClient):
         self,
         canned_proposal: EditorProposal | None = None,
         canned_review: DirectorReview | None = None,
+        canned_render_review: RenderReview | None = None,
+        canned_render_reviews: list[RenderReview] | None = None,
+        canned_correction: EditorProposal | None = None,
         fail_on_editor: bool = False,
         fail_on_director: bool = False,
+        fail_on_render_review: bool = False,
+        fail_on_correction: bool = False,
     ) -> None:
         self._canned_proposal = canned_proposal
         self._canned_review = canned_review
+        self._canned_render_review = canned_render_review
+        self._canned_render_reviews = list(canned_render_reviews) if canned_render_reviews else []
+        self._canned_correction = canned_correction
         self._fail_on_editor = fail_on_editor
         self._fail_on_director = fail_on_director
+        self._fail_on_render_review = fail_on_render_review
+        self._fail_on_correction = fail_on_correction
         self.call_history: list[dict[str, Any]] = []
-
     async def generate_editor_proposal(
         self,
         video_uri: str,
@@ -641,4 +984,122 @@ class FakeGenAIClient(GenAIClient):
 
         reconciled = reconcile_director_review_with_transcript(review, proposal, transcript)
         usage = AgentUsageMetadata(input_tokens=510, output_tokens=150, latency_ms=40)
+        return reconciled, usage
+
+    async def generate_render_review(
+        self,
+        preview_video_uri: str,
+        preview_mime_type: str,
+        transcript: Transcript,
+        proposal: EditorProposal,
+        director_review: DirectorReview | None,
+        edl: EditDecisionList,
+        production_id: str,
+        preview_artifact_id: str,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[RenderReview, AgentUsageMetadata]:
+        self.call_history.append(
+            {
+                "agent": "maya_render_review",
+                "production_id": production_id,
+                "preview_video_uri": preview_video_uri,
+                "preview_artifact_id": preview_artifact_id,
+                "edl_id": edl.edl_id,
+                "run_id": run_id,
+            }
+        )
+        if self._fail_on_render_review:
+            raise GenAIError("Simulated Maya post-render review failure", error_code="SIMULATED_RENDER_REVIEW_FAILURE")
+
+        if self._canned_render_reviews:
+            review = self._canned_render_reviews.pop(0)
+        elif self._canned_render_review is not None:
+            review = self._canned_render_review
+            self._canned_render_review = None
+        else:
+            review = RenderReview(
+                review_id=f"rrv_{production_id[:8]}",
+                production_id=production_id,
+                edl_id=edl.edl_id,
+                preview_artifact_id=preview_artifact_id,
+                agent="maya",
+                model="fake-gemini-3.7-flash",
+                verdict=RenderReviewVerdict.APPROVE,
+                summary="Dialogue flows naturally and pacing is crisp. Edit approved for Master render.",
+                issues=[],
+                approved_for_master=True,
+                confidence=0.97,
+                created_at=datetime.now(timezone.utc),
+            )
+
+        reconciled = reconcile_render_review_with_transcript(review, transcript)
+        usage = AgentUsageMetadata(input_tokens=550, output_tokens=120, latency_ms=42)
+        return reconciled, usage
+
+    async def generate_editor_correction(
+        self,
+        video_uri: str,
+        mime_type: str,
+        transcript: Transcript,
+        proposal: EditorProposal,
+        render_review: RenderReview,
+        production_id: str,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[EditorProposal, AgentUsageMetadata]:
+        self.call_history.append(
+            {
+                "agent": "leo_correction",
+                "production_id": production_id,
+                "video_uri": video_uri,
+                "render_review_id": render_review.review_id,
+                "run_id": run_id,
+            }
+        )
+        if self._fail_on_correction:
+            raise GenAIError("Simulated Leo correction failure", error_code="SIMULATED_CORRECTION_FAILURE")
+
+        if self._canned_correction is not None:
+            corrected_proposal = self._canned_correction
+        else:
+            # Adjust decisions based on render_review issues
+            revised_decisions: list[EditorDecision] = []
+            issue_decision_ids = {iss.related_decision_id for iss in render_review.issues if iss.related_decision_id}
+            for d in proposal.decisions:
+                if d.decision_id in issue_decision_ids:
+                    # Revise decision to keep for clarity or adjust bounds
+                    revised_decisions.append(
+                        EditorDecision(
+                            decision_id=d.decision_id,
+                            decision_type=EditorDecisionType.KEEP_FOR_CLARITY,
+                            transcript_start_word=d.transcript_start_word,
+                            transcript_end_word=d.transcript_end_word,
+                            source_start_ms=d.source_start_ms,
+                            source_end_ms=d.source_end_ms,
+                            original_text=d.original_text,
+                            action="keep",
+                            concise_reason="Restored take per Maya post-render review feedback",
+                            confidence=0.95,
+                        )
+                    )
+                else:
+                    revised_decisions.append(d)
+
+            corrected_proposal = EditorProposal(
+                production_id=production_id,
+                agent="leo",
+                model="fake-gemini-3.7-flash",
+                summary="Revised dialogue pass addressing Maya's post-render review feedback.",
+                decisions=revised_decisions,
+                short_candidate=proposal.short_candidate,
+                overall_confidence=0.94,
+            )
+
+        reconciled = reconcile_editor_proposal_with_transcript(corrected_proposal, transcript)
+        usage = AgentUsageMetadata(input_tokens=460, output_tokens=160, latency_ms=40)
         return reconciled, usage

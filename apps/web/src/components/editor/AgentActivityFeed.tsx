@@ -67,13 +67,36 @@ const presentActivity = (
     message = leoMessages[decision.decision_type] ?? "Reviewed this section.";
   }
   if (!message) {
-    message =
-      activity.message
-        .replace(/^\[[A-Z_]+\]\s*/u, "")
-        .replace(/^At \d{2}:\d{2}(?:\.\d+)?,?\s*/u, "")
-        .trim() || "Updated the production.";
-  }
+    let raw = activity.message
+      .replace(/^\[[A-Z_]+\]\s*/u, "")
+      .replace(/^At \d{2}:\d{2}(?:\.\d+)?,?\s*/u, "")
+      .trim();
 
+    if (
+      raw.includes("Proceed directly to EDL assembly") ||
+      raw.includes("Approved for EDL: True") ||
+      raw.includes("Approved for Edit Decision List") ||
+      raw.toLowerCase().startsWith("feedback to leo: approved")
+    ) {
+      raw = "Edit plan approved.";
+    } else if (raw.toLowerCase().startsWith("feedback to leo:")) {
+      raw = raw.replace(/^feedback to leo:\s*/iu, "");
+      if (raw.toLowerCase().includes("approved for edl")) {
+        raw = "Edit plan approved.";
+      }
+    } else if (
+      raw.includes("The dialogue flows naturally. Edit approved.") ||
+      raw.includes("approved for Master render")
+    ) {
+      raw = "The dialogue flows naturally. Edit approved.";
+    } else if (raw.includes("One cut feels too aggressive. Restoring context.")) {
+      raw = "One cut feels too aggressive. Restoring context.";
+    } else if (raw.includes("Adjusted the affected section.")) {
+      raw = "Adjusted the affected section.";
+    }
+
+    message = raw || "Updated the production.";
+  }
   const timecode = decision ? formatTimecode(decision.source_start_ms) : undefined;
 
   return {
@@ -145,7 +168,7 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
   }, [presentedItems, showFullHistory]);
 
   return (
-    <div className={className} data-testid="agent-activity-feed">
+    <div className={`overflow-x-hidden w-full ${className}`} data-testid="agent-activity-feed">
       {statusMessage && (
         <div
           className="mb-2 flex items-center gap-2 rounded-md bg-surface-2/80 px-2.5 py-1.5 text-[11px] text-text-secondary border border-border-subtle"
@@ -166,8 +189,8 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
               const content = (
                 <>
                   <RowAvatar isLeo={item.isLeo} name={item.agentName} />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline justify-between gap-1.5">
+                  <span className="min-w-0 flex-1 overflow-hidden">
+                    <span className="flex items-baseline justify-between gap-1.5 min-w-0">
                       <span className="text-[11px] font-semibold text-text-primary">
                         {item.agentName}
                       </span>
@@ -177,7 +200,7 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
                         </span>
                       )}
                     </span>
-                    <span className="mt-0.5 block text-[11px] leading-4 text-text-secondary">
+                    <span className="mt-0.5 block text-[11px] leading-4 text-text-secondary break-words whitespace-normal">
                       {item.message}
                     </span>
                   </span>
@@ -189,7 +212,7 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
                   {clickable ? (
                     <button
                       type="button"
-                      className="-mx-1 -my-0.5 flex w-[calc(100%+0.5rem)] gap-2 rounded-md p-1 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                      className="-mx-1 -my-0.5 flex w-full min-w-0 gap-2 rounded-md p-1 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary overflow-hidden"
                       onClick={() => onSelectActivity?.(item.activity)}
                       aria-label={`${item.message}${
                         item.timecode ? ` Seek to ${item.timecode}` : ""
@@ -198,7 +221,7 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
                       {content}
                     </button>
                   ) : (
-                    <div className="flex w-full gap-2 p-0.5">{content}</div>
+                    <div className="flex w-full min-w-0 gap-2 p-0.5 overflow-hidden">{content}</div>
                   )}
                 </li>
               );

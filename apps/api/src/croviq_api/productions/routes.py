@@ -32,6 +32,10 @@ from croviq_api.productions.render_repository import (
     RenderRepository,
     get_render_repository,
 )
+from croviq_api.productions.render_review_repository import (
+    RenderReviewRepository,
+    get_render_review_repository,
+)
 from croviq_api.productions.edl_repository import (
     EDLRepository,
     get_edl_repository,
@@ -62,6 +66,8 @@ from croviq_api.productions.schemas import (
     ProductionPlaybackResponse,
     RenderArtifactResponse,
     RenderListResponse,
+    ReviewPreviewResponse,
+    RenderReviewDetailResponse,
 )
 from croviq_api.workspaces.repository import (
     WorkspaceRepository,
@@ -1207,4 +1213,91 @@ async def list_production_renders(
     return RenderListResponse(
         production_id=prod.production_id,
         renders=responses,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/review-preview",
+    response_model=ReviewPreviewResponse,
+    summary="Review Preview Render & Gate Master Render",
+    description="Maya (Director) inspects the rendered preview video, evaluates editorial quality, and either approves for Master render or executes a single bounded correction loop.",
+)
+async def review_preview_video(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    editorial_service: Annotated[DirectorEditorService, Depends(get_editorial_service)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> ReviewPreviewResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    (
+        review,
+        master_art,
+        second_review,
+        status_str,
+        activities,
+    ) = await editorial_service.review_preview(
+        production_id=production_id,
+        current_user=current_user,
+        request_id=request_id,
+    )
+
+    master_response = None
+    if master_art is not None and master_art.status == ArtifactStatus.completed:
+        playback_url = None
+        playback_expires_at = None
+        try:
+            target = await media_storage.generate_signed_read_target(
+                bucket=master_art.gcs_bucket,
+                object_name=master_art.gcs_object,
+                expiry_seconds=3600,
+            )
+            playback_url = target.read_url
+            playback_expires_at = target.expires_at
+        except Exception:
+            pass
+        master_response = RenderArtifactResponse.from_domain(
+            artifact=master_art,
+            playback_url=playback_url,
+            playback_expires_at=playback_expires_at,
+        )
+
+    return ReviewPreviewResponse(
+        production_id=production_id,
+        review=review,
+        master_artifact=master_response,
+        second_review=second_review,
+        status=status_str,
+        activities=activities,
+    )
+
+
+@router.get(
+    "/productions/{production_id}/render-reviews",
+    response_model=RenderReviewDetailResponse,
+    summary="Get Render Reviews",
+    description="Retrieve all post-render reviews for a production.",
+)
+@router.get(
+    "/productions/{production_id}/render-review",
+    response_model=RenderReviewDetailResponse,
+    summary="Get Latest Render Review",
+    description="Retrieve latest post-render review for a production.",
+)
+async def get_render_reviews(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)],
+) -> RenderReviewDetailResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    reviews = await render_review_repo.list_render_reviews(prod.production_id)
+    latest = reviews[0] if reviews else None
+    needs_manual = len(reviews) >= 2 and latest is not None and latest.verdict == "CORRECT"
+
+    return RenderReviewDetailResponse(
+        production_id=prod.production_id,
+        review=latest,
+        reviews=reviews,
+        needs_manual_review=needs_manual,
     )

@@ -29,10 +29,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const trackAreaRef = useRef<HTMLDivElement>(null);
 
-  const [zoomScale, setZoomScale] = useState<number>(8);
+  const [zoomScale, setZoomScale] = useState<number | null>(null);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
   const [containerWidth, setContainerWidth] = useState<number>(0);
-
   const totalDurationSec = Math.max(1, durationMs / 1000);
 
   // Monitor available track width
@@ -48,11 +47,14 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
     return () => window.removeEventListener("resize", updateWidth);
   }, []);
 
-  // Compute timeline width (at least container width so it doesn't show scrollbars when fit)
-  const timelineContentWidth = Math.max(
-    containerWidth || 600,
-    Math.round(totalDurationSec * zoomScale),
-  );
+  // Compute timeline width: auto-fit to container unless user zoomed beyond viewport
+  const isOverflowing =
+    zoomScale !== null &&
+    containerWidth > 0 &&
+    Math.round(totalDurationSec * zoomScale) > containerWidth;
+  const timelineContentWidth = isOverflowing
+    ? Math.round(totalDurationSec * zoomScale)
+    : containerWidth || 600;
 
   // Calculate pixel position for a given millisecond time
   const msToPixels = useCallback(
@@ -73,18 +75,25 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
     [durationMs, timelineContentWidth],
   );
 
-  // Auto-fit zoom to available container width
+  // Auto-fit zoom to available container width (hides scrollbar)
   const handleZoomFit = () => {
-    if (trackAreaRef.current) {
-      const availableWidth = trackAreaRef.current.clientWidth;
-      const fitScale = Math.max(2, availableWidth / totalDurationSec);
-      setZoomScale(fitScale);
-    }
+    setZoomScale(null);
   };
 
   // Zoom In / Out
-  const handleZoomIn = () => setZoomScale((z) => Math.min(50, z * 1.3));
-  const handleZoomOut = () => setZoomScale((z) => Math.max(2, z / 1.3));
+  const handleZoomIn = () => {
+    const currentScale = zoomScale ?? (containerWidth || 600) / totalDurationSec;
+    setZoomScale(Math.min(50, currentScale * 1.3));
+  };
+  const handleZoomOut = () => {
+    const currentScale = zoomScale ?? (containerWidth || 600) / totalDurationSec;
+    const nextScale = currentScale / 1.3;
+    if (containerWidth > 0 && Math.round(totalDurationSec * nextScale) <= containerWidth) {
+      setZoomScale(null);
+    } else {
+      setZoomScale(Math.max(2, nextScale));
+    }
+  };
 
   // Scrubbing & seeking interaction
   const handleScrubStart = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -124,7 +133,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   }, [isScrubbing, onSeek, pixelsToMs]);
 
   // Generate ruler tick marks based on zoom level
-  const rulerIntervalSec = zoomScale > 20 ? 5 : zoomScale > 10 ? 10 : 15;
+  const effectiveZoomScale =
+    zoomScale ?? (containerWidth > 0 ? containerWidth / totalDurationSec : 6);
+  const rulerIntervalSec = effectiveZoomScale > 20 ? 5 : effectiveZoomScale > 10 ? 10 : 15;
   const rulerTicks: number[] = [];
   for (let sec = 0; sec <= totalDurationSec; sec += rulerIntervalSec) {
     rulerTicks.push(sec);
@@ -210,7 +221,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
         {/* Right Scrollable Timeline Canvas */}
         <div
           ref={trackAreaRef}
-          className="flex-1 overflow-x-auto overflow-y-hidden relative bg-surface-1 cursor-crosshair focus:outline-none"
+          className={`flex-1 ${
+            isOverflowing ? "overflow-x-auto" : "overflow-x-hidden"
+          } overflow-y-hidden relative bg-surface-1 cursor-crosshair focus:outline-none`}
           onMouseDown={handleScrubStart}
           role="region"
           aria-label="Timeline Tracks Canvas"

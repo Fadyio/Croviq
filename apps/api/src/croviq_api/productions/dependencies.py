@@ -6,13 +6,19 @@ from fastapi import Depends
 
 from croviq_agents.client import FakeGenAIClient, GenAIClient, GoogleGenAIClient
 from croviq_api.config import Settings, get_settings
-from croviq_api.media.dependencies import get_media_inspector
+from croviq_api.media.dependencies import get_media_inspector, get_media_storage
+from croviq_api.media.storage import MediaStorage
 from croviq_media.inspector import MediaInspector
 from croviq_media.render import FakeRenderService, FFmpegRenderService, RenderService
 from croviq_api.productions.render_repository import (
     RenderRepository,
     get_render_repository,
     set_render_repository,
+)
+from croviq_api.productions.render_review_repository import (
+    RenderReviewRepository,
+    get_render_review_repository,
+    set_render_review_repository,
 )
 from croviq_api.memory.dependencies import get_memory_store
 from croviq_api.memory.store import ChannelMemoryStore
@@ -76,8 +82,22 @@ def get_editorial_service(
     media_inspector: Annotated[MediaInspector, Depends(get_media_inspector)],
     editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)],
     genai_client: Annotated[GenAIClient, Depends(get_genai_client)],
+    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    media_inspector_svc: Annotated[MediaInspector, Depends(get_media_inspector)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> DirectorEditorService:
     """FastAPI dependency provider for DirectorEditorService."""
+    edl_svc = EDLService(
+        production_repo=production_repo,
+        transcript_repo=transcript_repo,
+        editorial_repo=editorial_repo,
+        edl_repo=edl_repo,
+        media_inspector=media_inspector,
+    )
+    render_svc = get_render_service(settings=settings)
     return DirectorEditorService(
         production_repo=production_repo,
         transcript_repo=transcript_repo,
@@ -85,9 +105,13 @@ def get_editorial_service(
         media_inspector=media_inspector,
         editorial_repo=editorial_repo,
         genai_client=genai_client,
+        render_review_repo=render_review_repo,
+        edl_repo=edl_repo,
+        render_repo=render_repo,
+        edl_service=edl_svc,
+        render_service=render_svc,
+        media_storage=media_storage,
     )
-
-
 def get_edl_service(
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
     transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
