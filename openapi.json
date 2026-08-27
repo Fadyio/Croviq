@@ -943,6 +943,52 @@
         }
       }
     },
+    "/api/productions/{production_id}/renders/short": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Render Vertical Short Video",
+        "description": "Deterministically render a 9:16 vertical Short MP4 with word-synced captions for an approved production.",
+        "operationId": "render_short_video_api_productions__production_id__renders_short_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderArtifactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/productions/{production_id}/renders": {
       "get": {
         "tags": ["Productions & Uploads"],
@@ -1281,7 +1327,7 @@
       },
       "ArtifactType": {
         "type": "string",
-        "enum": ["PREVIEW", "MASTER"],
+        "enum": ["PREVIEW", "MASTER", "SHORT"],
         "title": "ArtifactType",
         "description": "Supported render artifact types."
       },

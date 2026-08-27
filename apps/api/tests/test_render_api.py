@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
@@ -50,12 +51,10 @@ from croviq_media.render import FakeRenderService, RenderExecutionResult, Render
 
 
 class CountingFakeRenderService(RenderService):
-    """Render service that counts execution calls to verify idempotency and zero model dependencies."""
-
     def __init__(self) -> None:
         self.preview_call_count = 0
         self.master_call_count = 0
-
+        self.short_call_count = 0
     def render_preview(
         self,
         source_path: Path | str,
@@ -102,6 +101,32 @@ class CountingFakeRenderService(RenderService):
             video_codec="h264",
             audio_codec="aac",
             render_time_ms=350.0,
+        )
+
+    def render_short(
+        self,
+        source_path: Path | str,
+        edl: EditDecisionList,
+        short_candidate: Any,
+        transcript: Any = None,
+        output_path: Path | str | None = None,
+    ) -> RenderExecutionResult:
+        self.short_call_count += 1
+        src = Path(source_path)
+        out = Path(output_path) if output_path else Path("short_out.mp4")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"fake short mp4 bytes vertical")
+        return RenderExecutionResult(
+            output_path=out,
+            artifact_type=ArtifactType.SHORT,
+            duration_ms=4000,
+            size_bytes=len(b"fake short mp4 bytes vertical"),
+            width=1080,
+            height=1920,
+            frame_rate=30.0,
+            video_codec="h264",
+            audio_codec="aac",
+            render_time_ms=200.0,
         )
 
 

@@ -9,6 +9,7 @@ import {
   Layers,
   RotateCcw,
   Sparkles,
+  Smartphone,
 } from "lucide-react";
 import {
   findExecutableSkipInterval,
@@ -22,6 +23,7 @@ import type { PreviewMode } from "./PreviewToggle";
 interface VideoStageProps {
   playbackUrl: string | null;
   renderedPreviewUrl?: string | null;
+  shortPlaybackUrl?: string | null;
   currentTimeMs: number;
   durationMs: number;
   isPlaying: boolean;
@@ -37,6 +39,7 @@ interface VideoStageProps {
 export const VideoStage: React.FC<VideoStageProps> = ({
   playbackUrl,
   renderedPreviewUrl,
+  shortPlaybackUrl,
   currentTimeMs,
   durationMs,
   isPlaying,
@@ -85,9 +88,13 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
   }, [currentTimeMs]);
 
+  const isUsingShortArtifact = previewMode === "short" && Boolean(shortPlaybackUrl);
   const isUsingRenderedArtifact = previewMode === "edited" && Boolean(renderedPreviewUrl);
-  const activeVideoUrl = isUsingRenderedArtifact ? renderedPreviewUrl : playbackUrl;
-
+  const activeVideoUrl = isUsingShortArtifact
+    ? shortPlaybackUrl
+    : isUsingRenderedArtifact
+      ? renderedPreviewUrl
+      : playbackUrl;
   // Preserve playback position across source switches (e.g. Original vs Edited Preview)
   const prevActiveUrlRef = useRef<string | null>(null);
   useEffect(() => {
@@ -268,6 +275,17 @@ export const VideoStage: React.FC<VideoStageProps> = ({
               B-Roll Coverage Active &middot; {formatTimecode(activeCoverage.source_start_ms)}{" "}
               &rarr; {formatTimecode(activeCoverage.source_end_ms)}
             </span>
+          </div>
+        )}
+
+        {/* Rendered Short Mode Badge */}
+        {isUsingShortArtifact && (
+          <div
+            className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/90 backdrop-blur-md text-white text-xs font-medium shadow-lg border border-primary/40"
+            data-testid="rendered-short-badge"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-white shrink-0" />
+            <span>Short (9:16)</span>
           </div>
         )}
 

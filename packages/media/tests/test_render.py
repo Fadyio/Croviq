@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import pytest
 
-from croviq_domain.editorial import EditorDecisionType
+from croviq_domain.editorial import EditorDecisionType, ShortCandidate
 from croviq_domain.edl import (
     CoverageMarker,
     CoverageType,
@@ -14,6 +14,7 @@ from croviq_domain.edl import (
     EditDecisionList,
 )
 from croviq_domain.render import ArtifactType
+from croviq_domain.transcript import Transcript, TranscriptWord
 from croviq_media.render import (
     FakeRenderService,
     FFmpegRenderService,
@@ -22,12 +23,13 @@ from croviq_media.render import (
 )
 
 
-def _create_synthetic_video(target_path: Path, duration_sec: int = 5) -> Path:
+def _create_synthetic_video(target_path: Path, duration_sec: int = 5, size: str = "640x360") -> Path:
     """Helper to generate a synthetic test video (H.264/AAC) with visual test patterns and audio tone."""
     cmd = [
         "ffmpeg", "-y",
-        "-f", "lavfi", "-i", f"testsrc=duration={duration_sec}:size=640x360:rate=30",
+        "-f", "lavfi", "-i", f"testsrc=duration={duration_sec}:size={size}:rate=30",
         "-f", "lavfi", "-i", f"sine=frequency=440:duration={duration_sec}",
+        "-shortest",
         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "128k",
         str(target_path),
@@ -42,6 +44,12 @@ def _create_synthetic_video(target_path: Path, duration_sec: int = 5) -> Path:
 def synthetic_5s_video(tmp_path: Path) -> Path:
     video_path = tmp_path / "source_5s.mp4"
     return _create_synthetic_video(video_path, duration_sec=5)
+
+@pytest.fixture
+def synthetic_vertical_5s_video(tmp_path: Path) -> Path:
+    video_path = tmp_path / "source_vert_5s.mp4"
+    return _create_synthetic_video(video_path, duration_sec=5, size="360x640")
+
 
 
 def test_zero_cut_preview_render(synthetic_5s_video: Path, tmp_path: Path):
@@ -268,3 +276,139 @@ def test_fake_render_service(synthetic_5s_video: Path, tmp_path: Path):
     assert res.duration_ms == 5000
     assert res.video_codec == "h264"
     assert res.audio_codec == "aac"
+
+
+def test_render_short_vertical_source(synthetic_vertical_5s_video: Path, tmp_path: Path):
+    renderer = FFmpegRenderService()
+    now = datetime.now(timezone.utc)
+    edl = EditDecisionList(
+        edl_id="edl_short_vert",
+        production_id="prod_test",
+        source_duration_ms=5000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=now,
+    )
+    candidate = ShortCandidate(
+        start_ms=1000,
+        end_ms=4000,
+        transcript_start_word=0,
+        transcript_end_word=2,
+        hook_title="Vertical Short Demo",
+        concise_reason="Compact demo of vertical short rendering",
+        confidence=0.95,
+    )
+    transcript = Transcript(
+        transcript_id="tr_short",
+        production_id="prod_test",
+        language_code="en",
+        duration_ms=5000,
+        words=[
+            TranscriptWord(index=0, text="Vertical", start_ms=1000, end_ms=1800),
+            TranscriptWord(index=1, text="Short", start_ms=1900, end_ms=2800),
+            TranscriptWord(index=2, text="Render.", start_ms=2900, end_ms=3900),
+        ],
+        created_at=now,
+    )
+
+    out_path = tmp_path / "short_vertical.mp4"
+    res = renderer.render_short(
+        source_path=synthetic_vertical_5s_video,
+        edl=edl,
+        short_candidate=candidate,
+        transcript=transcript,
+        output_path=out_path,
+    )
+
+    assert res.output_path.exists()
+    assert res.artifact_type == ArtifactType.SHORT
+    assert res.width == 1080
+    assert res.height == 1920
+    assert abs(res.duration_ms - 2900) <= 250
+    assert res.video_codec == "h264"
+    assert res.audio_codec == "aac"
+
+
+def test_render_short_landscape_source_with_blurred_fill(synthetic_5s_video: Path, tmp_path: Path):
+    renderer = FFmpegRenderService()
+    now = datetime.now(timezone.utc)
+    edl = EditDecisionList(
+        edl_id="edl_short_land",
+        production_id="prod_test",
+        source_duration_ms=5000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=now,
+    )
+    candidate = ShortCandidate(
+        start_ms=1000,
+        end_ms=4000,
+        transcript_start_word=0,
+        transcript_end_word=2,
+        hook_title="Landscape to Vertical Demo",
+        concise_reason="Landscape video with blurred fill background",
+        confidence=0.92,
+    )
+    transcript = Transcript(
+        transcript_id="tr_short_land",
+        production_id="prod_test",
+        language_code="en",
+        duration_ms=5000,
+        words=[
+            TranscriptWord(index=0, text="Landscape", start_ms=1000, end_ms=1800),
+            TranscriptWord(index=1, text="to", start_ms=1900, end_ms=2200),
+            TranscriptWord(index=2, text="Vertical.", start_ms=2300, end_ms=3800),
+        ],
+        created_at=now,
+    )
+
+    out_path = tmp_path / "short_landscape.mp4"
+    res = renderer.render_short(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        short_candidate=candidate,
+        transcript=transcript,
+        output_path=out_path,
+    )
+
+    assert res.output_path.exists()
+    assert res.artifact_type == ArtifactType.SHORT
+    assert res.width == 1080
+    assert res.height == 1920
+    assert abs(res.duration_ms - 2800) <= 250
+    assert res.video_codec == "h264"
+    assert res.audio_codec == "aac"
+
+
+def test_fake_render_service_short(synthetic_5s_video: Path, tmp_path: Path):
+    fake = FakeRenderService()
+    now = datetime.now(timezone.utc)
+    edl = EditDecisionList(
+        edl_id="edl_fake_short",
+        production_id="prod_test",
+        source_duration_ms=5000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=now,
+    )
+    candidate = ShortCandidate(
+        start_ms=1000,
+        end_ms=3000,
+        transcript_start_word=0,
+        transcript_end_word=1,
+        hook_title="Fake Short",
+        concise_reason="Fake test",
+        confidence=0.9,
+    )
+    out_path = tmp_path / "fake_short.mp4"
+    res = fake.render_short(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        short_candidate=candidate,
+        output_path=out_path,
+    )
+    assert res.output_path.exists()
+    assert res.artifact_type == ArtifactType.SHORT
+    assert res.width == 1080
+    assert res.height == 1920
+    assert res.duration_ms == 2000

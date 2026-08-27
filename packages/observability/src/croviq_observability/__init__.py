@@ -39,6 +39,7 @@ from croviq_observability.logger import (
     log_render_review_event,
     log_editor_correction_event,
     log_master_approved_event,
+    log_short_render_event,
 )
 try:
     from croviq_observability.middleware import (
@@ -87,6 +88,7 @@ __all__ = [
     "log_render_review_event",
     "log_editor_correction_event",
     "log_master_approved_event",
+    "log_short_render_event",
     "register_error_handlers",
     "sanitize_payload",
     "set_logger",

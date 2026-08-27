@@ -1,0 +1,23 @@
+{
+  "production_id": "prod_0b7657f515ae",
+  "edl_id": "edl_6cfe6b3bf3f2",
+  "short_artifact_id": "art_short_1787790280",
+  "short_gcs_uri": "gs://croviq-506602-croviq-media-raw/workspaces/ws_27iEBUMcu6ToDYwp2OdEIHBuwIA3/productions/prod_0b7657f515ae/renders/edl_6cfe6b3bf3f2/short.mp4",
+  "hook_title": "A Modern Smartphone You Can Actually Repair Yourself!",
+  "concise_reason": "Highlights 12 user-replaceable modular parts, distraction-free hardware switch, and microSD card expansion in a punchy ~40s run.",
+  "short_start_ms": 51200,
+  "short_end_ms": 91000,
+  "duration_ms": 39800,
+  "size_bytes": 20122543,
+  "width": 1080,
+  "height": 1920,
+  "frame_rate": 25.0,
+  "video_codec": "h264",
+  "audio_codec": "aac",
+  "render_time_ms": 0.0,
+  "usage": {
+    "cached": true,
+    "gemini_calls": 0,
+    "transcribe_calls": 0
+  }
+}

@@ -92,6 +92,11 @@ class EventType(StrEnum):
     # Master render approval event (Issue #30)
     MASTER_APPROVED = "master.approved"
 
+    # Vertical Short Rendering events (Issue #31)
+    SHORT_RENDER_STARTED = "short.render.started"
+    SHORT_RENDER_COMPLETED = "short.render.completed"
+    SHORT_RENDER_FAILED = "short.render.failed"
+
 # Normalized set of all standard event names
 NORMALIZED_EVENT_TYPES: frozenset[str] = frozenset(e.value for e in EventType)
 

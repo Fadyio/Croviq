@@ -66,6 +66,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
   const [masterArtifact, setMasterArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
   >(null);
+  const [shortArtifact, setShortArtifact] = useState<
+    components["schemas"]["RenderArtifactResponse"] | null
+  >(null);
   const [renderReview, setRenderReview] = useState<components["schemas"]["RenderReview"] | null>(
     null,
   );
@@ -177,6 +180,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       rendersData?.renders?.find((r) => r.artifact_type === "MASTER" && r.status === "completed") ??
       null;
     setMasterArtifact(completedMaster);
+
+    const completedShort =
+      rendersData?.renders?.find((r) => r.artifact_type === "SHORT" && r.status === "completed") ??
+      null;
+    setShortArtifact(completedShort);
     return {
       runDetail: runData,
       productionRun: {
@@ -193,6 +201,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
         masterArtifact: completedMaster,
         masterStatus: completedMaster?.status,
         masterCompletedAt: completedMaster?.completed_at,
+        shortArtifact: completedShort,
+        shortStatus: completedShort?.status,
+        shortCompletedAt: completedShort?.completed_at,
         needsManualReview,
       },
     };
@@ -552,6 +563,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             mode={previewMode}
             onModeChange={setPreviewMode}
             activeCutCount={twickData.activeCutCount}
+            hasShort={Boolean(shortArtifact?.playback_url)}
           />
 
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-2 border border-border-subtle text-xs text-text-secondary">
@@ -587,6 +599,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             masterArtifact,
             masterStatus: masterArtifact?.status,
             masterCompletedAt: masterArtifact?.completed_at,
+            shortArtifact,
+            shortStatus: shortArtifact?.status,
+            shortCompletedAt: shortArtifact?.completed_at,
             needsManualReview:
               isManualReviewRequired ||
               (renderReview?.verdict === "CORRECT" && renderSubStatus === "Needs manual review"),
@@ -606,6 +621,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
           <VideoStage
             playbackUrl={playbackUrl}
             renderedPreviewUrl={renderedPreviewUrl}
+            shortPlaybackUrl={shortArtifact?.playback_url}
             currentTimeMs={currentTimeMs}
             durationMs={durationMs}
             isPlaying={isPlaying}

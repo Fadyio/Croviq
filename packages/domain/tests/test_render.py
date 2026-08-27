@@ -15,8 +15,8 @@ from croviq_domain.render import (
 def test_artifact_type_values():
     assert ArtifactType.PREVIEW == "PREVIEW"
     assert ArtifactType.MASTER == "MASTER"
-    assert set(ArtifactType) == {ArtifactType.PREVIEW, ArtifactType.MASTER}
-
+    assert ArtifactType.SHORT == "SHORT"
+    assert set(ArtifactType) == {ArtifactType.PREVIEW, ArtifactType.MASTER, ArtifactType.SHORT}
 
 def test_artifact_status_values():
     assert ArtifactStatus.pending == "pending"
@@ -56,6 +56,11 @@ def test_build_render_artifact_gcs_object_path():
         artifact_type="PREVIEW",
     )
     assert str_preview_path == "workspaces/ws_123/productions/prod_abc/renders/edl_xyz/preview.mp4"
+    short_path = build_render_artifact_gcs_object_path(
+        "ws_123", "prod_abc", "edl_xyz", ArtifactType.SHORT
+    )
+    assert short_path == "workspaces/ws_123/productions/prod_abc/renders/edl_xyz/short.mp4"
+
 
 
 def test_build_render_artifact_gcs_object_path_invalid_inputs():

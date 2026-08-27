@@ -804,3 +804,57 @@ def log_master_approved_event(
         **extra,
         **kwargs,
     )
+
+
+def log_short_render_event(
+    event_type: str | EventType,
+    production_id: str,
+    edl_id: str,
+    artifact_id: str | None = None,
+    short_start_ms: int | None = None,
+    short_end_ms: int | None = None,
+    duration_ms: int | None = None,
+    render_time_ms: float | None = None,
+    size_bytes: int | None = None,
+    request_id: str | None = None,
+    git_sha: str | None = None,
+    status: str = "success",
+    error_code: str | None = None,
+    message: str | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Log structured vertical Short render event for Google Cloud Logging ingestion."""
+    normalized_type = event_type.value if isinstance(event_type, EventType) else str(event_type)
+    severity: LogSeverity = "ERROR" if (normalized_type == EventType.SHORT_RENDER_FAILED.value or status == "failed") else "INFO"
+
+    status_code: int = 500 if (status == "failed" or normalized_type == EventType.SHORT_RENDER_FAILED.value) else 200
+
+    extra: dict[str, Any] = {
+        "production_id": production_id,
+        "edl_id": edl_id,
+        "artifact_id": artifact_id,
+        "render_status": str(status),
+    }
+    if short_start_ms is not None:
+        extra["short_start_ms"] = short_start_ms
+    if short_end_ms is not None:
+        extra["short_end_ms"] = short_end_ms
+    if duration_ms is not None:
+        extra["duration_ms"] = duration_ms
+    if render_time_ms is not None:
+        extra["render_time_ms"] = round(render_time_ms, 2)
+    if size_bytes is not None:
+        extra["size_bytes"] = size_bytes
+    if git_sha is not None:
+        extra["git_sha"] = git_sha
+
+    return _default_logger.log(
+        event_type=normalized_type,
+        severity=severity,
+        status=status_code,
+        request_id=request_id,
+        message=message or f"Short render {status}",
+        error_code=error_code,
+        **extra,
+        **kwargs,
+    )
