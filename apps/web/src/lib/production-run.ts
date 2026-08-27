@@ -125,7 +125,8 @@ export const deriveProductionRunStages = (
       label: "Render",
       status: renderStatus,
       subStatus:
-        overrides.renderSubStatus ?? (run.needsManualReview ? "Needs manual review" : "Rendering preview…"),
+        overrides.renderSubStatus ??
+        (run.needsManualReview ? "Needs manual review" : "Rendering preview…"),
       durationMs:
         run.renderDurationMs ??
         elapsed(run.edlCreatedAt, run.masterCompletedAt ?? run.renderCompletedAt),

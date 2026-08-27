@@ -415,7 +415,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     if (activeProcessingStage === "maya-review") return "maya";
     if (activeProcessingStage === "render" && renderSubStatus?.includes("Maya")) return "maya";
     if (activeProcessingStage === "render" && renderSubStatus?.includes("correction")) return "leo";
-    if (activeProcessingStage === "transcript" || activeProcessingStage === "edit-plan" || activeProcessingStage === "render") return "system";
+    if (
+      activeProcessingStage === "transcript" ||
+      activeProcessingStage === "edit-plan" ||
+      activeProcessingStage === "render"
+    )
+      return "system";
     return null;
   }, [activeProcessingStage, renderSubStatus]);
 
@@ -652,7 +657,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             onSelectBlock={handleSelectBlock}
             onSeek={handleSeek}
             isPlaying={isPlaying}
-            className="h-[220px] shrink-0"
+            className="h-[156px] shrink-0"
           />
         </div>
 

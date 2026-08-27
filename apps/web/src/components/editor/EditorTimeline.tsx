@@ -157,7 +157,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
       {/* Timeline Header Bar with Track Labels & Zoom Toolbar */}
       <div className="h-7 px-3 bg-surface-2 border-b border-border-subtle flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-text-primary tracking-tight">Timeline</span>
+          <span className="text-[11px] font-semibold text-text-primary tracking-tight">
+            Timeline
+          </span>
           <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-text-muted">
             <span>&middot;</span>
             <span className="font-medium text-text-secondary">{twickData.activeCutCount} cuts</span>
@@ -283,7 +285,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                             : "bg-surface-3 border border-border-strong text-text-muted line-through opacity-60"
                       } ${isSelected ? "ring-2 ring-primary shadow-md scale-[1.02] z-10" : ""}`}
                       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                      title={`${cut.label}: ${formatTimecode(cut.startMs)} → ${formatTimecode(cut.endMs)} (${((cut.endMs - cut.startMs)/1000).toFixed(1)}s)`}
+                      title={`${cut.label}: ${formatTimecode(cut.startMs)} → ${formatTimecode(cut.endMs)} (${((cut.endMs - cut.startMs) / 1000).toFixed(1)}s)`}
                     >
                       <span className="truncate">{cut.label}</span>
                     </div>
