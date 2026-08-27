@@ -1,12 +1,13 @@
 import React from "react";
 import { Scissors, Film, Smartphone } from "lucide-react";
 
-export type PreviewMode = "original" | "edited" | "short";
+export type PreviewMode = "original" | "edited" | "studio_voice" | "short";
 
 interface PreviewToggleProps {
   mode: PreviewMode;
   onModeChange: (mode: PreviewMode) => void;
   activeCutCount: number;
+  hasStudioVoice?: boolean;
   hasShort?: boolean;
   className?: string;
 }
@@ -15,6 +16,7 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
   mode,
   onModeChange,
   activeCutCount,
+  hasStudioVoice = false,
   hasShort = false,
   className = "",
 }) => {
@@ -64,6 +66,25 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
           </span>
         )}
       </button>
+      {hasStudioVoice && (
+        <button
+          type="button"
+          onClick={() => onModeChange("studio_voice")}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+            mode === "studio_voice"
+              ? "bg-primary text-white shadow-xs font-semibold"
+              : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
+          }`}
+          aria-pressed={mode === "studio_voice"}
+          title="Play Studio Voice narration with ducked ambient audio"
+          data-testid="preview-toggle-studio-voice"
+        >
+          <Film
+            className={`w-3.5 h-3.5 ${mode === "studio_voice" ? "text-white" : "text-primary"}`}
+          />
+          <span>Studio Voice</span>
+        </button>
+      )}
 
       {hasShort && (
         <button

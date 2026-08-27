@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import React, { useMemo } from "react";
+import { Clock, Loader2, Sparkles, AlertCircle } from "lucide-react";
 import { formatTimecode } from "../../lib/edl-adapter";
 import type { AgentActivity, DirectorReview, EditorDecision } from "../../lib/edl-adapter";
 import leoAvatar from "../../assets/agents/leo.webp";
@@ -10,257 +10,204 @@ interface AgentActivityFeedProps {
   decisions?: EditorDecision[];
   review?: DirectorReview | null;
   statusMessage?: string | null;
+  activeAgent?: "leo" | "maya" | null;
+  onSeek?: (timeMs: number) => void;
   onSelectActivity?: (activity: AgentActivity) => void;
   className?: string;
 }
 
-const avatarMap: Record<"leo" | "maya", string> = {
-  leo: leoAvatar,
-  maya: mayaAvatar,
-};
-
-const leoMessages: Partial<Record<EditorDecision["decision_type"], string>> = {
-  KEEP: "Preserved this section.",
-  KEEP_FOR_CLARITY: "Kept this section for technical clarity.",
-  BROLL_COVER_CANDIDATE: "Found a section that would benefit from visual coverage.",
-  REMOVE_FILLER: "Removed a filler phrase.",
-  REMOVE_FALSE_START: "Removed a false start.",
-  REMOVE_REPETITION: "Removed a repeated point.",
-  TRIM_PAUSE: "Tightened a pause.",
-  TIGHTEN_EXPLANATION: "Tightened this explanation.",
-  SHORT_CANDIDATE: "Selected a strong Short candidate.",
-};
-
-const mayaMessages = {
-  APPROVE: "Approved Leo's edit.",
-  REJECT: "Kept the original section.",
-  MODIFY: "Adjusted Leo's proposed edit.",
-} as const;
-
-interface PresentedItem {
-  activity: AgentActivity;
-  isLeo: boolean;
-  isSystem: boolean;
-  agentName: string;
-  message: string;
-  decision?: EditorDecision;
-  timecode?: string;
+interface ChatBubbleItem {
+  id: string;
+  sender: "leo" | "maya" | "system";
+  name: string;
+  role: string;
+  avatar: string;
+  text: string;
+  timestampMs?: number;
+  timeRangeText?: string;
+  activityType: string;
+  rawActivity: AgentActivity;
+  isCorrection?: boolean;
 }
-
-const presentActivity = (
-  activity: AgentActivity,
-  decisions: EditorDecision[],
-  review: DirectorReview | null,
-): PresentedItem => {
-  const agentLower = activity.agent.toLowerCase();
-  const isLeo = agentLower === "leo";
-  const isSystem = agentLower === "system";
-  const decision = activity.related_decision_id
-    ? decisions.find((candidate) => candidate.decision_id === activity.related_decision_id)
-    : undefined;
-
-  let message = "";
-  if (!isLeo && decision) {
-    const verdict = review?.decisions?.find(
-      (candidate) => candidate.editor_decision_id === decision.decision_id,
-    )?.verdict;
-    if (verdict) message = mayaMessages[verdict];
-  }
-  if (!message && decision) {
-    message = leoMessages[decision.decision_type] || decision.concise_reason || "Reviewed this section.";
-  }
-  if (!message) {
-    let raw = activity.message
-      .replace(/^\[[A-Z_]+\]\s*/u, "")
-      .replace(/^At \d{2}:\d{2}(?:\.\d+)?,?\s*/u, "")
-      .trim();
-
-    if (
-      raw.includes("Proceed directly to EDL assembly") ||
-      raw.includes("Approved for EDL: True") ||
-      raw.includes("Approved for Edit Decision List") ||
-      raw.toLowerCase().startsWith("feedback to leo: approved")
-    ) {
-      raw = "Edit plan approved.";
-    } else if (raw.toLowerCase().startsWith("feedback to leo:")) {
-      raw = raw.replace(/^feedback to leo:\s*/iu, "");
-      if (raw.toLowerCase().includes("approved for edl")) {
-        raw = "Edit plan approved.";
-      }
-    } else if (
-      raw.includes("The dialogue flows naturally. Edit approved.") ||
-      raw.includes("approved for Master render")
-    ) {
-      raw = "The dialogue flows naturally. Edit approved.";
-    } else if (raw.includes("One cut feels too aggressive. Restoring context.")) {
-      raw = "One cut feels too aggressive. Restoring context.";
-    } else if (raw.includes("Adjusted the affected section.")) {
-      raw = "Adjusted the affected section.";
-    }
-
-    message = raw || "Updated the production.";
-  }
-  const timecode = decision ? formatTimecode(decision.source_start_ms) : undefined;
-
-  return {
-    activity,
-    isLeo,
-    isSystem,
-    agentName: isSystem ? "System" : isLeo ? "Leo" : "Maya",
-    message,
-    decision,
-    timecode,
-  };
-};
-
-const RowAvatar: React.FC<{ isLeo: boolean; isSystem?: boolean; name: string }> = ({
-  isLeo,
-  isSystem = false,
-  name,
-}) => {
-  const [failed, setFailed] = useState(false);
-  const src = isSystem ? undefined : avatarMap[isLeo ? "leo" : "maya"];
-
-  return (
-    <span
-      className={`relative z-10 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-surface-2 text-[10px] font-semibold ${
-        isSystem
-          ? "border-border-strong text-text-secondary bg-surface-3"
-          : isLeo
-            ? "border-primary/40 text-primary"
-            : "border-info/40 text-info"
-      }`}
-      aria-hidden="true"
-    >
-      {src && !failed ? (
-        <img src={src} alt="" className="size-full object-cover" onError={() => setFailed(true)} />
-      ) : (
-        <span>{isSystem ? "S" : isLeo ? "L" : "M"}</span>
-      )}
-    </span>
-  );
-};
 
 export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
   activities = [],
   decisions = [],
   review = null,
   statusMessage = null,
+  activeAgent = null,
+  onSeek,
   onSelectActivity,
   className = "",
 }) => {
-  const [showFullHistory, setShowFullHistory] = useState(false);
+  // Convert activities and decisions into a natural conversational flow
+  const chatMessages = useMemo<ChatBubbleItem[]>(() => {
+    const items: ChatBubbleItem[] = [];
 
-  // Process and dedupe activities
-  const presentedItems = useMemo<PresentedItem[]>(() => {
-    const items: PresentedItem[] = [];
+    // Process raw activities
     for (const act of activities) {
-      const presented = presentActivity(act, decisions, review);
-      // Dedupe identical consecutive messages for the same agent
-      const last = items.at(-1);
-      if (
-        last &&
-        last.agentName === presented.agentName &&
-        last.message === presented.message &&
-        last.timecode === presented.timecode
-      ) {
-        continue;
-      }
-      items.push(presented);
-    }
-    return items;
-  }, [activities, decisions, review]);
+      const isLeo = act.agent.toLowerCase().includes("leo");
+      const isMaya = act.agent.toLowerCase().includes("maya");
+      const sender = isLeo ? "leo" : isMaya ? "maya" : "system";
+      const name = isLeo ? "Leo" : isMaya ? "Maya" : "Studio System";
+      const role = isLeo ? "Video Editor" : isMaya ? "Director" : "Automated Pipeline";
+      const avatar = isLeo ? leoAvatar : mayaAvatar;
 
-  // Display latest 4 items by default unless expanded
-  const displayedItems = useMemo(() => {
-    if (showFullHistory || presentedItems.length <= 4) {
-      return presentedItems;
+      // Extract timecodes if present in the message
+      let timestampMs: number | undefined;
+      let timeRangeText: string | undefined;
+
+      if (act.related_decision_id) {
+        const matchingDec = decisions.find((d) => d.decision_id === act.related_decision_id);
+        if (matchingDec) {
+          timestampMs = matchingDec.source_start_ms;
+          timeRangeText = `${formatTimecode(matchingDec.source_start_ms)} – ${formatTimecode(matchingDec.source_end_ms)}`;
+        }
+      }
+
+      // Clean up bracketed enum prefixes from message text (e.g. "[TRIM_DEAD_AIR] At 00:15: ...")
+      let cleanText = act.message;
+      if (cleanText.startsWith("[") && cleanText.includes("]")) {
+        const bracketEnd = cleanText.indexOf("]");
+        cleanText = cleanText.substring(bracketEnd + 1).trim();
+        if (cleanText.startsWith("At ") && cleanText.includes(":")) {
+          const colonIdx = cleanText.indexOf(":");
+          cleanText = cleanText.substring(colonIdx + 1).trim();
+        }
+      }
+
+      items.push({
+        id: act.activity_id,
+        sender,
+        name,
+        role,
+        avatar,
+        text: cleanText,
+        timestampMs,
+        timeRangeText,
+        activityType: act.activity_type,
+        rawActivity: act,
+        isCorrection:
+          act.message.toLowerCase().includes("revised") ||
+          act.message.toLowerCase().includes("restored"),
+      });
     }
-    return presentedItems.slice(-4);
-  }, [presentedItems, showFullHistory]);
+
+    return items;
+  }, [activities, decisions]);
 
   return (
-    <div className={`overflow-x-hidden w-full ${className}`} data-testid="agent-activity-feed">
-      {statusMessage && (
-        <div
-          className="mb-2 flex items-center gap-2 rounded-md bg-surface-2/80 px-2.5 py-1.5 text-[11px] text-text-secondary border border-border-subtle"
-          role="status"
-        >
-          <Loader2 className="size-3.5 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
-          <span>{statusMessage}</span>
-        </div>
-      )}
+    <div
+      className={`flex flex-col h-full bg-surface-1 select-none overflow-hidden ${className}`}
+      data-testid="agent-activity-feed"
+    >
+      {/* Messages Scroll Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {chatMessages.length === 0 && !statusMessage && (
+          <div className="flex flex-col items-center justify-center h-48 text-center p-4">
+            <span className="text-xs text-text-muted">
+              Leo and Maya will discuss their editorial choices here during production.
+            </span>
+          </div>
+        )}
 
-      {presentedItems.length === 0 && !statusMessage ? (
-        <p className="py-2 text-[11px] text-text-muted">Activity will appear as work completes.</p>
-      ) : (
-        <div className="flex flex-col">
-          <ol className="relative flex flex-col gap-2">
-            {displayedItems.map((item) => {
-              const clickable = Boolean(item.decision && onSelectActivity);
-              const content = (
-                <>
-                  <RowAvatar isLeo={item.isLeo} isSystem={item.isSystem} name={item.agentName} />
-                  <span className="min-w-0 flex-1 overflow-hidden">
-                    <span className="flex items-baseline justify-between gap-1.5 min-w-0">
-                      <span className="text-[11px] font-semibold text-text-primary">
-                        {item.agentName}
-                      </span>
-                      {item.timecode && (
-                        <span className="font-mono text-[9px] tabular-nums text-text-muted">
-                          {item.timecode}
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] leading-4 text-text-secondary break-words whitespace-normal">
-                      {item.message}
-                    </span>
-                  </span>
-                </>
-              );
+        {chatMessages.map((item) => {
+          const isMaya = item.sender === "maya";
 
-              return (
-                <li key={item.activity.activity_id} className="relative flex gap-2">
-                  {clickable ? (
+          return (
+            <div
+              key={item.id}
+              className={`flex flex-col gap-1 transition-all duration-200 ease-out animate-in fade-in slide-in-from-bottom-2 ${
+                isMaya ? "items-end" : "items-start"
+              }`}
+              data-testid={`activity-message-${item.sender}`}
+            >
+              {/* Agent Header */}
+              <div
+                className={`flex items-center gap-2 px-1 ${
+                  isMaya ? "flex-row-reverse" : "flex-row"
+                }`}
+              >
+                <img
+                  src={item.avatar}
+                  alt={item.name}
+                  className="size-5 rounded-full object-cover border border-border-subtle"
+                />
+                <span className="text-[11px] font-semibold text-text-primary">{item.name}</span>
+                <span className="text-[10px] text-text-muted">· {item.role}</span>
+              </div>
+
+              {/* Speech Bubble */}
+              <div
+                className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-xs cursor-pointer transition-all hover:ring-1 hover:ring-primary/40 ${
+                  isMaya
+                    ? "bg-purple-950/40 border border-purple-800/40 text-purple-100 rounded-tr-xs"
+                    : "bg-surface-2 border border-border-subtle text-text-primary rounded-tl-xs"
+                }`}
+                onClick={() => {
+                  if (item.timestampMs !== undefined) onSeek?.(item.timestampMs);
+                  onSelectActivity?.(item.rawActivity);
+                }}
+              >
+                <p className="whitespace-pre-wrap">{item.text}</p>
+
+                {/* Interactive Timecode Pill if available */}
+                {item.timestampMs !== undefined && (
+                  <div className={`mt-2 flex ${isMaya ? "justify-end" : "justify-start"}`}>
                     <button
                       type="button"
-                      className="-mx-1 -my-0.5 flex w-full min-w-0 gap-2 rounded-md p-1 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary overflow-hidden"
-                      onClick={() => onSelectActivity?.(item.activity)}
-                      aria-label={`${item.message}${
-                        item.timecode ? ` Seek to ${item.timecode}` : ""
-                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSeek?.(item.timestampMs!);
+                        onSelectActivity?.(item.rawActivity);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-3/80 hover:bg-primary/20 hover:text-primary border border-border-subtle text-[10px] font-mono text-text-secondary transition-colors cursor-pointer"
+                      title="Seek to video timestamp and inspect decision"
+                      data-testid="bubble-seek-btn"
                     >
-                      {content}
+                      <Clock className="size-2.5" />
+                      <span>{item.timeRangeText || formatTimecode(item.timestampMs)}</span>
                     </button>
-                  ) : (
-                    <div className="flex w-full min-w-0 gap-2 p-0.5 overflow-hidden">{content}</div>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
 
-          {presentedItems.length > 4 && (
-            <button
-              type="button"
-              onClick={() => setShowFullHistory((h) => !h)}
-              className="mt-2 self-start text-[10px] font-medium text-text-muted hover:text-text-primary transition-colors flex items-center gap-1 py-0.5"
+        {/* Live Working Indicator */}
+        {statusMessage && (
+          <div
+            className={`flex flex-col gap-1 animate-in fade-in slide-in-from-bottom-2 ${
+              activeAgent === "maya" ? "items-end" : "items-start"
+            }`}
+            data-testid="agent-live-working-indicator"
+          >
+            <div
+              className={`flex items-center gap-2 px-1 ${
+                activeAgent === "maya" ? "flex-row-reverse" : "flex-row"
+              }`}
             >
-              {showFullHistory ? (
-                <>
-                  <ChevronUp className="size-3" />
-                  <span>Show recent only</span>
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="size-3" />
-                  <span>View run history ({presentedItems.length})</span>
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      )}
+              <img
+                src={activeAgent === "maya" ? mayaAvatar : leoAvatar}
+                alt="Working"
+                className="size-5 rounded-full object-cover border border-border-subtle"
+              />
+              <span className="text-[11px] font-semibold text-text-primary">
+                {activeAgent === "maya" ? "Maya" : "Leo"}
+              </span>
+              <span className="text-[10px] text-text-muted">
+                · {activeAgent === "maya" ? "Director" : "Video Editor"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-surface-2/60 border border-primary/30 text-xs text-text-secondary">
+              <Loader2 className="size-3.5 text-primary animate-spin" />
+              <span className="truncate">{statusMessage}</span>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

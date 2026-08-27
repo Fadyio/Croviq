@@ -50,8 +50,9 @@ from croviq_domain.user import User
 from croviq_media.render import FakeRenderService, RenderExecutionResult, RenderService
 
 
-class CountingFakeRenderService(RenderService):
+class CountingFakeRenderService(FakeRenderService):
     def __init__(self) -> None:
+        super().__init__()
         self.preview_call_count = 0
         self.master_call_count = 0
         self.short_call_count = 0

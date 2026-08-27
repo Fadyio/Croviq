@@ -412,3 +412,37 @@ def test_fake_render_service_short(synthetic_5s_video: Path, tmp_path: Path):
     assert res.width == 1080
     assert res.height == 1920
     assert res.duration_ms == 2000
+def test_render_studio_voice_preview(synthetic_5s_video: Path, tmp_path: Path):
+    renderer = FFmpegRenderService()
+    now = datetime.now(timezone.utc)
+    edl = EditDecisionList(
+        edl_id="edl_sv_test",
+        production_id="prod_sv",
+        source_duration_ms=5000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=now,
+    )
+    # Generate 5s synthetic narration wav
+    narr_path = tmp_path / "narr.wav"
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi", "-i", "sine=frequency=880:duration=5",
+        "-c:a", "pcm_s16le", str(narr_path)
+    ]
+    subprocess.run(cmd, check=True)
+
+    out_path = tmp_path / "studio_voice_preview.mp4"
+    res = renderer.render_studio_voice_preview(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        narration_audio_path=narr_path,
+        speech_intervals_ms=[(1000, 3000)],
+        output_path=out_path,
+    )
+
+    assert res.output_path.exists()
+    assert res.artifact_type == ArtifactType.STUDIO_VOICE_PREVIEW
+    assert res.duration_ms >= 4800
+    assert res.video_codec == "h264"
+    assert res.audio_codec == "aac"

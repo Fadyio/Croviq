@@ -1,5 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, AlertCircle, LogOut, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  AlertCircle,
+  LogOut,
+  Loader2,
+  CheckCircle2,
+  Sparkles,
+  MessageSquare,
+  FileText,
+  Sliders,
+  Play,
+  RotateCcw,
+} from "lucide-react";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
 import { PreviewToggle, type PreviewMode } from "../components/editor/PreviewToggle";
@@ -9,6 +21,8 @@ import { TranscriptPanel } from "../components/editor/TranscriptPanel";
 import { AgentPresence } from "../components/editor/AgentPresence";
 import { AgentActivityFeed } from "../components/editor/AgentActivityFeed";
 import { DecisionInspector } from "../components/editor/DecisionInspector";
+import { MediaBin, type BRollAssetItem } from "../components/editor/MediaBin";
+import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
 import { ProductionRunStrip } from "../components/editor/ProductionRunStrip";
 import {
   edlToTwickTimeline,
@@ -21,6 +35,7 @@ import {
   type Transcript,
   type TimelineBlock,
   type CoverageMarker,
+  formatDuration,
 } from "../lib/edl-adapter";
 import type { components } from "../api/generated";
 import {
@@ -30,8 +45,15 @@ import {
   type ProcessingStage,
 } from "../lib/production-run";
 
+const waitForRunUpdate = async (): Promise<void> => {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  window.setTimeout(resolve, 1000);
+  await promise;
+};
+
 type Production = components["schemas"]["Production"];
 type EditorialRunDetail = components["schemas"]["EditorialRunDetailResponse"];
+type BRollArtifact = components["schemas"]["BRollArtifact"];
 
 interface LoadedEditorData {
   productionRun: PersistedProductionRun;
@@ -39,14 +61,8 @@ interface LoadedEditorData {
 }
 
 const readOptionalJson = async <T,>(response: Response, label: string): Promise<T | null> => {
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`${label} could not be loaded`);
+  if (!response.ok) return null;
   return response.json() as Promise<T>;
-};
-const waitForRunUpdate = async (): Promise<void> => {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  window.setTimeout(resolve, 750);
-  await promise;
 };
 
 interface EditorPageProps {
@@ -60,6 +76,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
   const [production, setProduction] = useState<Production | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [renderedPreviewUrl, setRenderedPreviewUrl] = useState<string | null>(null);
+  const [studioVoicePreviewUrl, setStudioVoicePreviewUrl] = useState<string | null>(null);
+  const [masterUrl, setMasterUrl] = useState<string | null>(null);
+
   const [previewArtifact, setPreviewArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
   >(null);
@@ -74,22 +93,35 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
   );
   const [renderSubStatus, setRenderSubStatus] = useState<string | null>(null);
   const [isManualReviewRequired, setIsManualReviewRequired] = useState<boolean>(false);
+
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [proposal, setProposal] = useState<EditorProposal | null>(null);
   const [review, setReview] = useState<DirectorReview | null>(null);
   const [activities, setActivities] = useState<AgentActivity[]>([]);
+  const [brollArtifacts, setBrollArtifacts] = useState<BRollArtifact[]>([]);
   const [editorialRun, setEditorialRun] = useState<EditorialRunDetail["run"] | null>(null);
   const [edl, setEdl] = useState<EditDecisionList | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeProcessingStage, setActiveProcessingStage] = useState<ProcessingStage | null>(null);
   const [failedProcessingStage, setFailedProcessingStage] = useState<ProcessingStage | null>(null);
+
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [durationMs, setDurationMs] = useState(113824);
   const [isPlaying, setIsPlaying] = useState(false);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("edited");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<TimelineBlock | null>(null);
+
+  // Production Room inspector tab: "agents" | "transcript" | "decision"
+  const [rightPanelTab, setRightPanelTab] = useState<"agents" | "transcript" | "decision">(
+    "agents",
+  );
+
+  // Agent settings drawer state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsAgentId, setSettingsAgentId] = useState<"leo" | "maya">("leo");
 
   const runPromiseRef = useRef<Promise<void> | null>(null);
   const processingProductionIdRef = useRef<string | null>(null);
@@ -108,6 +140,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       edlResponse,
       rendersResponse,
       reviewResponse,
+      brollResponse,
     ] = await Promise.all([
       fetch(`/api/productions/${productionId}`, { headers }),
       fetch(`/api/productions/${productionId}/playback`, { headers }).catch(() => null),
@@ -116,397 +149,344 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
       fetch(`/api/productions/${productionId}/edl`, { headers }),
       fetch(`/api/productions/${productionId}/renders`, { headers }).catch(() => null),
       fetch(`/api/productions/${productionId}/render-reviews`, { headers }).catch(() => null),
+      fetch(`/api/productions/${productionId}/broll`, { headers }).catch(() => null),
     ]);
 
     if (!productionResponse.ok) {
       throw new Error(`Production '${productionId}' could not be loaded`);
     }
 
-    const productionData = (await productionResponse.json()) as Production;
-    const transcriptData = await readOptionalJson<Transcript>(transcriptResponse, "Transcript");
-    const runData = await readOptionalJson<EditorialRunDetail>(runResponse, "Editorial run");
-    const edlData = await readOptionalJson<components["schemas"]["EDLDetailResponse"]>(
-      edlResponse,
-      "Edit plan",
-    );
-    let rendersData: components["schemas"]["RenderListResponse"] | null = null;
-    if (rendersResponse && rendersResponse.ok) {
-      try {
-        rendersData = (await rendersResponse.json()) as components["schemas"]["RenderListResponse"];
-      } catch {
-        rendersData = null;
-      }
-    }
-    let reviewsData: components["schemas"]["RenderReviewDetailResponse"] | null = null;
-    if (reviewResponse && reviewResponse.ok) {
-      try {
-        reviewsData =
-          (await reviewResponse.json()) as components["schemas"]["RenderReviewDetailResponse"];
-      } catch {
-        reviewsData = null;
-      }
-    }
-    const latestReview = reviewsData?.review ?? null;
-    setRenderReview(latestReview);
-    const needsManualReview = Boolean(reviewsData?.needs_manual_review);
-    setIsManualReviewRequired(needsManualReview);
-    setProduction(productionData);
-    setTranscript(transcriptData);
-    setProposal(runData?.proposal ?? null);
-    setReview(runData?.review ?? null);
-    setActivities(runData?.activities ?? []);
-    setEditorialRun(runData?.run ?? null);
+    const [
+      productionPayload,
+      playbackPayload,
+      transcriptPayload,
+      runPayload,
+      edlPayload,
+      rendersPayload,
+      reviewPayload,
+      brollPayload,
+    ] = await Promise.all([
+      productionResponse.json() as Promise<Production>,
+      playbackResponse
+        ? readOptionalJson<components["schemas"]["ProductionPlaybackResponse"]>(
+            playbackResponse,
+            "Playback",
+          )
+        : Promise.resolve(null),
+      readOptionalJson<Transcript>(transcriptResponse, "Transcript"),
+      readOptionalJson<EditorialRunDetail>(runResponse, "Editorial run"),
+      readOptionalJson<EditDecisionList>(edlResponse, "EDL"),
+      rendersResponse
+        ? readOptionalJson<components["schemas"]["RenderListResponse"]>(rendersResponse, "Renders")
+        : Promise.resolve(null),
+      reviewResponse
+        ? readOptionalJson<components["schemas"]["RenderReviewDetailResponse"]>(
+            reviewResponse,
+            "Render review",
+          )
+        : Promise.resolve(null),
+      brollResponse
+        ? readOptionalJson<components["schemas"]["BRollListResponse"]>(brollResponse, "BRoll")
+        : Promise.resolve(null),
+    ]);
 
-    const loadedEdl = edlData?.edl ?? null;
-    setEdl(loadedEdl);
-    if (loadedEdl?.source_duration_ms) setDurationMs(loadedEdl.source_duration_ms);
-    else if (transcriptData?.duration_ms) setDurationMs(transcriptData.duration_ms);
-
-    if (playbackResponse?.ok) {
-      const playbackData = await playbackResponse.json();
-      setPlaybackUrl(playbackData.playback_url);
-    }
-
-    const completedPreview =
-      rendersData?.renders?.find(
-        (r) => r.artifact_type === "PREVIEW" && r.status === "completed",
+    const preview =
+      rendersPayload?.renders?.find(
+        (render: components["schemas"]["RenderArtifactResponse"]) =>
+          render.artifact_type === "PREVIEW",
       ) ?? null;
-    setPreviewArtifact(completedPreview);
-    if (completedPreview?.playback_url) {
-      setRenderedPreviewUrl(completedPreview.playback_url);
+    const master =
+      rendersPayload?.renders?.find(
+        (render: components["schemas"]["RenderArtifactResponse"]) =>
+          render.artifact_type === "MASTER",
+      ) ?? null;
+    const short =
+      rendersPayload?.renders?.find(
+        (render: components["schemas"]["RenderArtifactResponse"]) =>
+          render.artifact_type === "SHORT",
+      ) ?? null;
+    const svPreview =
+      rendersPayload?.renders?.find(
+        (render: components["schemas"]["RenderArtifactResponse"]) =>
+          render.artifact_type === "STUDIO_VOICE_PREVIEW",
+      ) ?? null;
+    setProduction(productionPayload);
+    setPlaybackUrl(playbackPayload?.playback_url ?? null);
+    setRenderedPreviewUrl(preview?.playback_url ?? playbackPayload?.rendered_preview_url ?? null);
+    setStudioVoicePreviewUrl(
+      svPreview?.playback_url ?? playbackPayload?.studio_voice_preview_url ?? null,
+    );
+    setMasterUrl(master?.playback_url ?? playbackPayload?.master_url ?? null);
+
+    setPreviewArtifact(preview);
+    setMasterArtifact(master);
+    setShortArtifact(short);
+
+    if (brollPayload?.artifacts) {
+      setBrollArtifacts(brollPayload.artifacts);
     }
 
-    const completedMaster =
-      rendersData?.renders?.find((r) => r.artifact_type === "MASTER" && r.status === "completed") ??
-      null;
-    setMasterArtifact(completedMaster);
+    if (reviewPayload) {
+      setRenderReview(reviewPayload.review ?? null);
+      setIsManualReviewRequired(Boolean(reviewPayload.needs_manual_review));
+    }
+    const actualEdl: EditDecisionList | null = (edlPayload as any)?.edl
+      ? (edlPayload as any).edl
+      : edlPayload;
+    setTranscript(transcriptPayload);
+    setEdl(actualEdl);
 
-    const completedShort =
-      rendersData?.renders?.find((r) => r.artifact_type === "SHORT" && r.status === "completed") ??
-      null;
-    setShortArtifact(completedShort);
+    if (runPayload) {
+      setProposal(runPayload.proposal as EditorProposal | null);
+      setReview(runPayload.review as DirectorReview | null);
+      setActivities(runPayload.activities as AgentActivity[]);
+      setEditorialRun(runPayload.run ?? null);
+    }
+
     return {
-      runDetail: runData,
       productionRun: {
-        uploaded: productionData.source_media?.status === "uploaded",
-        uploadedAt: productionData.source_media?.uploaded_at,
-        transcriptCreatedAt: transcriptData?.created_at,
-        editorialRun: runData?.run,
-        activities: runData?.activities,
-        edlCreatedAt: loadedEdl?.created_at,
-        renderCompletedAt: completedPreview?.completed_at,
-        renderStatus: completedPreview?.status,
-        renderDurationMs: completedPreview?.duration_ms,
-        renderReview: latestReview,
-        masterArtifact: completedMaster,
-        masterStatus: completedMaster?.status,
-        masterCompletedAt: completedMaster?.completed_at,
-        shortArtifact: completedShort,
-        shortStatus: completedShort?.status,
-        shortCompletedAt: completedShort?.completed_at,
-        needsManualReview,
+        uploaded: productionPayload.source_media?.status === "uploaded",
+        uploadedAt: productionPayload.source_media?.uploaded_at,
+        transcriptCreatedAt: transcriptPayload?.created_at,
+        editorialRun: runPayload?.run ?? null,
+        proposal: (runPayload?.proposal as EditorProposal) || null,
+        activities: (runPayload?.activities as AgentActivity[]) || [],
+        edlCreatedAt: actualEdl?.created_at,
+        renderCompletedAt: preview?.completed_at,
+        renderStatus: preview?.status,
+        renderDurationMs: preview?.duration_ms,
+        renderReview: reviewPayload?.review ?? null,
+        masterArtifact: master,
+        masterStatus: master?.status,
+        shortStatus: short?.status,
+        shortCompletedAt: short?.completed_at,
+        needsManualReview: Boolean(reviewPayload?.needs_manual_review),
       },
+      runDetail: runPayload,
     };
   }, [firebaseUser, productionId]);
 
-  const refreshEditorialRun = useCallback(
-    async (headers: HeadersInit): Promise<EditorialRunDetail | null> => {
-      const response = await fetch(`/api/productions/${productionId}/editorial-run`, {
-        headers,
-      });
-      if (!response.ok) return null;
-      const runData = (await response.json()) as EditorialRunDetail;
-      setEditorialRun(runData.run);
-      setProposal(runData.proposal ?? null);
-      setReview(runData.review ?? null);
-      setActivities(runData.activities ?? []);
-      if (runData.run.status === "reviewing") {
-        activeProcessingStageRef.current = "maya-review";
-        setActiveProcessingStage("maya-review");
-      }
-      return runData;
-    },
-    [productionId],
-  );
-
-  const processProduction = useCallback(
-    async (showInitialLoader: boolean, retryFailedRun = false) => {
-      setFailedProcessingStage(null);
-      setErrorMessage(null);
-      if (showInitialLoader) setIsLoading(true);
-
-      let snapshot: LoadedEditorData;
-      try {
-        snapshot = await loadPersistedData();
-      } catch (error) {
-        if (showInitialLoader) {
-          setErrorMessage(
-            error instanceof Error ? error.message : "Failed to load production editor workspace",
-          );
-        }
-        return;
-      } finally {
-        if (showInitialLoader) setIsLoading(false);
-      }
-
-      const persistedEditorialStatus = snapshot.runDetail?.run.status;
-      const persistedEditorialStage: ProcessingStage =
-        persistedEditorialStatus === "reviewing" ||
-        (persistedEditorialStatus === "failed" && snapshot.runDetail?.proposal)
-          ? "maya-review"
-          : "leo-edit";
-
-      if (persistedEditorialStatus === "failed" && !retryFailedRun) {
-        setFailedProcessingStage(persistedEditorialStage);
-        return;
-      }
-
-      if (persistedEditorialStatus === "analyzing" || persistedEditorialStatus === "reviewing") {
-        if (!firebaseUser) return;
-        activeProcessingStageRef.current = persistedEditorialStage;
-        setActiveProcessingStage(persistedEditorialStage);
-        const token = await firebaseUser.getIdToken();
-        const headers = { Authorization: `Bearer ${token}` };
-        let currentStatus: components["schemas"]["EditorialRunStatus"] = persistedEditorialStatus;
-        while (currentStatus === "analyzing" || currentStatus === "reviewing") {
-          await waitForRunUpdate();
-          const currentRun = await refreshEditorialRun(headers);
-          if (currentRun) currentStatus = currentRun.run.status ?? "pending";
-        }
-        if (currentStatus === "failed") {
-          setFailedProcessingStage(activeProcessingStageRef.current ?? persistedEditorialStage);
-          setActiveProcessingStage(null);
-          return;
-        }
-        snapshot = await loadPersistedData();
-      }
-
-      let nextStage = nextMissingProcessingStage(snapshot.productionRun);
-      while (nextStage) {
-        const visibleStage: ProcessingStage =
-          nextStage === "leo-edit" &&
-          (snapshot.runDetail?.run.status === "reviewing" ||
-            (snapshot.runDetail?.run.status === "failed" && snapshot.runDetail.proposal))
-            ? "maya-review"
-            : nextStage;
-        activeProcessingStageRef.current = visibleStage;
-        setActiveProcessingStage(visibleStage);
-
-        let pollTimer: number | undefined;
-        try {
-          if (!firebaseUser) throw new Error("Authentication required");
-          const token = await firebaseUser.getIdToken();
-          const headers = { Authorization: `Bearer ${token}` };
-          if (nextStage === "render") {
-            const hasPreview = Boolean(
-              snapshot.productionRun.renderCompletedAt ||
-              snapshot.productionRun.renderStatus === "completed",
-            );
-            if (!hasPreview) {
-              setRenderSubStatus("Rendering preview…");
-              const previewResp = await fetch(`/api/productions/${productionId}/renders/preview`, {
-                method: "POST",
-                headers,
-              });
-              if (!previewResp.ok) throw new Error("renders/preview failed");
-              snapshot = await loadPersistedData();
-            }
-
-            if (!snapshot.productionRun.renderReview && !snapshot.productionRun.masterArtifact) {
-              setRenderSubStatus("Maya reviewing preview…");
-              const reviewResp = await fetch(`/api/productions/${productionId}/review-preview`, {
-                method: "POST",
-                headers,
-              });
-              if (!reviewResp.ok) throw new Error("review-preview failed");
-              const reviewResult =
-                (await reviewResp.json()) as components["schemas"]["ReviewPreviewResponse"];
-              if (reviewResult.status === "needs_manual_review") {
-                setIsManualReviewRequired(true);
-                setRenderSubStatus("Needs manual review");
-              } else if (reviewResult.status === "complete") {
-                setIsManualReviewRequired(false);
-                setRenderSubStatus("Complete");
-              }
-              snapshot = await loadPersistedData();
-            }
-          } else {
-            const endpoint =
-              nextStage === "transcript"
-                ? "transcribe"
-                : nextStage === "leo-edit"
-                  ? "analyze"
-                  : "edl";
-            if (nextStage === "leo-edit") {
-              pollTimer = window.setInterval(() => {
-                void refreshEditorialRun(headers);
-              }, 750);
-            }
-
-            const response = await fetch(`/api/productions/${productionId}/${endpoint}`, {
-              method: "POST",
-              headers,
-            });
-            if (!response.ok) throw new Error(`${endpoint} failed`);
-            if (pollTimer !== undefined) window.clearInterval(pollTimer);
-
-            snapshot = await loadPersistedData();
-          }
-          nextStage = nextMissingProcessingStage(snapshot.productionRun);
-        } catch {
-          if (pollTimer !== undefined) window.clearInterval(pollTimer);
-          setFailedProcessingStage(activeProcessingStageRef.current ?? visibleStage);
-          setActiveProcessingStage(null);
-          return;
-        }
-      }
-
-      activeProcessingStageRef.current = null;
-      setActiveProcessingStage(null);
-      setRenderSubStatus(null);
-    },
-    [firebaseUser, loadPersistedData, productionId, refreshEditorialRun],
-  );
-
   const beginProductionRun = useCallback(
-    (showInitialLoader: boolean, retryFailedRun = false) => {
-      if (runPromiseRef.current) return;
-      runPromiseRef.current = processProduction(showInitialLoader, retryFailedRun).finally(() => {
-        runPromiseRef.current = null;
-      });
+    async (initialRun?: PersistedProductionRun, forceRetry = false) => {
+      if (!firebaseUser) return;
+      if (runPromiseRef.current && !forceRetry) return;
+
+      const runExecution = (async () => {
+        try {
+          setErrorMessage(null);
+          setFailedProcessingStage(null);
+
+          let productionRun = initialRun || (await loadPersistedData()).productionRun;
+          let missingStage = nextMissingProcessingStage(productionRun);
+          if (
+            missingStage === null &&
+            forceRetry &&
+            productionRun.editorialRun?.status === "failed"
+          ) {
+            missingStage = "leo-edit";
+          }
+          while (missingStage !== null) {
+            if (
+              productionRun.editorialRun &&
+              (productionRun.editorialRun.status === "analyzing" ||
+                productionRun.editorialRun.status === "reviewing")
+            ) {
+              setActiveProcessingStage(
+                productionRun.editorialRun.status === "reviewing" ? "maya-review" : "leo-edit",
+              );
+              await waitForRunUpdate();
+              const refreshed = await loadPersistedData();
+              productionRun = refreshed.productionRun;
+              missingStage = nextMissingProcessingStage(productionRun);
+              continue;
+            }
+
+            setActiveProcessingStage(missingStage);
+            activeProcessingStageRef.current = missingStage;
+
+            const token = await firebaseUser.getIdToken();
+            const headers = { Authorization: `Bearer ${token}` };
+
+            if (missingStage === "transcript") {
+              const resTranscribe = await fetch(`/api/productions/${productionId}/transcribe`, {
+                method: "POST",
+                headers,
+              });
+              if (!resTranscribe.ok) throw new Error("Transcription failed");
+            } else if (
+              missingStage === ("leo-edit" as ProcessingStage) ||
+              missingStage === ("maya-review" as ProcessingStage)
+            ) {
+              setActiveProcessingStage("leo-edit");
+              const analyzePromise = fetch(`/api/productions/${productionId}/analyze`, {
+                method: "POST",
+                headers,
+              });
+              const pollInterval = window.setInterval(async () => {
+                try {
+                  const curr = await loadPersistedData();
+                  if (curr.productionRun.editorialRun?.status === "reviewing") {
+                    setActiveProcessingStage("maya-review");
+                  }
+                } catch {
+                  // Ignore poll error while in flight
+                }
+              }, 200);
+              const resAnalyze = await analyzePromise;
+              window.clearInterval(pollInterval);
+              if (!resAnalyze.ok) throw new Error("Editorial analysis failed");
+            } else if (missingStage === "edit-plan") {
+              const resAssemble = await fetch(`/api/productions/${productionId}/edl`, {
+                method: "POST",
+                headers,
+              });
+              if (!resAssemble.ok) throw new Error("Edit Decision List assembly failed");
+            } else if (missingStage === "render") {
+              setRenderSubStatus("Rendering preview video…");
+              const resRender = await fetch(`/api/productions/${productionId}/renders/preview`, {
+                method: "POST",
+                headers,
+              });
+              if (!resRender.ok) throw new Error("Preview rendering failed");
+
+              setRenderSubStatus("Director reviewing preview…");
+              const revRes = await fetch(`/api/productions/${productionId}/review-preview`, {
+                method: "POST",
+                headers,
+              });
+              if (!revRes.ok) throw new Error("Director post-render review failed");
+            }
+            const updated = await loadPersistedData();
+            productionRun = updated.productionRun;
+            missingStage = nextMissingProcessingStage(productionRun);
+          }
+        } catch (err: unknown) {
+          const stage = activeProcessingStageRef.current || "render";
+          setFailedProcessingStage(stage);
+          setErrorMessage(err instanceof Error ? err.message : "Production run error");
+          setActiveProcessingStage(null);
+          activeProcessingStageRef.current = null;
+          runPromiseRef.current = null;
+        }
+      })();
+
+      runPromiseRef.current = runExecution;
+      await runExecution;
     },
-    [processProduction],
+    [firebaseUser, loadPersistedData, productionId],
   );
 
   useEffect(() => {
-    if (!firebaseUser) return;
-    if (processingProductionIdRef.current !== productionId) {
-      processingProductionIdRef.current = productionId;
-      runPromiseRef.current = null;
-    }
-    beginProductionRun(true);
-  }, [beginProductionRun, firebaseUser, productionId]);
-
-  // Construct Twick Timeline Representation from EDL & Editorial Run
-  const twickData = useMemo(() => {
-    const effectiveEdl: EditDecisionList = edl || {
-      edl_id: `edl_${productionId}`,
-      production_id: productionId,
-      source_duration_ms: durationMs,
-      cuts: [],
-      coverage_markers: [],
-      created_at: new Date().toISOString(),
+    let isMounted = true;
+    const init = async () => {
+      try {
+        const loaded = await loadPersistedData();
+        if (isMounted) {
+          setIsLoading(false);
+          if (processingProductionIdRef.current !== productionId) {
+            processingProductionIdRef.current = productionId;
+            beginProductionRun(loaded.productionRun);
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setErrorMessage(err instanceof Error ? err.message : "Unable to load production");
+          setIsLoading(false);
+        }
+      }
     };
-    return edlToTwickTimeline(effectiveEdl, proposal, review);
-  }, [durationMs, edl, productionId, proposal, review]);
+    init();
+    return () => {
+      isMounted = false;
+    };
+  }, [loadPersistedData, productionId, beginProductionRun]);
 
-  // Derive active coverage region during playback
-  const activeCoverage: CoverageMarker | null = useMemo(() => {
-    if (!edl?.coverage_markers) return null;
-    return (
-      edl.coverage_markers.find(
-        (m) => currentTimeMs >= m.source_start_ms && currentTimeMs <= m.source_end_ms,
-      ) || null
-    );
-  }, [currentTimeMs, edl?.coverage_markers]);
-
-  const activeAgent = useMemo<"leo" | "maya" | "system" | null>(() => {
-    if (activeProcessingStage === "leo-edit") return "leo";
-    if (activeProcessingStage === "maya-review") return "maya";
-    if (activeProcessingStage === "render" && renderSubStatus?.includes("Maya")) return "maya";
-    if (activeProcessingStage === "render" && renderSubStatus?.includes("correction")) return "leo";
-    if (
-      activeProcessingStage === "transcript" ||
-      activeProcessingStage === "edit-plan" ||
-      activeProcessingStage === "render"
-    )
-      return "system";
-    return null;
-  }, [activeProcessingStage, renderSubStatus]);
-
-  const activeStatusMessage = useMemo<string | null>(() => {
-    if (activeProcessingStage === "transcript") return "Transcribing speech…";
-    if (activeProcessingStage === "leo-edit") return "Leo: Analyzing pacing and visual flow…";
-    if (activeProcessingStage === "maya-review") return "Maya: Reviewing Leo's edit…";
-    if (activeProcessingStage === "edit-plan") return "System: Cleaning dead air & assembling EDL…";
-    if (activeProcessingStage === "render") return renderSubStatus || "Rendering edited preview…";
-    return null;
-  }, [activeProcessingStage, renderSubStatus]);
-  // Selected decision entity
-  const selectedDecision = useMemo<EditorDecision | null>(() => {
-    if (!selectedDecisionId || !proposal?.decisions) return null;
-    return proposal.decisions.find((d) => d.decision_id === selectedDecisionId) || null;
-  }, [proposal?.decisions, selectedDecisionId]);
-
-  // Selected director decision entity
-  const selectedDirectorDecision = useMemo<DirectorDecision | null>(() => {
-    if (!selectedDecisionId || !review?.decisions) return null;
-    return review.decisions.find((d) => d.editor_decision_id === selectedDecisionId) || null;
-  }, [review?.decisions, selectedDecisionId]);
-
-  // Handlers
-  const handlePlayPause = useCallback(() => {
-    setIsPlaying((p) => !p);
-  }, []);
-
+  // Handle seeking and synchronized block selections
   const handleSeek = useCallback((targetMs: number) => {
     setCurrentTimeMs(targetMs);
   }, []);
 
+  const handlePlayPause = useCallback(() => {
+    setIsPlaying((prev) => !prev);
+  }, []);
+
   const handleSelectBlock = useCallback((block: TimelineBlock | null) => {
     setSelectedBlock(block);
-    if (block?.decisionId) {
-      setSelectedDecisionId(block.decisionId);
-    } else {
-      setSelectedDecisionId(null);
+    if (block) {
+      setSelectedDecisionId(block.decisionId || (block as any).decision_id || null);
+      setRightPanelTab("decision");
     }
   }, []);
 
   const handleSelectDecision = useCallback(
     (decision: EditorDecision | null) => {
-      if (decision) {
-        setSelectedDecisionId(decision.decision_id);
-        setCurrentTimeMs(decision.source_start_ms);
-        const matchingBlock = twickData.blocks.find((b) => b.decisionId === decision.decision_id);
-        setSelectedBlock(matchingBlock || null);
-      } else {
+      if (!decision) {
         setSelectedDecisionId(null);
-        setSelectedBlock(null);
+        return;
       }
+      setSelectedDecisionId(decision.decision_id);
+      handleSeek(decision.source_start_ms);
+      setRightPanelTab("decision");
     },
-    [twickData.blocks],
+    [handleSeek],
   );
-
-  const handleCloseInspector = useCallback(() => {
-    setSelectedDecisionId(null);
-    setSelectedBlock(null);
+  const handleOpenSettings = useCallback((agent: "leo" | "maya") => {
+    setSettingsAgentId(agent);
+    setIsSettingsOpen(true);
   }, []);
 
-  const videoFilename =
-    production?.source_media?.original_filename ||
-    (productionId === "prod_f0b41bfd429e" ? "Fairphone 6 Plus teardown.mp4" : productionId);
-  const runStages = deriveProductionRunStages(
-    {
-      uploaded: production?.source_media?.status === "uploaded",
-      uploadedAt: production?.source_media?.uploaded_at,
-      transcriptCreatedAt: transcript?.created_at,
-      editorialRun,
-      activities,
-      edlCreatedAt: edl?.created_at,
-      renderCompletedAt: previewArtifact?.completed_at,
-      renderStatus: previewArtifact?.status,
-      renderDurationMs: previewArtifact?.duration_ms,
-    },
-    { active: activeProcessingStage, failed: failedProcessingStage },
-  );
+  // Twick data representation for bottom timeline
+  const twickData = useMemo(() => {
+    if (!edl) {
+      return {
+        tracks: [],
+        blocks: [],
+        totalDurationMs: durationMs,
+        activeCutCount: 0,
+        coverageMarkerCount: 0,
+        keepSegments: [[0, durationMs]] as Array<[number, number]>,
+      };
+    }
+    return edlToTwickTimeline(edl, proposal, review);
+  }, [edl, durationMs, proposal, review]);
 
-  const processingStatusMessage: Partial<Record<ProcessingStage, string>> = {
-    transcript: "Preparing transcript…",
-    "leo-edit": "Leo is reviewing the footage…",
-    "maya-review": "Maya is reviewing Leo's edit…",
-    "edit-plan": "Preparing edit plan…",
-    render: renderSubStatus ?? "Rendering preview video…",
-  };
+  const selectedDecision = useMemo(() => {
+    if (!selectedDecisionId || !proposal || !proposal.decisions) return null;
+    return (
+      proposal.decisions.find((d: EditorDecision) => d.decision_id === selectedDecisionId) || null
+    );
+  }, [selectedDecisionId, proposal]);
+
+  const selectedDirectorDecision = useMemo<DirectorDecision | null>(() => {
+    if (!selectedDecisionId || !review || !review.decisions) return null;
+    return (
+      (review.decisions as any).find(
+        (d: any) =>
+          d.editor_decision_id === selectedDecisionId || d.decision_id === selectedDecisionId,
+      ) || null
+    );
+  }, [selectedDecisionId, review]);
+
+  const activeCoverage = useMemo<CoverageMarker | null>(() => {
+    if (!edl?.coverage_markers) return null;
+    return (
+      edl.coverage_markers.find(
+        (m: CoverageMarker) =>
+          currentTimeMs >= m.source_start_ms && currentTimeMs <= m.source_end_ms,
+      ) || null
+    );
+  }, [edl, currentTimeMs]);
+
+  // Derive B-roll items for Media Bin
+  const brollBinItems = useMemo<BRollAssetItem[]>(() => {
+    return brollArtifacts.map((b: BRollArtifact) => ({
+      artifactId: b.artifact_id,
+      sourceStartMs: b.source_start_ms,
+      sourceEndMs: b.source_end_ms,
+      durationMs: b.duration_ms,
+      promptSummary: b.prompt_summary || "",
+    }));
+  }, [brollArtifacts]);
   const processingFailureMessage: Record<ProcessingStage, string> = {
     transcript: "Transcription failed",
     "leo-edit": "Leo analysis failed",
@@ -515,20 +495,65 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     render: "Preview render failed",
   };
 
+  // Compact Single Status Message
+  const compactStatus = useMemo(() => {
+    if (activeProcessingStage) {
+      if (activeProcessingStage === "transcript") return "Preparing transcript…";
+      if (activeProcessingStage === "leo-edit") return "Leo is reviewing the footage…";
+      if (activeProcessingStage === "maya-review") return "Maya is reviewing Leo's edit…";
+      if (activeProcessingStage === "edit-plan") return "Preparing edit plan…";
+      if (activeProcessingStage === "render") return renderSubStatus || "Rendering preview video…";
+      return "Croviq is editing your video…";
+    }
+    if (editorialRun?.status === "analyzing") return "Leo is reviewing the footage…";
+    if (editorialRun?.status === "reviewing") return "Maya is reviewing Leo's edit…";
+    if (failedProcessingStage) return "Editing pass encountered an issue";
+    if (previewArtifact?.status === "completed") {
+      const durSec = Math.round((previewArtifact.duration_ms || durationMs) / 1000);
+      const mins = Math.floor(durSec / 60);
+      const secs = durSec % 60;
+      return `Production complete · ${mins}m ${secs}s`;
+    }
+    return "Ready";
+  }, [
+    activeProcessingStage,
+    failedProcessingStage,
+    editorialRun?.status,
+    previewArtifact,
+    durationMs,
+    renderSubStatus,
+  ]);
+
+  const activeAgent = useMemo(() => {
+    if (activeProcessingStage === "leo-edit") return "leo";
+    if (activeProcessingStage === "maya-review") return "maya";
+    if (editorialRun?.status === "analyzing") return "leo";
+    if (editorialRun?.status === "reviewing") return "maya";
+    return null;
+  }, [activeProcessingStage, editorialRun?.status]);
+
+  const activeStatusMessage = useMemo(() => {
+    if (activeProcessingStage) return compactStatus;
+    if (editorialRun?.status === "analyzing") return "Leo is reviewing the footage…";
+    if (editorialRun?.status === "reviewing") return "Maya is reviewing Leo's edit…";
+    return null;
+  }, [activeProcessingStage, compactStatus, editorialRun?.status]);
+  const videoFilename = production?.source_media?.original_filename || "Recording.mp4";
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background text-text-primary flex flex-col items-center justify-center gap-3">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        <p className="text-xs text-text-secondary font-medium">Opening Editor workspace...</p>
+      <div className="h-[100dvh] bg-background text-text-primary flex flex-col items-center justify-center gap-3">
+        <Loader2 className="size-8 text-primary animate-spin" />
+        <p className="text-xs text-text-secondary font-medium">Opening Croviq Studio...</p>
       </div>
     );
   }
 
-  if (errorMessage) {
+  if (errorMessage && !production) {
     return (
-      <div className="min-h-screen bg-background text-text-primary flex flex-col items-center justify-center p-6 text-center gap-4">
-        <div className="w-12 h-12 rounded-full bg-danger/10 text-danger flex items-center justify-center border border-danger/20">
-          <AlertCircle className="w-6 h-6" />
+      <div className="h-[100dvh] bg-background text-text-primary flex flex-col items-center justify-center p-6 text-center gap-4">
+        <div className="size-12 rounded-full bg-danger/10 text-danger flex items-center justify-center border border-danger/20">
+          <AlertCircle className="size-6" />
         </div>
         <div className="max-w-md flex flex-col gap-1">
           <h1 className="text-base font-semibold text-text-primary">Unable to load production</h1>
@@ -539,7 +564,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
           onClick={onNavigateHome}
           className="px-4 py-2 bg-surface-2 text-text-primary hover:bg-surface-3 rounded-lg text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="size-3.5" />
           <span>Back to Productions</span>
         </button>
       </div>
@@ -548,11 +573,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
 
   return (
     <div
-      className="h-[100dvh] max-h-[100dvh] bg-background text-text-primary flex flex-col font-sans selection:bg-primary/25 overflow-hidden"
+      className="h-[100dvh] max-h-[100dvh] bg-background text-text-primary flex flex-col font-sans select-none overflow-hidden"
       data-testid="editor-workspace"
     >
-      {/* Editor Header Bar */}
-      <header className="h-12 bg-surface-1 border-b border-border-subtle px-4 sm:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30 backdrop-blur-sm">
+      {/* Top Navigation Bar */}
+      <header className="h-11 bg-surface-1 border-b border-border-subtle px-4 flex items-center justify-between shrink-0 z-30">
+        {/* Left: Brand + Project Title */}
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
@@ -561,7 +587,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             title="Back to Productions"
             aria-label="Back to Productions"
           >
-            <CroviqLogo height={24} className="h-6 w-auto" />
+            <CroviqLogo height={22} className="h-5.5 w-auto" />
           </button>
 
           <span className="text-border-strong select-none font-light">/</span>
@@ -571,28 +597,37 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
           </span>
         </div>
 
-        {/* Right Header Controls: PreviewToggle + User / Logout */}
+        {/* Center: Compact Current Status (No checklist pipeline bar) */}
+        <div
+          className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-2/70 border border-border-subtle text-xs"
+          data-testid="compact-status-banner"
+        >
+          {activeProcessingStage ? (
+            <Loader2 className="size-3.5 text-primary animate-spin shrink-0" />
+          ) : (
+            <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+          )}
+          <span className="font-medium text-text-secondary text-[11px] truncate max-w-xs">
+            {compactStatus}
+          </span>
+        </div>
+
+        {/* Right: Preview Mode Switcher + User Actions */}
         <div className="flex items-center gap-3">
           <PreviewToggle
             mode={previewMode}
             onModeChange={setPreviewMode}
             activeCutCount={twickData.activeCutCount}
+            hasStudioVoice={Boolean(studioVoicePreviewUrl)}
             hasShort={Boolean(shortArtifact?.playback_url)}
           />
-
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-2 border border-border-subtle text-xs text-text-secondary">
-            <span className="w-1.5 h-1.5 rounded-full bg-success"></span>
-            <span className="font-mono text-text-muted text-[11px]">
-              {user?.email || "creator@croviq.app"}
-            </span>
-          </div>
 
           <button
             onClick={logout}
             className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-transparent hover:border-border-subtle"
             title="Sign out"
           >
-            <LogOut className="w-3.5 h-3.5" />
+            <LogOut className="size-3.5" />
             <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
@@ -628,13 +663,31 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
         )}
       />
 
-      <main className="flex-1 min-h-0 p-3 sm:p-4 flex flex-col lg:flex-row gap-3 sm:gap-4 max-w-[1920px] w-full mx-auto overflow-hidden">
-        {/* Main Editor Column (flexible remaining width) */}
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col gap-3 overflow-hidden">
-          {/* Video Stage */}
+      {/* Main Professional Editor NLE Workstation (3 Columns) */}
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        {/* Left Column: Media Bin (220-260px) */}
+        <MediaBin
+          currentMode={previewMode}
+          sourceDurationMs={durationMs}
+          editedDurationMs={
+            previewArtifact?.duration_ms || (edl as any)?.estimated_target_duration_ms || durationMs
+          }
+          hasRenderedPreview={Boolean(renderedPreviewUrl)}
+          hasMaster={Boolean(masterArtifact?.playback_url || masterUrl)}
+          hasStudioVoice={Boolean(studioVoicePreviewUrl)}
+          hasShort={Boolean(shortArtifact?.playback_url)}
+          brollAssets={brollBinItems}
+          onSelectMode={setPreviewMode}
+          onSeek={handleSeek}
+          className="w-[230px] shrink-0"
+        />
+
+        {/* Center Column: Video Canvas (Flexible width, contained video, centered 9:16 Short) */}
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col bg-black overflow-hidden relative">
           <VideoStage
             playbackUrl={playbackUrl}
             renderedPreviewUrl={renderedPreviewUrl}
+            studioVoicePreviewUrl={studioVoicePreviewUrl}
             shortPlaybackUrl={shortArtifact?.playback_url}
             currentTimeMs={currentTimeMs}
             durationMs={durationMs}
@@ -648,83 +701,160 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             onDurationChange={setDurationMs}
             className="flex-1 min-h-0"
           />
-
-          {/* Twick Timeline */}
-          <EditorTimeline
-            twickData={twickData}
-            currentTimeMs={currentTimeMs}
-            durationMs={durationMs}
-            selectedBlockId={selectedBlock?.id || null}
-            onSelectBlock={handleSelectBlock}
-            onSeek={handleSeek}
-            isPlaying={isPlaying}
-            className="h-[156px] shrink-0"
-          />
         </div>
 
-        {/* Right Rail (fixed 380px, bounded height to workspace, 25-30% activity / 70-75% transcript) */}
-        <aside className="w-full lg:w-[380px] shrink-0 h-full min-h-0 flex flex-col gap-2.5 overflow-hidden bg-surface-1/40 rounded-xl border border-border-subtle p-3">
-          <section className="shrink-0 flex flex-col gap-2 border-b border-border-subtle pb-2.5 max-h-[36%] overflow-y-auto overflow-x-hidden w-full min-w-0">
-            <AgentPresence activeAgent={activeAgent} statusMessage={activeStatusMessage} />
+        {/* Right Column: Production Room (340-400px, Inspector Tabs: AGENTS / TRANSCRIPT / DECISION) */}
+        <aside
+          className="w-[360px] shrink-0 h-full min-h-0 flex flex-col bg-surface-1 border-l border-border-subtle overflow-hidden"
+          data-testid="production-room"
+        >
+          {/* Agent Presence Header (Click avatar to open settings) */}
+          <div className="p-3 border-b border-border-subtle bg-surface-2/30">
+            <AgentPresence
+              activeAgent={activeAgent}
+              statusMessage={activeStatusMessage}
+              onOpenSettings={handleOpenSettings}
+            />
 
-            {failedProcessingStage && (
+            {(failedProcessingStage ||
+              (editorialRun?.status === "failed" ? "maya-review" : null)) && (
               <div
-                className="mt-1 flex items-center justify-between gap-3 rounded-md bg-danger/10 px-2.5 py-1.5"
+                className="mt-2 flex items-center justify-between gap-3 rounded-md bg-danger/10 px-2.5 py-1.5 border border-danger/20"
                 role="alert"
               >
-                <span className="flex items-center gap-2 text-[11px] font-medium text-danger">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-danger">
                   <AlertCircle className="size-3.5 shrink-0" />
-                  {processingFailureMessage[failedProcessingStage]}
+                  {processingFailureMessage[failedProcessingStage || "maya-review"]}
                 </span>
                 <button
                   type="button"
                   className="rounded px-2 py-0.5 text-[10px] font-semibold text-text-primary ring-1 ring-border-strong transition-colors hover:bg-surface-3 focus-visible:outline-none focus-visible:ring-primary"
-                  onClick={() => beginProductionRun(false, true)}
+                  onClick={() => beginProductionRun(undefined, true)}
                 >
                   Retry
                 </button>
               </div>
             )}
+          </div>
 
-            <div className="min-h-0">
-              {selectedDecision || selectedBlock ? (
+          {/* Inspector Tab Switcher */}
+          <div className="flex border-b border-border-subtle bg-surface-2/20 px-3">
+            <button
+              type="button"
+              onClick={() => setRightPanelTab("agents")}
+              className={`flex items-center gap-1.5 py-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
+                rightPanelTab === "agents"
+                  ? "border-primary text-text-primary"
+                  : "border-transparent text-text-muted hover:text-text-secondary"
+              }`}
+              data-testid="tab-agents-feed"
+            >
+              <MessageSquare className="size-3.5" />
+              Agents
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightPanelTab("transcript")}
+              className={`flex items-center gap-1.5 py-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
+                rightPanelTab === "transcript"
+                  ? "border-primary text-text-primary"
+                  : "border-transparent text-text-muted hover:text-text-secondary"
+              }`}
+              data-testid="tab-transcript"
+            >
+              <FileText className="size-3.5" />
+              Transcript
+            </button>
+            {(selectedDecision || selectedBlock) && (
+              <button
+                type="button"
+                onClick={() => setRightPanelTab("decision")}
+                className={`flex items-center gap-1.5 py-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
+                  rightPanelTab === "decision"
+                    ? "border-primary text-text-primary"
+                    : "border-transparent text-text-muted hover:text-text-secondary"
+                }`}
+                data-testid="tab-decision-inspector"
+              >
+                <Sliders className="size-3.5" />
+                Decision
+              </button>
+            )}
+          </div>
+
+          {/* Active Tab Surface */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {rightPanelTab === "agents" ? (
+              <AgentActivityFeed
+                activities={activities}
+                decisions={proposal?.decisions ?? []}
+                review={review}
+                statusMessage={activeProcessingStage ? compactStatus : null}
+                activeAgent={
+                  activeProcessingStage === "leo-edit"
+                    ? "leo"
+                    : activeProcessingStage === "maya-review"
+                      ? "maya"
+                      : null
+                }
+                onSeek={handleSeek}
+                onSelectActivity={(activity) => {
+                  const matching = proposal?.decisions?.find(
+                    (decision: EditorDecision) =>
+                      decision.decision_id === activity.related_decision_id,
+                  );
+                  if (matching) handleSelectDecision(matching);
+                }}
+              />
+            ) : rightPanelTab === "transcript" ? (
+              <TranscriptPanel
+                transcript={transcript}
+                currentTimeMs={currentTimeMs}
+                decisions={proposal?.decisions || []}
+                selectedDecisionId={selectedDecisionId}
+                onSelectDecision={handleSelectDecision}
+                onSeek={handleSeek}
+                className="h-full"
+              />
+            ) : (
+              <div className="p-3 h-full overflow-y-auto">
                 <DecisionInspector
                   decision={selectedDecision}
                   directorDecision={selectedDirectorDecision}
                   selectedBlock={selectedBlock}
-                  onClose={handleCloseInspector}
+                  onClose={() => {
+                    setSelectedDecisionId(null);
+                    setSelectedBlock(null);
+                    setRightPanelTab("agents");
+                  }}
                   onSeek={handleSeek}
                 />
-              ) : (
-                <AgentActivityFeed
-                  activities={activities}
-                  decisions={proposal?.decisions ?? []}
-                  review={review}
-                  statusMessage={
-                    activeProcessingStage ? processingStatusMessage[activeProcessingStage] : null
-                  }
-                  onSelectActivity={(activity) => {
-                    const matching = proposal?.decisions?.find(
-                      (decision) => decision.decision_id === activity.related_decision_id,
-                    );
-                    if (matching) handleSelectDecision(matching);
-                  }}
-                />
-              )}
-            </div>
-          </section>
-
-          <TranscriptPanel
-            transcript={transcript}
-            currentTimeMs={currentTimeMs}
-            decisions={proposal?.decisions || []}
-            selectedDecisionId={selectedDecisionId}
-            onSelectDecision={handleSelectDecision}
-            onSeek={handleSeek}
-            className="flex-1 min-h-0"
-          />
+              </div>
+            )}
+          </div>
         </aside>
-      </main>
+      </div>
+
+      {/* Bottom Row: Compressed Twick Timeline (~180-220px) */}
+      <div className="h-[190px] shrink-0 border-t border-border-subtle bg-surface-1">
+        <EditorTimeline
+          twickData={twickData}
+          currentTimeMs={currentTimeMs}
+          durationMs={durationMs}
+          selectedBlockId={selectedBlock?.id || null}
+          onSelectBlock={handleSelectBlock}
+          onSeek={handleSeek}
+          isPlaying={isPlaying}
+          className="h-full"
+        />
+      </div>
+
+      {/* Agent Settings Drawer (Leo / Maya) */}
+      <AgentSettingsDrawer
+        isOpen={isSettingsOpen}
+        agentId={settingsAgentId}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </div>
   );
 };

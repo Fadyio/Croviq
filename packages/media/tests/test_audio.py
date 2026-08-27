@@ -7,8 +7,8 @@ from croviq_media.audio import (
     AudioExtractor,
     FakeAudioExtractor,
     FFmpegAudioExtractor,
+    StudioVoiceAudioMixer,
 )
-
 
 @pytest.fixture
 def sample_video_path(tmp_path: Path) -> Path:
@@ -86,3 +86,28 @@ def test_ffmpeg_audio_extractor_nonexistent_source(tmp_path: Path):
     nonexistent = tmp_path / "does_not_exist.mp4"
     with pytest.raises(AudioExtractionError, match="not found"):
         extractor.extract_speech_audio(nonexistent)
+def test_studio_voice_audio_mixer(tmp_path: Path):
+    mixer = StudioVoiceAudioMixer()
+    # Create two 1-second sine audio files
+    src_audio = tmp_path / "source.wav"
+    narr_audio = tmp_path / "narr.wav"
+    mixed_out = tmp_path / "mixed.aac"
+
+    for p in (src_audio, narr_audio):
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+            "-c:a", "pcm_s16le", str(p)
+        ]
+        res = subprocess.run(cmd, capture_output=True)
+        if res.returncode != 0:
+            pytest.skip("ffmpeg sine lavfi not available")
+
+    out = mixer.mix_narration_with_ambient(
+        source_audio_path=src_audio,
+        narration_audio_path=narr_audio,
+        speech_intervals_ms=[(0, 500)],
+        target_path=mixed_out,
+    )
+    assert out.exists()
+    assert out.stat().st_size > 0

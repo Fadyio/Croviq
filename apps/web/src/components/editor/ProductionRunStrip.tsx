@@ -10,10 +10,7 @@ export const ProductionRunStrip: React.FC<ProductionRunStripProps> = ({ stages }
   const activeStage = stages.find((s) => s.status === "active");
   const failedStage = stages.find((s) => s.status === "failed");
   const isAllComplete = stages.every((s) => s.status === "completed");
-  const totalDurationMs = stages.reduce(
-    (acc, s) => (s.durationMs ? acc + s.durationMs : acc),
-    0,
-  );
+  const totalDurationMs = stages.reduce((acc, s) => (s.durationMs ? acc + s.durationMs : acc), 0);
 
   return (
     <nav

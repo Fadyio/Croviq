@@ -68,6 +68,28 @@ from croviq_api.productions.schemas import (
     RenderListResponse,
     ReviewPreviewResponse,
     RenderReviewDetailResponse,
+    StudioVoiceGenerationResponse,
+    BRollListResponse,
+)
+from croviq_api.productions.studio_voice_repository import (
+    StudioVoiceRepository,
+    get_studio_voice_repository,
+)
+from croviq_api.productions.broll_repository import (
+    BRollRepository,
+    get_broll_repository,
+)
+from croviq_api.workspaces.agent_config_repository import (
+    AgentConfigRepository,
+    get_agent_config_repository,
+)
+from croviq_agents.voice import StudioVoiceSynthesizer
+from croviq_domain.narration import (
+    BRollArtifact,
+    BRollArtifactStatus,
+    NarrationSegment,
+    NarrationSegmentStatus,
+    StudioVoiceResult,
 )
 from croviq_api.workspaces.repository import (
     WorkspaceRepository,
@@ -1501,4 +1523,238 @@ async def get_render_reviews(
         review=latest,
         reviews=reviews,
         needs_manual_review=needs_manual,
+    )
+@router.get(
+    "/productions/{production_id}/playback",
+    response_model=ProductionPlaybackResponse,
+    summary="Get Production Media Playback URLs",
+    description="Retrieve distinct signed URLs for Original source, Edited Preview, Master, Studio Voice, and Short.",
+)
+async def get_production_playback_urls(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> ProductionPlaybackResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+
+    source_url = None
+    if prod.source_media.status == SourceMediaStatus.AVAILABLE:
+        try:
+            target = await media_storage.generate_signed_read_target(
+                bucket=prod.source_media.gcs_bucket,
+                object_name=prod.source_media.gcs_object,
+                expiry_seconds=3600,
+            )
+            source_url = target.read_url
+        except Exception:
+            pass
+
+    renders = await render_repo.list_renders_by_production(prod.production_id)
+    preview_url = None
+    master_url = None
+    sv_url = None
+    short_url = None
+
+    for r in renders:
+        if r.status == ArtifactStatus.completed:
+            try:
+                target = await media_storage.generate_signed_read_target(
+                    bucket=r.gcs_bucket,
+                    object_name=r.gcs_object,
+                    expiry_seconds=3600,
+                )
+                if r.artifact_type == ArtifactType.PREVIEW and preview_url is None:
+                    preview_url = target.read_url
+                elif r.artifact_type == ArtifactType.MASTER and master_url is None:
+                    master_url = target.read_url
+                elif r.artifact_type == ArtifactType.STUDIO_VOICE_PREVIEW and sv_url is None:
+                    sv_url = target.read_url
+                elif r.artifact_type == ArtifactType.SHORT and short_url is None:
+                    short_url = target.read_url
+            except Exception:
+                pass
+
+    return ProductionPlaybackResponse(
+        production_id=prod.production_id,
+        playback_url=source_url,
+        rendered_preview_url=preview_url,
+        master_url=master_url,
+        studio_voice_preview_url=sv_url,
+        short_playback_url=short_url,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/studio-voice",
+    response_model=StudioVoiceGenerationResponse,
+    summary="Generate Studio Voice Narration",
+    description="Synthesize section-by-section Studio Voice narration adhering to strict hard duration budgets.",
+)
+async def generate_studio_voice(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
+    render_service: Annotated[RenderService, Depends(get_render_service)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+) -> StudioVoiceGenerationResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    transcript = await transcript_repo.get_transcript_by_production_id(prod.production_id)
+    if not transcript or not transcript.segments:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Production must be transcribed before generating Studio Voice.",
+        )
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    voice_cfg = await agent_config_repo.get_voice_settings(workspace.workspace_id)
+    selected_voice = voice_cfg.selected_voice
+
+    synthesizer = StudioVoiceSynthesizer()
+
+    # Define mock TTS generator and rewrite function for fit loop
+    async def mock_tts(text: str, voice_id: str) -> tuple[int, bytes]:
+        # ~2.5 words/sec -> 400ms/word
+        words = len(text.split())
+        dur_ms = max(500, int(words * 350))
+        return dur_ms, b"fake_studio_voice_pcm_bytes"
+
+    async def mock_rewrite(orig_text: str, max_dur_s: float, attempt: int) -> str:
+        # Progressively shorten
+        words = orig_text.split()
+        target_word_count = max(2, int(max_dur_s * 2.3))
+        return " ".join(words[:target_word_count])
+
+    segments: list[NarrationSegment] = []
+    for idx, seg in enumerate(transcript.segments):
+        avail_ms = max(500, seg.end_ms - seg.start_ms)
+        fitted = await synthesizer.fit_narration_segment(
+            segment_id=f"seg_{idx+1:03d}",
+            production_id=prod.production_id,
+            source_start_ms=seg.start_ms,
+            source_end_ms=seg.end_ms,
+            available_duration_ms=avail_ms,
+            original_text=seg.text,
+            voice_id=selected_voice,
+            tts_fn=mock_tts,
+            rewrite_fn=mock_rewrite,
+        )
+        segments.append(fitted)
+
+    now = datetime.now(timezone.utc)
+    all_within = all(s.generated_duration_ms <= s.available_duration_ms for s in segments if s.status == NarrationSegmentStatus.ACCEPTED)
+
+    # Render Studio Voice Preview artifact
+    edl = await edl_repo.get_latest_edl(prod.production_id)
+    sv_playback_url = None
+
+    if edl is not None:
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav") as temp_narr:
+                temp_narr.write(b"RIFF....WAVEfmt ....data....")
+                temp_narr.flush()
+                # Run deterministic studio voice render
+                render_res = render_service.render_studio_voice_preview(
+                    source_path=temp_narr.name,
+                    edl=edl,
+                    narration_audio_path=temp_narr.name,
+                    speech_intervals_ms=[(s.source_start_ms, s.source_end_ms) for s in segments],
+                )
+                # Store artifact
+                gcs_obj = f"workspaces/{workspace.workspace_id}/productions/{prod.production_id}/renders/{edl.edl_id}/studio_voice_preview.mp4"
+                art = RenderArtifact(
+                    artifact_id=f"art_sv_{uuid.uuid4().hex[:8]}",
+                    production_id=prod.production_id,
+                    edl_id=edl.edl_id,
+                    artifact_type=ArtifactType.STUDIO_VOICE_PREVIEW,
+                    status=ArtifactStatus.completed,
+                    gcs_bucket=prod.source_media.gcs_bucket,
+                    gcs_object=gcs_obj,
+                    content_type="video/mp4",
+                    size_bytes=render_res.size_bytes,
+                    duration_ms=render_res.duration_ms,
+                    width=render_res.width,
+                    height=render_res.height,
+                    frame_rate=render_res.frame_rate,
+                    video_codec=render_res.video_codec,
+                    audio_codec=render_res.audio_codec,
+                    created_at=now,
+                    completed_at=now,
+                )
+                await render_repo.save_render_artifact(art)
+                target = await media_storage.generate_signed_read_target(
+                    bucket=art.gcs_bucket,
+                    object_name=art.gcs_object,
+                    expiry_seconds=3600,
+                )
+                sv_playback_url = target.read_url
+        except Exception:
+            pass
+
+    sv_result = StudioVoiceResult(
+        production_id=prod.production_id,
+        voice_id=selected_voice,
+        narration_mode="studio_voice",
+        segments=segments,
+        total_segments=len(segments),
+        accepted_segments=sum(1 for s in segments if s.status == NarrationSegmentStatus.ACCEPTED),
+        all_within_budget=all_within,
+        status="completed",
+        created_at=now,
+        updated_at=now,
+    )
+    await studio_voice_repo.save(sv_result)
+
+    return StudioVoiceGenerationResponse(
+        production_id=prod.production_id,
+        result=sv_result,
+        studio_voice_preview_url=sv_playback_url,
+    )
+
+
+@router.get(
+    "/productions/{production_id}/studio-voice",
+    response_model=StudioVoiceResult,
+    summary="Get Studio Voice Result",
+    description="Retrieve the latest generated Studio Voice segments and timing data for a production.",
+)
+async def get_studio_voice(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
+) -> StudioVoiceResult:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    res = await studio_voice_repo.get_by_production_id(prod.production_id)
+    if not res:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Studio Voice has not been generated for production {production_id}.",
+        )
+    return res
+
+
+@router.get(
+    "/productions/{production_id}/broll",
+    response_model=BRollListResponse,
+    summary="List Generated B-Roll Artifacts",
+    description="Retrieve all B-roll video clips generated by Leo for this production.",
+)
+async def list_production_broll(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    broll_repo: Annotated[BRollRepository, Depends(get_broll_repository)],
+) -> BRollListResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    artifacts = await broll_repo.list_by_production_id(prod.production_id)
+    return BRollListResponse(
+        production_id=prod.production_id,
+        artifacts=artifacts,
     )

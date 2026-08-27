@@ -181,6 +181,271 @@
         ]
       }
     },
+    "/api/workspace/agent-settings": {
+      "get": {
+        "tags": ["Workspaces"],
+        "summary": "Get Agent Settings",
+        "description": "Retrieve creator-configured prompts for Leo and Maya, narration voice settings, and official Google voice catalog.",
+        "operationId": "get_agent_settings_api_workspace_agent_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSettingsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/workspace/agent-settings/prompts/{agent_id}": {
+      "put": {
+        "tags": ["Workspaces"],
+        "summary": "Update Agent Working Prompt",
+        "description": "Update the complete editorial working prompt for Leo or Maya. Bumps version and timestamps.",
+        "operationId": "update_agent_prompt_api_workspace_agent_settings_prompts__agent_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePromptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPromptConfig"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspace/agent-settings/prompts/{agent_id}/reset": {
+      "post": {
+        "tags": ["Workspaces"],
+        "summary": "Reset Agent Working Prompt",
+        "description": "Reset Leo or Maya working prompt back to the system default editorial prompt.",
+        "operationId": "reset_agent_prompt_api_workspace_agent_settings_prompts__agent_id__reset_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPromptConfig"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspace/agent-settings/memory": {
+      "get": {
+        "tags": ["Workspaces"],
+        "summary": "View Agent Memory (Read-Only)",
+        "description": "Retrieve what Leo currently knows from the Channel Memory Bank.",
+        "operationId": "get_agent_memory_api_workspace_agent_settings_memory_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentMemorySummaryResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/workspace/agent-settings/voice": {
+      "get": {
+        "tags": ["Workspaces"],
+        "summary": "Get Voice Settings",
+        "description": "Get current narration mode and Studio Voice selection.",
+        "operationId": "get_voice_settings_endpoint_api_workspace_agent_settings_voice_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSettingsConfig"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": ["Workspaces"],
+        "summary": "Update Voice Settings",
+        "description": "Update narration mode (Original, Enhanced Original, Studio Voice) and selected Google voice.",
+        "operationId": "update_voice_settings_endpoint_api_workspace_agent_settings_voice_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVoiceSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSettingsConfig"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/workspace/agent-settings/voice/sample": {
+      "post": {
+        "tags": ["Workspaces"],
+        "summary": "Audition Voice Sample",
+        "description": "Preview audio sample for a selected Google Gemini TTS voice.",
+        "operationId": "get_voice_sample_endpoint_api_workspace_agent_settings_voice_sample_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceSampleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSampleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/channel/memory/profile": {
       "get": {
         "tags": ["Memory"],
@@ -808,9 +1073,9 @@
     "/api/productions/{production_id}/playback": {
       "get": {
         "tags": ["Productions & Uploads"],
-        "summary": "Get Short-Lived Signed URL for Source Video Playback",
-        "description": "Retrieve a short-lived keyless signed GET URL for browser source video playback.",
-        "operationId": "get_production_playback_api_productions__production_id__playback_get",
+        "summary": "Get Production Media Playback URLs",
+        "description": "Retrieve distinct signed URLs for Original source, Edited Preview, Master, Studio Voice, and Short.",
+        "operationId": "get_production_playback_urls_api_productions__production_id__playback_get",
         "security": [
           {
             "HTTPBearer": []
@@ -1172,6 +1437,142 @@
           }
         }
       }
+    },
+    "/api/productions/{production_id}/studio-voice": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Generate Studio Voice Narration",
+        "description": "Synthesize section-by-section Studio Voice narration adhering to strict hard duration budgets.",
+        "operationId": "generate_studio_voice_api_productions__production_id__studio_voice_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioVoiceGenerationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get Studio Voice Result",
+        "description": "Retrieve the latest generated Studio Voice segments and timing data for a production.",
+        "operationId": "get_studio_voice_api_productions__production_id__studio_voice_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioVoiceResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/broll": {
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "List Generated B-Roll Artifacts",
+        "description": "Retrieve all B-roll video clips generated by Leo for this production.",
+        "operationId": "list_production_broll_api_productions__production_id__broll_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BRollListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1204,9 +1605,8 @@
           },
           "role": {
             "type": "string",
-            "minLength": 1,
             "title": "Role",
-            "description": "Agent role (e.g. Dialogue Editor, Director)"
+            "description": "Agent role (e.g. Video Editor, Director)"
           },
           "activity_type": {
             "type": "string",
@@ -1252,6 +1652,106 @@
         ],
         "title": "AgentActivity",
         "description": "Product-facing persisted activity message from Maya or Leo."
+      },
+      "AgentId": {
+        "type": "string",
+        "enum": ["leo", "maya"],
+        "title": "AgentId",
+        "description": "Supported Croviq agents."
+      },
+      "AgentMemorySummaryResponse": {
+        "properties": {
+          "channel_title": {
+            "type": "string",
+            "title": "Channel Title"
+          },
+          "style_guide": {
+            "type": "string",
+            "title": "Style Guide"
+          },
+          "creator_preferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Creator Preferences"
+          },
+          "lessons": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryItemResponse"
+            },
+            "type": "array",
+            "title": "Lessons"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["channel_title", "style_guide"],
+        "title": "AgentMemorySummaryResponse",
+        "description": "Read-only summary of what Leo and Maya currently know."
+      },
+      "AgentPromptConfig": {
+        "properties": {
+          "agent_id": {
+            "$ref": "#/components/schemas/AgentId",
+            "description": "Target agent identifier (leo or maya)"
+          },
+          "prompt_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prompt Text",
+            "description": "Complete editorial working prompt text"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version",
+            "description": "Monotonically increasing version number",
+            "default": 1
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp when the prompt was last updated"
+          },
+          "is_custom": {
+            "type": "boolean",
+            "title": "Is Custom",
+            "description": "Whether this prompt differs from system default",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["agent_id", "prompt_text", "updated_at"],
+        "title": "AgentPromptConfig",
+        "description": "Creator-editable working prompt configuration for an agent."
+      },
+      "AgentSettingsResponse": {
+        "properties": {
+          "leo_prompt": {
+            "$ref": "#/components/schemas/AgentPromptConfig"
+          },
+          "maya_prompt": {
+            "$ref": "#/components/schemas/AgentPromptConfig"
+          },
+          "voice_settings": {
+            "$ref": "#/components/schemas/VoiceSettingsConfig"
+          },
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceCatalogItem"
+            },
+            "type": "array",
+            "title": "Voices"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["leo_prompt", "maya_prompt", "voice_settings", "voices"],
+        "title": "AgentSettingsResponse",
+        "description": "Complete Agent Settings state returned to client."
       },
       "AnalyzeProductionResponse": {
         "properties": {
@@ -1327,7 +1827,7 @@
       },
       "ArtifactType": {
         "type": "string",
-        "enum": ["PREVIEW", "MASTER", "SHORT"],
+        "enum": ["PREVIEW", "MASTER", "SHORT", "STUDIO_VOICE_PREVIEW", "STUDIO_VOICE_MASTER"],
         "title": "ArtifactType",
         "description": "Supported render artifact types."
       },
@@ -1680,6 +2180,119 @@
         "type": "object",
         "required": ["event_type"],
         "title": "AuthTokenRefreshedEvent"
+      },
+      "BRollArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Id",
+            "description": "Unique artifact identifier"
+          },
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated production identifier"
+          },
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id",
+            "description": "Optional associated editor decision id"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms",
+            "description": "Start time on source timeline in ms"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source End Ms",
+            "description": "End time on source timeline in ms"
+          },
+          "gcs_bucket": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Gcs Bucket"
+          },
+          "gcs_object": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Gcs Object"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Duration Ms",
+            "description": "Target clip duration in ms (~2000-8000ms)"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BRollArtifactStatus",
+            "default": "accepted"
+          },
+          "prompt_summary": {
+            "type": "string",
+            "title": "Prompt Summary",
+            "description": "Human summary of B-roll visual intent",
+            "default": ""
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "artifact_id",
+          "production_id",
+          "source_start_ms",
+          "source_end_ms",
+          "gcs_bucket",
+          "gcs_object",
+          "duration_ms",
+          "created_at"
+        ],
+        "title": "BRollArtifact",
+        "description": "Minimal canonical B-roll artifact generated by Leo via Omni Flash."
+      },
+      "BRollArtifactStatus": {
+        "type": "string",
+        "enum": ["pending", "accepted", "rejected", "failed"],
+        "title": "BRollArtifactStatus",
+        "description": "Lifecycle status of a generated B-roll asset."
+      },
+      "BRollListResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Unique production identifier"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/BRollArtifact"
+            },
+            "type": "array",
+            "title": "Artifacts",
+            "description": "List of generated B-roll clips"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id"],
+        "title": "BRollListResponse",
+        "description": "Response listing generated B-roll artifacts for a production."
       },
       "BrandKit": {
         "properties": {
@@ -2386,6 +2999,14 @@
             "title": "Decisions",
             "description": "Per-decision review verdicts"
           },
+          "section_decisions": {
+            "items": {
+              "$ref": "#/components/schemas/DirectorSectionDecision"
+            },
+            "type": "array",
+            "title": "Section Decisions",
+            "description": "Review verdicts on Leo's full-timeline section plan"
+          },
           "editor_feedback": {
             "type": "string",
             "minLength": 1,
@@ -2417,6 +3038,31 @@
         ],
         "title": "DirectorReview",
         "description": "Complete review output emitted by Director (Maya)."
+      },
+      "DirectorSectionDecision": {
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Section Id"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/DirectorVerdict",
+            "description": "Verdict: APPROVE, REJECT, or MODIFY"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["section_id", "verdict", "reason"],
+        "title": "DirectorSectionDecision",
+        "description": "Director review verdict for a full-timeline VideoSectionDecision."
       },
       "DirectorVerdict": {
         "type": "string",
@@ -2658,7 +3304,7 @@
           "confidence"
         ],
         "title": "EditorDecision",
-        "description": "Individual editorial decision proposed by Leo (Dialogue Editor)."
+        "description": "Individual editorial decision proposed by Leo (Video Editor)."
       },
       "EditorDecisionType": {
         "type": "string",
@@ -2674,7 +3320,7 @@
           "SHORT_CANDIDATE"
         ],
         "title": "EditorDecisionType",
-        "description": "Semantic action types supported by Dialogue Editor (Leo)."
+        "description": "Semantic action types supported by Video Editor (Leo)."
       },
       "EditorProposal": {
         "properties": {
@@ -2721,6 +3367,14 @@
             ],
             "description": "Optional Short candidate excerpt identified during analysis"
           },
+          "section_plan": {
+            "items": {
+              "$ref": "#/components/schemas/VideoSectionDecision"
+            },
+            "type": "array",
+            "title": "Section Plan",
+            "description": "Full-timeline editorial section plan covering the whole production"
+          },
           "overall_confidence": {
             "type": "number",
             "maximum": 1.0,
@@ -2733,7 +3387,7 @@
         "type": "object",
         "required": ["production_id", "model", "summary", "overall_confidence"],
         "title": "EditorProposal",
-        "description": "Complete batch proposal emitted by Dialogue Editor (Leo)."
+        "description": "Complete batch proposal emitted by Leo (Video Editor)."
       },
       "EditorialRun": {
         "properties": {
@@ -2994,6 +3648,153 @@
         "title": "MediaMetadata",
         "description": "Canonical metadata extracted from source video/audio via FFprobe."
       },
+      "MemoryItemResponse": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Topic"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content"
+          },
+          "learned_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learned From"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["topic", "content"],
+        "title": "MemoryItemResponse",
+        "description": "Single read-only memory entry displayed in creator Agent Settings."
+      },
+      "NarrationMode": {
+        "type": "string",
+        "enum": ["original", "enhanced_original", "studio_voice"],
+        "title": "NarrationMode",
+        "description": "Narration audio mode."
+      },
+      "NarrationSegment": {
+        "properties": {
+          "segment_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Segment Id",
+            "description": "Unique segment identifier"
+          },
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated production identifier"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms",
+            "description": "Start timestamp on source timeline in ms"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source End Ms",
+            "description": "End timestamp on source timeline in ms"
+          },
+          "available_duration_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Available Duration Ms",
+            "description": "Strict maximum duration budget in ms"
+          },
+          "original_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Original Text",
+            "description": "Original spoken transcript text"
+          },
+          "rewritten_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Rewritten Text",
+            "description": "Leo's editorial rewritten text"
+          },
+          "voice_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Voice Id",
+            "description": "Selected Google Gemini TTS voice identifier"
+          },
+          "generated_duration_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Generated Duration Ms",
+            "description": "Actual measured TTS audio duration in ms",
+            "default": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/NarrationSegmentStatus",
+            "default": "pending"
+          },
+          "audio_artifact_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Artifact Reference",
+            "description": "GCS object or storage key"
+          },
+          "attempts": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Attempts",
+            "description": "Number of TTS synthesis/rewrite attempts",
+            "default": 1
+          },
+          "tempo_adjustment": {
+            "type": "number",
+            "maximum": 1.1,
+            "minimum": 0.9,
+            "title": "Tempo Adjustment",
+            "description": "Applied tempo multiplier (max 3-5%)",
+            "default": 1.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "segment_id",
+          "production_id",
+          "source_start_ms",
+          "source_end_ms",
+          "available_duration_ms",
+          "original_text",
+          "rewritten_text",
+          "voice_id"
+        ],
+        "title": "NarrationSegment",
+        "description": "Minimal canonical narration segment representation."
+      },
+      "NarrationSegmentStatus": {
+        "type": "string",
+        "enum": ["pending", "accepted", "rejected", "failed"],
+        "title": "NarrationSegmentStatus",
+        "description": "Status of a narration segment synthesis."
+      },
       "Production": {
         "properties": {
           "production_id": {
@@ -3089,25 +3890,87 @@
           "production_id": {
             "type": "string",
             "title": "Production Id",
-            "description": "Canonical unique production identifier"
+            "description": "Unique production identifier"
           },
           "playback_url": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Playback Url",
-            "description": "Short-lived keyless signed GET URL for browser video playback"
+            "description": "Original source media playback URL"
           },
           "expires_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Expires At",
-            "description": "UTC expiration timestamp of the signed playback URL"
+            "description": "Expiration timestamp for signed URLs"
+          },
+          "rendered_preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendered Preview Url",
+            "description": "Edited preview video playback URL"
+          },
+          "master_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Master Url",
+            "description": "Master video playback URL"
+          },
+          "studio_voice_preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Studio Voice Preview Url",
+            "description": "Studio Voice video playback URL"
+          },
+          "short_playback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Playback Url",
+            "description": "Social Short video playback URL"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["production_id", "playback_url", "expires_at"],
+        "required": ["production_id"],
         "title": "ProductionPlaybackResponse",
-        "description": "Response containing a short-lived signed GET URL for browser source video playback."
+        "description": "Playback URLs for all available media outputs of a production."
       },
       "ProductionStatus": {
         "type": "string",
@@ -3599,6 +4462,12 @@
         "title": "ReviewPreviewResponse",
         "description": "Response returned upon completing post-render preview review and Master render gating."
       },
+      "SectionAction": {
+        "type": "string",
+        "enum": ["KEEP", "TIGHTEN", "REMOVE", "COVERAGE"],
+        "title": "SectionAction",
+        "description": "Editorial action applied to a full-timeline production section."
+      },
       "ShortCandidate": {
         "properties": {
           "start_ms": {
@@ -3645,6 +4514,17 @@
             "minimum": 0.0,
             "title": "Confidence",
             "description": "Model confidence score for the candidate excerpt"
+          },
+          "visual_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShortVisualPlan"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional visual focus regions for 9:16 reframe"
           }
         },
         "additionalProperties": false,
@@ -3660,6 +4540,86 @@
         ],
         "title": "ShortCandidate",
         "description": "Identified 20-60s candidate segment suitable for vertical Short extraction."
+      },
+      "ShortVisualPlan": {
+        "properties": {
+          "regions": {
+            "items": {
+              "$ref": "#/components/schemas/ShortVisualRegion"
+            },
+            "type": "array",
+            "title": "Regions",
+            "description": "List of chronological visual focus regions for the Short"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ShortVisualPlan",
+        "description": "Visual reframe plan for social Short rendering."
+      },
+      "ShortVisualRegion": {
+        "properties": {
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Start timestamp in ms relative to Short timeline"
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Ms",
+            "description": "End timestamp in ms relative to Short timeline"
+          },
+          "x": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "description": "Normalized x coordinate (0.0 to 1.0) of crop top-left in source frame"
+          },
+          "y": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "description": "Normalized y coordinate (0.0 to 1.0) of crop top-left in source frame"
+          },
+          "width": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Width",
+            "description": "Normalized width (0.0 to 1.0) of focus region"
+          },
+          "height": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Height",
+            "description": "Normalized height (0.0 to 1.0) of focus region"
+          },
+          "zoom": {
+            "type": "number",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Zoom",
+            "description": "Optional zoom factor",
+            "default": 1.0
+          },
+          "focus_label": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Focus Label",
+            "description": "Visual description of focus area (e.g. YAML editor, status)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["start_ms", "end_ms", "x", "y", "width", "height", "focus_label"],
+        "title": "ShortVisualRegion",
+        "description": "Normalized focus rectangle identifying the readable screen region for a Short scene."
       },
       "SilenceInterval": {
         "properties": {
@@ -3813,6 +4773,121 @@
         "required": ["production_id", "source_media", "media_metadata", "transcript", "channel_id"],
         "title": "SourceVideoAnalysisInput",
         "description": "Canonical provider-neutral input contract consumed by Gemini agents in Issue #26."
+      },
+      "StudioVoiceGenerationResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Unique production identifier"
+          },
+          "result": {
+            "$ref": "#/components/schemas/StudioVoiceResult",
+            "description": "Aggregated Studio Voice result and segment details"
+          },
+          "studio_voice_preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Studio Voice Preview Url",
+            "description": "Signed playback URL for Studio Voice preview"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id", "result"],
+        "title": "StudioVoiceGenerationResponse",
+        "description": "Response returned upon generating Studio Voice narration for a production."
+      },
+      "StudioVoiceResult": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id"
+          },
+          "voice_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Voice Id"
+          },
+          "narration_mode": {
+            "type": "string",
+            "title": "Narration Mode",
+            "default": "studio_voice"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/NarrationSegment"
+            },
+            "type": "array",
+            "title": "Segments"
+          },
+          "total_segments": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Segments",
+            "default": 0
+          },
+          "accepted_segments": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Accepted Segments",
+            "default": 0
+          },
+          "all_within_budget": {
+            "type": "boolean",
+            "title": "All Within Budget",
+            "default": true
+          },
+          "gcs_bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gcs Bucket"
+          },
+          "gcs_object": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gcs Object"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "completed"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id", "voice_id", "created_at", "updated_at"],
+        "title": "StudioVoiceResult",
+        "description": "Aggregated Studio Voice generation result for a production."
       },
       "TargetAgent": {
         "type": "string",
@@ -4058,6 +5133,46 @@
         "title": "TranscriptWord",
         "description": "Canonical representation of a single spoken word with millisecond time alignment."
       },
+      "UpdatePromptRequest": {
+        "properties": {
+          "prompt_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prompt Text",
+            "description": "Updated editorial working prompt"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["prompt_text"],
+        "title": "UpdatePromptRequest",
+        "description": "Request payload for updating an agent's working prompt."
+      },
+      "UpdateVoiceSettingsRequest": {
+        "properties": {
+          "narration_mode": {
+            "$ref": "#/components/schemas/NarrationMode",
+            "description": "Selected narration mode"
+          },
+          "selected_voice": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Selected Voice",
+            "default": "en-US-Journey-F"
+          },
+          "language": {
+            "type": "string",
+            "minLength": 2,
+            "title": "Language",
+            "default": "en-US"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["narration_mode"],
+        "title": "UpdateVoiceSettingsRequest",
+        "description": "Request payload for updating narration and Studio Voice settings."
+      },
       "User": {
         "properties": {
           "user_id": {
@@ -4144,6 +5259,205 @@
         "type": "object",
         "required": ["loc", "msg", "type"],
         "title": "ValidationError"
+      },
+      "VideoSectionDecision": {
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Section Id",
+            "description": "Unique identifier for the timeline section"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms",
+            "description": "Start time in milliseconds on the source video timeline"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source End Ms",
+            "description": "End time in milliseconds on the source video timeline"
+          },
+          "transcript_start_word": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transcript Start Word",
+            "description": "Canonical 0-indexed transcript start word index"
+          },
+          "transcript_end_word": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transcript End Word",
+            "description": "Canonical 0-indexed transcript end word index"
+          },
+          "action": {
+            "$ref": "#/components/schemas/SectionAction",
+            "description": "Editorial action: KEEP, TIGHTEN, REMOVE, or COVERAGE"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "description": "Editorial justification for why this section is kept, tightened, or removed"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Model confidence score for this section decision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "section_id",
+          "source_start_ms",
+          "source_end_ms",
+          "transcript_start_word",
+          "transcript_end_word",
+          "action",
+          "reason",
+          "confidence"
+        ],
+        "title": "VideoSectionDecision",
+        "description": "Comprehensive full-timeline section decision proposed by Leo (Video Editor)."
+      },
+      "VoiceCatalogItem": {
+        "properties": {
+          "voice_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Voice Id",
+            "description": "Voice identifier"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Display Name",
+            "description": "Human readable voice name"
+          },
+          "gender": {
+            "type": "string",
+            "title": "Gender",
+            "description": "Voice characteristic (female, male, neutral)",
+            "default": "neutral"
+          },
+          "language_code": {
+            "type": "string",
+            "title": "Language Code",
+            "description": "Primary BCP-47 language code",
+            "default": "en-US"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Brief tone or style description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["voice_id", "display_name"],
+        "title": "VoiceCatalogItem",
+        "description": "Official Google Gemini TTS voice catalog entry."
+      },
+      "VoiceSampleRequest": {
+        "properties": {
+          "voice_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Voice Id",
+            "description": "Voice identifier to sample"
+          },
+          "sample_text": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Sample Text",
+            "description": "Neutral fixed sample script",
+            "default": "Welcome to Croviq. I'll make your video clear, concise, and easy to follow."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["voice_id"],
+        "title": "VoiceSampleRequest",
+        "description": "Request to preview audio for a specific Studio Voice."
+      },
+      "VoiceSampleResponse": {
+        "properties": {
+          "voice_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Voice Id"
+          },
+          "sample_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Sample Text"
+          },
+          "audio_base64": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Audio Base64",
+            "description": "Base64-encoded audio payload"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "default": "audio/mp3"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["voice_id", "sample_text", "audio_base64"],
+        "title": "VoiceSampleResponse",
+        "description": "Generated audio preview for voice audition."
+      },
+      "VoiceSettingsConfig": {
+        "properties": {
+          "narration_mode": {
+            "$ref": "#/components/schemas/NarrationMode",
+            "description": "Selected narration playback mode",
+            "default": "original"
+          },
+          "selected_voice": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Selected Voice",
+            "description": "Selected Studio Voice catalog voice identifier",
+            "default": "en-US-Journey-F"
+          },
+          "language": {
+            "type": "string",
+            "minLength": 2,
+            "title": "Language",
+            "description": "Language code for synthesis",
+            "default": "en-US"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp when settings were updated"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["updated_at"],
+        "title": "VoiceSettingsConfig",
+        "description": "Creator-configured narration and Studio Voice settings."
       },
       "Workspace": {
         "properties": {

@@ -241,7 +241,13 @@ test.describe("Product Home and Creator Flow", () => {
     page.on("console", (msg) => {
       if (msg.type() === "error") {
         const txt = msg.text();
-        if (!txt.includes("401") && !txt.includes("404") && !txt.includes("500") && !txt.includes("Failed to load resource") && !txt.includes("net::ERR_")) {
+        if (
+          !txt.includes("401") &&
+          !txt.includes("404") &&
+          !txt.includes("500") &&
+          !txt.includes("Failed to load resource") &&
+          !txt.includes("net::ERR_")
+        ) {
           consoleErrors.push(txt);
         }
       }

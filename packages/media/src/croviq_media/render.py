@@ -9,8 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-from typing import Any
-
+from typing import Any, Sequence
 from croviq_domain.editorial import ShortCandidate
 from croviq_domain.edl import EditDecisionList, derive_keep_segments
 from croviq_domain.render import ArtifactType
@@ -79,7 +78,29 @@ class RenderService(ABC):
         """Render a 9:16 vertical Short MP4 (1080x1920) with word-synced captions."""
         pass
 
+    @abstractmethod
+    def render_studio_voice_preview(
+        self,
+        source_path: Path | str,
+        edl: EditDecisionList,
+        narration_audio_path: Path | str,
+        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
+        output_path: Path | str | None = None,
+    ) -> RenderExecutionResult:
+        """Render fast preview MP4 combining EDL cuts, Studio Voice narration, and ducked ambient audio."""
+        pass
 
+    @abstractmethod
+    def render_studio_voice_master(
+        self,
+        source_path: Path | str,
+        edl: EditDecisionList,
+        narration_audio_path: Path | str,
+        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
+        output_path: Path | str | None = None,
+    ) -> RenderExecutionResult:
+        """Render high quality YouTube master MP4 combining EDL cuts, Studio Voice narration, and ducked ambient audio."""
+        pass
 class FakeRenderService(RenderService):
     """In-memory or mock render service for unit testing."""
 
@@ -125,6 +146,25 @@ class FakeRenderService(RenderService):
             width=1080,
             height=1920,
         )
+    def render_studio_voice_preview(
+        self,
+        source_path: Path | str,
+        edl: EditDecisionList,
+        narration_audio_path: Path | str,
+        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
+        output_path: Path | str | None = None,
+    ) -> RenderExecutionResult:
+        return self._simulate_render(source_path, edl, ArtifactType.STUDIO_VOICE_PREVIEW, output_path)
+
+    def render_studio_voice_master(
+        self,
+        source_path: Path | str,
+        edl: EditDecisionList,
+        narration_audio_path: Path | str,
+        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
+        output_path: Path | str | None = None,
+    ) -> RenderExecutionResult:
+        return self._simulate_render(source_path, edl, ArtifactType.STUDIO_VOICE_MASTER, output_path)
 
     def _simulate_render(
         self,
@@ -227,6 +267,59 @@ class FFmpegRenderService(RenderService):
             artifact_type=ArtifactType.MASTER,
             encoding_args=encoding_args,
             output_path=output_path,
+        )
+    def render_studio_voice_preview(
+        self,
+        source_path: Path | str,
+        edl: EditDecisionList,
+        narration_audio_path: Path | str,
+        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
+        output_path: Path | str | None = None,
+    ) -> RenderExecutionResult:
+        """Render fast Studio Voice preview MP4 combining EDL video cuts and mixed narration track."""
+        encoding_args = [
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "128k",
+        ]
+        return self._execute_render(
+            source_path=source_path,
+            edl=edl,
+            artifact_type=ArtifactType.STUDIO_VOICE_PREVIEW,
+            encoding_args=encoding_args,
+            output_path=output_path,
+            narration_path=narration_audio_path,
+            speech_intervals_ms=speech_intervals_ms,
+        )
+
+    def render_studio_voice_master(
+        self,
+        source_path: Path | str,
+        edl: EditDecisionList,
+        narration_audio_path: Path | str,
+        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
+        output_path: Path | str | None = None,
+    ) -> RenderExecutionResult:
+        """Render high quality YouTube master MP4 with Studio Voice narration."""
+        encoding_args = [
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "18",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "192k",
+        ]
+        return self._execute_render(
+            source_path=source_path,
+            edl=edl,
+            artifact_type=ArtifactType.STUDIO_VOICE_MASTER,
+            encoding_args=encoding_args,
+            output_path=output_path,
+            narration_path=narration_audio_path,
+            speech_intervals_ms=speech_intervals_ms,
         )
 
     def render_short(
@@ -367,18 +460,31 @@ class FFmpegRenderService(RenderService):
         self,
         keep_segments: list[tuple[int, int]],
         source_duration_ms: int,
+        has_narration: bool = False,
+        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
     ) -> tuple[str | None, list[str]]:
-        """Construct deterministic FFmpeg filtergraph for keep segments with ~20ms audio crossfade."""
+        """Construct deterministic FFmpeg filtergraph for keep segments with ~20ms audio crossfade and optional Studio Voice mixing."""
         num_segs = len(keep_segments)
         if num_segs == 0:
             raise RenderError("Cannot render EDL with zero keep segments")
 
+        ducking_cond = "1.0"
+        if speech_intervals_ms:
+            conds = [f"between(t,{s/1000.0:.3f},{e/1000.0:.3f})" for s, e in speech_intervals_ms]
+            ducking_cond = f"if({'+'.join(conds)}, 0.05, 1.0)"
+
         # Zero-cut optimization: full duration with enhanced audio
         if num_segs == 1 and keep_segments[0][0] == 0 and keep_segments[0][1] >= source_duration_ms:
+            if has_narration:
+                filter_graph = (
+                    f"[0:a]volume='{ducking_cond}':eval=frame[a_ducked];"
+                    f"[1:a]volume=1.0[a_narr];"
+                    f"[a_ducked][a_narr]amix=inputs=2:duration=first:dropout_transition=0.2[a_mixed];"
+                    f"[a_mixed]loudnorm=I=-16:TP=-1.0:LRA=10[aout]"
+                )
+                return filter_graph, ["-map", "0:v", "-map", "[aout]"]
             filter_graph = f"[0:a]{DEFAULT_SPEECH_ENHANCEMENT_FILTER}[aout]"
             return filter_graph, ["-map", "0:v", "-map", "[aout]"]
-
-        # Single sub-segment trim with enhanced audio
         if num_segs == 1:
             start_ms, end_ms = keep_segments[0]
             start_s = start_ms / 1000.0
@@ -423,7 +529,16 @@ class FFmpegRenderService(RenderService):
             audio_inputs.append(f"[a{i}]")
 
         vconcat = f"{''.join(video_inputs)}concat=n={num_segs}:v=1:a=0[vout]"
-        aconcat = f"{''.join(audio_inputs)}concat=n={num_segs}:v=0:a=1[a_raw];[a_raw]{DEFAULT_SPEECH_ENHANCEMENT_FILTER}[aout]"
+        if has_narration:
+            aconcat = (
+                f"{''.join(audio_inputs)}concat=n={num_segs}:v=0:a=1[a_raw];"
+                f"[a_raw]volume='{ducking_cond}':eval=frame[a_ducked];"
+                f"[1:a]volume=1.0[a_narr];"
+                f"[a_ducked][a_narr]amix=inputs=2:duration=first:dropout_transition=0.2[a_mixed];"
+                f"[a_mixed]loudnorm=I=-16:TP=-1.0:LRA=10[aout]"
+            )
+        else:
+            aconcat = f"{''.join(audio_inputs)}concat=n={num_segs}:v=0:a=1[a_raw];[a_raw]{DEFAULT_SPEECH_ENHANCEMENT_FILTER}[aout]"
         full_filter = ";".join(video_filters + audio_filters + [vconcat, aconcat])
         return full_filter, ["-map", "[vout]", "-map", "[aout]"]
 
@@ -434,6 +549,8 @@ class FFmpegRenderService(RenderService):
         artifact_type: ArtifactType,
         encoding_args: list[str],
         output_path: Path | str | None = None,
+        narration_path: Path | str | None = None,
+        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
     ) -> RenderExecutionResult:
         start_time = time.perf_counter()
         source = Path(source_path)
@@ -459,7 +576,13 @@ class FFmpegRenderService(RenderService):
             target = Path(temp.name)
             created_temp = True
 
-        filter_graph, map_args = self._build_filtergraph(keep_segments, edl.source_duration_ms)
+        has_narration = narration_path is not None and Path(narration_path).exists()
+        filter_graph, map_args = self._build_filtergraph(
+            keep_segments,
+            edl.source_duration_ms,
+            has_narration=has_narration,
+            speech_intervals_ms=speech_intervals_ms,
+        )
 
         cmd = [
             ffmpeg_bin,
@@ -467,7 +590,8 @@ class FFmpegRenderService(RenderService):
             "-v", "error",
             "-i", str(source),
         ]
-
+        if has_narration and narration_path is not None:
+            cmd.extend(["-i", str(narration_path)])
         if filter_graph is not None:
             cmd.extend(["-filter_complex", filter_graph])
             cmd.extend(map_args)

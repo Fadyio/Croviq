@@ -13,7 +13,8 @@ class ArtifactType(StrEnum):
     PREVIEW = "PREVIEW"
     MASTER = "MASTER"
     SHORT = "SHORT"
-
+    STUDIO_VOICE_PREVIEW = "STUDIO_VOICE_PREVIEW"
+    STUDIO_VOICE_MASTER = "STUDIO_VOICE_MASTER"
 class ArtifactStatus(StrEnum):
     """Lifecycle status of a render artifact."""
 

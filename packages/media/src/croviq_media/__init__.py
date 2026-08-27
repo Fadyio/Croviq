@@ -3,6 +3,7 @@ from croviq_media.audio import (
     AudioExtractor,
     FakeAudioExtractor,
     FFmpegAudioExtractor,
+    StudioVoiceAudioMixer,
 )
 from croviq_media.cut_safety import (
     DEFAULT_TRANSITION_MS,
@@ -45,7 +46,7 @@ __all__ = [
     "AudioExtractor",
     "FakeAudioExtractor",
     "FFmpegAudioExtractor",
-    "FakeMediaInspector",
+    "StudioVoiceAudioMixer",
     "DEFAULT_TRANSITION_MS",
     "MAX_BOUNDARY_ADJUSTMENT_MS",
     "CutSafetyAnalyzer",
