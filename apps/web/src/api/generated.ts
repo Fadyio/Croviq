@@ -172,6 +172,14 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/renders/short": {
+    post: {
+      responses: {
+        200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
   "/api/productions/{production_id}/renders": {
     get: {
       responses: {
@@ -245,7 +253,7 @@ export interface components {
       completed_at?: string | null;
     };
     ArtifactStatus: "pending" | "rendering" | "completed" | "failed";
-    ArtifactType: "PREVIEW" | "MASTER";
+    ArtifactType: "PREVIEW" | "MASTER" | "SHORT";
     AssembleEDLResponse: {
       /** Unique identifier for the assembled Edit Decision List */
       edl_id: string;

@@ -320,6 +320,16 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
       body: Buffer.from(""),
     });
   });
+  await page.route("**/fake-short.mp4*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "video/mp4",
+      headers: {
+        "access-control-allow-origin": "*",
+      },
+      body: Buffer.from(""),
+    });
+  });
 
   await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/transcribe`, async (route) => {
     options.requests?.push("transcribe");
@@ -645,6 +655,24 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
             playback_expires_at: "2026-08-27T00:00:00Z",
             created_at: "2026-08-26T00:02:45Z",
             completed_at: "2026-08-26T00:02:50Z",
+          },
+          {
+            artifact_id: "art_short_001",
+            production_id: FAIRPHONE_PRODUCTION_ID,
+            edl_id: defaultFairphoneEdl.edl_id,
+            artifact_type: "SHORT",
+            status: "completed",
+            duration_ms: 39800,
+            size_bytes: 850000,
+            width: 1080,
+            height: 1920,
+            frame_rate: 30.0,
+            video_codec: "h264",
+            audio_codec: "aac",
+            playback_url: "https://storage.googleapis.com/fake-short.mp4",
+            playback_expires_at: "2026-08-27T00:00:00Z",
+            created_at: "2026-08-26T00:03:05Z",
+            completed_at: "2026-08-26T00:03:10Z",
           },
         ],
       }),
@@ -1203,5 +1231,23 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     // Capture screenshot at 1280x800
     await page.screenshot({ path: "e2e/screenshots/editor-1280x800.png" });
+  });
+
+  test("displays Short output option and switches to vertical Short preview", async ({ page }) => {
+    await loginAndNavigateToEditor(page);
+
+    // 1. Verify Short toggle option is visible in header controls
+    const previewMode = page.getByRole("group", { name: "Preview Mode Selection" });
+    await expect(previewMode.getByRole("button", { name: "Short", exact: true })).toBeVisible();
+
+    // 2. Click Short toggle to activate vertical 9:16 Short playback
+    await previewMode.getByRole("button", { name: "Short", exact: true }).click();
+
+    // 3. Verify Short active state and badge
+    await expect(previewMode.getByRole("button", { name: "Short", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByTestId("rendered-short-badge")).toBeVisible();
   });
 });

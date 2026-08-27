@@ -120,6 +120,50 @@ test.describe("production run state", () => {
     expect(nextMissingProcessingStage(renderCompleteRun)).toBeNull();
   });
 
+  test("marks render completed with short artifact present", () => {
+    const shortCompleteRun: PersistedProductionRun = {
+      uploaded: true,
+      uploadedAt: "2026-08-27T10:00:00Z",
+      transcriptCreatedAt: "2026-08-27T10:00:05Z",
+      editorialRun: {
+        run_id: "run_01",
+        production_id: "prod_01",
+        editor_proposal_id: "prop_01",
+        director_review_id: "rev_01",
+        status: "completed",
+        started_at: "2026-08-27T10:00:05Z",
+        completed_at: "2026-08-27T10:00:10Z",
+      },
+      edlCreatedAt: "2026-08-27T10:00:12Z",
+      renderCompletedAt: "2026-08-27T10:00:16Z",
+      renderStatus: "completed",
+      renderDurationMs: 4000,
+      renderReview: {
+        review_id: "rrv_01",
+        production_id: "prod_01",
+        edl_id: "edl_01",
+        preview_artifact_id: "art_prev_01",
+        agent: "maya",
+        model: "gemini-3.7-flash",
+        verdict: "APPROVE",
+        summary: "The dialogue flows naturally. Edit approved.",
+        issues: [],
+        approved_for_master: true,
+        confidence: 0.95,
+        created_at: "2026-08-27T10:00:20Z",
+      },
+      masterStatus: "completed",
+      masterCompletedAt: "2026-08-27T10:00:25Z",
+      shortStatus: "completed",
+      shortCompletedAt: "2026-08-27T10:00:28Z",
+    };
+
+    const stages = deriveProductionRunStages(shortCompleteRun);
+    const renderStage = stages.find((s) => s.id === "render");
+    expect(renderStage).toMatchObject({ id: "render", status: "completed" });
+    expect(nextMissingProcessingStage(shortCompleteRun)).toBeNull();
+  });
+
   test("marks render failed when correction pass fails and needs manual review", () => {
     const needsReviewRun: PersistedProductionRun = {
       uploaded: true,

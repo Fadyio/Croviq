@@ -100,6 +100,7 @@ from croviq_observability import (
     EventType,
     log_media_inspect_event,
     log_render_event,
+    log_short_render_event,
     log_transcription_event,
 )
 
@@ -1171,6 +1172,206 @@ async def render_master_video(
         media_storage=media_storage,
     )
 
+
+
+@router.post(
+    "/productions/{production_id}/renders/short",
+    response_model=RenderArtifactResponse,
+    summary="Render Vertical Short Video",
+    description="Deterministically render a 9:16 vertical Short MP4 with word-synced captions for an approved production.",
+)
+async def render_short_video(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)],
+    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
+    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    render_service: Annotated[RenderService, Depends(get_render_service)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> RenderArtifactResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    if not prod.source_media or not prod.source_media.gcs_bucket or not prod.source_media.gcs_object:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Production '{production_id}' has no uploaded source media to render",
+        )
+
+    edl = await edl_repo.get_latest_edl(production_id)
+    if not edl:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Production '{production_id}' has no assembled EDL.",
+        )
+
+    # 1. Approval Gate: Maya review must approve for Master
+    latest_review = await render_review_repo.get_latest_render_review(production_id)
+    if not latest_review or not latest_review.approved_for_master:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Production '{production_id}' has not been approved for Master render by Director review.",
+        )
+
+    # 2. ShortCandidate check
+    latest_run = await editorial_repo.get_latest_editorial_run(production_id)
+    if not latest_run or not latest_run.editor_proposal_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Production '{production_id}' has no editorial proposal.",
+        )
+    proposal = await editorial_repo.get_editor_proposal(production_id, latest_run.editor_proposal_id)
+    if not proposal or not proposal.short_candidate:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Production '{production_id}' has no ShortCandidate selected by Leo.",
+        )
+    short_candidate = proposal.short_candidate
+
+    # 3. Idempotency check: if completed artifact exists in storage, return signed target
+    existing_artifact = await render_repo.get_render_artifact_by_type(
+        production_id=production_id,
+        edl_id=edl.edl_id,
+        artifact_type=ArtifactType.SHORT,
+    )
+    if existing_artifact and existing_artifact.status == ArtifactStatus.completed:
+        meta = await media_storage.get_object_metadata(
+            existing_artifact.gcs_bucket,
+            existing_artifact.gcs_object,
+        )
+        if meta.exists:
+            signed_target = await media_storage.generate_signed_read_target(
+                bucket=existing_artifact.gcs_bucket,
+                object_name=existing_artifact.gcs_object,
+                expiry_seconds=3600,
+            )
+            return RenderArtifactResponse.from_domain(
+                artifact=existing_artifact,
+                playback_url=signed_target.read_url,
+                playback_expires_at=signed_target.expires_at,
+            )
+
+    # 4. Load transcript
+    transcript = await transcript_repo.get_transcript_by_production_id(production_id)
+
+    # 5. Execute render
+    artifact_id = f"art_short_{uuid.uuid4().hex[:12]}"
+    gcs_bucket = prod.source_media.gcs_bucket
+    gcs_object = build_render_artifact_gcs_object_path(
+        workspace_id=prod.workspace_id,
+        production_id=prod.production_id,
+        edl_id=edl.edl_id,
+        artifact_type=ArtifactType.SHORT,
+    )
+    now = datetime.now(timezone.utc)
+    settings = get_settings()
+
+    log_short_render_event(
+        event_type=EventType.SHORT_RENDER_STARTED,
+        production_id=prod.production_id,
+        edl_id=edl.edl_id,
+        artifact_id=artifact_id,
+        short_start_ms=short_candidate.start_ms,
+        short_end_ms=short_candidate.end_ms,
+        status="started",
+        request_id=request_id,
+        git_sha=settings.git_sha,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        local_src = tmp_path / "source.mp4"
+        local_out = tmp_path / "short.mp4"
+
+        try:
+            await media_storage.download_object_to_path(
+                bucket=prod.source_media.gcs_bucket,
+                object_name=prod.source_media.gcs_object,
+                target_path=local_src,
+            )
+
+            render_res = render_service.render_short(
+                source_path=local_src,
+                edl=edl,
+                short_candidate=short_candidate,
+                transcript=transcript,
+                output_path=local_out,
+            )
+
+            await media_storage.upload_object_from_path(
+                bucket=gcs_bucket,
+                object_name=gcs_object,
+                source_path=local_out,
+                content_type="video/mp4",
+            )
+
+            completed_at = datetime.now(timezone.utc)
+            artifact = RenderArtifact(
+                artifact_id=artifact_id,
+                production_id=prod.production_id,
+                edl_id=edl.edl_id,
+                artifact_type=ArtifactType.SHORT,
+                status=ArtifactStatus.completed,
+                gcs_bucket=gcs_bucket,
+                gcs_object=gcs_object,
+                content_type="video/mp4",
+                size_bytes=render_res.size_bytes,
+                duration_ms=render_res.duration_ms,
+                width=render_res.width,
+                height=render_res.height,
+                frame_rate=render_res.frame_rate,
+                video_codec=render_res.video_codec,
+                audio_codec=render_res.audio_codec,
+                created_at=now,
+                completed_at=completed_at,
+                failure_code=None,
+            )
+            await render_repo.save_render_artifact(artifact)
+
+            log_short_render_event(
+                event_type=EventType.SHORT_RENDER_COMPLETED,
+                production_id=prod.production_id,
+                edl_id=edl.edl_id,
+                artifact_id=artifact_id,
+                short_start_ms=short_candidate.start_ms,
+                short_end_ms=short_candidate.end_ms,
+                duration_ms=render_res.duration_ms,
+                render_time_ms=render_res.render_time_ms,
+                size_bytes=render_res.size_bytes,
+                status="completed",
+                request_id=request_id,
+                git_sha=settings.git_sha,
+            )
+
+            signed_target = await media_storage.generate_signed_read_target(
+                bucket=artifact.gcs_bucket,
+                object_name=artifact.gcs_object,
+                expiry_seconds=3600,
+            )
+            return RenderArtifactResponse.from_domain(
+                artifact=artifact,
+                playback_url=signed_target.read_url,
+                playback_expires_at=signed_target.expires_at,
+            )
+        except Exception as exc:
+            sanitized_err = str(exc)
+            log_short_render_event(
+                event_type=EventType.SHORT_RENDER_FAILED,
+                production_id=prod.production_id,
+                edl_id=edl.edl_id,
+                artifact_id=artifact_id,
+                status="failed",
+                request_id=request_id,
+                git_sha=settings.git_sha,
+                error_code=sanitized_err,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Rendering SHORT failed: {sanitized_err}",
+            ) from exc
 
 @router.get(
     "/productions/{production_id}/renders",

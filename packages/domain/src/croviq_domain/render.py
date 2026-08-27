@@ -12,7 +12,7 @@ class ArtifactType(StrEnum):
 
     PREVIEW = "PREVIEW"
     MASTER = "MASTER"
-
+    SHORT = "SHORT"
 
 class ArtifactStatus(StrEnum):
     """Lifecycle status of a render artifact."""

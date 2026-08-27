@@ -30,6 +30,7 @@ from croviq_domain.editorial import (
     EditorProposal,
     EditorialRun,
     EditorialRunStatus,
+    ShortCandidate,
 )
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile, ChannelProfileBuilder
@@ -51,6 +52,7 @@ from croviq_observability import (
     log_ai_event,
     log_master_approved_event,
     log_render_event,
+    log_short_render_event,
 )
 logger = logging.getLogger(__name__)
 
@@ -527,6 +529,136 @@ class DirectorEditorService:
                     detail=f"Rendering {artifact_type.value} failed: {sanitized_err}",
                 ) from exc
 
+
+    async def _execute_short_render(
+        self,
+        prod: Production,
+        edl: EditDecisionList,
+        short_candidate: ShortCandidate,
+        transcript: Transcript | None,
+        request_id: str = "unknown",
+    ) -> RenderArtifact:
+        """Execute deterministic vertical Short render with word-synced captions."""
+        if self._render_repo:
+            existing_short = await self._render_repo.get_render_artifact_by_type(
+                production_id=prod.production_id,
+                edl_id=edl.edl_id,
+                artifact_type=ArtifactType.SHORT,
+            )
+            if existing_short and existing_short.status == ArtifactStatus.completed:
+                return existing_short
+
+        if not self._render_service or not self._media_storage or not self._render_repo:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Rendering infrastructure not initialized",
+            )
+
+        now = datetime.now(timezone.utc)
+        artifact_id = f"art_short_{uuid.uuid4().hex[:12]}"
+        gcs_bucket = prod.source_media.gcs_bucket
+        gcs_object = build_render_artifact_gcs_object_path(
+            workspace_id=prod.workspace_id,
+            production_id=prod.production_id,
+            edl_id=edl.edl_id,
+            artifact_type=ArtifactType.SHORT,
+        )
+
+        settings = get_settings()
+        log_short_render_event(
+            event_type=EventType.SHORT_RENDER_STARTED,
+            production_id=prod.production_id,
+            edl_id=edl.edl_id,
+            artifact_id=artifact_id,
+            short_start_ms=short_candidate.start_ms,
+            short_end_ms=short_candidate.end_ms,
+            status="started",
+            request_id=request_id,
+            git_sha=settings.git_sha,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            local_src = tmp_path / "source.mp4"
+            local_out = tmp_path / "short.mp4"
+
+            try:
+                await self._media_storage.download_object_to_path(
+                    bucket=prod.source_media.gcs_bucket,
+                    object_name=prod.source_media.gcs_object,
+                    target_path=local_src,
+                )
+
+                render_res = self._render_service.render_short(
+                    source_path=local_src,
+                    edl=edl,
+                    short_candidate=short_candidate,
+                    transcript=transcript,
+                    output_path=local_out,
+                )
+
+                await self._media_storage.upload_object_from_path(
+                    bucket=gcs_bucket,
+                    object_name=gcs_object,
+                    source_path=local_out,
+                    content_type="video/mp4",
+                )
+
+                completed_at = datetime.now(timezone.utc)
+                artifact = RenderArtifact(
+                    artifact_id=artifact_id,
+                    production_id=prod.production_id,
+                    edl_id=edl.edl_id,
+                    artifact_type=ArtifactType.SHORT,
+                    status=ArtifactStatus.completed,
+                    gcs_bucket=gcs_bucket,
+                    gcs_object=gcs_object,
+                    content_type="video/mp4",
+                    size_bytes=render_res.size_bytes,
+                    duration_ms=render_res.duration_ms,
+                    width=render_res.width,
+                    height=render_res.height,
+                    frame_rate=render_res.frame_rate,
+                    video_codec=render_res.video_codec,
+                    audio_codec=render_res.audio_codec,
+                    created_at=now,
+                    completed_at=completed_at,
+                    failure_code=None,
+                )
+                await self._render_repo.save_render_artifact(artifact)
+
+                log_short_render_event(
+                    event_type=EventType.SHORT_RENDER_COMPLETED,
+                    production_id=prod.production_id,
+                    edl_id=edl.edl_id,
+                    artifact_id=artifact_id,
+                    short_start_ms=short_candidate.start_ms,
+                    short_end_ms=short_candidate.end_ms,
+                    duration_ms=render_res.duration_ms,
+                    render_time_ms=render_res.render_time_ms,
+                    size_bytes=render_res.size_bytes,
+                    status="completed",
+                    request_id=request_id,
+                    git_sha=settings.git_sha,
+                )
+                return artifact
+            except Exception as exc:
+                sanitized_err = str(exc)
+                log_short_render_event(
+                    event_type=EventType.SHORT_RENDER_FAILED,
+                    production_id=prod.production_id,
+                    edl_id=edl.edl_id,
+                    artifact_id=artifact_id,
+                    status="failed",
+                    request_id=request_id,
+                    git_sha=settings.git_sha,
+                    error_code=sanitized_err,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Rendering SHORT failed: {sanitized_err}",
+                ) from exc
+
     async def review_preview(
         self,
         production_id: str,
@@ -670,6 +802,18 @@ class DirectorEditorService:
                 artifact_type=ArtifactType.MASTER,
                 request_id=request_id,
             )
+            # If ShortCandidate exists, automatically render Short
+            if proposal and proposal.short_candidate:
+                try:
+                    await self._execute_short_render(
+                        prod=prod,
+                        edl=edl,
+                        short_candidate=proposal.short_candidate,
+                        transcript=transcript,
+                        request_id=request_id,
+                    )
+                except Exception as short_exc:
+                    logger.warning("Automatic Short render failed after Master approval: %s", short_exc)
             return render_review, master_art, None, "complete", all_activities
 
         # 8. CORRECT: Execute ONE bounded correction loop
@@ -776,6 +920,17 @@ class DirectorEditorService:
                     artifact_type=ArtifactType.MASTER,
                     request_id=request_id,
                 )
+                if revised_proposal and revised_proposal.short_candidate:
+                    try:
+                        await self._execute_short_render(
+                            prod=prod,
+                            edl=new_edl,
+                            short_candidate=revised_proposal.short_candidate,
+                            transcript=transcript,
+                            request_id=request_id,
+                        )
+                    except Exception as short_exc:
+                        logger.warning("Automatic Short render failed after Master approval: %s", short_exc)
                 return render_review, master_art, second_render_review, "complete", all_activities
             else:
                 # Second post-render review is FINAL -> needs_manual_review

@@ -24,6 +24,9 @@ export interface PersistedProductionRun {
   masterArtifact?: RenderArtifactResponse | null;
   masterStatus?: "pending" | "rendering" | "completed" | "failed" | null;
   masterCompletedAt?: string | null;
+  shortArtifact?: RenderArtifactResponse | null;
+  shortStatus?: "pending" | "rendering" | "completed" | "failed" | null;
+  shortCompletedAt?: string | null;
   needsManualReview?: boolean;
 }
 
