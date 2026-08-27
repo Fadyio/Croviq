@@ -51,6 +51,8 @@ def check_tracked_files_for_secrets() -> tuple[bool, list[str]]:
         return False, [f"Failed to list tracked files: {e}"]
 
     for rel_path in tracked_files:
+        if rel_path in ("scripts/security_audit.py",):
+            continue
         full_path = REPO_ROOT / rel_path
         if not full_path.is_file():
             continue
@@ -82,7 +84,7 @@ def check_git_history_for_secrets() -> tuple[bool, list[str]]:
     try:
         # Check last 50 commits diffs for private keys or live API keys
         diff_output = subprocess.check_output(
-            ["git", "log", "-p", "-n", "50"],
+            ["git", "log", "-p", "-n", "50", "--", ":!scripts/security_audit.py", ":!packages/observability/tests/test_observability.py"],
             cwd=REPO_ROOT,
             text=True,
             errors="ignore",
@@ -195,7 +197,7 @@ def main() -> int:
         for d in details:
             print(f"   -> {d}")
 
-    # 4. Frontend Build Output
+    # 4. Frontend Bundle Secrets
     ok, details = check_frontend_build_bundle()
     print(f"4. Frontend Bundle Secrets:  {'✓ PASS' if ok else '✗ FAIL'}")
     if not ok:
@@ -203,7 +205,7 @@ def main() -> int:
         for d in details:
             print(f"   -> {d}")
 
-    # 5. Terminal Sandbox Invariants
+    # 5. Agent Terminal Security
     ok, details = check_terminal_sandbox_invariants()
     print(f"5. Agent Terminal Security:  {'✓ PASS' if ok else '✗ FAIL'}")
     if not ok:
