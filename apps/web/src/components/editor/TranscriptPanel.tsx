@@ -170,7 +170,11 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                             className="mx-1 inline-flex items-center gap-0.5 cursor-pointer text-[9px] text-danger/85 bg-danger/10 px-1 py-0.5 rounded border border-danger/20 font-mono select-none hover:bg-danger/20 transition-colors"
                             title={decision.concise_reason}
                           >
-                            ✂ -{((decision.source_end_ms - decision.source_start_ms) / 1000).toFixed(1)}s
+                            ✂ -
+                            {((decision.source_end_ms - decision.source_start_ms) / 1000).toFixed(
+                              1,
+                            )}
+                            s
                           </span>
                         )}
                         <button

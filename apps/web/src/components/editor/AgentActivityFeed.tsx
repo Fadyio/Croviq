@@ -113,7 +113,11 @@ const presentActivity = (
   };
 };
 
-const RowAvatar: React.FC<{ isLeo: boolean; isSystem?: boolean; name: string }> = ({ isLeo, isSystem = false, name }) => {
+const RowAvatar: React.FC<{ isLeo: boolean; isSystem?: boolean; name: string }> = ({
+  isLeo,
+  isSystem = false,
+  name,
+}) => {
   const [failed, setFailed] = useState(false);
   const src = isSystem ? undefined : avatarMap[isLeo ? "leo" : "maya"];
 

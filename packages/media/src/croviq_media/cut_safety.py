@@ -167,8 +167,12 @@ class CutSafetyAnalyzer:
         req_start_ms = start_word.start_ms
         req_end_ms = end_word.end_ms
 
-        left_anchor = transcript.words[start_word_idx - 1].text if start_word_idx > 0 else "[START]"
-        right_anchor = transcript.words[end_word_idx + 1].text if end_word_idx + 1 < len(transcript.words) else "[END]"
+        if decision.decision_type == EditorDecisionType.TRIM_PAUSE:
+            left_anchor = start_word.text
+            right_anchor = end_word.text
+        else:
+            left_anchor = transcript.words[start_word_idx - 1].text if start_word_idx > 0 else "[START]"
+            right_anchor = transcript.words[end_word_idx + 1].text if end_word_idx + 1 < len(transcript.words) else "[END]"
 
         # 6. Validate bounds against Media Duration
         if req_start_ms >= media_metadata.duration_ms or req_end_ms > media_metadata.duration_ms + 2000:
@@ -219,16 +223,20 @@ class CutSafetyAnalyzer:
 
         # 8. Boundary Snapping & Safety Assessment
         if decision.decision_type == EditorDecisionType.TRIM_PAUSE:
-            # Special case for pause trimming: preserve natural breathing room
-            raw_start = decision.source_start_ms
-            raw_end = decision.source_end_ms
-            pause_duration = raw_end - raw_start
-            if pause_duration > (self.natural_pause_breath_ms * 2):
-                safe_start_ms = raw_start + self.natural_pause_breath_ms
-                safe_end_ms = raw_end - self.natural_pause_breath_ms
+            # Special case for pause trimming: deterministic silence cleanup already retains natural pause padding
+            if decision.decision_id.startswith("silence_cut_") or decision.original_text.startswith("[Silence:"):
+                safe_start_ms = decision.source_start_ms
+                safe_end_ms = decision.source_end_ms
             else:
-                safe_start_ms = raw_start
-                safe_end_ms = raw_end
+                raw_start = decision.source_start_ms
+                raw_end = decision.source_end_ms
+                pause_duration = raw_end - raw_start
+                if pause_duration > (self.natural_pause_breath_ms * 2):
+                    safe_start_ms = raw_start + self.natural_pause_breath_ms
+                    safe_end_ms = raw_end - self.natural_pause_breath_ms
+                else:
+                    safe_start_ms = raw_start
+                    safe_end_ms = raw_end
 
             safety_status = CutSafetyStatus.SAFE
             safety_reason = "Natural pause trimming leaving comfortable breath padding."
