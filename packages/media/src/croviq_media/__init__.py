@@ -34,7 +34,12 @@ from croviq_media.transcript import (
     parse_duration_to_ms,
     parse_gemini_transcription_response,
 )
-
+from croviq_media.silence import (
+    DEFAULT_MIN_SILENCE_DURATION_MS,
+    DEFAULT_NATURAL_PAUSE_MS,
+    SilenceCleanupPlanner,
+    format_silence_plan_for_prompt,
+)
 __all__ = [
     "AudioExtractionError",
     "AudioExtractor",
@@ -62,6 +67,9 @@ __all__ = [
     "RenderService",
     "FFmpegRenderService",
     "FakeRenderService",
+    "DEFAULT_MIN_SILENCE_DURATION_MS",
+    "DEFAULT_NATURAL_PAUSE_MS",
+    "SilenceCleanupPlanner",
+    "format_silence_plan_for_prompt",
 ]
-
 __version__ = "0.1.0"

@@ -143,11 +143,10 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                     const isDecisionStart = decision?.transcript_start_word === word.index;
                     const isCoverage = decision?.decision_type === "BROLL_COVER_CANDIDATE";
                     const isProtected = decision?.decision_type === "KEEP_FOR_CLARITY";
-                    const isRemoved =
+                    const isSilenceCut = decision?.decision_type === "TRIM_PAUSE";
+                    const isWordRemoved =
                       decision?.decision_type.startsWith("REMOVE_") ||
-                      decision?.decision_type === "TRIM_PAUSE" ||
                       decision?.decision_type === "TIGHTEN_EXPLANATION";
-
                     return (
                       <React.Fragment key={word.index}>
                         {isDecisionStart && isCoverage && (
@@ -162,6 +161,18 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                             aria-label="Preserved for clarity"
                           />
                         )}
+                        {isSilenceCut && isDecisionStart && (
+                          <span
+                            onClick={() => {
+                              onSeek(decision.source_start_ms);
+                              onSelectDecision(decision);
+                            }}
+                            className="mx-1 inline-flex items-center gap-0.5 cursor-pointer text-[9px] text-danger/85 bg-danger/10 px-1 py-0.5 rounded border border-danger/20 font-mono select-none hover:bg-danger/20 transition-colors"
+                            title={decision.concise_reason}
+                          >
+                            ✂ -{((decision.source_end_ms - decision.source_start_ms) / 1000).toFixed(1)}s
+                          </span>
+                        )}
                         <button
                           ref={isActive ? activeWordRef : undefined}
                           type="button"
@@ -174,7 +185,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                               ? "bg-primary font-medium text-white shadow-sm"
                               : isSelected
                                 ? "bg-primary/20 text-text-primary"
-                                : isRemoved
+                                : isWordRemoved
                                   ? "text-danger/70 line-through decoration-danger/60 decoration-1"
                                   : isCoverage
                                     ? "text-text-primary underline decoration-info/60 decoration-1 underline-offset-4 hover:bg-info/10"

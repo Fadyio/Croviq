@@ -27,6 +27,8 @@ from croviq_domain.edl import EditDecisionList
 from croviq_domain.editorial import (
     AgentActivity,
     DirectorReview,
+    EditorDecision,
+    EditorDecisionType,
     EditorProposal,
     EditorialRun,
     EditorialRunStatus,
@@ -47,6 +49,7 @@ from croviq_domain.transcript import Transcript
 from croviq_domain.user import User
 from croviq_media.inspector import MediaInspector
 from croviq_media.render import RenderService
+from croviq_media.silence import SilenceCleanupPlanner
 from croviq_observability import (
     EventType,
     log_ai_event,
@@ -247,27 +250,89 @@ class DirectorEditorService:
             if resume_proposal is not None:
                 proposal = resume_proposal
             else:
-                # 7. Leo (Dialogue Editor) analysis pass
+                # 6b. Deterministic Baseline Silence Cleanup before Leo
+                silence_planner = SilenceCleanupPlanner()
+                silence_decisions = silence_planner.plan_silence_cleanup(
+                    transcript=transcript,
+                    media_metadata=media_metadata,
+                )
+
+                # 7. Leo (Video Editor) analysis pass
                 editor = LeoDialogueEditor(client=self._genai_client)
-                proposal, leo_usage, leo_activities = await editor.analyze(
+                raw_proposal, leo_usage, leo_activities = await editor.analyze(
                     analysis_input=analysis_input,
                     channel_profile=channel_profile,
                     lessons=lessons,
+                    silence_decisions=silence_decisions,
                     run_id=run.run_id,
                     request_id=request_id,
+                )
+
+                # Merge deterministic silence cleanup decisions with Leo's creative decisions into one canonical list
+                merged_decisions: list[EditorDecision] = []
+                total_silence_removed_ms = 0
+
+                for sil_d in silence_decisions:
+                    sil_start = sil_d.source_start_ms
+                    sil_end = sil_d.source_end_ms
+                    overlapping_leo = next(
+                        (
+                            ld for ld in raw_proposal.decisions
+                            if max(ld.source_start_ms, sil_start) < min(ld.source_end_ms, sil_end)
+                        ),
+                        None,
+                    )
+                    if overlapping_leo is None:
+                        merged_decisions.append(sil_d)
+                        total_silence_removed_ms += (sil_end - sil_start)
+                    elif overlapping_leo.decision_type != EditorDecisionType.TRIM_PAUSE:
+                        pass
+                    else:
+                        merged_decisions.append(sil_d)
+                        total_silence_removed_ms += (sil_end - sil_start)
+
+                for ld in raw_proposal.decisions:
+                    if ld.decision_type == EditorDecisionType.TRIM_PAUSE:
+                        if any(max(ld.source_start_ms, sd.source_start_ms) < min(ld.source_end_ms, sd.source_end_ms) for sd in merged_decisions if sd.decision_id.startswith("silence_cut_")):
+                            continue
+                    merged_decisions.append(ld)
+
+                merged_decisions.sort(key=lambda d: d.source_start_ms)
+
+                system_activities: list[AgentActivity] = []
+                if total_silence_removed_ms > 0:
+                    system_activities.append(
+                        AgentActivity(
+                            activity_id=f"act_sys_silence_{uuid.uuid4().hex[:8]}",
+                            production_id=production_id,
+                            agent="system",
+                            action=f"Removed {total_silence_removed_ms / 1000.0:.1f}s of dead air.",
+                            timestamp=datetime.now(timezone.utc),
+                            details={"silence_cuts_count": len([d for d in merged_decisions if d.decision_id.startswith("silence_cut_")]), "removed_ms": total_silence_removed_ms},
+                        )
+                    )
+
+                proposal = EditorProposal(
+                    production_id=raw_proposal.production_id,
+                    agent="leo",
+                    model=raw_proposal.model,
+                    summary=raw_proposal.summary,
+                    decisions=merged_decisions,
+                    short_candidate=raw_proposal.short_candidate,
+                    overall_confidence=raw_proposal.overall_confidence,
                 )
 
                 # Persist proposal and Leo activities
                 proposal_id = f"prop_{uuid.uuid4().hex[:12]}"
                 await self._editorial_repo.save_editor_proposal(proposal, proposal_id=proposal_id)
-                await self._editorial_repo.save_activities(leo_activities)
+                await self._editorial_repo.save_activities(system_activities + leo_activities)
+                all_activities.extend(system_activities)
                 all_activities.extend(leo_activities)
 
                 # 8. Update run to REVIEWING
                 run.status = EditorialRunStatus.REVIEWING
                 run.editor_proposal_id = proposal_id
                 await self._editorial_repo.save_editorial_run(run)
-
             # 9. Maya (Director) review pass
             director = MayaDirector(client=self._genai_client)
             review, maya_usage, maya_activities = await director.review(

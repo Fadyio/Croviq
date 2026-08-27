@@ -410,14 +410,23 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     );
   }, [currentTimeMs, edl?.coverage_markers]);
 
-  const activeAgent = useMemo<"leo" | "maya" | null>(() => {
+  const activeAgent = useMemo<"leo" | "maya" | "system" | null>(() => {
     if (activeProcessingStage === "leo-edit") return "leo";
     if (activeProcessingStage === "maya-review") return "maya";
     if (activeProcessingStage === "render" && renderSubStatus?.includes("Maya")) return "maya";
     if (activeProcessingStage === "render" && renderSubStatus?.includes("correction")) return "leo";
+    if (activeProcessingStage === "transcript" || activeProcessingStage === "edit-plan" || activeProcessingStage === "render") return "system";
     return null;
   }, [activeProcessingStage, renderSubStatus]);
 
+  const activeStatusMessage = useMemo<string | null>(() => {
+    if (activeProcessingStage === "transcript") return "Transcribing speech…";
+    if (activeProcessingStage === "leo-edit") return "Leo: Analyzing pacing and visual flow…";
+    if (activeProcessingStage === "maya-review") return "Maya: Reviewing Leo's edit…";
+    if (activeProcessingStage === "edit-plan") return "System: Cleaning dead air & assembling EDL…";
+    if (activeProcessingStage === "render") return renderSubStatus || "Rendering edited preview…";
+    return null;
+  }, [activeProcessingStage, renderSubStatus]);
   // Selected decision entity
   const selectedDecision = useMemo<EditorDecision | null>(() => {
     if (!selectedDecisionId || !proposal?.decisions) return null;
@@ -650,7 +659,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
         {/* Right Rail (fixed 380px, bounded height to workspace, 25-30% activity / 70-75% transcript) */}
         <aside className="w-full lg:w-[380px] shrink-0 h-full min-h-0 flex flex-col gap-2.5 overflow-hidden bg-surface-1/40 rounded-xl border border-border-subtle p-3">
           <section className="shrink-0 flex flex-col gap-2 border-b border-border-subtle pb-2.5 max-h-[36%] overflow-y-auto overflow-x-hidden w-full min-w-0">
-            <AgentPresence activeAgent={activeAgent} />
+            <AgentPresence activeAgent={activeAgent} statusMessage={activeStatusMessage} />
 
             {failedProcessingStage && (
               <div

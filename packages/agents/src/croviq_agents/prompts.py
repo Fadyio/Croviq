@@ -1,12 +1,29 @@
-"""Prompt templates for Leo (Dialogue Editor) and Maya (Director) reasoning agents."""
+"""Prompt templates for Leo (Video Editor) and Maya (Director) reasoning agents."""
 
-from typing import Any
-from croviq_domain.editorial import DirectorReview, EditorProposal
+from typing import Any, Sequence
+from croviq_domain.editorial import DirectorReview, EditorDecision, EditorProposal
 from croviq_domain.edl import EditDecisionList
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile
 from croviq_domain.render_review import RenderReview, RenderReviewIssue
 from croviq_domain.transcript import Transcript
 
+def format_silence_plan_for_prompt(silence_decisions: Sequence[EditorDecision] | None) -> str:
+    """Format deterministic silence cleanup decisions into a concise agent prompt context section."""
+    if not silence_decisions:
+        return "Deterministic Silence Cleanup: No long dead-air pauses detected (>=1.2s)."
+
+    lines = [
+        "Deterministic Silence Cleanup Plan (Already Scheduled):",
+        "The following long dead-air pauses are already scheduled for automatic cleanup.",
+        "Do NOT waste editorial decisions rediscovering these obvious pauses:",
+    ]
+    for d in silence_decisions:
+        start_tc = f"{int(d.source_start_ms // 60000):02d}:{(d.source_start_ms % 60000) / 1000.0:04.1f}"
+        end_tc = f"{int(d.source_end_ms // 60000):02d}:{(d.source_end_ms % 60000) / 1000.0:04.1f}"
+        dur_s = (d.source_end_ms - d.source_start_ms) / 1000.0
+        lines.append(f"- {start_tc} -> {end_tc} ({dur_s:.2f}s dead air trimmed)")
+
+    return "\n".join(lines)
 def format_transcript_for_prompt(transcript: Transcript, max_words: int | None = None) -> str:
     """Format canonical transcript words into an indexed listing for model anchoring."""
     lines: list[str] = []
@@ -48,26 +65,35 @@ def build_editor_prompt(
     lessons: list[ChannelLesson] | None,
     production_id: str,
     media_summary: str | None = None,
+    silence_decisions: Sequence[EditorDecision] | None = None,
 ) -> str:
-    """Construct the structured editorial prompt for Leo (Dialogue Editor)."""
+    """Construct the structured editorial prompt for Leo (Video Editor)."""
     memory_context = format_channel_memory_summary(channel_profile, lessons)
     formatted_transcript = format_transcript_for_prompt(transcript)
+    silence_context = format_silence_plan_for_prompt(silence_decisions or [])
 
-    return f"""You are Leo, the Dialogue Editor on the Croviq autonomous production team.
+    return f"""You are Leo, the Video Editor on the Croviq autonomous production team.
 
 YOUR ROLE & MISSION:
 Analyze the raw video recording and its word-timed transcript to propose structured editorial improvements.
 Your goal is to make the creator sound concise, confident, and engaging WITHOUT altering technical meaning, distorting facts, or creating unnatural speech transitions.
 
+{silence_context}
+
 EDITORIAL POLICY & HARD SAFETY PRINCIPLES:
-1. Preserve technical meaning and essential tutorial steps. Never cut crucial explanations or code context.
-2. Preserve natural sentence grammar and speaker intent.
-3. Identify and remove filler words (e.g. "um", "uh", "you know", "like"), false starts, and repeated explanations.
-4. Trim awkward dead air or unnaturally long pauses while retaining natural conversational cadence.
-5. Identify moments where on-screen demonstration / terminal footage can naturally cover a dialogue cut.
-6. Identify 1 high-energy standalone 20-60 second candidate range suitable for a vertical Short.
-7. Conservative editing: when uncertain whether a phrase is important, keep it (KEEP_FOR_CLARITY).
-8. If the video is already tightly edited, propose only minimal necessary adjustments. Do not invent artificial cuts.
+1. BASELINE SILENCE ALREADY SCHEDULED: The long dead-air pauses listed above are already scheduled for automatic cleanup. Do NOT waste editorial decisions rediscovering obvious dead air.
+2. Focus your editorial decisions on higher-value VIDEO EDITING:
+   - False starts, speech stumbles, and verbal restarts
+   - Filler words (e.g. "um", "uh", "you know", "like")
+   - Repeated explanations and redundant descriptions
+   - Visual pacing, screen/demo walkthrough flow, and cut safety
+   - B-roll / screen insert coverage opportunities (BROLL_COVER_CANDIDATE)
+   - Moments worth emphasizing for clarity (KEEP_FOR_CLARITY)
+   - 1 high-energy standalone 20-60 second candidate range suitable for a vertical Short
+3. Preserve technical meaning and essential tutorial steps. Never cut crucial code context or command execution.
+4. Preserve natural sentence grammar and speaker intent.
+5. Conservative editing: when uncertain whether a phrase is important, keep it (KEEP_FOR_CLARITY).
+6. If the video is already tightly edited, propose only minimal necessary adjustments. Do not invent artificial cuts.
 
 CANONICAL WORD TIMING ANCHOR RULE:
 Every decision MUST reference canonical 0-indexed transcript word boundaries:
@@ -90,7 +116,6 @@ WORD-INDEXED TRANSCRIPT ({len(transcript.words)} words, {transcript.duration_ms}
 
 Produce a complete, structured EditorProposal conforming strictly to the requested schema.
 """
-
 
 def build_director_prompt(
     transcript: Transcript,
@@ -276,8 +301,7 @@ def build_editor_correction_prompt(
         )
     prior_decisions_text = "\n".join(prior_decisions_lines)
 
-    return f"""You are Leo, the Dialogue Editor on the Croviq autonomous production team.
-
+    return f"""You are Leo, the Video Editor on the Croviq autonomous production team.
 YOUR ROLE & MISSION: TARGETED EDITORIAL CORRECTION PASS
 Maya (Director) has watched the rendered preview video and requested specific corrections.
 Your goal is to revise ONLY affected decisions based on Maya's feedback. Do NOT start from scratch or re-cut untouched sections.

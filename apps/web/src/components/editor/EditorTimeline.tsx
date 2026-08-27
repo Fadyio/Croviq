@@ -151,23 +151,23 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`h-[220px] shrink-0 flex flex-col bg-surface-1 rounded-xl border border-border-subtle overflow-hidden select-none shadow-md ${className}`}
+      className={`h-[156px] shrink-0 flex flex-col bg-surface-1 rounded-xl border border-border-subtle overflow-hidden select-none shadow-md ${className}`}
       data-testid="editor-timeline"
     >
       {/* Timeline Header Bar with Track Labels & Zoom Toolbar */}
-      <div className="h-8 px-3.5 bg-surface-2 border-b border-border-subtle flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2.5">
-          <span className="text-xs font-semibold text-text-primary tracking-tight">Timeline</span>
+      <div className="h-7 px-3 bg-surface-2 border-b border-border-subtle flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-text-primary tracking-tight">Timeline</span>
           <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-text-muted">
             <span>&middot;</span>
-            <span>{twickData.activeCutCount} cuts</span>
+            <span className="font-medium text-text-secondary">{twickData.activeCutCount} cuts</span>
             <span>&middot;</span>
             <span>{twickData.coverageMarkerCount} coverage</span>
           </div>
         </div>
 
         {/* Zoom Controls */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             type="button"
             onClick={handleZoomOut}
@@ -175,7 +175,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             title="Zoom Out"
             aria-label="Zoom Out"
           >
-            <ZoomOut className="w-3.5 h-3.5" />
+            <ZoomOut className="w-3 h-3" />
           </button>
           <button
             type="button"
@@ -184,7 +184,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             title="Zoom In"
             aria-label="Zoom In"
           >
-            <ZoomIn className="w-3.5 h-3.5" />
+            <ZoomIn className="w-3 h-3" />
           </button>
           <button
             type="button"
@@ -193,31 +193,30 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             title="Fit to Width"
             aria-label="Fit to Width"
           >
-            <Maximize className="w-3.5 h-3.5" />
+            <Maximize className="w-3 h-3" />
           </button>
         </div>
       </div>
 
       {/* Main Track Workspace Viewport (Left Track Headers + Right Scrollable Tracks) */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left Track Headers Column (Fixed Width 96px) */}
-        <div className="w-24 shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col pt-6 z-10">
-          <div className="h-10 px-2.5 flex items-center gap-1.5 border-b border-border-subtle/40 text-[11px] font-medium text-text-secondary">
-            <Video className="w-3.5 h-3.5 text-text-muted shrink-0" />
+        {/* Left Track Headers Column (Fixed Width 80px) */}
+        <div className="w-20 shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col pt-5 z-10">
+          <div className="h-5 px-2 flex items-center gap-1 border-b border-border-subtle/30 text-[10px] font-medium text-text-muted">
+            <Video className="w-3 h-3 text-text-muted/70 shrink-0" />
             <span className="truncate">Source</span>
           </div>
 
-          <div className="h-10 px-2.5 flex items-center gap-1.5 border-b border-border-subtle/40 text-[11px] font-medium text-text-secondary">
-            <Scissors className="w-3.5 h-3.5 text-primary shrink-0" />
+          <div className="h-9 px-2 flex items-center gap-1 border-b border-border-subtle/30 text-[10px] font-semibold text-text-primary">
+            <Scissors className="w-3 h-3 text-primary shrink-0" />
             <span className="truncate">Edits</span>
           </div>
 
-          <div className="h-10 px-2.5 flex items-center gap-1.5 text-[11px] font-medium text-text-secondary">
-            <Layers className="w-3.5 h-3.5 text-info shrink-0" />
+          <div className="h-6 px-2 flex items-center gap-1 text-[10px] font-medium text-text-muted">
+            <Layers className="w-3 h-3 text-info shrink-0" />
             <span className="truncate">Coverage</span>
           </div>
         </div>
-
         {/* Right Scrollable Timeline Canvas */}
         <div
           ref={trackAreaRef}
@@ -233,8 +232,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             className="relative h-full flex flex-col"
             style={{ width: `${timelineContentWidth}px` }}
           >
-            {/* 1. Time Ruler Bar (Top 24px) */}
-            <div className="h-6 border-b border-border-subtle bg-surface-2/60 relative shrink-0">
+            {/* 1. Time Ruler Bar (Top 20px) */}
+            <div className="h-5 border-b border-border-subtle bg-surface-2/70 relative shrink-0">
               {rulerTicks.map((tickSec) => {
                 const tickPx = msToPixels(tickSec * 1000);
                 return (
@@ -252,30 +251,21 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               })}
             </div>
 
-            {/* 2. Track 1 Content: SOURCE VIDEO (Continuous Bar without label) */}
-            <div className="h-10 border-b border-border-subtle/40 relative flex items-center px-1 shrink-0">
-              {sourceBlocks.map((block) => (
-                <div
-                  key={block.id}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectBlock(block);
-                  }}
-                  className="absolute top-1 bottom-1 left-1 right-1 rounded bg-surface-3/80 border border-border-strong/50 flex items-center px-3 cursor-pointer hover:border-primary/40 transition-colors"
-                />
-              ))}
+            {/* 2. Track 1 Content: SOURCE VIDEO (Thin Rail Line) */}
+            <div className="h-5 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-1">
+              <div className="absolute inset-x-1 h-1.5 rounded-full bg-surface-3/90 border border-border-subtle" />
             </div>
 
-            {/* 3. Track 2 Content: DIALOGUE EDITS */}
-            <div className="h-10 border-b border-border-subtle/40 relative flex items-center px-1 bg-surface-2/20 shrink-0">
+            {/* 3. Track 2 Content: EDITS (Primary Prominent Visible Markers) */}
+            <div className="h-9 border-b border-border-subtle/30 relative flex items-center px-1 bg-surface-2/15 shrink-0">
               {dialogueCutBlocks.length === 0 ? (
-                <div className="absolute inset-0 flex items-center px-3 text-[11px] text-text-muted pointer-events-none">
-                  <span>No dialogue cuts</span>
+                <div className="absolute inset-0 flex items-center px-3 text-[10px] text-text-muted pointer-events-none">
+                  <span>No cuts applied</span>
                 </div>
               ) : (
                 dialogueCutBlocks.map((cut) => {
                   const leftPx = msToPixels(cut.startMs);
-                  const widthPx = Math.max(12, msToPixels(cut.endMs) - leftPx);
+                  const widthPx = Math.max(14, msToPixels(cut.endMs) - leftPx);
                   const isSelected = selectedBlockId === cut.id;
 
                   return (
@@ -285,15 +275,15 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                         e.stopPropagation();
                         onSelectBlock(cut);
                       }}
-                      className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center justify-center px-1.5 text-[10px] font-mono font-medium truncate ${
+                      className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center justify-center px-1 text-[10px] font-mono font-semibold truncate ${
                         cut.type === "cut-safe"
-                          ? "bg-danger/25 border border-danger/60 text-danger hover:bg-danger/35"
+                          ? "bg-danger/25 border border-danger/70 text-danger hover:bg-danger/40 shadow-sm"
                           : cut.type === "cut-needs-coverage"
-                            ? "bg-warning/25 border border-warning/60 text-warning hover:bg-warning/35"
+                            ? "bg-warning/25 border border-warning/70 text-warning hover:bg-warning/40 shadow-sm"
                             : "bg-surface-3 border border-border-strong text-text-muted line-through opacity-60"
-                      } ${isSelected ? "ring-2 ring-primary shadow-lg" : ""}`}
+                      } ${isSelected ? "ring-2 ring-primary shadow-md scale-[1.02] z-10" : ""}`}
                       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                      title={`${cut.label}: ${formatTimecode(cut.startMs)} → ${formatTimecode(cut.endMs)}`}
+                      title={`${cut.label}: ${formatTimecode(cut.startMs)} → ${formatTimecode(cut.endMs)} (${((cut.endMs - cut.startMs)/1000).toFixed(1)}s)`}
                     >
                       <span className="truncate">{cut.label}</span>
                     </div>
@@ -302,11 +292,11 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               )}
             </div>
 
-            {/* 4. Track 3 Content: COVERAGE */}
-            <div className="h-10 relative flex items-center px-1 shrink-0">
+            {/* 4. Track 3 Content: COVERAGE (Thin Secondary Track) */}
+            <div className="h-6 relative flex items-center px-1 shrink-0 bg-surface-1">
               {coverageBlocks.map((cov) => {
                 const leftPx = msToPixels(cov.startMs);
-                const widthPx = Math.max(16, msToPixels(cov.endMs) - leftPx);
+                const widthPx = Math.max(14, msToPixels(cov.endMs) - leftPx);
                 const isSelected = selectedBlockId === cov.id;
                 const isCurrentActive = currentTimeMs >= cov.startMs && currentTimeMs <= cov.endMs;
 
@@ -317,26 +307,22 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                       e.stopPropagation();
                       onSelectBlock(cov);
                     }}
-                    className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center gap-1.5 px-2 text-[10px] font-medium ${
+                    className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium ${
                       cov.type === "coverage-broll"
                         ? "bg-info/25 border border-info/70 text-info hover:bg-info/35"
                         : "bg-surface-3 border border-border-strong text-text-secondary hover:bg-surface-3/80"
-                    } ${isSelected ? "ring-2 ring-primary shadow-lg" : ""} ${
+                    } ${isSelected ? "ring-2 ring-primary shadow-md" : ""} ${
                       isCurrentActive ? "ring-1 ring-info animate-pulse" : ""
                     }`}
                     style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
                     title={`Coverage: ${cov.label} (${formatTimecode(cov.startMs)} → ${formatTimecode(cov.endMs)})`}
                   >
-                    <Layers className="w-3 h-3 shrink-0" />
+                    <Layers className="w-2.5 h-2.5 shrink-0" />
                     <span className="truncate font-semibold">{cov.label}</span>
-                    <span className="hidden md:inline text-[9px] text-text-muted font-mono shrink-0">
-                      ({((cov.endMs - cov.startMs) / 1000).toFixed(1)}s)
-                    </span>
                   </div>
                 );
               })}
             </div>
-
             {/* Canonical Playhead Line across all tracks */}
             <div
               className="absolute top-0 bottom-0 w-0.5 bg-primary z-20 pointer-events-none transition-[left] duration-75 shadow-sm"

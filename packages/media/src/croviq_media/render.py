@@ -15,6 +15,7 @@ from croviq_domain.editorial import ShortCandidate
 from croviq_domain.edl import EditDecisionList, derive_keep_segments
 from croviq_domain.render import ArtifactType
 from croviq_domain.transcript import Transcript
+from croviq_media.audio import DEFAULT_SPEECH_ENHANCEMENT_FILTER
 from croviq_media.short import (
     extract_rebased_caption_words,
     generate_ass_subtitles,
@@ -371,21 +372,21 @@ class FFmpegRenderService(RenderService):
         if num_segs == 0:
             raise RenderError("Cannot render EDL with zero keep segments")
 
-        # Zero-cut optimization: full duration from 0 to source_duration_ms
+        # Zero-cut optimization: full duration with enhanced audio
         if num_segs == 1 and keep_segments[0][0] == 0 and keep_segments[0][1] >= source_duration_ms:
-            return None, []
+            filter_graph = f"[0:a]{DEFAULT_SPEECH_ENHANCEMENT_FILTER}[aout]"
+            return filter_graph, ["-map", "0:v", "-map", "[aout]"]
 
-        # Single sub-segment trim
+        # Single sub-segment trim with enhanced audio
         if num_segs == 1:
             start_ms, end_ms = keep_segments[0]
             start_s = start_ms / 1000.0
             end_s = end_ms / 1000.0
             filter_graph = (
                 f"[0:v]trim=start={start_s:.4f}:end={end_s:.4f},setpts=PTS-STARTPTS[vout];"
-                f"[0:a]atrim=start={start_s:.4f}:end={end_s:.4f},asetpts=PTS-STARTPTS[aout]"
+                f"[0:a]atrim=start={start_s:.4f}:end={end_s:.4f},asetpts=PTS-STARTPTS,{DEFAULT_SPEECH_ENHANCEMENT_FILTER}[aout]"
             )
             return filter_graph, ["-map", "[vout]", "-map", "[aout]"]
-
         # Multiple keep segments with 20ms audio micro-transitions
         video_filters: list[str] = []
         audio_filters: list[str] = []
@@ -421,8 +422,7 @@ class FFmpegRenderService(RenderService):
             audio_inputs.append(f"[a{i}]")
 
         vconcat = f"{''.join(video_inputs)}concat=n={num_segs}:v=1:a=0[vout]"
-        aconcat = f"{''.join(audio_inputs)}concat=n={num_segs}:v=0:a=1[aout]"
-
+        aconcat = f"{''.join(audio_inputs)}concat=n={num_segs}:v=0:a=1[a_raw];[a_raw]{DEFAULT_SPEECH_ENHANCEMENT_FILTER}[aout]"
         full_filter = ";".join(video_filters + audio_filters + [vconcat, aconcat])
         return full_filter, ["-map", "[vout]", "-map", "[aout]"]
 
@@ -650,11 +650,10 @@ class FFmpegRenderService(RenderService):
 
         if num_segs == 1:
             vconcat = "[v0]null[v_trimmed]"
-            aconcat = "[a0]anull[aout]"
+            aconcat = f"[a0]anull,{DEFAULT_SPEECH_ENHANCEMENT_FILTER}[aout]"
         else:
             vconcat = f"{''.join(video_inputs)}concat=n={num_segs}:v=1:a=0[v_trimmed]"
-            aconcat = f"{''.join(audio_inputs)}concat=n={num_segs}:v=0:a=1[aout]"
-
+            aconcat = f"{''.join(audio_inputs)}concat=n={num_segs}:v=0:a=1[a_raw];[a_raw]{DEFAULT_SPEECH_ENHANCEMENT_FILTER}[aout]"
         composition_filters: list[str] = []
         if is_vertical:
             # Scale to fit 1080x1920 with black padding if aspect deviates slightly

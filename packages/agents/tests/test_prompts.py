@@ -124,12 +124,37 @@ def test_build_editor_prompt_includes_anchors_and_policy() -> None:
         production_id="prod_test_123",
         media_summary="1080p 30fps",
     )
-    assert "You are Leo, the Dialogue Editor" in prompt
+    assert "You are Leo, the Video Editor" in prompt
     assert "CANONICAL WORD TIMING ANCHOR RULE" in prompt
     assert "transcript_start_word" in prompt
     assert "transcript_end_word" in prompt
     assert "[0] (0ms - 400ms) Welcome" in prompt
     assert "prod_test_123" in prompt
+def test_build_editor_prompt_includes_silence_plan() -> None:
+    tr = _sample_transcript()
+    silence_dec = EditorDecision(
+        decision_id="silence_01",
+        decision_type=EditorDecisionType.TRIM_PAUSE,
+        transcript_start_word=0,
+        transcript_end_word=1,
+        source_start_ms=2125,
+        source_end_ms=9575,
+        original_text="[Silence]",
+        action="trim",
+        concise_reason="Deterministic silence cleanup: trimmed 7.45s dead air",
+        confidence=1.0,
+    )
+    prompt = build_editor_prompt(
+        transcript=tr,
+        channel_profile=None,
+        lessons=None,
+        production_id="prod_test_123",
+        silence_decisions=[silence_dec],
+    )
+    assert "Deterministic Silence Cleanup Plan (Already Scheduled)" in prompt
+    assert "00:02.1 -> 00:09.6" in prompt
+    assert "7.45s dead air trimmed" in prompt
+    assert "BASELINE SILENCE ALREADY SCHEDULED" in prompt
 
 
 def test_build_director_prompt_includes_leo_decisions() -> None:
@@ -298,7 +323,7 @@ def test_build_editor_correction_prompt() -> None:
         channel_profile=None,
         lessons=None,
     )
-    assert "You are Leo, the Dialogue Editor" in prompt
+    assert "You are Leo, the Video Editor" in prompt
     assert "TARGETED EDITORIAL CORRECTION PASS" in prompt
     assert "rrv_123" in prompt
     assert "Audio clip audible at word boundary." in prompt

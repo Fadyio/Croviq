@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Sequence
 
 from croviq_agents.prompts import (
     build_director_prompt,
@@ -244,9 +244,10 @@ class GenAIClient(ABC):
         production_id: str,
         run_id: str | None = None,
         media_summary: str | None = None,
+        silence_decisions: Sequence[EditorDecision] | None = None,
         request_id: str = "unknown",
     ) -> tuple[EditorProposal, AgentUsageMetadata]:
-        """Invoke Leo (Dialogue Editor) to analyze video & transcript and propose edits."""
+        """Invoke Leo (Video Editor) to analyze video & transcript and propose edits."""
         pass
 
     @abstractmethod
@@ -337,27 +338,17 @@ class GoogleGenAIClient(GenAIClient):
         production_id: str,
         run_id: str | None = None,
         media_summary: str | None = None,
+        silence_decisions: Sequence[EditorDecision] | None = None,
         request_id: str = "unknown",
     ) -> tuple[EditorProposal, AgentUsageMetadata]:
-        from google.genai import types
-
-        client = self._get_client()
-        prompt = build_editor_prompt(
+        prompt_text = build_editor_prompt(
             transcript=transcript,
             channel_profile=channel_profile,
             lessons=lessons,
             production_id=production_id,
             media_summary=media_summary,
+            silence_decisions=silence_decisions,
         )
-
-        video_part = types.Part.from_uri(file_uri=video_uri, mime_type=mime_type)
-
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=EditorProposal,
-            temperature=0.2,
-        )
-
         log_ai_event(
             event_type=EventType.AI_CALL_STARTED,
             agent="leo",
@@ -845,6 +836,7 @@ class FakeGenAIClient(GenAIClient):
         production_id: str,
         run_id: str | None = None,
         media_summary: str | None = None,
+        silence_decisions: Sequence[EditorDecision] | None = None,
         request_id: str = "unknown",
     ) -> tuple[EditorProposal, AgentUsageMetadata]:
         self.call_history.append(

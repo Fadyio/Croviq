@@ -40,6 +40,7 @@ const mayaMessages = {
 interface PresentedItem {
   activity: AgentActivity;
   isLeo: boolean;
+  isSystem: boolean;
   agentName: string;
   message: string;
   decision?: EditorDecision;
@@ -51,7 +52,9 @@ const presentActivity = (
   decisions: EditorDecision[],
   review: DirectorReview | null,
 ): PresentedItem => {
-  const isLeo = activity.agent.toLowerCase() === "leo";
+  const agentLower = activity.agent.toLowerCase();
+  const isLeo = agentLower === "leo";
+  const isSystem = agentLower === "system";
   const decision = activity.related_decision_id
     ? decisions.find((candidate) => candidate.decision_id === activity.related_decision_id)
     : undefined;
@@ -102,28 +105,33 @@ const presentActivity = (
   return {
     activity,
     isLeo,
-    agentName: isLeo ? "Leo" : "Maya",
+    isSystem,
+    agentName: isSystem ? "System" : isLeo ? "Leo" : "Maya",
     message,
     decision,
     timecode,
   };
 };
 
-const RowAvatar: React.FC<{ isLeo: boolean; name: string }> = ({ isLeo, name }) => {
+const RowAvatar: React.FC<{ isLeo: boolean; isSystem?: boolean; name: string }> = ({ isLeo, isSystem = false, name }) => {
   const [failed, setFailed] = useState(false);
-  const src = avatarMap[isLeo ? "leo" : "maya"];
+  const src = isSystem ? undefined : avatarMap[isLeo ? "leo" : "maya"];
 
   return (
     <span
       className={`relative z-10 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-surface-2 text-[10px] font-semibold ${
-        isLeo ? "border-primary/40 text-primary" : "border-info/40 text-info"
+        isSystem
+          ? "border-border-strong text-text-secondary bg-surface-3"
+          : isLeo
+            ? "border-primary/40 text-primary"
+            : "border-info/40 text-info"
       }`}
       aria-hidden="true"
     >
       {src && !failed ? (
         <img src={src} alt="" className="size-full object-cover" onError={() => setFailed(true)} />
       ) : (
-        <span>{isLeo ? "L" : "M"}</span>
+        <span>{isSystem ? "S" : isLeo ? "L" : "M"}</span>
       )}
     </span>
   );
@@ -188,7 +196,7 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
               const clickable = Boolean(item.decision && onSelectActivity);
               const content = (
                 <>
-                  <RowAvatar isLeo={item.isLeo} name={item.agentName} />
+                  <RowAvatar isLeo={item.isLeo} isSystem={item.isSystem} name={item.agentName} />
                   <span className="min-w-0 flex-1 overflow-hidden">
                     <span className="flex items-baseline justify-between gap-1.5 min-w-0">
                       <span className="text-[11px] font-semibold text-text-primary">
