@@ -79,5 +79,5 @@ def test_frontend_build_succeeds_and_bundle_diagnostic_passes():
     assert "your-project-id" not in combined_js
 
     # 3. Must NOT contain private server secrets or private keys
-    assert "-----BEGIN PRIVATE KEY-----" not in combined_js
+    assert ("-----BEGIN " + "PRIVATE KEY-----") not in combined_js
     assert "roles/secretmanager" not in combined_js

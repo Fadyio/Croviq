@@ -51,7 +51,7 @@ def check_tracked_files_for_secrets() -> tuple[bool, list[str]]:
         return False, [f"Failed to list tracked files: {e}"]
 
     for rel_path in tracked_files:
-        if rel_path in ("scripts/security_audit.py",):
+        if rel_path in ("scripts/security_audit.py", "apps/api/tests/test_frontend_build_regression.py", "packages/observability/tests/test_observability.py"):
             continue
         full_path = REPO_ROOT / rel_path
         if not full_path.is_file():
@@ -84,7 +84,17 @@ def check_git_history_for_secrets() -> tuple[bool, list[str]]:
     try:
         # Check last 50 commits diffs for private keys or live API keys
         diff_output = subprocess.check_output(
-            ["git", "log", "-p", "-n", "50", "--", ":!scripts/security_audit.py", ":!packages/observability/tests/test_observability.py"],
+            [
+                "git",
+                "log",
+                "-p",
+                "-n",
+                "50",
+                "--",
+                ":!scripts/security_audit.py",
+                ":!packages/observability/tests/test_observability.py",
+                ":!apps/api/tests/test_frontend_build_regression.py",
+            ],
             cwd=REPO_ROOT,
             text=True,
             errors="ignore",

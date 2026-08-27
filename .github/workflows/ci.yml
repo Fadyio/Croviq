@@ -55,8 +55,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
         run: pnpm -r build
-
       - name: Typecheck via Makefile
         run: make typecheck
 
