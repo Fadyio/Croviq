@@ -59,7 +59,7 @@ class FakeMediaStorage(MediaStorage):
         self,
         bucket: str,
         object_name: str,
-        expiry_seconds: int = 3600,
+        expiry_seconds: int = 1800,
     ) -> SignedReadTarget:
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=expiry_seconds)
         read_url = f"{self.base_url}/{bucket}/{object_name}?token=mock_v4_signed_read"
@@ -67,7 +67,6 @@ class FakeMediaStorage(MediaStorage):
             read_url=read_url,
             expires_at=expires_at,
         )
-
     async def get_object_metadata(
         self,
         bucket: str,

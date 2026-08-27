@@ -397,7 +397,15 @@ resource "google_cloud_run_v2_service" "api" {
         value = "gemini-3.5-transcribe-preview"
       }
 
+      env {
+        name  = "SIGNED_URL_EXPIRY_SECONDS"
+        value = "1800"
+      }
 
+      env {
+        name  = "MAX_UPLOAD_SIZE_BYTES"
+        value = "1073741824"
+      }
 
       startup_probe {
         http_get {

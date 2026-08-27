@@ -950,6 +950,7 @@ async def _execute_render_for_production(
     media_storage: MediaStorage,
 ) -> RenderArtifactResponse:
     request_id = getattr(request.state, "request_id", "unknown")
+    settings = get_settings()
     prod = await _get_owned_production(production_id, current_user, production_repo)
     if not prod.source_media or not prod.source_media.gcs_bucket or not prod.source_media.gcs_object:
         raise HTTPException(
@@ -979,7 +980,7 @@ async def _execute_render_for_production(
             signed_target = await media_storage.generate_signed_read_target(
                 bucket=existing_artifact.gcs_bucket,
                 object_name=existing_artifact.gcs_object,
-                expiry_seconds=3600,
+                expiry_seconds=settings.signed_url_expiry_seconds,
             )
             return RenderArtifactResponse.from_domain(
                 artifact=existing_artifact,
@@ -997,8 +998,6 @@ async def _execute_render_for_production(
         artifact_type=artifact_type,
     )
     now = datetime.now(timezone.utc)
-    settings = get_settings()
-
     log_render_event(
         event_type=EventType.RENDER_STARTED,
         production_id=prod.production_id,
@@ -1088,7 +1087,7 @@ async def _execute_render_for_production(
             signed_target = await media_storage.generate_signed_read_target(
                 bucket=gcs_bucket,
                 object_name=gcs_object,
-                expiry_seconds=3600,
+                expiry_seconds=settings.signed_url_expiry_seconds,
             )
 
             return RenderArtifactResponse.from_domain(
@@ -1202,7 +1201,8 @@ async def render_short_video(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Production '{production_id}' has no uploaded source media to render",
         )
-
+    request_id = getattr(request.state, "request_id", "unknown")
+    settings = get_settings()
     edl = await edl_repo.get_latest_edl(production_id)
     if not edl:
         raise HTTPException(
@@ -1248,7 +1248,7 @@ async def render_short_video(
             signed_target = await media_storage.generate_signed_read_target(
                 bucket=existing_artifact.gcs_bucket,
                 object_name=existing_artifact.gcs_object,
-                expiry_seconds=3600,
+                expiry_seconds=settings.signed_url_expiry_seconds,
             )
             return RenderArtifactResponse.from_domain(
                 artifact=existing_artifact,
@@ -1269,8 +1269,6 @@ async def render_short_video(
         artifact_type=ArtifactType.SHORT,
     )
     now = datetime.now(timezone.utc)
-    settings = get_settings()
-
     log_short_render_event(
         event_type=EventType.SHORT_RENDER_STARTED,
         production_id=prod.production_id,
@@ -1351,7 +1349,7 @@ async def render_short_video(
             signed_target = await media_storage.generate_signed_read_target(
                 bucket=artifact.gcs_bucket,
                 object_name=artifact.gcs_object,
-                expiry_seconds=3600,
+                expiry_seconds=settings.signed_url_expiry_seconds,
             )
             return RenderArtifactResponse.from_domain(
                 artifact=artifact,
@@ -1389,6 +1387,7 @@ async def list_production_renders(
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> RenderListResponse:
+    settings = get_settings()
     prod = await _get_owned_production(production_id, current_user, production_repo)
     artifacts = await render_repo.list_render_artifacts(production_id)
     responses: list[RenderArtifactResponse] = []
@@ -1400,7 +1399,7 @@ async def list_production_renders(
                 target = await media_storage.generate_signed_read_target(
                     bucket=art.gcs_bucket,
                     object_name=art.gcs_object,
-                    expiry_seconds=3600,
+                    expiry_seconds=settings.signed_url_expiry_seconds,
                 )
                 playback_url = target.read_url
                 playback_expires_at = target.expires_at
@@ -1433,6 +1432,7 @@ async def review_preview_video(
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> ReviewPreviewResponse:
     request_id = getattr(request.state, "request_id", "unknown")
+    settings = get_settings()
     (
         review,
         master_art,
@@ -1453,7 +1453,7 @@ async def review_preview_video(
             target = await media_storage.generate_signed_read_target(
                 bucket=master_art.gcs_bucket,
                 object_name=master_art.gcs_object,
-                expiry_seconds=3600,
+                expiry_seconds=settings.signed_url_expiry_seconds,
             )
             playback_url = target.read_url
             playback_expires_at = target.expires_at
@@ -1464,7 +1464,6 @@ async def review_preview_video(
             playback_url=playback_url,
             playback_expires_at=playback_expires_at,
         )
-
     return ReviewPreviewResponse(
         production_id=production_id,
         review=review,
@@ -1517,6 +1516,7 @@ async def get_production_playback_urls(
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> ProductionPlaybackResponse:
+    settings = get_settings()
     prod = await _get_owned_production(production_id, current_user, production_repo)
 
     source_url = None
@@ -1525,7 +1525,7 @@ async def get_production_playback_urls(
             target = await media_storage.generate_signed_read_target(
                 bucket=prod.source_media.gcs_bucket,
                 object_name=prod.source_media.gcs_object,
-                expiry_seconds=3600,
+                expiry_seconds=settings.signed_url_expiry_seconds,
             )
             source_url = target.read_url
         except Exception:
@@ -1544,7 +1544,7 @@ async def get_production_playback_urls(
                 target = await media_storage.generate_signed_read_target(
                     bucket=r.gcs_bucket,
                     object_name=r.gcs_object,
-                    expiry_seconds=3600,
+                    expiry_seconds=settings.signed_url_expiry_seconds,
                 )
                 type_val = r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)
                 if type_val == ArtifactType.PREVIEW.value and preview_url is None:
@@ -1706,10 +1706,11 @@ async def generate_studio_voice(
                     completed_at=now,
                 )
                 await render_repo.save_render_artifact(art)
+                settings = get_settings()
                 target = await media_storage.generate_signed_read_target(
                     bucket=art.gcs_bucket,
                     object_name=art.gcs_object,
-                    expiry_seconds=3600,
+                    expiry_seconds=settings.signed_url_expiry_seconds,
                 )
                 sv_playback_url = target.read_url
         except Exception as exc:

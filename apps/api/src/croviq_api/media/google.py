@@ -106,7 +106,7 @@ class GoogleMediaStorage(MediaStorage):
         self,
         bucket: str,
         object_name: str,
-        expiry_seconds: int = 3600,
+        expiry_seconds: int = 1800,
     ) -> SignedReadTarget:
         """Generate a short-lived V4 signed GET URL for browser playback via Cloud Run identity."""
         return await asyncio.to_thread(

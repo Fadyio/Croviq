@@ -122,7 +122,7 @@ def check_env_file_tracking() -> tuple[bool, list[str]]:
 
 
 def check_frontend_build_bundle() -> tuple[bool, list[str]]:
-    """Check frontend dist/ assets for server secrets."""
+    """Check frontend dist/ assets for server secrets, dummy keys, and placeholder strings."""
     findings: list[str] = []
     dist_dir = REPO_ROOT / "apps" / "web" / "dist"
     if not dist_dir.exists():
@@ -133,6 +133,17 @@ def check_frontend_build_bundle() -> tuple[bool, list[str]]:
             content = js_file.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             continue
+
+        # Check for placeholder strings in built bundle
+        placeholders = [
+            "your-firebase-web-api-key",
+            "your-project.firebaseapp.com",
+            "your-project-id",
+        ]
+        for p in placeholders:
+            if p in content:
+                findings.append(f"Frontend bundle {js_file.name} contains placeholder string '{p}'")
+
         for pattern, secret_type in SECRET_PATTERNS:
             matches = re.finditer(pattern, content)
             for m in matches:
@@ -142,7 +153,6 @@ def check_frontend_build_bundle() -> tuple[bool, list[str]]:
                 findings.append(f"Frontend bundle {js_file.name} contains {secret_type}")
 
     return len(findings) == 0, findings
-
 
 def check_terminal_sandbox_invariants() -> tuple[bool, list[str]]:
     """Verify terminal sandbox allowlist does not contain network utilities or arbitrary interpreters."""

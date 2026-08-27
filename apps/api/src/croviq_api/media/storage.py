@@ -80,11 +80,10 @@ class MediaStorage(ABC):
         self,
         bucket: str,
         object_name: str,
-        expiry_seconds: int = 3600,
+        expiry_seconds: int = 1800,
     ) -> SignedReadTarget:
         """Generate a short-lived V4 signed GET URL for browser playback."""
         pass
-
     @abstractmethod
     async def upload_object_from_path(
         self,

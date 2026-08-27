@@ -4,10 +4,12 @@ from enum import StrEnum
 
 
 class EventType(StrEnum):
+    # Configuration & Lifecycle events
+    CONFIG_LOADED = "config.loaded"
+
     # HTTP events
     HTTP_REQUEST = "http.request"
     HTTP_RESPONSE = "http.response"
-
     # Auth events
     AUTH_LOGIN_ATTEMPT = "auth.login_attempt"
     AUTH_LOGIN_VERIFIED = "auth.login_verified"

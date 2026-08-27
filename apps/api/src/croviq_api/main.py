@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from typing import Any
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +8,7 @@ from croviq_api.auth import DemoAccessRestrictedError, auth_router
 from croviq_api.auth.logging import log_auth_event
 from croviq_api.config import get_settings
 from croviq_api.logging import StructuredLoggingMiddleware
-from croviq_observability import register_error_handlers
+from croviq_observability import log_event, register_error_handlers
 from croviq_api.schemas import ClientAuthEvent, HealthResponse
 from croviq_api.memory import memory_router
 from croviq_api.workspaces import workspace_router
@@ -19,6 +20,39 @@ LOCAL_DEVELOPMENT_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
+def emit_startup_config_event(settings: Any = None) -> dict[str, Any]:
+    """Emit a safe structured configuration event at application startup."""
+    if settings is None:
+        settings = get_settings()
+    tts_prov = (
+        settings.speech_service_provider
+        if settings.speech_service_provider
+        else ("google" if settings.environment == "production" else "fake")
+    )
+    return log_event(
+        event_type="config.loaded",
+        environment=settings.environment,
+        gcp_project_id=settings.gcp_project_id,
+        vertex_location=settings.vertexai_location,
+        genai_provider=settings.genai_backend_provider,
+        gemini_model=settings.gemini_model_id,
+        transcription_provider=settings.speech_service_provider,
+        transcription_model=settings.gemini_transcription_model,
+        memory_provider=settings.memory_store_provider,
+        media_provider=settings.media_storage_provider,
+        tts_provider=tts_prov,
+        max_upload_size_bytes=settings.max_upload_size_bytes,
+        signed_url_expiry_seconds=settings.signed_url_expiry_seconds,
+        git_sha=settings.git_sha,
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_settings()
+    emit_startup_config_event(settings)
+    yield
+
 
 def create_app() -> FastAPI:
     settings = get_settings()
@@ -28,8 +62,8 @@ def create_app() -> FastAPI:
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan,
     )
-
     @app.exception_handler(DemoAccessRestrictedError)
     async def demo_access_restricted_handler(
         request: Request, exc: DemoAccessRestrictedError
