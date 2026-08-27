@@ -408,6 +408,8 @@ class GoogleGenAIClient(GenAIClient):
             response_mime_type="application/json",
             response_schema=EditorProposal,
             temperature=0.2,
+            max_output_tokens=8192,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
 
         log_ai_event(
@@ -527,6 +529,8 @@ class GoogleGenAIClient(GenAIClient):
             response_mime_type="application/json",
             response_schema=DirectorReview,
             temperature=0.2,
+            max_output_tokens=8192,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
 
         log_ai_event(
@@ -651,6 +655,8 @@ class GoogleGenAIClient(GenAIClient):
             response_mime_type="application/json",
             response_schema=RenderReview,
             temperature=0.2,
+            max_output_tokens=8192,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
 
         log_ai_event(
@@ -771,6 +777,8 @@ class GoogleGenAIClient(GenAIClient):
             response_mime_type="application/json",
             response_schema=EditorProposal,
             temperature=0.2,
+            max_output_tokens=8192,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
 
         log_ai_event(

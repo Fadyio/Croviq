@@ -37,14 +37,14 @@ def get_auth_token() -> str:
         pass
 
     raise ValueError("No authentication method available. Set CROVIQ_AUTH_TOKEN or VITE_FIREBASE_API_KEY + CROVIQ_DEMO_PASSWORD.")
-def api_request(path, method="GET", body=None, token=None):
+def api_request(path, method="GET", body=None, token=None, timeout=180):
     url = f"{BASE_URL}{path}"
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     data = json.dumps(body).encode() if body else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode())
 
 def main():
