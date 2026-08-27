@@ -29,6 +29,8 @@ from croviq_domain.agent_config import (
     VoiceSampleResponse,
     VoiceSettingsConfig,
 )
+from croviq_domain.channel_provider import SampleChannelDataProvider
+from croviq_domain.memory import ChannelProfileBuilder
 from croviq_domain.user import User
 from croviq_domain.workspace import Workspace
 
@@ -173,20 +175,39 @@ async def get_agent_memory(
     current_user: Annotated[User, Depends(get_current_user)],
     memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
 ) -> AgentMemorySummaryResponse:
-    await initialize_sample_channel_memory(memory_store)
     channel_id = "croviq_syn_ai_eng_01"
-    profile = await memory_store.get_profile(channel_id)
-    lessons = await memory_store.get_lessons(channel_id)
-    formatted_lessons = [
-        MemoryItemResponse(
-            topic=getattr(lesson, "directive", str(lesson)),
-            content=getattr(lesson, "evidence_summary", getattr(lesson, "directive", "Editorial lesson")),
-            learned_from=getattr(lesson, "learned_from_production_id", "github.mp4"),
-        )
-        for lesson in lessons
-    ]
+    formatted_lessons = []
+    channel_title = "AI Engineering & Agent Systems"
 
-    channel_title = profile.channel_name if profile and hasattr(profile, "channel_name") else "AI Engineering Walkthroughs"
+    try:
+        await initialize_sample_channel_memory(memory_store)
+        profile = await memory_store.get_profile(channel_id)
+        lessons = await memory_store.get_lessons(channel_id)
+        if profile and getattr(profile, "channel_name", None):
+            channel_title = profile.channel_name
+        formatted_lessons = [
+            MemoryItemResponse(
+                topic=getattr(lesson, "directive", str(lesson)),
+                content=getattr(lesson, "evidence_summary", getattr(lesson, "directive", "Editorial lesson")),
+                learned_from=getattr(lesson, "learned_from_production_id", "github.mp4"),
+            )
+            for lesson in lessons
+        ]
+    except Exception:
+        provider = SampleChannelDataProvider()
+        channel = await provider.get_channel()
+        profile = ChannelProfileBuilder.build_profile(channel)
+        channel_title = profile.channel_name
+        lessons = ChannelProfileBuilder.build_lessons(channel)
+        formatted_lessons = [
+            MemoryItemResponse(
+                topic=getattr(lesson, "directive", str(lesson)),
+                content=getattr(lesson, "evidence_summary", getattr(lesson, "directive", "Editorial lesson")),
+                learned_from=getattr(lesson, "learned_from_production_id", "github.mp4"),
+            )
+            for lesson in lessons
+        ]
+
     style_guide = "Concise, highly technical, high-momentum tutorials without fluff."
     prefs = [
         "Prefers direct jump to terminal commands without conversational preambles.",
@@ -200,7 +221,6 @@ async def get_agent_memory(
         creator_preferences=prefs,
         lessons=formatted_lessons,
     )
-
 
 @router.get(
     "/workspace/agent-settings/voice",
