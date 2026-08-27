@@ -820,12 +820,14 @@ async def analyze_production(
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
     editorial_service: Annotated[DirectorEditorService, Depends(get_editorial_service)],
+    force: bool = False,
 ) -> AnalyzeProductionResponse:
     request_id = getattr(request.state, "request_id", "unknown")
     run, proposal, review, activities = await editorial_service.run_editorial_analysis(
         production_id=production_id,
         current_user=current_user,
         request_id=request_id,
+        force=force,
     )
     return AnalyzeProductionResponse(
         run_id=run.run_id,

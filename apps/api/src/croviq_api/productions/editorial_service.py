@@ -95,6 +95,7 @@ class DirectorEditorService:
         production_id: str,
         current_user: User,
         request_id: str = "unknown",
+        force: bool = False,
     ) -> tuple[EditorialRun, EditorProposal, DirectorReview, list[AgentActivity]]:
         """Execute the complete Leo dialogue pass and Maya director review sequence."""
         # 1. Load production and verify ownership
@@ -128,7 +129,7 @@ class DirectorEditorService:
         existing_run = await self._editorial_repo.get_latest_editorial_run(production_id)
         resume_proposal: EditorProposal | None = None
         existing_activities: list[AgentActivity] = []
-        if existing_run is not None:
+        if existing_run is not None and not force:
             if existing_run.status == EditorialRunStatus.COMPLETED:
                 proposal = (
                     await self._editorial_repo.get_editor_proposal(

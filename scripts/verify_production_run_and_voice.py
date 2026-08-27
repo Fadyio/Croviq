@@ -61,7 +61,7 @@ def main():
     print(f"Transcript words count: {len(transcript.get('words', []))}, duration_ms: {transcript.get('duration_ms')}")
 
     print("4. Triggering fresh Editorial Run (Leo analyze + tool use + self review)...")
-    analyze_resp = api_request(f"/api/productions/{PRODUCTION_ID}/analyze", method="POST", token=token)
+    analyze_resp = api_request(f"/api/productions/{PRODUCTION_ID}/analyze?force=true", method="POST", token=token)
     print("Analyze response status:", analyze_resp.get("status"))
 
     # Poll for editorial run completion
