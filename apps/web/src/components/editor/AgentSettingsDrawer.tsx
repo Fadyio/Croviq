@@ -510,7 +510,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                     {
                       id: "studio_voice" as NarrationMode,
                       label: "Studio Voice",
-                      desc: "Replace spoken narration with Studio Voice (Journey F), timed to original speech.",
+                      desc: "Replace spoken narration with Studio Voice, timed to original speech.",
                     },
                   ].map((mode) => (
                     <label
@@ -547,7 +547,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                 <div className="space-y-2">
                   <label className="text-[11px] text-text-secondary block">Voice Selection</label>
                   <select
-                    value={voiceSettings?.selected_voice || "en-US-Journey-F"}
+                    value={voiceSettings?.selected_voice || "Puck"}
                     onChange={(e) => handleSelectVoice(e.target.value)}
                     className="w-full px-3 py-2 rounded-md bg-surface-2 border border-border-strong text-xs text-text-primary focus:border-primary focus:outline-hidden"
                     data-testid="voice-selector-dropdown"

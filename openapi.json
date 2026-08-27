@@ -405,7 +405,7 @@
       "post": {
         "tags": ["Workspaces"],
         "summary": "Audition Voice Sample",
-        "description": "Preview audio sample for a selected Studio Voice (Journey) voice.",
+        "description": "Preview audio sample for a selected Studio Voice (Gemini TTS) prebuilt voice.",
         "operationId": "get_voice_sample_endpoint_api_workspace_agent_settings_voice_sample_post",
         "requestBody": {
           "content": {
@@ -5168,7 +5168,7 @@
             "type": "string",
             "minLength": 1,
             "title": "Selected Voice",
-            "default": "en-US-Journey-F"
+            "default": "Puck"
           },
           "language": {
             "type": "string",
@@ -5446,8 +5446,8 @@
             "type": "string",
             "minLength": 1,
             "title": "Selected Voice",
-            "description": "Selected Studio Voice catalog voice identifier",
-            "default": "en-US-Journey-F"
+            "description": "Selected Studio Voice catalog voice identifier (Gemini TTS prebuilt voice)",
+            "default": "Puck"
           },
           "language": {
             "type": "string",

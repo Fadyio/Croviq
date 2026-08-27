@@ -103,7 +103,7 @@ class CreateEdlCandidateArgs(BaseModel):
 
 
 class GenerateBRollArgs(BaseModel):
-    prompt: str = Field(..., min_length=1, description="Visual description for Omni Flash video generation")
+    prompt: str = Field(..., min_length=1, description="Visual description for Gemini Omni Flash (gemini-omni-flash) video generation")
     duration_ms: int = Field(default=4000, ge=2000, le=8000, description="Duration in ms (2000-8000)")
     source_start_ms: int = Field(..., ge=0)
     source_end_ms: int = Field(..., ge=0)
@@ -115,7 +115,7 @@ class InspectBRollArgs(BaseModel):
 
 class SynthesizeVoiceSegmentArgs(BaseModel):
     text: str = Field(..., min_length=1, description="Text script for the segment")
-    voice_id: str = Field(default="en-US-Journey-F", description="Selected voice id")
+    voice_id: str = Field(default="Puck", description="Selected Gemini TTS prebuilt voice id (e.g. Puck, Aoede)")
     max_duration_ms: int = Field(..., ge=100, description="Strict duration ceiling in ms")
 
 
@@ -581,7 +581,7 @@ def build_default_editor_tool_registry(
     registry.register(
         ToolDefinition(
             name="generate_broll",
-            description="Generate visual coverage B-roll video clip via Omni Flash for an abstract or transition section",
+            description="Generate visual coverage B-roll video clip via Gemini Omni Flash (gemini-omni-flash) for an abstract or transition section",
             parameters_schema=GenerateBRollArgs,
             handler=handle_generate_broll,
             human_summary_formatter=lambda args, out: f"Leo created visual coverage for {args.get('prompt', 'transition')}.",
@@ -607,7 +607,7 @@ def build_default_editor_tool_registry(
     )
 
     # 13. synthesize_voice_segment
-    def handle_synthesize_voice_segment(text: str, voice_id: str = "en-US-Journey-F", max_duration_ms: int = 4000) -> dict[str, Any]:
+    def handle_synthesize_voice_segment(text: str, voice_id: str = "Puck", max_duration_ms: int = 4000) -> dict[str, Any]:
         # Estimate duration (~150 words per minute -> ~2.5 words per sec -> 400ms per word)
         words = len(text.split())
         est_duration = max(500, int(words * 380))

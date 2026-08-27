@@ -73,9 +73,9 @@ class VoiceSettingsConfig(BaseModel):
         description="Selected narration playback mode",
     )
     selected_voice: str = Field(
-        default="en-US-Journey-F",
+        default="Puck",
         min_length=1,
-        description="Selected Studio Voice catalog voice identifier",
+        description="Selected Studio Voice catalog voice identifier (Gemini TTS prebuilt voice)",
     )
     language: str = Field(
         default="en-US",

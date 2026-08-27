@@ -1216,7 +1216,7 @@ export interface components {
     VoiceSettingsConfig: {
       /** Selected narration playback mode */
       narration_mode?: components["schemas"]["NarrationMode"];
-      /** Selected Studio Voice catalog voice identifier */
+      /** Selected Studio Voice catalog voice identifier (Gemini TTS prebuilt voice) */
       selected_voice?: string;
       /** Language code for synthesis */
       language?: string;

@@ -18,7 +18,7 @@ Croviq is "DevOps for YouTube Creators": an autonomous, visible production works
 ## Positioning
 
 Unlike generic auto-cutters, silence-strippers, or opaque black-box video generators:
-- **Visible, Specialized Production Team**: Specialized agents (Maya as Director, Leo as Editor, Alex as Data Scientist, Nina as Packaging, Iris as QA) with distinct operational roles, explicit reasoning logs, and observable handoffs.
+- **Visible, Autonomous Production Team**: Implemented production agents (Maya as Director, Leo as Video Editor) and planned release agents (Alex as Data Scientist, Nina as Packaging, Iris as QA) with distinct operational roles, explicit reasoning logs, and observable handoffs.
 - **Deterministic, Non-Destructive Editing**: All edits compile into typed Edit Decision Lists (EDLs) previewed via interactive multi-track timelines (Twick) and synchronized transcript overlays, rendered deterministically with FFmpeg.
 - **Natural Cut Safety**: Automatic speech boundary detection, micro-crossfades, room-tone bridging, and screen coverage markers to eliminate jarring jump cuts.
 - **Long-Term Channel Memory**: Falsifiable production lessons and retention change points stored in Google Agent Platform Memory Bank that dynamically guide future edits.

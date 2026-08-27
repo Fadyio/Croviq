@@ -2,13 +2,14 @@
 
 > **DevOps for YouTube creators**: an autonomous, visible production team that learns the channel, transforms raw footage into a release, validates the work, learns from performance, and feeds those lessons into the next production.
 
-Croviq operates like a professional media production company at the creator's workstation:
-- **Maya (Director)**: Senior production lead who inspects footage, reads Channel Memory, guides editorial strategy, reviews edit batches, and approves masters.
-- **Leo (Editor)**: Dialogue editor who performs semantic passes, eliminates filler/redundancy, applies natural cut safety, and renders masters and vertical Shorts.
+### Implemented Autonomous Agents
+- **Leo (Video Editor)**: Video Editor responsible for full-video inspection, full-timeline editorial planning, real media tool use, test rendering, self-review, semantic cuts, Short candidate selection, Studio Voice narration rewriting, and B-roll decisions when useful.
+- **Maya (Director)**: Director who reviews Leo's edit plan, reviews rendered Preview, requests at most one correction, and approves final output.
+
+### Planned Agents
 - **Alex (Data Scientist)**: Statistical intelligence agent who detects retention patterns, baseline shifts, and feeds falsifiable lessons into long-term Channel Memory.
 - **Nina (Packaging)**: Metadata, chapters, title rankings, and thumbnail concept generation.
 - **Iris (Quality Assurance)**: Independent verification of factual claims, captions, timestamps, and publishing readiness.
-
 ---
 
 ## Production Topology & Single Origin
@@ -37,17 +38,22 @@ Google Global External Application Load Balancer
 
 ## Technology Stack
 
-- **Multimodal AI Reasoning**: Gemini 3.7 Flash via Google GenAI SDK (`google-genai`) on Vertex AI / Gemini API.
+- **Multimodal AI Reasoning**: Gemini 3.7 Flash (`gemini-3.7-flash`) via Google GenAI SDK (`google-genai`) on Vertex AI.
 - **Speech Transcription**: Gemini 3.5 Transcribe Preview (`gemini-3.5-transcribe-preview`) on Vertex AI.
+- **Studio Voice**: Gemini 3.1 Flash TTS (`gemini-3.1-flash-tts-preview`) with prebuilt voice catalog (Puck, Charon, Aoede, Kore, Fenrir, Leda, Orus, Zephyr) via Google GenAI SDK.
+- **Optional Generative Video / B-Roll**: Gemini Omni Flash (`gemini-omni-flash`).
+- **Silence / Pause Processing**: Deterministic silence/pause cleanup with cut-safety validation.
+- **Authentication**: Firebase JS SDK (`12.18.0`) + Google Cloud Identity Platform email/password authentication.
 - **Shared Long-Term Memory**: Google Agent Platform Memory Bank (`ChannelProfile`, `ChannelLesson`).
-- **Operational Data & State**: Google Cloud Firestore Native Mode (`us-central1`).
-- **Media Storage**: Google Cloud Storage (GCS) private buckets.
+- **Storage Separation**:
+  - **Google Cloud Storage (GCS)**: Stores raw footage, rendered Preview, Master, Short, Studio Voice audio, and generated B-roll media.
+  - **Google Cloud Firestore**: Stores workspaces, productions, transcripts, editorial runs, agent activity, EDLs, render metadata, reviews, and operational state.
+- **DNS & Routing**: Cloudflare (Authoritative DNS Only) + Google Global External Application Load Balancer.
+- **Timeline Component**: `@twick/timeline` ([https://github.com/ncounterspecialist/twick](https://github.com/ncounterspecialist/twick)).
 - **Deterministic Rendering**: FFmpeg on Google Cloud Run executing typed Edit Decision Lists (EDLs).
-- **Frontend Workstation**: React 19, Vite 6, TypeScript, Tailwind CSS, Twick timeline adapter, Motion for React, Lucide.
-- **Backend API**: Python 3.12, FastAPI, Pydantic v2, `pydantic-settings`, `uv`.
+- **Frontend Workstation**: React 19.2.8, Vite 8.2.2 (Rolldown unified bundler), TypeScript 5.9.3, Tailwind CSS 4.3.3 (`@tailwindcss/vite`), Firebase JS SDK 12.18.0, Motion 13.1.1, Lucide-react 1.34.0, `@twick/timeline` 0.15.31, Playwright 1.62.1.
+- **Backend API**: Python 3.12, FastAPI, Pydantic v2, `google-genai` 2.20.0, `uvicorn`, `uv`.
 - **Infrastructure as Code**: 100% Terraform-managed GCP and Cloudflare DNS resources.
-
----
 
 ## Local Development
 

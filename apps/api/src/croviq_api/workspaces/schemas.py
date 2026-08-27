@@ -27,7 +27,7 @@ class UpdateVoiceSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     narration_mode: NarrationMode = Field(..., description="Selected narration mode")
-    selected_voice: str = Field(default="en-US-Journey-F", min_length=1)
+    selected_voice: str = Field(default="Puck", min_length=1)
     language: str = Field(default="en-US", min_length=2)
 
 

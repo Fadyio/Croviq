@@ -16,8 +16,8 @@ def test_voice_catalog_contains_standard_google_voices():
     catalog = VoiceCatalog.list_voices()
     assert len(catalog) >= 4
     voice_ids = [v.voice_id for v in catalog]
-    assert "en-US-Journey-F" in voice_ids
-    assert "en-US-Journey-D" in voice_ids
+    assert "Puck" in voice_ids
+    assert "Aoede" in voice_ids
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_tts_fit_loop_accepts_when_within_budget():
         source_end_ms=16000,
         available_duration_ms=6000,
         original_text="So here is the complete explanation of our database schema.",
-        voice_id="en-US-Journey-F",
+        voice_id="Puck",
         tts_fn=mock_tts,
         rewrite_fn=mock_rewrite,
     )
@@ -76,7 +76,7 @@ async def test_tts_fit_loop_retries_on_overrun_and_accepts():
         source_end_ms=5000,
         available_duration_ms=5000,
         original_text="So here is the very long explanation of our database schema in full detail.",
-        voice_id="en-US-Journey-F",
+        voice_id="Puck",
         tts_fn=mock_tts,
         rewrite_fn=mock_rewrite,
     )
@@ -105,7 +105,7 @@ async def test_tts_fit_loop_fails_gracefully_after_max_attempts():
         source_end_ms=4000,
         available_duration_ms=4000,
         original_text="A very long sentence that never fits in the window.",
-        voice_id="en-US-Journey-F",
+        voice_id="Puck",
         tts_fn=mock_tts,
         rewrite_fn=mock_rewrite,
         max_attempts=3,

@@ -32,7 +32,7 @@ def test_narration_segment_valid():
         available_duration_ms=7900,
         original_text="So here we go and install the thing",
         rewritten_text="Now, let's install the package.",
-        voice_id="en-US-Journey-F",
+        voice_id="Puck",
         generated_duration_ms=6500,
         status=NarrationSegmentStatus.ACCEPTED,
         attempts=1,
@@ -53,7 +53,7 @@ def test_narration_segment_invalid_times():
             available_duration_ms=1000,
             original_text="text",
             rewritten_text="text",
-            voice_id="en-US-Journey-F",
+            voice_id="Puck",
         )
 
 
@@ -67,13 +67,13 @@ def test_studio_voice_result_aggregation():
         available_duration_ms=5000,
         original_text="Hello world",
         rewritten_text="Hello world.",
-        voice_id="en-US-Journey-F",
+        voice_id="Puck",
         generated_duration_ms=4200,
         status=NarrationSegmentStatus.ACCEPTED,
     )
     res = StudioVoiceResult(
         production_id="prod_123",
-        voice_id="en-US-Journey-F",
+        voice_id="Puck",
         segments=[seg1],
         total_segments=1,
         accepted_segments=1,
@@ -119,7 +119,7 @@ def test_voice_settings_config():
     now = datetime.now(timezone.utc)
     voice_cfg = VoiceSettingsConfig(
         narration_mode=NarrationMode.STUDIO_VOICE,
-        selected_voice="en-US-Journey-F",
+        selected_voice="Puck",
         language="en-US",
         updated_at=now,
     )

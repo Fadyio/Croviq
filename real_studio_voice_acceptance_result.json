@@ -1,6 +1,7 @@
 {
   "production_id": "prod_473209137802",
-  "selected_voice": "en-US-Journey-F",
+  "model_id": "gemini-3.1-flash-tts-preview",
+  "selected_voice": "Aoede",
   "total_verified_sections": 11,
   "all_within_budget": true,
   "timeline_extended_ms": 0,

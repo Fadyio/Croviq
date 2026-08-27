@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ command, mode }) => {
@@ -12,9 +13,10 @@ export default defineConfig(({ command, mode }) => {
       "VITE_FIREBASE_PROJECT_ID",
     ] as const;
 
+    const isCi = process.env.CI === "true";
     const missing = requiredEnvVars.filter((key) => {
-      const val = process.env[key] || env[key];
-      return !val || val.trim() === "";
+      const val = isCi ? process.env[key] : process.env[key] || env[key];
+      return !val || val.trim() === "" || val.startsWith("your-");
     });
 
     if (missing.length > 0) {
@@ -27,7 +29,7 @@ export default defineConfig(({ command, mode }) => {
   }
 
   return {
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
     server: {
       port: 5173,
       host: true,

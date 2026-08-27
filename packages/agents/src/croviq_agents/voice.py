@@ -25,35 +25,68 @@ from croviq_domain.transcript import Transcript, TranscriptSegment
 logger = logging.getLogger(__name__)
 
 
-# Official Google Cloud TTS (Journey / Neural2) Voice Catalog
+# Official Gemini 3.1 Flash TTS Prebuilt Voice Catalog (gemini-3.1-flash-tts-preview)
+GEMINI_TTS_MODEL: str = "gemini-3.1-flash-tts-preview"
+GEMINI_TTS_STYLE_INSTRUCTION: str = (
+    "Professional technical presenter. Clear, natural, confident, conversational, moderate pace, not theatrical."
+)
+
 GOOGLE_GEMINI_VOICES: list[VoiceCatalogItem] = [
     VoiceCatalogItem(
-        voice_id="en-US-Journey-F",
-        display_name="Journey (Female)",
-        gender="female",
-        language_code="en-US",
-        description="Natural, warm, engaging voice suitable for technical tutorials",
-    ),
-    VoiceCatalogItem(
-        voice_id="en-US-Journey-D",
-        display_name="Journey (Male)",
+        voice_id="Puck",
+        display_name="Puck",
         gender="male",
         language_code="en-US",
-        description="Clear, authoritative, friendly voice for product walkthroughs",
+        description="Clear, engaging, and dynamic technical presentation voice",
     ),
     VoiceCatalogItem(
-        voice_id="en-US-Neural2-A",
-        display_name="Neural2 (Female)",
-        gender="female",
-        language_code="en-US",
-        description="Crisp, studio-grade narration with precise technical pronunciation",
-    ),
-    VoiceCatalogItem(
-        voice_id="en-US-Neural2-C",
-        display_name="Neural2 (Male)",
+        voice_id="Charon",
+        display_name="Charon",
         gender="male",
         language_code="en-US",
-        description="Polished, concise, professional documentary and instructional tone",
+        description="Authoritative, natural, and steady conversational voice",
+    ),
+    VoiceCatalogItem(
+        voice_id="Kore",
+        display_name="Kore",
+        gender="female",
+        language_code="en-US",
+        description="Crisp, friendly, and articulate instructional tone",
+    ),
+    VoiceCatalogItem(
+        voice_id="Fenrir",
+        display_name="Fenrir",
+        gender="male",
+        language_code="en-US",
+        description="Deep, resonant, and confident delivery",
+    ),
+    VoiceCatalogItem(
+        voice_id="Aoede",
+        display_name="Aoede",
+        gender="female",
+        language_code="en-US",
+        description="Warm, expressive, and natural technical presenter",
+    ),
+    VoiceCatalogItem(
+        voice_id="Leda",
+        display_name="Leda",
+        gender="female",
+        language_code="en-US",
+        description="Polished, balanced, and articulate narration voice",
+    ),
+    VoiceCatalogItem(
+        voice_id="Orus",
+        display_name="Orus",
+        gender="male",
+        language_code="en-US",
+        description="Direct, calm, and professional presenter",
+    ),
+    VoiceCatalogItem(
+        voice_id="Zephyr",
+        display_name="Zephyr",
+        gender="male",
+        language_code="en-US",
+        description="Modern, smooth, and conversational tone",
     ),
 ]
 

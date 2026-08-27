@@ -146,24 +146,24 @@ def test_voice_settings_and_sample_endpoint(api_test_context):
         "/api/workspace/agent-settings/voice",
         json={
             "narration_mode": "studio_voice",
-            "selected_voice": "en-US-Journey-D",
+            "selected_voice": "Charon",
             "language": "en-US",
         },
     )
     assert put_resp.status_code == 200
-    assert put_resp.json()["selected_voice"] == "en-US-Journey-D"
+    assert put_resp.json()["selected_voice"] == "Charon"
 
     # Audition voice sample
     sample_resp = client.post(
         "/api/workspace/agent-settings/voice/sample",
         json={
-            "voice_id": "en-US-Journey-D",
+            "voice_id": "Charon",
             "sample_text": "Welcome to Croviq. I'll make your video clear, concise, and easy to follow.",
         },
     )
     assert sample_resp.status_code == 200
     sample_data = sample_resp.json()
-    assert sample_data["voice_id"] == "en-US-Journey-D"
+    assert sample_data["voice_id"] == "Charon"
     assert "audio_base64" in sample_data
     assert len(sample_data["audio_base64"]) > 0
 

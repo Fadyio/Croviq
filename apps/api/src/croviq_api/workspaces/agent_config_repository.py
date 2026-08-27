@@ -126,7 +126,7 @@ class InMemoryAgentConfigRepository(AgentConfigRepository):
             return self._voice_settings[workspace_id]
         return VoiceSettingsConfig(
             narration_mode=NarrationMode.ORIGINAL,
-            selected_voice="en-US-Journey-F",
+            selected_voice="Puck",
             language="en-US",
             updated_at=datetime.now(timezone.utc),
         )
@@ -214,7 +214,7 @@ class FirestoreAgentConfigRepository(AgentConfigRepository):
             return VoiceSettingsConfig.model_validate(data)
         return VoiceSettingsConfig(
             narration_mode=NarrationMode.ORIGINAL,
-            selected_voice="en-US-Journey-F",
+            selected_voice="Puck",
             language="en-US",
             updated_at=datetime.now(timezone.utc),
         )

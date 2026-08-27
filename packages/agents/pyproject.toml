@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "croviq-domain",
     "croviq-observability",
-    "google-genai>=0.1.1",
+    "google-genai>=2.20.0",
     "pydantic>=2.10.0",
 ]
 

@@ -312,7 +312,7 @@ dependencies = [
 requires-dist = [
     { name = "croviq-domain", editable = "../../packages/domain" },
     { name = "croviq-observability", editable = "../../packages/observability" },
-    { name = "google-genai", specifier = ">=0.1.1" },
+    { name = "google-genai", specifier = ">=2.20.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
 ]
 

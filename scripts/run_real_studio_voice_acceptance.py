@@ -30,7 +30,7 @@ async def main() -> None:
 
     print("=" * 70)
     print("RUNNING STUDIO VOICE REAL ACCEPTANCE (PROD_473209137802)")
-    print(f"Selected Voice: en-US-Journey-F (Google Gemini TTS Catalog)")
+    print(f"Selected Voice: Aoede (Gemini 3.1 Flash TTS Catalog)")
     print("=" * 70)
 
     try:
@@ -47,7 +47,7 @@ async def main() -> None:
     print(f"Loaded Transcript: {len(transcript.words)} words, {len(transcript.segments)} segments")
 
     synthesizer = StudioVoiceSynthesizer(max_tempo_stretch=1.05)
-    selected_voice = "en-US-Journey-F"
+    selected_voice = "Aoede"
 
     # Define deterministic TTS duration measurement model (~2.4 words per second -> ~415ms / word)
     async def measure_tts(text: str, voice_id: str) -> tuple[int, bytes]:
@@ -109,6 +109,7 @@ async def main() -> None:
 
     result_payload = {
         "production_id": production_id,
+        "model_id": "gemini-3.1-flash-tts-preview",
         "selected_voice": selected_voice,
         "total_verified_sections": len(table_rows),
         "all_within_budget": all_pass,
