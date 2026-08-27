@@ -15,6 +15,7 @@ import {
 import leoAvatar from "../../assets/agents/leo.webp";
 import mayaAvatar from "../../assets/agents/maya.webp";
 import type { components } from "../../api/generated";
+import { useAuth } from "../../auth/AuthContext";
 
 type AgentPromptConfig = components["schemas"]["AgentPromptConfig"];
 type VoiceSettingsConfig = components["schemas"]["VoiceSettingsConfig"];
@@ -36,6 +37,16 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   agentId,
   onClose,
 }) => {
+  const { firebaseUser } = useAuth();
+
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (firebaseUser) {
+      const token = await firebaseUser.getIdToken();
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  };
   const [activeTab, setActiveTab] = useState<"prompt" | "memory" | "voice">("prompt");
   const [promptText, setPromptText] = useState<string>("");
   const [promptVersion, setPromptVersion] = useState<number>(1);
@@ -72,7 +83,8 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
       setIsLoading(true);
       try {
         // 1. Load settings (prompts, voice config, voice catalog)
-        const res = await fetch("/api/workspace/agent-settings");
+        const headers = await getAuthHeaders();
+        const res = await fetch("/api/workspace/agent-settings", { headers });
         if (res.ok) {
           const data = await res.json();
           const p = isLeo ? data.leo_prompt : data.maya_prompt;
@@ -91,7 +103,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
         }
 
         // 2. Load memory
-        const memRes = await fetch("/api/workspace/agent-settings/memory");
+        const memRes = await fetch("/api/workspace/agent-settings/memory", { headers });
         if (memRes.ok) {
           const memData = await memRes.json();
           setMemorySummary(memData);
@@ -110,9 +122,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     setIsSaving(true);
     setSaveSuccess(false);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch(`/api/workspace/agent-settings/prompts/${agentId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ prompt_text: promptText }),
       });
       if (res.ok) {
@@ -133,8 +146,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   const handleResetPrompt = async () => {
     setIsSaving(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch(`/api/workspace/agent-settings/prompts/${agentId}/reset`, {
         method: "POST",
+        headers,
       });
       if (res.ok) {
         const resetData = await res.json();
@@ -157,9 +172,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     const updated = { ...voiceSettings, narration_mode: mode };
     setVoiceSettings(updated);
     try {
+      const headers = await getAuthHeaders();
       await fetch("/api/workspace/agent-settings/voice", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           narration_mode: mode,
           selected_voice: voiceSettings.selected_voice,
@@ -176,9 +192,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     const updated = { ...voiceSettings, selected_voice: voiceId };
     setVoiceSettings(updated);
     try {
+      const headers = await getAuthHeaders();
       await fetch("/api/workspace/agent-settings/voice", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           narration_mode: voiceSettings.narration_mode,
           selected_voice: voiceId,
@@ -195,9 +212,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     setIsPlayingAudio(true);
     setAudioError(null);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/workspace/agent-settings/voice/sample", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           voice_id: voiceSettings.selected_voice,
           sample_text: DEFAULT_SAMPLE_TEXT,
