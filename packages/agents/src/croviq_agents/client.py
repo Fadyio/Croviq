@@ -390,7 +390,10 @@ class GoogleGenAIClient(GenAIClient):
         silence_decisions: Sequence[EditorDecision] | None = None,
         request_id: str = "unknown",
     ) -> tuple[EditorProposal, AgentUsageMetadata]:
-        prompt_text = build_editor_prompt(
+        from google.genai import types
+
+        client = self._get_client()
+        prompt = build_editor_prompt(
             transcript=transcript,
             channel_profile=channel_profile,
             lessons=lessons,
@@ -398,6 +401,15 @@ class GoogleGenAIClient(GenAIClient):
             media_summary=media_summary,
             silence_decisions=silence_decisions,
         )
+
+        video_part = types.Part.from_uri(file_uri=video_uri, mime_type=mime_type)
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=EditorProposal,
+            temperature=0.2,
+        )
+
         log_ai_event(
             event_type=EventType.AI_CALL_STARTED,
             agent="leo",
@@ -407,7 +419,6 @@ class GoogleGenAIClient(GenAIClient):
             run_id=run_id,
             request_id=request_id,
         )
-
         start_time = time.perf_counter()
         last_error: Exception | None = None
 
