@@ -16,7 +16,7 @@ from croviq_domain.production import Production
 from croviq_domain.transcript import Transcript
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
 from croviq_domain.render_review import RenderReview
-
+from croviq_domain.narration import BRollArtifact, StudioVoiceResult
 class CreateUploadRequest(BaseModel):
     """Request payload to initiate a direct GCS media upload."""
 
@@ -475,3 +475,33 @@ class RenderReviewDetailResponse(BaseModel):
         default=False,
         description="Whether production requires manual human review after exhausted bounded correction",
     )
+class ProductionPlaybackResponse(BaseModel):
+    """Playback URLs for all available media outputs of a production."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    production_id: str = Field(..., description="Unique production identifier")
+    playback_url: str | None = Field(default=None, description="Original source media playback URL")
+    expires_at: datetime | None = Field(default=None, description="Expiration timestamp for signed URLs")
+    rendered_preview_url: str | None = Field(default=None, description="Edited preview video playback URL")
+    master_url: str | None = Field(default=None, description="Master video playback URL")
+    studio_voice_preview_url: str | None = Field(default=None, description="Studio Voice video playback URL")
+    short_playback_url: str | None = Field(default=None, description="Social Short video playback URL")
+
+class StudioVoiceGenerationResponse(BaseModel):
+    """Response returned upon generating Studio Voice narration for a production."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    production_id: str = Field(..., description="Unique production identifier")
+    result: StudioVoiceResult = Field(..., description="Aggregated Studio Voice result and segment details")
+    studio_voice_preview_url: str | None = Field(default=None, description="Signed playback URL for Studio Voice preview")
+
+
+class BRollListResponse(BaseModel):
+    """Response listing generated B-roll artifacts for a production."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    production_id: str = Field(..., description="Unique production identifier")
+    artifacts: list[BRollArtifact] = Field(default_factory=list, description="List of generated B-roll clips")

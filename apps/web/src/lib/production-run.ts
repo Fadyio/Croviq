@@ -14,6 +14,7 @@ export interface PersistedProductionRun {
   uploadedAt?: string | null;
   transcriptCreatedAt?: string | null;
   editorialRun?: EditorialRun | null;
+  proposal?: unknown | null;
   activities?: AgentActivity[];
   uploaded: boolean;
   edlCreatedAt?: string | null;
@@ -71,15 +72,18 @@ export const deriveProductionRunStages = (
 ): ProductionRunStage[] => {
   const editorialStatus = run.editorialRun?.status;
   const transcriptComplete = Boolean(run.transcriptCreatedAt);
-  const leoComplete = editorialStatus === "reviewing" || editorialStatus === "completed";
+  const hasLeoOutput =
+    Boolean((run as any).proposal) || Boolean(run.activities && run.activities.length > 0);
+  const leoComplete =
+    editorialStatus === "reviewing" ||
+    editorialStatus === "completed" ||
+    (editorialStatus === "failed" && hasLeoOutput);
   const mayaComplete = editorialStatus === "completed";
   const activities = run.activities ?? [];
-
   const previewComplete = run.renderStatus === "completed" || Boolean(run.renderCompletedAt);
   const masterComplete = run.masterStatus === "completed" || Boolean(run.masterCompletedAt);
   const hasApprovedReview = Boolean(run.renderReview?.approved_for_master);
   const renderFullyComplete = masterComplete || (previewComplete && hasApprovedReview);
-
   const renderStatus: RunStageStatus = run.needsManualReview
     ? "failed"
     : renderFullyComplete
@@ -103,14 +107,20 @@ export const deriveProductionRunStages = (
       id: "leo-edit",
       label: "Leo Edit",
       status: leoComplete ? "completed" : editorialStatus === "analyzing" ? "active" : "pending",
-      subStatus: "Editing pacing…",
+      subStatus: "Leo is reviewing the footage…",
       durationMs: elapsed(run.editorialRun?.started_at, lastActivityAt(activities, "leo")),
     },
     {
       id: "maya-review",
       label: "Maya Review",
-      status: mayaComplete ? "completed" : editorialStatus === "reviewing" ? "active" : "pending",
-      subStatus: "Reviewing Leo…",
+      status: mayaComplete
+        ? "completed"
+        : editorialStatus === "reviewing"
+          ? "active"
+          : editorialStatus === "failed" && leoComplete
+            ? "failed"
+            : "pending",
+      subStatus: "Maya is reviewing Leo's edit…",
       durationMs: elapsed(firstActivityAt(activities, "maya"), run.editorialRun?.completed_at),
     },
     {
@@ -154,6 +164,7 @@ export const nextMissingProcessingStage = (
 ): Exclude<ProcessingStage, "maya-review"> | null => {
   if (!run.uploaded) return null;
   if (!run.transcriptCreatedAt) return "transcript";
+  if (run.editorialRun?.status === "failed") return null;
   if (run.editorialRun?.status !== "completed") return "leo-edit";
   if (!run.edlCreatedAt) return "edit-plan";
   if (run.needsManualReview) return null;
@@ -162,5 +173,6 @@ export const nextMissingProcessingStage = (
   if (!previewComplete || (!run.renderReview && !masterComplete)) return "render";
   return null;
 };
+
 export const formatStageDuration = (durationMs: number): string =>
   `${(durationMs / 1000).toFixed(1)}s`;

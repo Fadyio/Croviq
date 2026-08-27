@@ -46,6 +46,57 @@ export interface paths {
       };
     };
   };
+  "/api/workspace/agent-settings": {
+    get: {
+      responses: {
+        200: components["schemas"]["AgentSettingsResponse"];
+      };
+    };
+  };
+  "/api/workspace/agent-settings/prompts/{agent_id}": {
+    put: {
+      responses: {
+        200: components["schemas"]["AgentPromptConfig"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/workspace/agent-settings/prompts/{agent_id}/reset": {
+    post: {
+      responses: {
+        200: components["schemas"]["AgentPromptConfig"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/workspace/agent-settings/memory": {
+    get: {
+      responses: {
+        200: components["schemas"]["AgentMemorySummaryResponse"];
+      };
+    };
+  };
+  "/api/workspace/agent-settings/voice": {
+    get: {
+      responses: {
+        200: components["schemas"]["VoiceSettingsConfig"];
+      };
+    };
+    put: {
+      responses: {
+        200: components["schemas"]["VoiceSettingsConfig"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/workspace/agent-settings/voice/sample": {
+    post: {
+      responses: {
+        200: components["schemas"]["VoiceSampleResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
   "/api/channel/memory/profile": {
     get: {
       responses: {
@@ -212,6 +263,28 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/studio-voice": {
+    post: {
+      responses: {
+        200: components["schemas"]["StudioVoiceGenerationResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+    get: {
+      responses: {
+        200: components["schemas"]["StudioVoiceResult"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/broll": {
+    get: {
+      responses: {
+        200: components["schemas"]["BRollListResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
 }
 
 export interface components {
@@ -225,7 +298,7 @@ export interface components {
       run_id: string;
       /** Agent name (e.g. Leo, Maya) */
       agent: string;
-      /** Agent role (e.g. Dialogue Editor, Director) */
+      /** Agent role (e.g. Video Editor, Director) */
       role: string;
       /** Activity category (e.g. proposal, review, note, decision) */
       activity_type: string;
@@ -235,6 +308,31 @@ export interface components {
       related_decision_id?: string | null;
       /** Timestamp when the activity occurred */
       created_at?: string;
+    };
+    AgentId: "leo" | "maya";
+    AgentMemorySummaryResponse: {
+      channel_title: string;
+      style_guide: string;
+      creator_preferences?: string[];
+      lessons?: components["schemas"]["MemoryItemResponse"][];
+    };
+    AgentPromptConfig: {
+      /** Target agent identifier (leo or maya) */
+      agent_id: components["schemas"]["AgentId"];
+      /** Complete editorial working prompt text */
+      prompt_text: string;
+      /** Monotonically increasing version number */
+      version?: number;
+      /** Timestamp when the prompt was last updated */
+      updated_at: string;
+      /** Whether this prompt differs from system default */
+      is_custom?: boolean;
+    };
+    AgentSettingsResponse: {
+      leo_prompt: components["schemas"]["AgentPromptConfig"];
+      maya_prompt: components["schemas"]["AgentPromptConfig"];
+      voice_settings: components["schemas"]["VoiceSettingsConfig"];
+      voices: components["schemas"]["VoiceCatalogItem"][];
     };
     AnalyzeProductionResponse: {
       /** Unique identifier for the editorial run */
@@ -253,7 +351,7 @@ export interface components {
       completed_at?: string | null;
     };
     ArtifactStatus: "pending" | "rendering" | "completed" | "failed";
-    ArtifactType: "PREVIEW" | "MASTER" | "SHORT";
+    ArtifactType: "PREVIEW" | "MASTER" | "SHORT" | "STUDIO_VOICE_PREVIEW" | "STUDIO_VOICE_MASTER";
     AssembleEDLResponse: {
       /** Unique identifier for the assembled Edit Decision List */
       edl_id: string;
@@ -313,6 +411,33 @@ export interface components {
       firebase_uid?: string | null;
       git_sha?: string | null;
       event_type: "auth.token.refreshed";
+    };
+    BRollArtifact: {
+      /** Unique artifact identifier */
+      artifact_id: string;
+      /** Associated production identifier */
+      production_id: string;
+      /** Optional associated editor decision id */
+      decision_id?: string | null;
+      /** Start time on source timeline in ms */
+      source_start_ms: number;
+      /** End time on source timeline in ms */
+      source_end_ms: number;
+      gcs_bucket: string;
+      gcs_object: string;
+      /** Target clip duration in ms (~2000-8000ms) */
+      duration_ms: number;
+      status?: components["schemas"]["BRollArtifactStatus"];
+      /** Human summary of B-roll visual intent */
+      prompt_summary?: string;
+      created_at: string;
+    };
+    BRollArtifactStatus: "pending" | "accepted" | "rejected" | "failed";
+    BRollListResponse: {
+      /** Unique production identifier */
+      production_id: string;
+      /** List of generated B-roll clips */
+      artifacts?: components["schemas"]["BRollArtifact"][];
     };
     BrandKit: {
       /** Tone adjectives or stylistic descriptors (e.g. ['concise', 'informative']) */
@@ -486,12 +611,20 @@ export interface components {
       overall_assessment: string;
       /** Per-decision review verdicts */
       decisions?: components["schemas"]["DirectorDecision"][];
+      /** Review verdicts on Leo's full-timeline section plan */
+      section_decisions?: components["schemas"]["DirectorSectionDecision"][];
       /** Direct feedback to Leo for adjustments or approval */
       editor_feedback: string;
       /** Whether the proposal is approved to proceed to EDL assembly */
       approved_for_edl: boolean;
       /** Director's confidence in the review */
       confidence: number;
+    };
+    DirectorSectionDecision: {
+      section_id: string;
+      /** Verdict: APPROVE, REJECT, or MODIFY */
+      verdict: components["schemas"]["DirectorVerdict"];
+      reason: string;
     };
     DirectorVerdict: "APPROVE" | "REJECT" | "MODIFY";
     EDLDetailResponse: {
@@ -571,6 +704,8 @@ export interface components {
       decisions?: components["schemas"]["EditorDecision"][];
       /** Optional Short candidate excerpt identified during analysis */
       short_candidate?: components["schemas"]["ShortCandidate"] | null;
+      /** Full-timeline editorial section plan covering the whole production */
+      section_plan?: components["schemas"]["VideoSectionDecision"][];
       /** Overall confidence in the proposal */
       overall_confidence: number;
     };
@@ -636,6 +771,40 @@ export interface components {
       /** Total media file size in bytes */
       size_bytes: number;
     };
+    MemoryItemResponse: {
+      topic: string;
+      content: string;
+      learned_from?: string | null;
+    };
+    NarrationMode: "original" | "enhanced_original" | "studio_voice";
+    NarrationSegment: {
+      /** Unique segment identifier */
+      segment_id: string;
+      /** Associated production identifier */
+      production_id: string;
+      /** Start timestamp on source timeline in ms */
+      source_start_ms: number;
+      /** End timestamp on source timeline in ms */
+      source_end_ms: number;
+      /** Strict maximum duration budget in ms */
+      available_duration_ms: number;
+      /** Original spoken transcript text */
+      original_text: string;
+      /** Leo's editorial rewritten text */
+      rewritten_text: string;
+      /** Selected Google Gemini TTS voice identifier */
+      voice_id: string;
+      /** Actual measured TTS audio duration in ms */
+      generated_duration_ms?: number;
+      status?: components["schemas"]["NarrationSegmentStatus"];
+      /** GCS object or storage key */
+      audio_artifact_reference?: string | null;
+      /** Number of TTS synthesis/rewrite attempts */
+      attempts?: number;
+      /** Applied tempo multiplier (max 3-5%) */
+      tempo_adjustment?: number;
+    };
+    NarrationSegmentStatus: "pending" | "accepted" | "rejected" | "failed";
     Production: {
       /** Unique production identifier */
       production_id: string;
@@ -661,12 +830,20 @@ export interface components {
       total: number;
     };
     ProductionPlaybackResponse: {
-      /** Canonical unique production identifier */
+      /** Unique production identifier */
       production_id: string;
-      /** Short-lived keyless signed GET URL for browser video playback */
-      playback_url: string;
-      /** UTC expiration timestamp of the signed playback URL */
-      expires_at: string;
+      /** Original source media playback URL */
+      playback_url?: string | null;
+      /** Expiration timestamp for signed URLs */
+      expires_at?: string | null;
+      /** Edited preview video playback URL */
+      rendered_preview_url?: string | null;
+      /** Master video playback URL */
+      master_url?: string | null;
+      /** Studio Voice video playback URL */
+      studio_voice_preview_url?: string | null;
+      /** Social Short video playback URL */
+      short_playback_url?: string | null;
     };
     ProductionStatus: "pending" | "uploading" | "uploaded" | "failed";
     RenderArtifactResponse: {
@@ -791,6 +968,7 @@ export interface components {
       /** Product-facing agent activity messages emitted during review and correction */
       activities?: components["schemas"]["AgentActivity"][];
     };
+    SectionAction: "KEEP" | "TIGHTEN" | "REMOVE" | "COVERAGE";
     ShortCandidate: {
       /** Start timestamp in source video milliseconds */
       start_ms: number;
@@ -806,6 +984,30 @@ export interface components {
       concise_reason: string;
       /** Model confidence score for the candidate excerpt */
       confidence: number;
+      /** Optional visual focus regions for 9:16 reframe */
+      visual_plan?: components["schemas"]["ShortVisualPlan"] | null;
+    };
+    ShortVisualPlan: {
+      /** List of chronological visual focus regions for the Short */
+      regions?: components["schemas"]["ShortVisualRegion"][];
+    };
+    ShortVisualRegion: {
+      /** Start timestamp in ms relative to Short timeline */
+      start_ms: number;
+      /** End timestamp in ms relative to Short timeline */
+      end_ms: number;
+      /** Normalized x coordinate (0.0 to 1.0) of crop top-left in source frame */
+      x: number;
+      /** Normalized y coordinate (0.0 to 1.0) of crop top-left in source frame */
+      y: number;
+      /** Normalized width (0.0 to 1.0) of focus region */
+      width: number;
+      /** Normalized height (0.0 to 1.0) of focus region */
+      height: number;
+      /** Optional zoom factor */
+      zoom?: number;
+      /** Visual description of focus area (e.g. YAML editor, status) */
+      focus_label: string;
     };
     SilenceInterval: {
       /** Silence interval start offset in milliseconds */
@@ -849,6 +1051,28 @@ export interface components {
       channel_id: string;
       /** Reference identifier to ChannelMemoryProfile in Memory Bank */
       channel_memory_reference?: string | null;
+    };
+    StudioVoiceGenerationResponse: {
+      /** Unique production identifier */
+      production_id: string;
+      /** Aggregated Studio Voice result and segment details */
+      result: components["schemas"]["StudioVoiceResult"];
+      /** Signed playback URL for Studio Voice preview */
+      studio_voice_preview_url?: string | null;
+    };
+    StudioVoiceResult: {
+      production_id: string;
+      voice_id: string;
+      narration_mode?: string;
+      segments?: components["schemas"]["NarrationSegment"][];
+      total_segments?: number;
+      accepted_segments?: number;
+      all_within_budget?: boolean;
+      gcs_bucket?: string | null;
+      gcs_object?: string | null;
+      status?: string;
+      created_at: string;
+      updated_at: string;
     };
     TargetAgent: "director" | "editor" | "packaging" | "qa";
     TranscribeProductionResponse: {
@@ -915,6 +1139,16 @@ export interface components {
       /** Optional speaker identifier or diarization tag */
       speaker_id?: string | null;
     };
+    UpdatePromptRequest: {
+      /** Updated editorial working prompt */
+      prompt_text: string;
+    };
+    UpdateVoiceSettingsRequest: {
+      /** Selected narration mode */
+      narration_mode: components["schemas"]["NarrationMode"];
+      selected_voice?: string;
+      language?: string;
+    };
     User: {
       /** Unique user identifier (e.g. Firebase UID / Google sub) */
       user_id: string;
@@ -935,6 +1169,59 @@ export interface components {
       type: string;
       input?: unknown;
       ctx?: Record<string, unknown>;
+    };
+    VideoSectionDecision: {
+      /** Unique identifier for the timeline section */
+      section_id: string;
+      /** Start time in milliseconds on the source video timeline */
+      source_start_ms: number;
+      /** End time in milliseconds on the source video timeline */
+      source_end_ms: number;
+      /** Canonical 0-indexed transcript start word index */
+      transcript_start_word: number;
+      /** Canonical 0-indexed transcript end word index */
+      transcript_end_word: number;
+      /** Editorial action: KEEP, TIGHTEN, REMOVE, or COVERAGE */
+      action: components["schemas"]["SectionAction"];
+      /** Editorial justification for why this section is kept, tightened, or removed */
+      reason: string;
+      /** Model confidence score for this section decision */
+      confidence: number;
+    };
+    VoiceCatalogItem: {
+      /** Voice identifier */
+      voice_id: string;
+      /** Human readable voice name */
+      display_name: string;
+      /** Voice characteristic (female, male, neutral) */
+      gender?: string;
+      /** Primary BCP-47 language code */
+      language_code?: string;
+      /** Brief tone or style description */
+      description?: string | null;
+    };
+    VoiceSampleRequest: {
+      /** Voice identifier to sample */
+      voice_id: string;
+      /** Neutral fixed sample script */
+      sample_text?: string;
+    };
+    VoiceSampleResponse: {
+      voice_id: string;
+      sample_text: string;
+      /** Base64-encoded audio payload */
+      audio_base64: string;
+      content_type?: string;
+    };
+    VoiceSettingsConfig: {
+      /** Selected narration playback mode */
+      narration_mode?: components["schemas"]["NarrationMode"];
+      /** Selected Studio Voice catalog voice identifier */
+      selected_voice?: string;
+      /** Language code for synthesis */
+      language?: string;
+      /** Timestamp when settings were updated */
+      updated_at: string;
     };
     Workspace: {
       /** Unique workspace identifier */

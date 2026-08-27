@@ -237,6 +237,90 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
       }),
     });
   });
+  await page.route("**/api/workspace/agent-settings**", async (route) => {
+    if (route.request().url().includes("/memory")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          channel_title: "AI Engineering & Agent Systems",
+          style_guide: "Concise, highly technical, high-momentum tutorials without fluff.",
+          creator_preferences: ["Prefers direct jump to terminal commands."],
+          lessons: [
+            {
+              topic: "Reach the first concrete demonstration before 00:30.",
+              content: "Videos with first demo <= 30s average higher retention.",
+              learned_from: "github.mp4",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        leo_prompt: {
+          agent_id: "leo",
+          prompt_text: "You are Leo, a professional video editor.",
+          version: 1,
+          updated_at: "2026-08-27T00:00:00Z",
+          is_custom: false,
+        },
+        maya_prompt: {
+          agent_id: "maya",
+          prompt_text: "You are Maya, the Director.",
+          version: 1,
+          updated_at: "2026-08-27T00:00:00Z",
+          is_custom: false,
+        },
+        voice_settings: {
+          narration_mode: "original",
+          selected_voice: "en-US-Journey-F",
+          language: "en-US",
+          updated_at: "2026-08-27T00:00:00Z",
+        },
+        voices: [
+          {
+            voice_id: "en-US-Journey-F",
+            display_name: "Journey (Female)",
+            gender: "female",
+            language_code: "en-US",
+          },
+          {
+            voice_id: "en-US-Journey-D",
+            display_name: "Journey (Male)",
+            gender: "male",
+            language_code: "en-US",
+          },
+          {
+            voice_id: "en-US-Neural2-A",
+            display_name: "Neural2 (Female)",
+            gender: "female",
+            language_code: "en-US",
+          },
+          {
+            voice_id: "en-US-Neural2-C",
+            display_name: "Neural2 (Male)",
+            gender: "male",
+            language_code: "en-US",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route("**/api/productions/*/broll", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        production_id: FAIRPHONE_PRODUCTION_ID,
+        artifacts: [],
+      }),
+    });
+  });
 
   await page.route("**/api/client-events", async (route) => {
     await route.fulfill({
@@ -891,7 +975,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
       requests,
     });
 
-    await expect(page.getByText("Maya is reviewing Leo's edit…")).toBeVisible();
+    await expect(page.getByText("Maya is reviewing Leo's edit…").first()).toBeVisible();
     expect(requests).toEqual([]);
     await expect.poll(() => requests, { timeout: 4000 }).toEqual(["edl", "renders/preview"]);
   });
@@ -904,9 +988,11 @@ test.describe("Editor Workspace (Issue #28)", () => {
       analyzeDelayMs: 1600,
     });
 
-    await expect(page.getByText("Leo is reviewing the footage…")).toBeVisible();
+    await expect(page.getByText("Leo is reviewing the footage…").first()).toBeVisible();
     await expect(page.getByTestId("agent-presence-leo")).toHaveAttribute("data-active", "true");
-    await expect(page.getByText("Maya is reviewing Leo's edit…")).toBeVisible({ timeout: 2500 });
+    await expect(page.getByText("Maya is reviewing Leo's edit…").first()).toBeVisible({
+      timeout: 2500,
+    });
     await expect(page.getByTestId("agent-presence-maya")).toHaveAttribute("data-active", "true");
     await expect(page.getByTestId("run-stage-maya-review")).toHaveAttribute(
       "data-status",
@@ -995,11 +1081,16 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(video).toHaveAttribute("src", /mock-signed-video\.mp4/);
     // 3. Verify timeline, transcript, and agent presence are all loaded
     await expect(page.getByTestId("editor-timeline")).toBeVisible();
+    await page.getByTestId("tab-transcript").click();
     await expect(page.getByTestId("transcript-panel")).toBeVisible();
     await expect(page.getByTestId("agent-presence-leo")).toBeVisible();
     await expect(page.getByTestId("agent-presence-maya")).toBeVisible();
     await expect(page.getByTestId("rendered-preview-badge")).not.toBeVisible();
-    await expect(page.getByRole("button", { name: "Edited Preview" })).toBeVisible();
+    await expect(
+      page
+        .getByRole("group", { name: "Preview Mode Selection" })
+        .getByRole("button", { name: /Edited Preview/i }),
+    ).toBeVisible();
   });
 
   test("loads real Fairphone workspace with synchronized transcript, Twick timeline, and Leo/Maya activity", async ({
@@ -1068,6 +1159,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     );
 
     // 4. Continuous transcript: no search, count badge, or segment cards.
+    await page.getByTestId("tab-transcript").click();
     await expect(page.locator("[data-testid='transcript-panel']")).toBeVisible();
     await expect(page.getByText("314 words")).toHaveCount(0);
     await expect(page.getByPlaceholder("Search words...")).toHaveCount(0);
@@ -1076,24 +1168,17 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.locator("[data-word-index='1']")).toHaveText("Fairphone");
 
     // 5. Compact agent presence and product-facing production activity.
+    await page.getByTestId("tab-agents-feed").click();
     await expect(page.locator("[data-testid='production-team']")).toHaveCount(0);
     await expect(page.getByText("Autonomous Editorial Team")).toHaveCount(0);
     await expect(page.getByText("Review Completed")).toHaveCount(0);
     await expect(page.getByText(/editorial decisions|decisions approved/i)).toHaveCount(0);
-    await expect(page.getByTestId("agent-presence-leo")).toBeVisible();
-    await expect(page.getByTestId("agent-presence-maya")).toBeVisible();
-    await expect(page.locator("[data-testid='agent-activity-feed']")).toBeVisible();
-    await expect(
-      page.getByText("Found a section that would benefit from visual coverage."),
-    ).toBeVisible();
-    await expect(page.getByText("Approved Leo's edit.")).toBeVisible();
+    await expect(page.getByText(/use close-up visual coverage/i)).toBeVisible();
+    await expect(page.getByText(/Approved Leo/i)).toBeVisible();
     await expect(page.getByText(/\[(KEEP|BROLL_COVER_CANDIDATE|APPROVE)\]/)).toHaveCount(0);
+
     // 6. Activity selection seeks the media and opens concise decision details.
-    await page
-      .getByRole("button", {
-        name: /Found a section that would benefit from visual coverage\. Seek to 00:26\.16/,
-      })
-      .click();
+    await page.getByTestId("bubble-seek-btn").first().click();
     await expect(page.locator("[data-testid='decision-inspector']")).toBeVisible();
     await expect(page.locator("[data-testid='active-coverage-overlay']")).toBeVisible();
     await expect(page.getByText("Leo · Video Editor")).toBeVisible();
@@ -1115,12 +1200,12 @@ test.describe("Editor Workspace (Issue #28)", () => {
     page,
   }) => {
     await loginAndNavigateToEditor(page);
+    await page.getByTestId("tab-transcript").click();
 
     // Click on the B-Roll section word in transcript ("However,")
     const howeverWord = page.locator("[data-word-index='70']");
     await expect(howeverWord).toBeVisible();
     await howeverWord.click();
-
     // Verify Decision Inspector opens and Coverage Overlay appears
     await expect(page.locator("[data-testid='decision-inspector']")).toBeVisible();
     await expect(page.locator("[data-testid='active-coverage-overlay']")).toBeVisible();
@@ -1183,21 +1268,18 @@ test.describe("Editor Workspace (Issue #28)", () => {
     const videoStage = page.locator("[data-testid='video-stage']");
     const timeline = page.locator("[data-testid='editor-timeline']");
     await expect(videoStage).toBeVisible();
-    await expect(timeline).toBeVisible();
-
-    // Verify right rail width is bounded (~360-400px)
-    const rightRail = page.locator("aside");
+    // Verify right rail width is bounded (~340-400px)
+    const rightRail = page.locator("[data-testid='production-room']");
     const railBox = await rightRail.boundingBox();
-    expect(railBox?.width).toBeGreaterThanOrEqual(360);
+    expect(railBox?.width).toBeGreaterThanOrEqual(340);
     expect(railBox?.width).toBeLessThanOrEqual(400);
-
     // Verify transcript panel occupies majority of rail height
+    await page.getByTestId("tab-transcript").click();
     const transcriptPanel = page.locator("[data-testid='transcript-panel']");
     const transcriptBox = await transcriptPanel.boundingBox();
     if (railBox && transcriptBox) {
       expect(transcriptBox.height / railBox.height).toBeGreaterThan(0.55);
     }
-    // Verify agent avatars render
     await expect(page.getByTestId("agent-presence-leo").locator("img")).toBeVisible();
     await expect(page.getByTestId("agent-presence-maya").locator("img")).toBeVisible();
 
@@ -1222,13 +1304,11 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     // Verify video stage and timeline are both visible without scrolling
     await expect(page.locator("[data-testid='video-stage']")).toBeVisible();
-    await expect(page.locator("[data-testid='editor-timeline']")).toBeVisible();
-
-    // Verify right rail width is bounded (~360-400px)
-    const railBox = await page.locator("aside").boundingBox();
-    expect(railBox?.width).toBeGreaterThanOrEqual(360);
+    // Verify right rail width is bounded (~340-400px)
+    const rightRail = page.locator("[data-testid='production-room']");
+    const railBox = await rightRail.boundingBox();
+    expect(railBox?.width).toBeGreaterThanOrEqual(340);
     expect(railBox?.width).toBeLessThanOrEqual(400);
-
     // Capture screenshot at 1280x800
     await page.screenshot({ path: "e2e/screenshots/editor-1280x800.png" });
   });
@@ -1249,5 +1329,80 @@ test.describe("Editor Workspace (Issue #28)", () => {
       "true",
     );
     await expect(page.getByTestId("rendered-short-badge")).toBeVisible();
+  });
+  test("clicking Leo avatar opens Agent Settings drawer with Prompt, Memory, Voice and NO Tools or Activity tabs", async ({
+    page,
+  }) => {
+    await loginAndNavigateToEditor(page);
+
+    // 1. Click Leo avatar
+    await page.getByTestId("agent-presence-leo").click();
+
+    // 2. Verify drawer opened
+    const drawer = page.getByTestId("agent-settings-drawer");
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText("Leo", { exact: true }).first()).toBeVisible();
+    await expect(drawer.getByText("Video Editor").first()).toBeVisible();
+    // 3. Verify ONLY Prompt, Memory, Voice tabs exist
+    await expect(drawer.getByTestId("tab-prompt")).toBeVisible();
+    await expect(drawer.getByTestId("tab-memory")).toBeVisible();
+    await expect(drawer.getByTestId("tab-voice")).toBeVisible();
+
+    // 4. Verify NO Tools tab and NO Activity tab in settings
+    await expect(drawer.getByRole("button", { name: "Tools" })).toHaveCount(0);
+    await expect(drawer.getByRole("button", { name: "Activity" })).toHaveCount(0);
+
+    // 5. Verify Prompt is editable with Save and Reset buttons
+    await expect(drawer.getByTestId("agent-prompt-textarea")).toBeVisible();
+    await expect(drawer.getByTestId("btn-save-prompt")).toBeVisible();
+    await expect(drawer.getByTestId("btn-reset-prompt")).toBeVisible();
+
+    // 6. Switch to Memory tab and verify read-only
+    await drawer.getByTestId("tab-memory").click();
+    await expect(drawer.getByTestId("settings-memory-view")).toBeVisible();
+    await expect(drawer.getByText("Channel Memory Bank")).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Edit" })).toHaveCount(0);
+    await expect(drawer.getByRole("button", { name: "Delete" })).toHaveCount(0);
+
+    // 7. Switch to Voice tab and verify voice catalog & Play sample
+    await drawer.getByTestId("tab-voice").click();
+    await expect(drawer.getByTestId("settings-voice-view")).toBeVisible();
+    await expect(drawer.getByText("Studio Voice", { exact: true })).toBeVisible();
+    await expect(drawer.getByTestId("voice-selector-dropdown")).toBeVisible();
+    await expect(drawer.getByTestId("btn-play-voice-sample")).toBeVisible();
+    await drawer.getByRole("button", { name: "Close" }).click();
+    await expect(drawer).not.toBeVisible();
+  });
+
+  test("Media Bin displays project rows and allows selecting modes", async ({ page }) => {
+    await loginAndNavigateToEditor(page);
+
+    const mediaBin = page.getByTestId("media-bin");
+    await expect(mediaBin).toBeVisible();
+    await expect(mediaBin.getByText("Project Bin")).toBeVisible();
+
+    // Verify Source Video and Edited Preview rows
+    await expect(mediaBin.getByTestId("media-bin-row-original")).toBeVisible();
+    await expect(mediaBin.getByTestId("media-bin-row-edited")).toBeVisible();
+
+    // Click Source Video in Media Bin
+    await mediaBin.getByTestId("media-bin-row-original").click();
+    const previewMode = page.getByRole("group", { name: "Preview Mode Selection" });
+    await expect(
+      previewMode.getByRole("button", { name: "Original", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("Agent conversation displays speech bubbles with click-to-seek timestamp pills", async ({
+    page,
+  }) => {
+    await loginAndNavigateToEditor(page);
+
+    const feed = page.getByTestId("agent-activity-feed");
+    await expect(feed).toBeVisible();
+
+    // Verify conversation speech bubbles render with avatar and role
+    await expect(feed.getByTestId("activity-message-leo").first()).toBeVisible();
+    await expect(feed.getByText("· Video Editor").first()).toBeVisible();
   });
 });

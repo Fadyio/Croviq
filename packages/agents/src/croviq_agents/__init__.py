@@ -10,7 +10,20 @@ from croviq_agents.client import (
     reconcile_editor_proposal_with_transcript,
 )
 from croviq_agents.director import MayaDirector
-from croviq_agents.editor import LeoDialogueEditor
+from croviq_agents.editor import LeoDialogueEditor, LeoVideoEditor, ensure_full_timeline_coverage
+from croviq_agents.terminal import SandboxedTerminalRunner, TerminalCommandResult, TerminalExecutionError
+from croviq_agents.tools import (
+    ToolDefinition,
+    ToolRegistry,
+    ToolResult,
+    build_default_editor_tool_registry,
+)
+from croviq_agents.voice import (
+    GOOGLE_GEMINI_VOICES,
+    StudioVoiceSynthesizer,
+    VoiceCatalog,
+    VoiceFitAttempt,
+)
 from croviq_agents.prompts import (
     build_director_prompt,
     build_editor_prompt,
@@ -25,7 +38,20 @@ __all__ = [
     "GenAIError",
     "GoogleGenAIClient",
     "LeoDialogueEditor",
+    "LeoVideoEditor",
     "MayaDirector",
+    "SandboxedTerminalRunner",
+    "TerminalCommandResult",
+    "TerminalExecutionError",
+    "ToolDefinition",
+    "ToolRegistry",
+    "ToolResult",
+    "build_default_editor_tool_registry",
+    "GOOGLE_GEMINI_VOICES",
+    "StudioVoiceSynthesizer",
+    "VoiceCatalog",
+    "VoiceFitAttempt",
+    "ensure_full_timeline_coverage",
     "build_director_prompt",
     "build_editor_prompt",
     "format_channel_memory_summary",

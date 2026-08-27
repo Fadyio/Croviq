@@ -26,6 +26,7 @@ import type { PreviewMode } from "./PreviewToggle";
 interface VideoStageProps {
   playbackUrl: string | null;
   renderedPreviewUrl?: string | null;
+  studioVoicePreviewUrl?: string | null;
   shortPlaybackUrl?: string | null;
   currentTimeMs: number;
   durationMs: number;
@@ -39,10 +40,10 @@ interface VideoStageProps {
   onDurationChange?: (durationMs: number) => void;
   className?: string;
 }
-
 export const VideoStage: React.FC<VideoStageProps> = ({
   playbackUrl,
   renderedPreviewUrl,
+  studioVoicePreviewUrl,
   shortPlaybackUrl,
   currentTimeMs,
   durationMs,
@@ -58,7 +59,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageContainerRef = useRef<HTMLDivElement>(null);
-
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [lastSkippedNotice, setLastSkippedNotice] = useState<string | null>(null);
@@ -79,13 +79,16 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
   }, [isPlaying]);
   const isUsingShortArtifact = previewMode === "short" && Boolean(shortPlaybackUrl);
+  const isUsingStudioVoiceArtifact =
+    previewMode === "studio_voice" && Boolean(studioVoicePreviewUrl);
   const isUsingRenderedArtifact = previewMode === "edited" && Boolean(renderedPreviewUrl);
   const activeVideoUrl = isUsingShortArtifact
     ? shortPlaybackUrl
-    : isUsingRenderedArtifact
-      ? renderedPreviewUrl
-      : playbackUrl;
-
+    : isUsingStudioVoiceArtifact
+      ? studioVoicePreviewUrl
+      : isUsingRenderedArtifact
+        ? renderedPreviewUrl
+        : playbackUrl;
   // Sync external seek (e.g. from timeline scrub or transcript click) to video
   useEffect(() => {
     const video = videoRef.current;
@@ -174,7 +177,12 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     const video = videoRef.current;
     if (!video) return;
     setVideoError(null);
-    if (previewMode === "original" && video.duration && !isNaN(video.duration) && onDurationChange) {
+    if (
+      previewMode === "original" &&
+      video.duration &&
+      !isNaN(video.duration) &&
+      onDurationChange
+    ) {
       onDurationChange(Math.round(video.duration * 1000));
     }
   };

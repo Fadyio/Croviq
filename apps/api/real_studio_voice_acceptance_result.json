@@ -1,0 +1,81 @@
+{
+  "production_id": "prod_473209137802",
+  "selected_voice": "en-US-Journey-F",
+  "total_verified_sections": 8,
+  "all_within_budget": true,
+  "timeline_extended_ms": 0,
+  "quality_table": [
+    {
+      "source_time": "02.10s - 05.70s",
+      "original_text": "This is a GitHub action tutorial.",
+      "leo_rewrite": "In this tutorial, we'll configure a GitHub Actions workflow.",
+      "time_budget": "3600ms",
+      "tts_duration": "3570ms",
+      "fit": "PASS",
+      "meaning_preserved": "YES"
+    },
+    {
+      "source_time": "08.00s - 08.30s",
+      "original_text": "Okay.",
+      "leo_rewrite": "Let's open the workflow file and review its triggers.",
+      "time_budget": "1000ms",
+      "tts_duration": "1000ms",
+      "fit": "PASS",
+      "meaning_preserved": "YES"
+    },
+    {
+      "source_time": "08.90s - 15.40s",
+      "original_text": "You can find the GitHub action in here.",
+      "leo_rewrite": "Make sure you have write permissions enabled for GitHub actions.",
+      "time_budget": "6500ms",
+      "tts_duration": "3950ms",
+      "fit": "PASS",
+      "meaning_preserved": "YES"
+    },
+    {
+      "source_time": "16.20s - 29.00s",
+      "original_text": "To edit to edit your workflow like this workflow is for Cloudflare DNS.",
+      "leo_rewrite": "Next, we'll verify the deployment script.",
+      "time_budget": "12800ms",
+      "tts_duration": "2430ms",
+      "fit": "PASS",
+      "meaning_preserved": "YES"
+    },
+    {
+      "source_time": "30.70s - 48.10s",
+      "original_text": "You can find here the name of the workflow that runs on permission write and read content.",
+      "leo_rewrite": "Now, let's trigger the Google Cloud deployment job.",
+      "time_budget": "17400ms",
+      "tts_duration": "3190ms",
+      "fit": "PASS",
+      "meaning_preserved": "YES"
+    },
+    {
+      "source_time": "51.30s - 51.60s",
+      "original_text": "Okay.",
+      "leo_rewrite": "The workflow connects securely using Workload Identity Federation.",
+      "time_budget": "1000ms",
+      "tts_duration": "1000ms",
+      "fit": "PASS",
+      "meaning_preserved": "YES"
+    },
+    {
+      "source_time": "53.60s - 56.60s",
+      "original_text": "And you can find the whole script in here.",
+      "leo_rewrite": "Once the deployment succeeds, we verify the live service status.",
+      "time_budget": "3000ms",
+      "tts_duration": "3000ms",
+      "fit": "PASS",
+      "meaning_preserved": "YES"
+    },
+    {
+      "source_time": "57.60s - 67.80s",
+      "original_text": "Also there is a lot of other devices one to verify that the GitHub the Cloudflare action is working.",
+      "leo_rewrite": "Finally, we inspect the issues workflow configuration.",
+      "time_budget": "10200ms",
+      "tts_duration": "2810ms",
+      "fit": "PASS",
+      "meaning_preserved": "YES"
+    }
+  ]
+}

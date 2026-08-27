@@ -16,8 +16,15 @@ def test_artifact_type_values():
     assert ArtifactType.PREVIEW == "PREVIEW"
     assert ArtifactType.MASTER == "MASTER"
     assert ArtifactType.SHORT == "SHORT"
-    assert set(ArtifactType) == {ArtifactType.PREVIEW, ArtifactType.MASTER, ArtifactType.SHORT}
-
+    assert ArtifactType.STUDIO_VOICE_PREVIEW == "STUDIO_VOICE_PREVIEW"
+    assert ArtifactType.STUDIO_VOICE_MASTER == "STUDIO_VOICE_MASTER"
+    assert set(ArtifactType) == {
+        ArtifactType.PREVIEW,
+        ArtifactType.MASTER,
+        ArtifactType.SHORT,
+        ArtifactType.STUDIO_VOICE_PREVIEW,
+        ArtifactType.STUDIO_VOICE_MASTER,
+    }
 def test_artifact_status_values():
     assert ArtifactStatus.pending == "pending"
     assert ArtifactStatus.rendering == "rendering"
