@@ -1107,10 +1107,10 @@ test.describe("Editor Workspace (Issue #28)", () => {
     });
 
     let geminiApiCalled = false;
-    let groqApiCalled = false;
+    let transcribeApiCalled = false;
     page.on("request", (req) => {
       if (req.url().includes("/analyze")) geminiApiCalled = true;
-      if (req.url().includes("/transcribe")) groqApiCalled = true;
+      if (req.url().includes("/transcribe")) transcribeApiCalled = true;
     });
 
     await loginAndNavigateToEditor(page);
@@ -1190,9 +1190,9 @@ test.describe("Editor Workspace (Issue #28)", () => {
       page.getByText(/Covering the modular plate swap with detailed close-up B-roll/i),
     ).toBeVisible();
 
-    // 7. Verify NO new Gemini or Groq calls on loading completed editor
+    // 7. Verify NO new Gemini or transcription calls on loading completed editor
     expect(geminiApiCalled).toBeFalsy();
-    expect(groqApiCalled).toBeFalsy();
+    expect(transcribeApiCalled).toBeFalsy();
     expect(consoleErrors).toEqual([]);
   });
 

@@ -59,9 +59,9 @@ flowchart TB
             DeptAgents["👥 Department Agents (Pydantic Models)<br/>• Alex: Data Scientist (Retention)<br/>• Nina: Packaging (Titles, Chapters)<br/>• Iris: QA Evaluator (Sync & Facts)"]
         end
 
-        subgraph MediaEngine["DETERMINISTIC MEDIA & AUDIO PIPELINE (FFMPEG & GROQ WHISPER)"]
+        subgraph MediaEngine["DETERMINISTIC MEDIA & AUDIO PIPELINE (FFMPEG & GEMINI TRANSCRIBE)"]
             Inspector["🔍 Media Inspector & Audio Extractor<br/>croviq_media.inspector / audio<br/>• FFprobe Metadata & Codecs<br/>• WAV Audio Extraction (16kHz PCM)"]
-            Transcribe["📝 Transcription Service<br/>croviq_media.transcript<br/>• Word-Level Timestamp Anchors<br/>• Gemini 3.5 Transcribe Preview<br/>• Groq Whisper Large v3 Fallback"]
+            Transcribe["📝 Transcription Service<br/>croviq_media.transcript<br/>• Word-Level Timestamp Anchors<br/>• Gemini 3.5 Transcribe Preview"]
             CutSafety["🛡️ Cut-Safety & EDL Assembler<br/>croviq_media.cut_safety<br/>• Audio Envelope & Syllable Padding<br/>• Micro-Crossfades (10–30ms)<br/>• Canonical EditDecisionList (JSON)"]
             Renderer["🎞️ FFmpeg Video Renderer<br/>croviq_media.render<br/>• Master 16:9 MP4 Render Engine<br/>• Vertical Short 9:16 Cropping<br/>• B-Roll Insertion & Captions"]
         end
@@ -120,7 +120,7 @@ flowchart TB
 1. **Decoupled Architecture**: Clear division between the frontend workstation UI (`apps/web`), the multi-agent creative reasoning team (`packages/agents`), and the deterministic media processing engine (`packages/media`).
 2. **Deterministic Engine vs. Creative Reasoning**: 
    - **Gemini 3.7 Flash** decides *what* to cut and *why* (semantic redundancy, false starts, filler words).
-   - **Groq Whisper Large v3 & Gemini Transcribe** provide *word-level timestamp anchors*.
+   - **Gemini 3.5 Transcribe Preview** provides *word-level timestamp anchors*.
    - **Deterministic Cut-Safety Pipeline** computes *where* cuts occur safely (audio envelope analysis, zero-crossing, syllable padding, micro-crossfades).
    - **FFmpeg on Cloud Run** *executes* the final `EditDecisionList` (EDL) deterministically against source media.
 3. **Single-Origin Public Ingress (ADR-0013)**: Single public entrypoint at `https://app.croviq.app` managed by Google Global External Application Load Balancer. Single-origin routing eliminates cross-origin CORS overhead in production:
@@ -205,7 +205,7 @@ flowchart TB
 | :--- | :--- | :--- | :--- |
 | **Media Inspector** | Extracts container, video stream, and audio stream metadata | `ffprobe -v quiet -print_format json -show_format -show_streams` | `packages/media/src/croviq_media/inspector.py` |
 | **Audio Extractor** | Demuxes pristine 16kHz mono PCM WAV audio from source video | `ffmpeg -i input.mp4 -vn -acodec pcm_s16le -ar 16000 -ac 1 output.wav` | `packages/media/src/croviq_media/audio.py` |
-| **Transcription Service** | Dual-engine word-level speech-to-text transcription | **Gemini 3.5 Transcribe Preview** + **Groq Whisper Large v3** | `packages/media/src/croviq_media/transcript.py` |
+| **Transcription Service** | Canonical word-level speech-to-text transcription | **Gemini 3.5 Transcribe Preview** | `packages/media/src/croviq_media/transcript.py` |
 | **Cut-Safety Pipeline** | Prevents syllable clipping via audio envelope & zero-crossing analysis | RMS envelope analysis, syllable padding, micro-crossfades (10–30ms) | `packages/media/src/croviq_media/cut_safety.py` |
 | **Silence Detector** | Detects acoustic gaps, breaths, and natural pauses | Audio thresholding and energy contour mapping | `packages/media/src/croviq_media/silence.py` |
 | **Short Extractor** | Extracts viral highlights and frames dynamic 9:16 vertical video | 9:16 smart cropping, face centering, subtitle burn-in | `packages/media/src/croviq_media/short.py` |
@@ -251,7 +251,7 @@ flowchart TB
   POST /api/workspaces/{w_id}/productions/{p_id}/analyze (FFprobe video/audio streams)
   ➔ POST /api/workspaces/{w_id}/productions/{p_id}/transcribe
   ➔ Audio demuxed to 16kHz PCM WAV
-  ➔ Gemini 3.5 Transcribe / Groq Whisper Large v3 generates word-level timestamps
+  ➔ Gemini 3.5 Transcribe generates word-level timestamps
   ➔ Firestore stores Transcript with word start/end timings
 
 [3. Multi-Agent Editorial Pass]

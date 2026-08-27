@@ -57,7 +57,7 @@ BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+([A-Za-z0-9_\-\.]+)", re.IGNORECASE
 JWT_PATTERN = re.compile(r"eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+")
 API_KEY_PATTERN = re.compile(r"(AIzaSy[A-Za-z0-9_\-]{33}|sk-[A-Za-z0-9_\-]{20,})")
 QUERY_SECRET_PATTERN = re.compile(
-    r"(?i)(password|passwd|secret|id_token|access_token|refresh_token|api_key|key|credentials)=([^&]+)"
+    r"(?i)(password|passwd|secret|id_token|access_token|refresh_token|api_key|key|credentials|X-Goog-Signature|X-Goog-Credential|X-Amz-Signature|signature)=([^&\s]+)"
 )
 
 

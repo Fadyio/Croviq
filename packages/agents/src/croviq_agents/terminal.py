@@ -7,7 +7,6 @@ from pathlib import Path
 import shlex
 import subprocess
 import time
-from typing import Any, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +28,13 @@ class TerminalCommandResult:
     truncated: bool = False
 
 
-# Security allowlists
+# Security allowlists: Only deterministic media inspection and workspace utilities.
+# Arbitrary language interpreters (python, python3, sh, bash, node, perl, ruby)
+# and network utilities (curl, wget, nc, socat, ssh) are STRICTLY FORBIDDEN
+# to prevent Cloud Run metadata server credential exfiltration and arbitrary execution.
 ALLOWED_BINARIES: set[str] = {
     "ffmpeg",
     "ffprobe",
-    "python",
-    "python3",
     "ls",
     "cat",
     "head",
@@ -46,18 +46,30 @@ ALLOWED_BINARIES: set[str] = {
     "echo",
 }
 
+# Environment variables permitted in the sandbox subprocess.
+# All cloud credentials, secrets, tokens, and sensitive paths are stripped.
 ALLOWED_ENV_VARS: set[str] = {
     "PATH",
-    "HOME",
-    "TMPDIR",
     "LC_ALL",
     "LANG",
-    "PYTHONPATH",
 }
+
+# Dangerous shell operators forbidden in arguments
+FORBIDDEN_OPERATORS: tuple[str, ...] = (
+    ";",
+    "&",
+    "|",
+    "`",
+    "$",
+    ">",
+    "<",
+    "\n",
+    "\r",
+)
 
 
 class SandboxedTerminalRunner:
-    """Executes safe, sandboxed commands in an isolated production workspace."""
+    """Executes safe, sandboxed commands strictly bounded within an isolated production workspace."""
 
     def __init__(
         self,
@@ -70,30 +82,72 @@ class SandboxedTerminalRunner:
         self.timeout_seconds = timeout_seconds
         self.max_output_bytes = max_output_bytes
         self.workspace_dir = (
-            (base_dir / production_id)
+            (base_dir / production_id).resolve()
             if base_dir
-            else Path(f"/tmp/croviq-agent/{production_id}")
+            else Path(f"/tmp/croviq-agent/{production_id}").resolve()
         )
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
 
     def _sanitize_env(self) -> dict[str, str]:
         """Create sanitized environment containing only approved non-sensitive variables."""
-        sanitized: dict[str, str] = {
-            "TMPDIR": str(self.workspace_dir),
-        }
+        sanitized: dict[str, str] = {}
         for k, v in os.environ.items():
             if k in ALLOWED_ENV_VARS:
-                # Do not pass through if it looks like a secret path/credential
-                if "secret" in k.lower() or "token" in k.lower() or "cred" in k.lower():
+                # Do not pass through if key or value looks like a secret path/credential
+                lower_k = k.lower()
+                if any(sec in lower_k for sec in ("secret", "token", "cred", "auth", "key", "pass")):
                     continue
                 sanitized[k] = v
-        # Ensure minimal PATH
+
+        # Enforce isolated directory variables bounded strictly to workspace
+        sanitized["TMPDIR"] = str(self.workspace_dir)
+        sanitized["HOME"] = str(self.workspace_dir)
+
+        # Ensure minimal PATH containing standard system binaries
         if "PATH" not in sanitized:
             sanitized["PATH"] = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin"
+
         return sanitized
 
+    def _validate_path_safety(self, token: str) -> None:
+        """Verify an argument token cannot escape the workspace directory via traversal or absolute path."""
+        # Skip pure CLI options (e.g. -v, --version, -show_entries)
+        if token.startswith("-") and not (token.startswith("./") or token.startswith("../")):
+            return
+
+        # Check explicit path traversal syntax
+        if ".." in token:
+            resolved = (self.workspace_dir / token).resolve()
+            try:
+                resolved.relative_to(self.workspace_dir)
+            except ValueError:
+                raise TerminalExecutionError(
+                    f"Path traversal outside workspace is forbidden: '{token}'"
+                )
+
+        # Check absolute paths
+        if token.startswith("/"):
+            resolved = Path(token).resolve()
+            try:
+                resolved.relative_to(self.workspace_dir)
+            except ValueError:
+                raise TerminalExecutionError(
+                    f"Absolute path outside workspace is forbidden: '{token}'"
+                )
+
+        # Check relative files/symlinks in workspace
+        candidate = self.workspace_dir / token
+        if candidate.is_symlink() or candidate.exists():
+            resolved = candidate.resolve()
+            try:
+                resolved.relative_to(self.workspace_dir)
+            except ValueError:
+                raise TerminalExecutionError(
+                    f"Symlink target outside workspace is forbidden: '{token}'"
+                )
+
     def _validate_command(self, raw_command: str) -> list[str]:
-        """Parse and strictly validate command binary against allowlist."""
+        """Parse and strictly validate command binary and argument boundaries."""
         if not raw_command or not raw_command.strip():
             raise TerminalExecutionError("Command must be non-empty")
 
@@ -111,10 +165,16 @@ class SandboxedTerminalRunner:
                 f"Binary '{binary}' is not in allowlisted binaries: {sorted(ALLOWED_BINARIES)}"
             )
 
-        # Check for dangerous patterns
+        # Check for dangerous shell operators and path escapes in arguments
         for token in tokens[1:]:
-            if token.startswith(";") or token.startswith("&") or token.startswith("|"):
-                raise TerminalExecutionError("Chained command operators are forbidden in arguments")
+            for op in FORBIDDEN_OPERATORS:
+                if op in token:
+                    raise TerminalExecutionError(
+                        f"Forbidden shell operator '{op}' detected in command argument: '{token}'"
+                    )
+
+            # Validate path safety for every argument token
+            self._validate_path_safety(token)
 
         return tokens
 
@@ -145,7 +205,7 @@ class SandboxedTerminalRunner:
         except subprocess.TimeoutExpired as exc:
             timed_out = True
             exit_code = -1
-            stdout = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+            stdout = exc.stdout if isinstance(exc.stdout, str) else (exc.stdout.decode("utf-8", errors="replace") if exc.stdout else "")
             stderr = f"Command timed out after {self.timeout_seconds}s"
         except Exception as exc:
             exit_code = -1

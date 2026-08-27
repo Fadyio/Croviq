@@ -380,7 +380,7 @@ async def test_render_preview_success_and_idempotency(test_setup, auth_user):
     assert data2["status"] == "completed"
     assert render_service.preview_call_count == 1  # Still 1, NOT incremented!
 
-    # 3. Model call assertions: Gemini / Groq models MUST have 0 calls
+    # 3. Model call assertions: Gemini models MUST have 0 calls
     assert getattr(genai_client, "call_count", 0) == 0
 
 

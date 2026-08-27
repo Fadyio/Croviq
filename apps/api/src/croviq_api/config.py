@@ -1,11 +1,18 @@
 import os
+from pathlib import Path
 import subprocess
 from functools import lru_cache
+from typing import Any
+
+from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from croviq_domain.production import (
     DEFAULT_SIGNED_URL_EXPIRY_SECONDS,
     MAX_UPLOAD_SIZE_BYTES,
 )
+
+
 def resolve_git_sha() -> str:
     """Resolve git SHA from environment or git repository fallback."""
     if sha := os.getenv("GIT_SHA"):
@@ -25,12 +32,16 @@ def resolve_git_sha() -> str:
         return "local"
 
 
-def parse_allowed_emails(raw_value: str | None) -> list[str]:
+def parse_allowed_emails(raw_value: str | list[str] | None) -> list[str]:
     """Parse and normalize comma-separated allowed emails configuration.
 
     Returns empty list if unset, failing closed unless explicitly configured.
     """
-    if not raw_value or not raw_value.strip():
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, list):
+        return [item.strip().lower() for item in raw_value if isinstance(item, str) and item.strip()]
+    if not isinstance(raw_value, str) or not raw_value.strip():
         return []
     emails: list[str] = []
     for item in raw_value.split(","):
@@ -40,52 +51,131 @@ def parse_allowed_emails(raw_value: str | None) -> list[str]:
     return emails
 
 
-class Settings:
-    def __init__(self) -> None:
-        self.service_name: str = "croviq-api"
-        self.environment: str = os.getenv("CROVIQ_ENV") or os.getenv("ENVIRONMENT", "development")
-        self.git_sha: str = resolve_git_sha()
-        self.gcp_project_id: str | None = (
-            os.getenv("GCP_PROJECT_ID")
-            or os.getenv("GOOGLE_CLOUD_PROJECT")
-            or os.getenv("GCLOUD_PROJECT")
-            or os.getenv("PROJECT_ID")
-        )
-        self.memory_bank_location: str = os.getenv("MEMORY_BANK_LOCATION") or os.getenv("GCP_REGION", "us-central1")
-        self.memory_bank_id: str = os.getenv("MEMORY_BANK_ID", "croviq-channel-memory")
-        self.memory_store_provider: str = os.getenv("MEMORY_STORE_PROVIDER", "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake")
-        self.allowed_emails: list[str] = parse_allowed_emails(os.getenv("CROVIQ_ALLOWED_EMAILS"))
-        self.media_bucket_name: str = os.getenv("MEDIA_BUCKET_NAME") or (
-            f"{self.gcp_project_id}-croviq-media-raw" if self.gcp_project_id else "croviq-media-raw"
-        )
-        self.media_storage_provider: str = os.getenv(
-            "MEDIA_STORAGE_PROVIDER",
-            "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
-        )
-        self.signed_url_expiry_seconds: int = int(os.getenv("SIGNED_URL_EXPIRY_SECONDS", str(DEFAULT_SIGNED_URL_EXPIRY_SECONDS)))
-        self.max_upload_size_bytes: int = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(MAX_UPLOAD_SIZE_BYTES)))
-        self.api_runtime_service_account: str | None = os.getenv("API_RUNTIME_SERVICE_ACCOUNT") or (
-            f"croviq-api-runtime@{self.gcp_project_id}.iam.gserviceaccount.com" if self.gcp_project_id else None
-        )
-        self.speech_service_provider: str = os.getenv(
-            "SPEECH_SERVICE_PROVIDER",
-            "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
-        )
-        self.gemini_transcription_model: str = os.getenv(
-            "GEMINI_TRANSCRIPTION_MODEL",
-            "gemini-3.5-transcribe-preview",
-        )
-        self.gemini_transcription_location: str = os.getenv(
+class Settings(BaseSettings):
+    """Canonical application settings loaded from environment or .env files."""
+
+    model_config = SettingsConfigDict(
+        env_file=(".env", "../../.env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    service_name: str = "croviq-api"
+    environment: str = Field(
+        default="development",
+        validation_alias=AliasChoices("CROVIQ_ENV", "ENVIRONMENT"),
+    )
+    git_sha: str = Field(
+        default_factory=resolve_git_sha,
+        validation_alias=AliasChoices("GIT_SHA", "COMMIT_SHA", "REVISION"),
+    )
+    gcp_project_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "GCP_PROJECT_ID",
+            "GOOGLE_CLOUD_PROJECT",
+            "GCLOUD_PROJECT",
+            "PROJECT_ID",
+        ),
+    )
+    memory_bank_location: str = Field(
+        default="us-central1",
+        validation_alias=AliasChoices("MEMORY_BANK_LOCATION", "GCP_REGION"),
+    )
+    memory_bank_id: str = Field(
+        default="croviq-channel-memory",
+        validation_alias=AliasChoices("MEMORY_BANK_ID"),
+    )
+    memory_store_provider: str = Field(
+        default="",
+        validation_alias=AliasChoices("MEMORY_STORE_PROVIDER"),
+    )
+    allowed_emails: str | list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("CROVIQ_ALLOWED_EMAILS"),
+    )
+    media_bucket_name: str = Field(
+        default="",
+        validation_alias=AliasChoices("MEDIA_BUCKET_NAME"),
+    )
+    media_storage_provider: str = Field(
+        default="",
+        validation_alias=AliasChoices("MEDIA_STORAGE_PROVIDER"),
+    )
+    signed_url_expiry_seconds: int = Field(
+        default=DEFAULT_SIGNED_URL_EXPIRY_SECONDS,
+        validation_alias=AliasChoices("SIGNED_URL_EXPIRY_SECONDS"),
+    )
+    max_upload_size_bytes: int = Field(
+        default=MAX_UPLOAD_SIZE_BYTES,
+        validation_alias=AliasChoices("MAX_UPLOAD_SIZE_BYTES"),
+    )
+    api_runtime_service_account: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("API_RUNTIME_SERVICE_ACCOUNT"),
+    )
+    speech_service_provider: str = Field(
+        default="",
+        validation_alias=AliasChoices("SPEECH_SERVICE_PROVIDER"),
+    )
+    gemini_transcription_model: str = Field(
+        default="gemini-3.5-transcribe-preview",
+        validation_alias=AliasChoices("GEMINI_TRANSCRIPTION_MODEL"),
+    )
+    gemini_transcription_location: str = Field(
+        default="global",
+        validation_alias=AliasChoices(
             "GEMINI_TRANSCRIPTION_LOCATION",
-            os.getenv("VERTEXAI_LOCATION", "global"),
-        )
-        self.groq_api_key: str | None = os.getenv("GROQ_API_KEY")
-        self.genai_backend_provider: str = os.getenv(
-            "GENAI_BACKEND_PROVIDER",
-            "google" if (os.getenv("CROVIQ_ENV") == "production" or os.getenv("ENVIRONMENT") == "production") else "fake",
-        )
-        self.gemini_model_id: str = os.getenv("GEMINI_MODEL_ID", "gemini-3.7-flash")
-        self.vertexai_location: str = os.getenv("VERTEXAI_LOCATION", "global")
+            "VERTEXAI_LOCATION",
+        ),
+    )
+    genai_backend_provider: str = Field(
+        default="",
+        validation_alias=AliasChoices("GENAI_BACKEND_PROVIDER"),
+    )
+    gemini_model_id: str = Field(
+        default="gemini-3.7-flash",
+        validation_alias=AliasChoices("GEMINI_MODEL_ID"),
+    )
+    vertexai_location: str = Field(
+        default="global",
+        validation_alias=AliasChoices("VERTEXAI_LOCATION"),
+    )
+
+    @field_validator("allowed_emails", mode="after")
+    @classmethod
+    def _validate_allowed_emails(cls, value: Any) -> list[str]:
+        return parse_allowed_emails(value)
+
+    @model_validator(mode="after")
+    def _apply_dynamic_defaults(self) -> "Settings":
+        is_prod = self.environment == "production"
+
+        if not self.memory_store_provider:
+            self.memory_store_provider = "google" if is_prod else "fake"
+
+        if not self.media_storage_provider:
+            self.media_storage_provider = "google" if is_prod else "fake"
+
+        if not self.speech_service_provider:
+            self.speech_service_provider = "google" if is_prod else "fake"
+
+        if not self.genai_backend_provider:
+            self.genai_backend_provider = "google" if is_prod else "fake"
+
+        if not self.media_bucket_name:
+            self.media_bucket_name = (
+                f"{self.gcp_project_id}-croviq-media-raw"
+                if self.gcp_project_id
+                else "croviq-media-raw"
+            )
+
+        if not self.api_runtime_service_account and self.gcp_project_id:
+            self.api_runtime_service_account = (
+                f"croviq-api-runtime@{self.gcp_project_id}.iam.gserviceaccount.com"
+            )
+
+        return self
 
 
 @lru_cache(maxsize=1)

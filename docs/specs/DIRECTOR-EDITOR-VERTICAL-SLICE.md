@@ -17,7 +17,7 @@ Croviq is **DevOps for YouTube creators**: an autonomous, visible production tea
 4. **Drop raw video**: Creator uploads a 3–8 minute raw recording (the owner's real GitHub Actions tutorial with false starts, filler words, dead air, and screen demos).
 5. **Editor workspace opens** (80/20 split):
    - **Maya (Director)** inspects source video + Memory Bank and announces editorial strategy ("The hook starts at 00:31; handing dialogue pass to Leo").
-   - **Leo (Editor)** performs the full dialogue pass using Gemini 3.7 Flash semantic decisions anchored to Groq Whisper Large v3 word-level timing anchors.
+   - **Leo (Editor)** performs the full dialogue pass using Gemini 3.7 Flash semantic decisions anchored to Gemini 3.5 Transcribe Preview word-level timing anchors.
    - **Live workspace updates**: Twick timeline and synchronized transcript visibly update (red strikethrough for removals, amber for review, green for preserved key takes).
    - **Natural cut safety**: Speech boundaries are respected, micro-crossfades are inserted, and talking-head jump cuts are covered with screen demonstration footage.
    - **Leo reports batch**: Summary of cuts, duration saved, and edits applied.
@@ -59,14 +59,14 @@ SampleChannelDataProvider (FastAPI / Domain Service)
 ### 2.4 Multimodal Agents & Audio Word Alignment
 - **Division of Labor**:
   - **Gemini 3.7 Flash** (via Google GenAI SDK `google-genai`): Understands video/audio narrative, identifies semantic redundancy, filler words, false starts, and Short candidate range.
-  - **Groq Whisper Large v3**: Narrow supporting transcription tool for speech recognition plus word-level timing anchors. Groq does not decide edit boundaries.
+  - **Gemini 3.5 Transcribe Preview**: Speech recognition plus word-level timing anchors via Google GenAI SDK. Gemini Transcribe does not decide edit boundaries.
   - **FFmpeg**: Deterministic media analysis, 16 kHz mono WAV extraction for transcription, silence envelope detection, and cut rendering.
 - **Maya (Director Agent)**:
   - Input: Raw video artifact, transcript, `ChannelProfile`, relevant `ChannelLesson` records.
   - Output (`DirectorStrategy`): `summary`, `editorial_notes[]`, `suggested_pacing`, `hand_off_instructions`.
   - Review Output (`DirectorReview`): `approved: bool`, `feedback: str`, `adjustments: list[EditAdjustment]`.
 - **Leo (Editor Agent)**:
-  - Input: Raw video, word-timed transcript from Groq Whisper, `DirectorStrategy`.
+  - Input: Raw video, word-timed transcript from Gemini 3.5 Transcribe, `DirectorStrategy`.
   - Output (`DialoguePassReport`): `edits: list[EditDecision]`, `cuts_count`, `duration_saved_ms`, `short_candidate_range`, `batch_notes`.
 
 ### 2.5 Canonical Edit Decision List (EDL) Schema
@@ -109,7 +109,7 @@ SampleChannelDataProvider (FastAPI / Domain Service)
 ```
 
 ### 2.6 Natural Cut Safety Pipeline
-1. **Word-Level Timing (Groq Whisper Large v3)**: Extract millisecond start/end timing anchors for each spoken word.
+1. **Word-Level Timing (Gemini 3.5 Transcribe Preview)**: Extract millisecond start/end timing anchors for each spoken word.
 2. **Boundary Padding & Silence Envelope**: Ensure cutpoints snap to inter-word silence intervals rather than mid-phoneme.
 3. **Audio Smoothing**: Apply 20ms audio micro-crossfades to prevent clicks.
 4. **Visual Discontinuity Mitigation**: When speech cuts cause a jarring talking-head jump, prioritize screen demo / terminal B-roll footage as an overlay.
@@ -168,7 +168,7 @@ SampleChannelDataProvider (FastAPI / Domain Service)
 
 - [ ] Deterministic sample AI engineering channel loaded without external credentials.
 - [ ] Raw video upload to GCS succeeds with signed URLs.
-- [ ] Groq Whisper Large v3 generates word-timed transcript anchors.
+- [ ] Gemini 3.5 Transcribe Preview generates word-timed transcript anchors.
 - [ ] Maya reviews source footage + Channel Memory and hands off to Leo.
 - [ ] Leo performs dialogue pass with live transcript and timeline synchronization.
 - [ ] Natural speech boundaries respected with zero mid-word audio clipping.

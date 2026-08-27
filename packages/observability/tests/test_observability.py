@@ -121,7 +121,10 @@ def test_secret_redaction_masks_sensitive_keys() -> None:
 def test_secret_redaction_in_strings() -> None:
     assert redact_string("Bearer my_secret_token_123") == "Bearer [REDACTED]"
     assert redact_string("https://api.example.com?password=mysecret&safe=1") == "https://api.example.com?password=[REDACTED]&safe=1"
-
+    assert (
+        redact_string("https://storage.googleapis.com/bucket/obj?X-Goog-Signature=abc123secret&other=val")
+        == "https://storage.googleapis.com/bucket/obj?X-Goog-Signature=[REDACTED]&other=val"
+    )
 
 # -----------------------------------------------------------------------------
 # 3. Context & Trace Extraction
