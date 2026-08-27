@@ -501,17 +501,10 @@ resource "google_storage_bucket" "media_raw" {
   depends_on = [google_project_service.required_services]
 }
 
-# Allow API runtime service account to create objects via signed upload URLs on the media bucket
-resource "google_storage_bucket_iam_member" "api_runtime_media_creator" {
+# Allow API runtime service account to manage objects in the media bucket
+resource "google_storage_bucket_iam_member" "api_runtime_object_user" {
   bucket = google_storage_bucket.media_raw.name
-  role   = "roles/storage.objectCreator"
-  member = "serviceAccount:${google_service_account.api_runtime.email}"
-}
-
-# Allow API runtime service account to inspect uploaded object metadata on the media bucket
-resource "google_storage_bucket_iam_member" "api_runtime_media_viewer" {
-  bucket = google_storage_bucket.media_raw.name
-  role   = "roles/storage.objectViewer"
+  role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.api_runtime.email}"
 }
 

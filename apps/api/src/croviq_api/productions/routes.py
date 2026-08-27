@@ -1,5 +1,6 @@
 """API routes for Production lifecycle and direct GCS media upload."""
 
+import logging
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,6 +8,8 @@ from typing import Annotated
 import tempfile
 import time
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
