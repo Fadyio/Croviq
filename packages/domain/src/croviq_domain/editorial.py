@@ -107,8 +107,8 @@ class ShortVisualRegion(BaseModel):
     end_ms: int = Field(..., ge=0, description="End timestamp in ms relative to Short timeline")
     x: float = Field(..., ge=0.0, le=1.0, description="Normalized x coordinate (0.0 to 1.0) of crop top-left in source frame")
     y: float = Field(..., ge=0.0, le=1.0, description="Normalized y coordinate (0.0 to 1.0) of crop top-left in source frame")
-    width: float = Field(..., gt=0.0, le=1.0, description="Normalized width (0.0 to 1.0) of focus region")
-    height: float = Field(..., gt=0.0, le=1.0, description="Normalized height (0.0 to 1.0) of focus region")
+    width: float = Field(..., ge=0.01, le=1.0, description="Normalized width (0.0 to 1.0) of focus region")
+    height: float = Field(..., ge=0.01, le=1.0, description="Normalized height (0.0 to 1.0) of focus region")
     zoom: float = Field(default=1.0, ge=1.0, le=3.0, description="Optional zoom factor")
     focus_label: str = Field(..., min_length=1, max_length=100, description="Visual description of focus area (e.g. YAML editor, status)")
 
