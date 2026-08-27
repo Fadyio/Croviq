@@ -262,7 +262,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             <div className="h-9 border-b border-border-subtle/30 relative flex items-center px-1 bg-surface-2/15 shrink-0">
               {dialogueCutBlocks.length === 0 ? (
                 <div className="absolute inset-0 flex items-center px-3 text-[10px] text-text-muted pointer-events-none">
-                  <span>No cuts applied</span>
+                  <span>No dialogue cuts</span>
                 </div>
               ) : (
                 dialogueCutBlocks.map((cut) => {
