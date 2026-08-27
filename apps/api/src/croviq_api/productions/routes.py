@@ -1,5 +1,6 @@
 """API routes for Production lifecycle and direct GCS media upload."""
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -1019,13 +1020,15 @@ async def _execute_render_for_production(
             )
 
             if artifact_type == ArtifactType.PREVIEW:
-                render_res = render_service.render_preview(
+                render_res = await asyncio.to_thread(
+                    render_service.render_preview,
                     source_path=local_src,
                     edl=edl,
                     output_path=local_out,
                 )
             else:
-                render_res = render_service.render_master(
+                render_res = await asyncio.to_thread(
+                    render_service.render_master,
                     source_path=local_src,
                     edl=edl,
                     output_path=local_out,
@@ -1607,22 +1610,21 @@ async def generate_studio_voice(
             production_id=prod.production_id,
         )
 
-    segments: list[NarrationSegment] = []
-    for idx, seg in enumerate(transcript.segments):
-        avail_ms = max(500, seg.end_ms - seg.start_ms)
-        fitted = await synthesizer.fit_narration_segment(
+    tasks = [
+        synthesizer.fit_narration_segment(
             segment_id=f"seg_{idx+1:03d}",
             production_id=prod.production_id,
             source_start_ms=seg.start_ms,
             source_end_ms=seg.end_ms,
-            available_duration_ms=avail_ms,
+            available_duration_ms=max(500, seg.end_ms - seg.start_ms),
             original_text=seg.text,
             voice_id=selected_voice,
             tts_fn=mock_tts,
             rewrite_fn=leo_rewrite_fn,
         )
-        segments.append(fitted)
-
+        for idx, seg in enumerate(transcript.segments)
+    ]
+    segments: list[NarrationSegment] = list(await asyncio.gather(*tasks))
     now = datetime.now(timezone.utc)
     all_within = all(s.generated_duration_ms <= s.available_duration_ms for s in segments if s.status == NarrationSegmentStatus.ACCEPTED)
 
@@ -1655,8 +1657,9 @@ async def generate_studio_voice(
                     f.write(data_size.to_bytes(4, "little"))
                     f.write(b"\x00" * min(data_size, 48000))
 
-                # Run deterministic studio voice preview render
-                render_res = render_service.render_studio_voice_preview(
+                # Run deterministic studio voice preview render in worker thread
+                render_res = await asyncio.to_thread(
+                    render_service.render_studio_voice_preview,
                     source_path=local_src,
                     edl=edl,
                     narration_audio_path=local_narr,
