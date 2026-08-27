@@ -19,6 +19,7 @@ import {
   editedToSourceTimeMs,
   type EditDecisionList,
   type CoverageMarker,
+  type ShortCandidate,
 } from "../../lib/edl-adapter";
 import type { PreviewMode } from "./PreviewToggle";
 
@@ -31,6 +32,7 @@ interface VideoStageProps {
   isPlaying: boolean;
   previewMode: PreviewMode;
   edl: EditDecisionList | null;
+  shortCandidate?: ShortCandidate | null;
   activeCoverage: CoverageMarker | null;
   onPlayPause: () => void;
   onSeek: (targetMs: number) => void;
@@ -47,6 +49,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   isPlaying,
   previewMode,
   edl,
+  shortCandidate,
   activeCoverage,
   onPlayPause,
   onSeek,
@@ -88,10 +91,13 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     const video = videoRef.current;
     if (!video || isSeekingInternallyRef.current) return;
 
+    const shortStartMs = shortCandidate?.start_ms ?? 0;
     const targetSec =
-      previewMode === "edited" && isUsingRenderedArtifact && edl
-        ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
-        : currentTimeMs / 1000;
+      previewMode === "short"
+        ? Math.max(0, currentTimeMs - shortStartMs) / 1000
+        : previewMode === "edited" && isUsingRenderedArtifact && edl
+          ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
+          : currentTimeMs / 1000;
 
     // Only update if difference is greater than 100ms to avoid feedback loops
     if (Math.abs(video.currentTime - targetSec) > 0.1) {
@@ -105,10 +111,13 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     const video = videoRef.current;
     if (!video || !activeVideoUrl) return;
     if (prevActiveUrlRef.current && prevActiveUrlRef.current !== activeVideoUrl) {
+      const shortStartMs = shortCandidate?.start_ms ?? 0;
       const targetSec =
-        previewMode === "edited" && isUsingRenderedArtifact && edl
-          ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
-          : currentTimeMs / 1000;
+        previewMode === "short"
+          ? Math.max(0, currentTimeMs - shortStartMs) / 1000
+          : previewMode === "edited" && isUsingRenderedArtifact && edl
+            ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
+            : currentTimeMs / 1000;
       video.currentTime = targetSec;
       if (isPlaying && video.paused) {
         video.play().catch(() => {});
@@ -123,6 +132,11 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     if (!video) return;
 
     const currentMs = Math.round(video.currentTime * 1000);
+    if (previewMode === "short") {
+      const shortStartMs = shortCandidate?.start_ms ?? 0;
+      onSeek(shortStartMs + currentMs);
+      return;
+    }
 
     if (previewMode === "edited" && isUsingRenderedArtifact && edl) {
       const sourceMs = editedToSourceTimeMs(currentMs, edl);

@@ -20,6 +20,7 @@ export type AgentActivity = components["schemas"]["AgentActivity"];
 export type Transcript = components["schemas"]["Transcript"];
 export type TranscriptWord = components["schemas"]["TranscriptWord"];
 export type TranscriptSegment = components["schemas"]["TranscriptSegment"];
+export type ShortCandidate = components["schemas"]["ShortCandidate"];
 
 export interface TimelineBlock {
   id: string;

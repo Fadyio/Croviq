@@ -641,6 +641,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             isPlaying={isPlaying}
             previewMode={previewMode}
             edl={edl}
+            shortCandidate={proposal?.short_candidate}
             activeCoverage={activeCoverage}
             onPlayPause={handlePlayPause}
             onSeek={handleSeek}

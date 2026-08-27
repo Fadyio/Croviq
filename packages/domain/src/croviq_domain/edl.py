@@ -294,13 +294,10 @@ def derive_keep_segments(edl: EditDecisionList) -> list[tuple[int, int]]:
         cut_end = max(0, min(cut.safe_end_ms, edl.source_duration_ms))
 
         if cut_start > current_pos:
-            if cut_start - current_pos >= 50:
-                segments.append((current_pos, cut_start))
+            segments.append((current_pos, cut_start))
 
         current_pos = max(current_pos, cut_end)
 
     if current_pos < edl.source_duration_ms:
-        if edl.source_duration_ms - current_pos >= 50:
-            segments.append((current_pos, edl.source_duration_ms))
-
+        segments.append((current_pos, edl.source_duration_ms))
     return segments if segments else [(0, edl.source_duration_ms)]

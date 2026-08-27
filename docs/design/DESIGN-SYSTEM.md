@@ -163,7 +163,7 @@ Clear, uncluttered creator entry point:
 | Agent | Name | Role | Canonical Icon | Responsibility |
 |---|---|---|---|---|
 | **Director** | Maya | Senior Production Lead | `Clapperboard` | Editorial strategy, memory reading, batch review, approval |
-| **Editor** | Leo | Dialogue Editor | `Scissors` | Dialogue pass, filler removal, pacing, Short extraction |
+| **Editor** | Leo | Video Editor | `Scissors` | Video editing, false-start & filler removal, pacing, Short extraction |
 | **Data Scientist** | Alex | Statistical Intelligence | `TrendingUp` | Retention change-points, baseline analysis, memory lessons |
 | **Packaging** | Nina | Packaging & Presentation | `Sparkles` | Titles, descriptions, chapters, thumbnail concepts |
 | **Quality Assurance** | Iris | QA & Compliance | `ShieldCheck` | Truthfulness, claims, caption alignment, publishing readiness |

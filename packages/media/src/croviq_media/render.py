@@ -305,6 +305,7 @@ class FFmpegRenderService(RenderService):
                 source_width=source_width,
                 source_height=source_height,
                 ass_file_path=ass_path,
+                short_candidate=short_candidate,
             )
 
             encoding_args = [
@@ -606,6 +607,7 @@ class FFmpegRenderService(RenderService):
         source_width: int,
         source_height: int,
         ass_file_path: Path | None = None,
+        short_candidate: ShortCandidate | None = None,
     ) -> tuple[str, list[str]]:
         """Construct deterministic 1080x1920 9:16 filtergraph with landscape blurred fill or vertical scaling."""
         num_segs = len(keep_segments)
@@ -666,12 +668,15 @@ class FFmpegRenderService(RenderService):
             target_crop_w = max(2, int((source_height * 9 / 16) / 2) * 2)
             target_crop_h = source_height
             max_x_offset = max(0, source_width - target_crop_w)
-            target_crop_x = min(max_x_offset, max(0, int(max_x_offset * 0.12)))
+            if short_candidate and short_candidate.visual_plan and short_candidate.visual_plan.regions:
+                reg = short_candidate.visual_plan.regions[0]
+                target_crop_x = min(max_x_offset, max(0, int(source_width * reg.x)))
+            else:
+                target_crop_x = min(max_x_offset, max(0, int(max_x_offset * 0.12)))
             composition_filters.append(
                 f"[v_trimmed]crop={target_crop_w}:{target_crop_h}:{target_crop_x}:0,"
                 "scale=1080:1920:flags=lanczos,setsar=1[v_comp]"
             )
-        # Subtitle burning
         subtitle_filter = self._resolve_subtitle_filter(ass_file_path)
         if subtitle_filter:
             composition_filters.append(f"[v_comp]{subtitle_filter}[vout]")
