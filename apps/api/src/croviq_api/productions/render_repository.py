@@ -68,6 +68,11 @@ class RenderRepository(ABC):
     ) -> list[RenderArtifact]:
         """List all RenderArtifact records associated with a production."""
         pass
+
+    @abstractmethod
+    async def delete_by_production_id(self, production_id: str) -> int:
+        """Delete all render artifacts for a production. Returns count of deleted artifacts."""
+        pass
     async def list_renders_by_production(self, production_id: str) -> list[RenderArtifact]:
         """Alias for list_render_artifacts."""
         return await self.list_render_artifacts(production_id)
@@ -138,6 +143,10 @@ class InMemoryRenderRepository(RenderRepository):
         artifacts = list(prod_renders.values())
         artifacts.sort(key=lambda a: a.created_at, reverse=True)
         return deepcopy(artifacts)
+
+    async def delete_by_production_id(self, production_id: str) -> int:
+        prod_renders = self._by_production.pop(production_id, {})
+        return len(prod_renders)
 
     def clear(self) -> None:
         self._by_production.clear()
@@ -340,6 +349,18 @@ class FirestoreRenderRepository(RenderRepository):
                 exception=exc,
             )
             raise
+
+    async def delete_by_production_id(self, production_id: str) -> int:
+        coll = (
+            self.client
+            .collection("productions")
+            .document(production_id)
+            .collection("renders")
+        )
+        snaps = [doc async for doc in coll.stream()]
+        for s in snaps:
+            await s.reference.delete()
+        return len(snaps)
 
 def get_default_render_repository() -> RenderRepository:
     """Factory for default RenderRepository instance."""

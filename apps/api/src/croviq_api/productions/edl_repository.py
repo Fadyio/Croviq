@@ -47,6 +47,11 @@ class EDLRepository(ABC):
         pass
 
     @abstractmethod
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        """Delete EDL records for a production."""
+        pass
+
+    @abstractmethod
     async def get_latest_edl(self, production_id: str) -> EditDecisionList | None:
         """Retrieve the most recent active EditDecisionList for a production."""
         pass
@@ -86,6 +91,14 @@ class InMemoryEDLRepository(EDLRepository):
         # Return the most recently saved
         latest_id = edl_ids[-1]
         return self._by_id.get((production_id, latest_id))
+
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        edl_ids = self._by_production.pop(production_id, None)
+        if edl_ids:
+            for edl_id in edl_ids:
+                self._by_id.pop((production_id, edl_id), None)
+            return True
+        return False
 
     def clear(self) -> None:
         self._by_id.clear()
@@ -233,6 +246,18 @@ class FirestoreEDLRepository(EDLRepository):
                 error_code=str(exc),
             )
             raise
+
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        coll_ref = (
+            self.client
+            .collection("productions")
+            .document(production_id)
+            .collection("edls")
+        )
+        docs = [doc async for doc in coll_ref.stream()]
+        for doc in docs:
+            await doc.reference.delete()
+        return len(docs) > 0
 
 
 def get_default_edl_repository() -> EDLRepository:

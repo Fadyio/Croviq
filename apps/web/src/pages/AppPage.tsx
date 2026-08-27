@@ -9,6 +9,8 @@ import {
   Video,
   X,
   ArrowRight,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
@@ -51,9 +53,15 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeXhrRef = useRef<XMLHttpRequest | null>(null);
 
-  // Recent Productions List
+  // Recent Productions List State
   const [productions, setProductions] = useState<Production[]>([]);
   const [isLoadingProductions, setIsLoadingProductions] = useState<boolean>(false);
+
+  // Deletion Flow State
+  const [productionToDelete, setProductionToDelete] = useState<Production | null>(null);
+  const [isDeletingProduction, setIsDeletingProduction] = useState<boolean>(false);
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
 
   const fetchProductions = useCallback(async () => {
     if (!firebaseUser) return;
@@ -277,20 +285,55 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!productionToDelete || !firebaseUser) return;
+    setIsDeletingProduction(true);
+    setDeleteErrorMessage(null);
+
+    const targetId = productionToDelete.production_id;
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/productions/${targetId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to delete production (${res.status})`);
+      }
+
+      // Optimistically remove from state
+      setProductions((prev) => prev.filter((p) => p.production_id !== targetId));
+      setProductionToDelete(null);
+      setDeleteSuccessMessage("Production and associated storage artifacts deleted successfully.");
+      setTimeout(() => setDeleteSuccessMessage(null), 4000);
+    } catch (err: unknown) {
+      setDeleteErrorMessage(err instanceof Error ? err.message : "Failed to delete production");
+    } finally {
+      setIsDeletingProduction(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-text-primary flex flex-col font-sans selection:bg-primary/25">
       {/* App Header Bar */}
-      <header className="h-14 bg-surface-1 border-b border-border-subtle px-4 sm:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30">
+      <header className="h-14 bg-surface-1 border-b border-border-subtle px-4 sm:px-8 flex items-center justify-between shrink-0 sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <CroviqLogo height={24} className="h-6 w-auto" />
+          <CroviqLogo height={26} className="h-6.5 w-auto" />
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-text-muted">{user?.email || "demo@croviq.app"}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-xs text-text-secondary font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>{user?.email || "demo@croviq.app"}</span>
+          </div>
 
           <button
             onClick={logout}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-transparent hover:border-border-subtle"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-border-subtle hover:border-border-strong"
             title="Sign out"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -299,22 +342,50 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
         </div>
       </header>
 
-      {/* Main Viewport */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-5 sm:px-6 sm:py-6 flex flex-col gap-5">
-        {/* Intro */}
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-xl font-bold tracking-tight text-text-primary">Croviq</h1>
-          <p className="text-xs text-text-secondary">Your autonomous video production team.</p>
-        </div>
+      {/* Main Centered Viewport */}
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8 sm:py-10 flex flex-col gap-8">
+        {/* Centered Hero Intro */}
+        <section className="flex flex-col items-center text-center gap-2 pt-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-2 border border-border-subtle text-[11px] font-mono text-text-secondary">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+            <span>Autonomous Video Operations</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-text-primary mt-1">
+            Croviq
+          </h1>
+          <p className="text-xs sm:text-sm text-text-secondary max-w-lg">
+            Your autonomous video production team.
+          </p>
+        </section>
 
-        {/* Upload Station */}
-        <section className="p-4 sm:p-5 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-3 shadow-sm">
-          <div>
-            <h2 className="text-xs font-semibold tracking-tight text-text-primary uppercase">
-              Drop your raw video
+        {/* Success Banner */}
+        {deleteSuccessMessage && (
+          <div
+            className="p-3 bg-success/10 border border-success/20 rounded-lg text-xs text-emerald-400 flex items-center justify-between gap-2 animate-in fade-in"
+            role="status"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
+              <span>{deleteSuccessMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDeleteSuccessMessage(null)}
+              className="text-text-muted hover:text-text-primary p-0.5"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Upload Station Card */}
+        <section className="p-5 sm:p-6 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xs font-semibold tracking-wider text-text-primary uppercase font-mono">
+              Upload raw footage
             </h2>
-            <p className="text-[11px] text-text-muted mt-0.5 font-mono">
-              MP4 &middot; MOV &middot; WebM &middot; MKV &middot; up to 1 GB
+            <p className="text-xs text-text-muted">
+              Select or drop source video to enter the autonomous production pipeline.
             </p>
           </div>
 
@@ -336,35 +407,35 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onClick={() => fileInputRef.current?.click()}
-              className={`border border-dashed rounded-lg py-7 px-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-150 ${
+              className={`border border-dashed rounded-xl py-9 px-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-150 ${
                 isDragOver
                   ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                  : "border-border-strong hover:border-text-secondary bg-surface-2/40 hover:bg-surface-2/70"
+                  : "border-border-strong hover:border-primary/60 bg-surface-2/40 hover:bg-surface-2/70"
               }`}
             >
-              <div className="w-9 h-9 rounded-full bg-surface-3 flex items-center justify-center mb-2.5 text-text-secondary border border-border-subtle">
-                <Upload className="w-4 h-4 text-primary" />
+              <div className="w-11 h-11 rounded-full bg-surface-3 flex items-center justify-center mb-3 text-text-secondary border border-border-subtle">
+                <Upload className="w-5 h-5 text-primary" />
               </div>
-              <p className="text-xs font-medium text-text-primary">
+              <p className="text-sm font-medium text-text-primary">
                 Drop your raw video here, or{" "}
-                <span className="text-primary underline font-semibold">browse</span>
+                <span className="text-primary underline font-semibold">browse files</span>
               </p>
-              <p className="text-[11px] text-text-muted mt-1 font-mono">
+              <p className="text-[11px] text-text-muted mt-1.5 font-mono">
                 MP4 &middot; MOV &middot; WebM &middot; MKV &middot; up to 1 GB
               </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-3.5 p-4 rounded-lg bg-surface-2 border border-border-subtle">
+            <div className="flex flex-col gap-4 p-4 rounded-lg bg-surface-2 border border-border-subtle">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-md bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0">
-                    <FileVideo className="w-4 h-4 text-primary" />
+                  <div className="w-10 h-10 rounded-lg bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0">
+                    <FileVideo className="w-5 h-5 text-primary" />
                   </div>
                   <div className="min-w-0 flex flex-col">
-                    <span className="text-xs font-medium text-text-primary truncate">
+                    <span className="text-xs font-semibold text-text-primary truncate">
                       {selectedFile.name}
                     </span>
-                    <span className="text-[11px] text-text-muted tabular-nums">
+                    <span className="text-[11px] text-text-muted tabular-nums font-mono">
                       {formatBytes(selectedFile.size)}
                     </span>
                   </div>
@@ -377,7 +448,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                     className="p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-3 rounded-md transition-colors"
                     title="Remove file"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -390,14 +461,14 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                       {uploadStatus === "uploading" && (
                         <>
                           <HardDrive className="w-3.5 h-3.5 text-primary animate-pulse" />
-                          <span>Uploading...</span>
+                          <span>Uploading directly to storage...</span>
                         </>
                       )}
                       {uploadStatus === "verifying" && "Verifying upload..."}
                       {uploadStatus === "uploaded" && (
                         <>
                           <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                          <span className="text-success font-medium">Uploaded</span>
+                          <span className="text-success font-medium">Upload verified</span>
                         </>
                       )}
                       {uploadStatus === "failed" && (
@@ -429,14 +500,14 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
 
               {uploadStatus === "uploaded" && activeProductionId && (
                 <div className="p-3 bg-success/10 border border-success/20 rounded-md text-xs text-text-primary flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-success font-medium">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>Upload complete</span>
+                  <div className="flex items-center gap-2 text-emerald-400 font-medium">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
+                    <span>Upload complete — production workspace ready</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleOpenProduction(activeProductionId)}
-                    className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
+                    className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
                   >
                     <span>Open Editor</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -445,8 +516,8 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
               )}
 
               {errorMessage && (
-                <div className="p-2.5 bg-danger/10 border border-danger/20 rounded-md text-xs text-danger flex items-center gap-2">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <div className="p-3 bg-danger/10 border border-danger/20 rounded-md text-xs text-danger flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{errorMessage}</span>
                 </div>
               )}
@@ -456,7 +527,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                   <button
                     type="button"
                     onClick={handleStartUpload}
-                    className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 shadow-sm"
+                    className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 shadow-sm"
                   >
                     <Upload className="w-3.5 h-3.5" />
                     <span>Upload video</span>
@@ -496,51 +567,63 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
           )}
 
           {!selectedFile && errorMessage && (
-            <div className="p-2.5 bg-danger/10 border border-danger/20 rounded-md text-xs text-danger flex items-center gap-2">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <div className="p-3 bg-danger/10 border border-danger/20 rounded-md text-xs text-danger flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMessage}</span>
             </div>
           )}
         </section>
 
-        {/* Recent Productions */}
-        <section className="p-4 sm:p-5 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-3 shadow-sm">
+        {/* Recent Productions Section */}
+        <section className="p-5 sm:p-6 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold tracking-tight text-text-primary uppercase">
-              Recent productions
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-semibold tracking-wider text-text-primary uppercase font-mono">
+                Recent productions
+              </h2>
+              {productions.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-surface-2 border border-border-subtle text-[10px] font-mono text-text-muted">
+                  {productions.length}
+                </span>
+              )}
+            </div>
           </div>
 
           {isLoadingProductions ? (
-            <div className="p-8 rounded-lg bg-surface-2/40 border border-border-subtle text-center text-xs text-text-muted">
-              Loading recent productions...
+            <div className="p-8 rounded-lg bg-surface-2/40 border border-border-subtle text-center text-xs text-text-muted flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <span>Loading productions...</span>
             </div>
           ) : productions.length === 0 ? (
-            <div className="py-8 px-4 rounded-lg bg-surface-2/30 border border-border-subtle text-center flex flex-col items-center justify-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-surface-3 flex items-center justify-center text-text-muted">
-                <Video className="w-4 h-4" />
+            <div className="py-10 px-4 rounded-lg bg-surface-2/30 border border-border-subtle text-center flex flex-col items-center justify-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center text-text-muted border border-border-subtle">
+                <Video className="w-5 h-5 text-text-secondary" />
               </div>
               <p className="text-xs text-text-secondary font-medium">No productions yet.</p>
-              <p className="text-xs text-text-muted">Drop a video above to begin.</p>
+              <p className="text-xs text-text-muted">
+                Upload a video above to enter the production pipeline.
+              </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2" data-testid="productions-list">
+            <div className="flex flex-col gap-2.5" data-testid="productions-list">
               {productions.map((prod) => (
                 <div
                   key={prod.production_id}
-                  onClick={() => handleOpenProduction(prod.production_id)}
-                  className="p-3 rounded-lg bg-surface-2/70 hover:bg-surface-2 border border-border-subtle hover:border-primary/40 transition-all flex items-center justify-between gap-3 cursor-pointer group"
+                  className="p-3.5 rounded-lg bg-surface-2/60 hover:bg-surface-2 border border-border-subtle hover:border-border-strong transition-all flex items-center justify-between gap-3 group"
                   data-testid={`production-row-${prod.production_id}`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="size-9 rounded-lg bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0 group-hover:border-primary/40 transition-colors">
-                      <FileVideo className="size-4 text-primary" />
+                  <div
+                    onClick={() => handleOpenProduction(prod.production_id)}
+                    className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0 group-hover:border-primary/40 transition-colors">
+                      <FileVideo className="w-4 h-4 text-primary" />
                     </div>
                     <div className="min-w-0 flex flex-col">
                       <span className="text-xs font-semibold text-text-primary truncate group-hover:text-primary transition-colors">
                         {prod.source_media?.original_filename || "Untitled Production"}
                       </span>
-                      <div className="flex items-center gap-2 text-[11px] text-text-muted mt-0.5">
+                      <div className="flex items-center gap-2 text-[11px] text-text-muted mt-0.5 font-mono">
                         {prod.source_media?.size_bytes ? (
                           <>
                             <span className="tabular-nums">
@@ -560,28 +643,40 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     {prod.status === "failed" && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border bg-danger/10 text-danger border-danger/20">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border bg-danger/10 text-danger border-danger/20 font-mono">
                         Failed
                       </span>
                     )}
                     {prod.status === "uploading" && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border bg-primary/10 text-primary border-primary/20">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border bg-primary/10 text-primary border-primary/20 font-mono">
                         Uploading
                       </span>
                     )}
 
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenProduction(prod.production_id);
-                      }}
-                      className="px-2.5 py-1.5 bg-surface-3 hover:bg-primary hover:text-white text-text-secondary text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 border border-border-subtle hover:border-transparent"
+                      onClick={() => handleOpenProduction(prod.production_id)}
+                      className="px-3 py-1.5 bg-surface-3 hover:bg-primary hover:text-white text-text-primary text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 border border-border-subtle hover:border-transparent shadow-sm"
                     >
                       <span>Open Editor</span>
                       <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteErrorMessage(null);
+                        setProductionToDelete(prod);
+                      }}
+                      className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-md transition-colors border border-transparent hover:border-danger/20"
+                      title="Delete production"
+                      aria-label="Delete production"
+                      data-testid={`delete-production-${prod.production_id}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -590,6 +685,80 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
           )}
         </section>
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {productionToDelete && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-modal-title"
+        >
+          <div className="w-full max-w-md bg-surface-1 border border-border-strong rounded-xl p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-danger/10 border border-danger/20 flex items-center justify-center shrink-0 text-danger">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex flex-col gap-1 min-w-0">
+                <h3 id="delete-modal-title" className="text-sm font-semibold text-text-primary">
+                  Delete production?
+                </h3>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Are you sure you want to delete{" "}
+                  <span className="font-semibold text-text-primary truncate">
+                    "{productionToDelete.source_media?.original_filename || "Untitled Production"}"
+                  </span>
+                  ?
+                </p>
+                <p className="text-[11px] text-text-muted mt-1 leading-relaxed">
+                  This will permanently remove the source footage, transcripts, edit decision lists,
+                  and all rendered video artifacts from storage.
+                </p>
+              </div>
+            </div>
+
+            {deleteErrorMessage && (
+              <div className="p-3 bg-danger/10 border border-danger/20 rounded-md text-xs text-danger flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{deleteErrorMessage}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                disabled={isDeletingProduction}
+                onClick={() => {
+                  setProductionToDelete(null);
+                  setDeleteErrorMessage(null);
+                }}
+                className="px-3.5 py-1.5 bg-surface-2 hover:bg-surface-3 text-text-secondary hover:text-text-primary text-xs font-medium rounded-md transition-colors border border-border-subtle"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingProduction}
+                onClick={handleConfirmDelete}
+                className="px-4 py-1.5 bg-danger hover:bg-red-600 text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                data-testid="confirm-delete-button"
+              >
+                {isDeletingProduction ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete production</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

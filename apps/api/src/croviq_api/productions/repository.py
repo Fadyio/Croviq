@@ -62,6 +62,11 @@ class ProductionRepository(ABC):
         """Update an existing Production record."""
         pass
 
+    @abstractmethod
+    async def delete_production(self, production_id: str) -> bool:
+        """Delete a Production record by its unique identifier."""
+        pass
+
     @staticmethod
     def production_to_dict(production: Production) -> dict[str, Any]:
         """Serialize a Production domain model to Firestore-compatible dictionary."""
@@ -161,6 +166,12 @@ class InMemoryProductionRepository(ProductionRepository):
         self._productions[production.production_id] = deepcopy(production)
         return deepcopy(production)
 
+
+    async def delete_production(self, production_id: str) -> bool:
+        if production_id in self._productions:
+            del self._productions[production_id]
+            return True
+        return False
     def clear(self) -> None:
         self._productions.clear()
 
@@ -361,6 +372,40 @@ class FirestoreProductionRepository(ProductionRepository):
             )
             raise
 
+
+    async def delete_production(self, production_id: str) -> bool:
+        start_time = time.perf_counter()
+        try:
+            doc_ref = self.client.collection("productions").document(production_id)
+            doc = await doc_ref.get()
+            if not doc.exists:
+                return False
+            await doc_ref.delete()
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.write",
+                collection="productions",
+                operation="delete",
+                document_id=production_id,
+                status=200,
+                latency_ms=latency_ms,
+                message=f"Deleted production record {production_id}",
+            )
+            return True
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.error",
+                collection="productions",
+                operation="delete",
+                document_id=production_id,
+                status=500,
+                latency_ms=latency_ms,
+                exception=exc,
+                error_code="firestore_delete_error",
+                message=f"Firestore delete error for production {production_id}: {type(exc).__name__}",
+            )
+            raise
 
 _global_production_repo: ProductionRepository | None = None
 

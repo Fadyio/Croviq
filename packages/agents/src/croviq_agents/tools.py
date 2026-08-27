@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 import time
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Literal, Sequence
 from pydantic import BaseModel, Field, ValidationError
 
 from croviq_agents.terminal import SandboxedTerminalRunner, TerminalCommandResult
@@ -103,11 +103,28 @@ class CreateEdlCandidateArgs(BaseModel):
 
 
 class GenerateBRollArgs(BaseModel):
-    prompt: str = Field(..., min_length=1, description="Visual description for Gemini Omni Flash (gemini-omni-flash) video generation")
-    duration_ms: int = Field(default=4000, ge=2000, le=8000, description="Duration in ms (2000-8000)")
+    prompt: str = Field(..., min_length=1, description="Visual description for Gemini Omni 1.1 Flash (gemini-omni-1.1-flash) video generation")
+    duration_ms: int = Field(default=4000, ge=2000, le=10000, description="Duration in ms (2000-10000ms with scene extension)")
     source_start_ms: int = Field(..., ge=0)
     source_end_ms: int = Field(..., ge=0)
-
+    mode: Literal["draft", "standard", "cinematic"] = Field(
+        default="standard",
+        description="Generation quality mode: 'draft' (360p fast iteration), 'standard' (720p), 'cinematic' (1080p)",
+    )
+    first_frame_description: str | None = Field(
+        default=None,
+        description="Optional initial keyframe visual description for camera orbit or zoom initiation",
+    )
+    last_frame_description: str | None = Field(
+        default=None,
+        description="Optional terminal keyframe visual description for smooth timeline transition",
+    )
+    scene_extension_prior_context_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=10000,
+        description="Prior video context window up to 10s (10000ms) for seamless narrative extension",
+    )
 
 class InspectBRollArgs(BaseModel):
     artifact_id: str = Field(..., min_length=1, description="BRoll artifact identifier")
@@ -567,6 +584,10 @@ def build_default_editor_tool_registry(
         duration_ms: int = 4000,
         source_start_ms: int = 0,
         source_end_ms: int = 4000,
+        mode: str = "standard",
+        first_frame_description: str | None = None,
+        last_frame_description: str | None = None,
+        scene_extension_prior_context_ms: int | None = None,
     ) -> dict[str, Any]:
         artifact_id = f"broll_{source_start_ms}_{int(time.time())}"
         return {
@@ -575,16 +596,21 @@ def build_default_editor_tool_registry(
             "duration_ms": duration_ms,
             "source_start_ms": source_start_ms,
             "source_end_ms": source_end_ms,
+            "mode": mode,
+            "model": "gemini-omni-1.1-flash",
+            "first_frame_description": first_frame_description,
+            "last_frame_description": last_frame_description,
+            "scene_extension_prior_context_ms": scene_extension_prior_context_ms,
             "status": "generated",
         }
 
     registry.register(
         ToolDefinition(
             name="generate_broll",
-            description="Generate visual coverage B-roll video clip via Gemini Omni Flash (gemini-omni-flash) for an abstract or transition section",
+            description="Generate visual coverage B-roll video clip via Gemini Omni 1.1 Flash (gemini-omni-1.1-flash) for an abstract or transition section",
             parameters_schema=GenerateBRollArgs,
             handler=handle_generate_broll,
-            human_summary_formatter=lambda args, out: f"Leo created visual coverage for {args.get('prompt', 'transition')}.",
+            human_summary_formatter=lambda args, out: f"Leo created visual coverage for {args.get('prompt', 'transition')} ({args.get('mode', 'standard')} mode).",
         )
     )
 

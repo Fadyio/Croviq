@@ -37,13 +37,24 @@ def get_google_media_storage() -> GoogleMediaStorage:
     )
 
 
+_custom_media_storage: MediaStorage | None = None
+
+
 def get_media_storage() -> MediaStorage:
     """Resolve active MediaStorage provider based on environment configuration."""
+    global _custom_media_storage
+    if _custom_media_storage is not None:
+        return _custom_media_storage
     settings = get_settings()
     if settings.media_storage_provider == "google":
         return get_google_media_storage()
     return get_fake_media_storage()
 
+
+def set_media_storage(storage: MediaStorage | None) -> None:
+    """Override media storage instance for tests."""
+    global _custom_media_storage
+    _custom_media_storage = storage
 
 _custom_transcription_service: TranscriptionService | None = None
 _custom_media_inspector: MediaInspector | None = None

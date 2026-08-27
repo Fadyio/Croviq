@@ -91,6 +91,11 @@ class EditorialRepository(ABC):
         """Batch persist AgentActivity records."""
         pass
 
+    @abstractmethod
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        """Delete all editorial runs, proposals, reviews, and activities for a production."""
+        pass
+
 
 class InMemoryEditorialRepository(EditorialRepository):
     """In-memory mock repository for tests and local execution."""
@@ -154,6 +159,19 @@ class InMemoryEditorialRepository(EditorialRepository):
                 self._activities[a.production_id] = []
             self._activities[a.production_id].append(deepcopy(a))
 
+
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        existed = (
+            production_id in self._runs
+            or production_id in self._proposals
+            or production_id in self._reviews
+            or production_id in self._activities
+        )
+        self._runs.pop(production_id, None)
+        self._proposals.pop(production_id, None)
+        self._reviews.pop(production_id, None)
+        self._activities.pop(production_id, None)
+        return existed
     def clear(self) -> None:
         self._runs.clear()
         self._proposals.clear()
@@ -366,6 +384,17 @@ class FirestoreEditorialRepository(EditorialRepository):
             latency_ms = (time.perf_counter() - start_time) * 1000
             log_firestore_event("firestore.error", "agent_activities", "batch_set", status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
+
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        db = self._get_client()
+        subcollections = ["editorial_runs", "editor_proposals", "director_reviews", "agent_activities"]
+        deleted_any = False
+        for sub in subcollections:
+            coll_ref = db.collection("productions").document(production_id).collection(sub)
+            for doc in coll_ref.stream():
+                doc.reference.delete()
+                deleted_any = True
+        return deleted_any
 
 _global_editorial_repo: EditorialRepository | None = None
 

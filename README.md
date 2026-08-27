@@ -41,20 +41,20 @@ Google Global External Application Load Balancer
 - **Multimodal AI Reasoning**: Gemini 3.7 Flash (`gemini-3.7-flash`) via Google GenAI SDK (`google-genai`) on Vertex AI.
 - **Speech Transcription**: Gemini 3.5 Transcribe Preview (`gemini-3.5-transcribe-preview`) on Vertex AI.
 - **Studio Voice**: Gemini 3.1 Flash TTS (`gemini-3.1-flash-tts-preview`) with prebuilt voice catalog (Puck, Charon, Aoede, Kore, Fenrir, Leda, Orus, Zephyr) via Google GenAI SDK.
-- **Optional Generative Video / B-Roll**: Gemini Omni Flash (`gemini-omni-flash`).
+- **Generative Video / B-Roll**: Gemini Omni 1.1 Flash (`gemini-omni-1.1-flash`) on Vertex AI with scene extension (up to 10s), keyframe control, and 360p drafting mode.
+- **Agent Tool Runtime**: Deterministic `ToolRegistry` with 13 internal sandboxed tools for media inspection, audio demuxing, waveform analysis, and EDL candidate generation.
 - **Silence / Pause Processing**: Deterministic silence/pause cleanup with cut-safety validation.
-- **Authentication**: Firebase JS SDK (`12.18.0`) + Google Cloud Identity Platform email/password authentication.
+- **Authentication**: Firebase JS SDK (`12.18.0`) on client + Google Cloud Identity Platform + Firebase Admin token verification on FastAPI backend.
 - **Shared Long-Term Memory**: Google Agent Platform Memory Bank (`ChannelProfile`, `ChannelLesson`).
 - **Storage Separation**:
-  - **Google Cloud Storage (GCS)**: Stores raw footage, rendered Preview, Master, Short, Studio Voice audio, and generated B-roll media.
+  - **Google Cloud Storage (GCS)**: Stores source footage, rendered Preview, Master, Short, Studio Voice audio, and generated B-roll media artifacts.
   - **Google Cloud Firestore**: Stores workspaces, productions, transcripts, editorial runs, agent activity, EDLs, render metadata, reviews, and operational state.
-- **DNS & Routing**: Cloudflare (Authoritative DNS Only) + Google Global External Application Load Balancer.
-- **Timeline Component**: `@twick/timeline` ([https://github.com/ncounterspecialist/twick](https://github.com/ncounterspecialist/twick)).
+- **DNS & Routing**: Cloudflare (Authoritative DNS Only) + Google Global External Application Load Balancer (single-origin routing to Cloud Run).
+- **Timeline Component**: `@twick/timeline` (https://github.com/ncounterspecialist/twick).
 - **Deterministic Rendering**: FFmpeg on Google Cloud Run executing typed Edit Decision Lists (EDLs).
 - **Frontend Workstation**: React 19.2.8, Vite 8.2.2 (Rolldown unified bundler), TypeScript 5.9.3, Tailwind CSS 4.3.3 (`@tailwindcss/vite`), Firebase JS SDK 12.18.0, Motion 13.1.1, Lucide-react 1.34.0, `@twick/timeline` 0.15.31, Playwright 1.62.1.
 - **Backend API**: Python 3.12, FastAPI, Pydantic v2, `google-genai` 2.20.0, `uvicorn`, `uv`.
 - **Infrastructure as Code**: 100% Terraform-managed GCP and Cloudflare DNS resources.
-
 ## Local Development
 
 The root `Makefile` is the canonical developer interface for Croviq.

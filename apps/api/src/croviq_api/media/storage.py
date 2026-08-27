@@ -94,3 +94,21 @@ class MediaStorage(ABC):
     ) -> ObjectMetadata:
         """Upload a local file to private media storage."""
         pass
+
+    @abstractmethod
+    async def delete_object(
+        self,
+        bucket: str,
+        object_name: str,
+    ) -> bool:
+        """Delete a single object from storage. Returns True if deleted or already absent."""
+        pass
+
+    @abstractmethod
+    async def delete_prefix(
+        self,
+        bucket: str,
+        prefix: str,
+    ) -> int:
+        """Delete all objects matching prefix from storage. Returns count of deleted objects."""
+        pass

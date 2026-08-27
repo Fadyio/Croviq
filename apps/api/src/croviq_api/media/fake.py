@@ -125,6 +125,33 @@ class FakeMediaStorage(MediaStorage):
         self._contents[key] = content
         return metadata
 
+    async def delete_object(
+        self,
+        bucket: str,
+        object_name: str,
+    ) -> bool:
+        key = f"{bucket}/{object_name}"
+        existed = key in self._objects or key in self._contents
+        self._objects.pop(key, None)
+        self._contents.pop(key, None)
+        return existed
+
+    async def delete_prefix(
+        self,
+        bucket: str,
+        prefix: str,
+    ) -> int:
+        prefix_key = f"{bucket}/{prefix}"
+        matching_keys = [k for k in self._objects if k.startswith(prefix_key)]
+        for k in matching_keys:
+            self._objects.pop(k, None)
+            self._contents.pop(k, None)
+        # Also check any contents that might have been populated directly
+        matching_contents = [k for k in self._contents if k.startswith(prefix_key) and k not in matching_keys]
+        for k in matching_contents:
+            self._contents.pop(k, None)
+        return len(matching_keys) + len(matching_contents)
+
     def clear(self) -> None:
         """Clear all stored in-memory mock objects."""
         self._objects.clear()

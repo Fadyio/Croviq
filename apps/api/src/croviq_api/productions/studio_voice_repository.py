@@ -24,6 +24,10 @@ class StudioVoiceRepository(ABC):
     async def save(self, result: StudioVoiceResult) -> StudioVoiceResult:
         pass
 
+    @abstractmethod
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        pass
+
 
 class InMemoryStudioVoiceRepository(StudioVoiceRepository):
     """In-memory repository for unit tests and local non-cloud execution."""
@@ -37,6 +41,9 @@ class InMemoryStudioVoiceRepository(StudioVoiceRepository):
     async def save(self, result: StudioVoiceResult) -> StudioVoiceResult:
         self._results[result.production_id] = result
         return result
+
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        return self._results.pop(production_id, None) is not None
 
 
 class FirestoreStudioVoiceRepository(StudioVoiceRepository):
@@ -70,6 +77,15 @@ class FirestoreStudioVoiceRepository(StudioVoiceRepository):
         doc_ref = db.collection("productions").document(result.production_id).collection("studio_voice").document("result")
         doc_ref.set(result.model_dump(mode="json"))
         return result
+
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        db = self._get_db()
+        doc_ref = db.collection("productions").document(production_id).collection("studio_voice").document("result")
+        doc = doc_ref.get()
+        if doc.exists:
+            doc_ref.delete()
+            return True
+        return False
 
 
 _global_studio_voice_repo: StudioVoiceRepository | None = None

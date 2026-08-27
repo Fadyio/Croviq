@@ -272,3 +272,55 @@ class GoogleMediaStorage(MediaStorage):
             content_type=blob.content_type or content_type,
             updated_at=blob.updated or datetime.now(timezone.utc),
         )
+
+    async def delete_object(
+        self,
+        bucket: str,
+        object_name: str,
+    ) -> bool:
+        """Delete a single object from storage. Returns True if deleted or already absent."""
+        return await asyncio.to_thread(
+            self._delete_object_sync,
+            bucket,
+            object_name,
+        )
+
+    def _delete_object_sync(self, bucket_name: str, object_name: str) -> bool:
+        client = self._get_client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+        try:
+            blob.delete()
+            return True
+        except Exception:
+            # Return False if not found or already deleted
+            return False
+
+    async def delete_prefix(
+        self,
+        bucket: str,
+        prefix: str,
+    ) -> int:
+        """Delete all objects matching prefix from storage. Returns count of deleted objects."""
+        return await asyncio.to_thread(
+            self._delete_prefix_sync,
+            bucket,
+            prefix,
+        )
+
+    def _delete_prefix_sync(self, bucket_name: str, prefix: str) -> int:
+        client = self._get_client()
+        bucket = client.bucket(bucket_name)
+        blobs = list(client.list_blobs(bucket, prefix=prefix))
+        if not blobs:
+            return 0
+        count = len(blobs)
+        try:
+            bucket.delete_blobs(blobs)
+        except Exception:
+            for blob in blobs:
+                try:
+                    blob.delete()
+                except Exception:
+                    pass
+        return count

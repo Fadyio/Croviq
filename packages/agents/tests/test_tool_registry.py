@@ -1,9 +1,14 @@
 """Tests for ToolRegistry and agent internal media tools."""
 
 import pytest
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
-from croviq_agents.tools import ToolRegistry, ToolDefinition, ToolResult
+from croviq_agents.tools import ToolRegistry, ToolDefinition, ToolResult, build_default_editor_tool_registry
+from croviq_domain.media_metadata import MediaMetadata
+from croviq_domain.production import SourceMedia, SourceMediaStatus
+from croviq_domain.source_analysis import SourceVideoAnalysisInput
+from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
 
 
 class DummyArgs(BaseModel):
@@ -98,3 +103,62 @@ def test_tool_registry_logs_execution_with_context():
     assert res.status == "success"
     assert res.latency_ms >= 0
     assert res.output["found"] == "test_inspect"
+
+
+def test_default_editor_tool_registry_generate_broll_omni_1_1():
+    now = datetime.now(timezone.utc)
+    analysis_input = SourceVideoAnalysisInput(
+        production_id="prod_omni_test",
+        channel_id="croviq_syn_ai_eng_01",
+        source_media=SourceMedia(
+            upload_id="up_01",
+            original_filename="sample.mp4",
+            content_type="video/mp4",
+            size_bytes=1000000,
+            gcs_bucket="croviq-media-raw",
+            gcs_object="workspaces/ws_1/productions/prod_omni_test/source/sample.mp4",
+            status=SourceMediaStatus.UPLOADED,
+            created_at=now,
+            uploaded_at=now,
+        ),
+        media_metadata=MediaMetadata(
+            duration_ms=60000,
+            size_bytes=1000000,
+            width=1920,
+            height=1080,
+            frame_rate=30.0,
+        ),
+        transcript=Transcript(
+            transcript_id="tr_01",
+            production_id="prod_omni_test",
+            language_code="en-US",
+            duration_ms=60000,
+            words=[TranscriptWord(index=0, text="hello", start_ms=0, end_ms=1000)],
+            segments=[TranscriptSegment(segment_id="s1", start_ms=0, end_ms=1000, text="hello", word_start_index=0, word_end_index=0)],
+            created_at=now,
+        ),
+    )
+    registry = build_default_editor_tool_registry(production_id="prod_omni_test", analysis_input=analysis_input)
+    assert registry.has_tool("generate_broll")
+
+    res = registry.execute(
+        "generate_broll",
+        {
+            "prompt": "Cinematic camera orbit around modular smartphone hardware",
+            "duration_ms": 6000,
+            "source_start_ms": 10000,
+            "source_end_ms": 16000,
+            "mode": "draft",
+            "first_frame_description": "Close-up of motherboard",
+            "last_frame_description": "Wide shot of complete device",
+            "scene_extension_prior_context_ms": 5000,
+        },
+    )
+    assert res.status == "success"
+    assert res.output["model"] == "gemini-omni-1.1-flash"
+    assert res.output["mode"] == "draft"
+    assert res.output["duration_ms"] == 6000
+    assert res.output["first_frame_description"] == "Close-up of motherboard"
+    assert res.output["last_frame_description"] == "Wide shot of complete device"
+    assert res.output["scene_extension_prior_context_ms"] == 5000
+    assert "draft mode" in res.human_summary

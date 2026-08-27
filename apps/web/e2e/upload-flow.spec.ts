@@ -99,6 +99,22 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
   });
 
   await page.route("**/api/productions/**", async (route) => {
+    if (route.request().method() === "DELETE") {
+      const url = route.request().url();
+      const parts = url.split("/api/productions/");
+      const prodId = parts[1]?.split("/")[0] || "prod_f0b41bfd429e";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "deleted",
+          production_id: prodId,
+          deleted_storage_objects_count: 2,
+          deleted_at: new Date().toISOString(),
+        }),
+      });
+      return;
+    }
     if (route.request().method() === "GET") {
       const url = route.request().url();
       if (url.endsWith("/renders")) {
@@ -203,17 +219,17 @@ test.describe("Product Home and Creator Flow", () => {
     // Verify main intro
     await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await expect(page.getByText("Your autonomous video production team.")).toBeVisible();
-
     // Verify upload dropzone
-    await expect(page.getByRole("heading", { name: "Drop your raw video" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Upload raw footage" })).toBeVisible();
     await expect(page.getByText(/MP4 · MOV · WebM · MKV · up to 1 GB/i).first()).toBeVisible();
 
     // Verify empty Recent productions section without 0 total badge
     await expect(page.getByRole("heading", { name: "Recent productions" })).toBeVisible();
     await expect(page.getByText("No productions yet.")).toBeVisible();
-    await expect(page.getByText("Drop a video above to begin.")).toBeVisible();
+    await expect(
+      page.getByText("Upload a video above to enter the production pipeline."),
+    ).toBeVisible();
     await expect(page.getByText("0 total")).toHaveCount(0);
-
     // Verify strictly NO engineering/debug clutter
     await expect(page.getByText("Croviq Demo Workspace")).toHaveCount(0);
     await expect(page.getByText("Synthetic AI Engineering")).toHaveCount(0);
@@ -296,6 +312,69 @@ test.describe("Product Home and Creator Flow", () => {
     // Verify clicking Open Editor navigates to the Editor URL
     await openEditorBtn.click();
     await expect(page).toHaveURL(/\/productions\/prod_f0b41bfd429e\/editor/);
+    expect(consoleErrors).toEqual([]);
+  });
+  test("supports deleting a production with confirmation dialog", async ({ page }) => {
+    const consoleErrors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+
+    const mockProduction = {
+      production_id: "prod_delete_test_01",
+      workspace_id: "ws_demo",
+      channel_id: "croviq_syn_ai_eng_01",
+      owner_user_id: "demo_user_123",
+      status: "uploaded",
+      source_media: {
+        upload_id: "upl_delete_01",
+        original_filename: "Test Video To Delete.mp4",
+        content_type: "video/mp4",
+        size_bytes: 5242880,
+        gcs_bucket: "croviq-506602-croviq-media-raw",
+        gcs_object: "workspaces/ws_demo/productions/prod_delete_test_01/source/video.mp4",
+        status: "uploaded",
+        created_at: "2026-08-26T04:33:44.963857Z",
+        uploaded_at: "2026-08-26T04:33:44.963857Z",
+      },
+      created_at: "2026-08-26T04:33:44.963857Z",
+      updated_at: "2026-08-26T04:33:44.963857Z",
+    };
+
+    await mockFirebasePasswordSignIn(page);
+    await mockBackendApis(page, [mockProduction]);
+    await login(page);
+
+    // Production row is visible initially
+    const prodRow = page.getByTestId("production-row-prod_delete_test_01");
+    await expect(prodRow).toBeVisible();
+    await expect(page.getByText("Test Video To Delete.mp4")).toBeVisible();
+
+    // Click delete action on the row
+    const deleteBtn = page.getByTestId("delete-production-prod_delete_test_01");
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+
+    // Confirmation modal opens
+    const modalTitle = page.getByRole("heading", { name: "Delete production?" });
+    await expect(modalTitle).toBeVisible();
+    await expect(page.getByText(/Are you sure you want to delete/i)).toBeVisible();
+
+    // Clicking Cancel closes modal without deleting
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(modalTitle).toHaveCount(0);
+    await expect(prodRow).toBeVisible();
+
+    // Click delete action again and confirm
+    await deleteBtn.click();
+    await expect(modalTitle).toBeVisible();
+    const confirmBtn = page.getByTestId("confirm-delete-button");
+    await expect(confirmBtn).toBeVisible();
+    await confirmBtn.click();
+
+    // Production row is removed from DOM and success toast appears
+    await expect(prodRow).toHaveCount(0);
+    await expect(page.getByText(/deleted successfully/i)).toBeVisible();
     expect(consoleErrors).toEqual([]);
   });
   test("executes end-to-end direct storage upload and records production", async ({ page }) => {

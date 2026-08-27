@@ -67,6 +67,11 @@ class RenderReviewRepository(ABC):
         """List all RenderReviews recorded for a production."""
         pass
 
+    @abstractmethod
+    async def delete_by_production_id(self, production_id: str) -> int:
+        """Delete all render reviews for a production."""
+        pass
+
     @staticmethod
     def _to_dict(review: RenderReview) -> dict[str, Any]:
         """Serialize RenderReview domain model to Firestore-compatible dictionary."""
@@ -136,6 +141,10 @@ class InMemoryRenderReviewRepository(RenderReviewRepository):
             reverse=True,
         )
         return [deepcopy(r) for r in sorted_reviews]
+
+    async def delete_by_production_id(self, production_id: str) -> int:
+        prod_reviews = self._by_production.pop(production_id, {})
+        return len(prod_reviews)
 
     def clear(self) -> None:
         self._by_production.clear()
@@ -346,6 +355,18 @@ class FirestoreRenderReviewRepository(RenderReviewRepository):
                 error_code=str(exc),
             )
             raise
+
+    async def delete_by_production_id(self, production_id: str) -> int:
+        client = self._get_client()
+        col_ref = (
+            client.collection("productions")
+            .document(production_id)
+            .collection("render_reviews")
+        )
+        docs = [doc async for doc in col_ref.stream()]
+        for doc in docs:
+            await doc.reference.delete()
+        return len(docs)
 
 
 def get_default_render_review_repository() -> RenderReviewRepository:

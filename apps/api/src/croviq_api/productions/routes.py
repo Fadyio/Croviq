@@ -65,6 +65,7 @@ from croviq_api.productions.schemas import (
     AnalyzeProductionResponse,
     CreateUploadRequest,
     CreateUploadResponse,
+    DeleteProductionResponse,
     EditorialRunDetailResponse,
     ProductionListResponse,
     TranscribeProductionResponse,
@@ -125,6 +126,7 @@ from croviq_media.audio import AudioExtractionError, AudioExtractor
 from croviq_media.inspector import MediaInspector, MediaInspectionError
 from croviq_media.transcript import TranscriptionError, TranscriptionService
 from croviq_observability import (
+    log_event,
     EventType,
     log_media_inspect_event,
     log_render_event,
@@ -533,6 +535,129 @@ async def get_production(
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
 ) -> Production:
     return await _get_owned_production(production_id, current_user, production_repo)
+
+
+@router.delete(
+    "/productions/{production_id}",
+    response_model=DeleteProductionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Delete Production",
+    description="Delete a production, its Firestore state and subcollections, and all associated media storage objects.",
+)
+async def delete_production(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
+    editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)],
+    studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
+    broll_repo: Annotated[BRollRepository, Depends(get_broll_repository)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> DeleteProductionResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+
+    prod = await production_repo.get_production(production_id)
+    if not prod:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Production '{production_id}' not found",
+        )
+    if prod.workspace_id != workspace.workspace_id or prod.owner_user_id != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to delete this production",
+        )
+
+    settings = get_settings()
+    bucket_name = (
+        prod.source_media.gcs_bucket
+        if prod.source_media and prod.source_media.gcs_bucket
+        else settings.media_bucket_name
+    )
+
+    deleted_storage_count = 0
+    # 1. Delete production prefix objects in GCS
+    prefix = f"workspaces/{prod.workspace_id}/productions/{production_id}/"
+    try:
+        deleted_storage_count += await media_storage.delete_prefix(bucket_name, prefix)
+    except Exception as exc:
+        logger.warning("Error deleting storage prefix %s: %s", prefix, exc)
+
+    # 2. Delete source media object if located outside prefix
+    if prod.source_media and prod.source_media.gcs_object:
+        if not prod.source_media.gcs_object.startswith(prefix):
+            try:
+                if await media_storage.delete_object(
+                    prod.source_media.gcs_bucket or bucket_name,
+                    prod.source_media.gcs_object,
+                ):
+                    deleted_storage_count += 1
+            except Exception as exc:
+                logger.warning("Error deleting source media object %s: %s", prod.source_media.gcs_object, exc)
+
+    # 3. Clean up Firestore records and subcollections
+    try:
+        await transcript_repo.delete_by_production_id(production_id)
+    except Exception as exc:
+        logger.warning("Error deleting transcripts for %s: %s", production_id, exc)
+
+    try:
+        await editorial_repo.delete_by_production_id(production_id)
+    except Exception as exc:
+        logger.warning("Error deleting editorial records for %s: %s", production_id, exc)
+
+    try:
+        await edl_repo.delete_by_production_id(production_id)
+    except Exception as exc:
+        logger.warning("Error deleting EDL records for %s: %s", production_id, exc)
+
+    try:
+        await render_repo.delete_by_production_id(production_id)
+    except Exception as exc:
+        logger.warning("Error deleting renders for %s: %s", production_id, exc)
+
+    try:
+        await render_review_repo.delete_by_production_id(production_id)
+    except Exception as exc:
+        logger.warning("Error deleting render reviews for %s: %s", production_id, exc)
+
+    try:
+        await studio_voice_repo.delete_by_production_id(production_id)
+    except Exception as exc:
+        logger.warning("Error deleting studio voice for %s: %s", production_id, exc)
+
+    try:
+        await broll_repo.delete_by_production_id(production_id)
+    except Exception as exc:
+        logger.warning("Error deleting broll for %s: %s", production_id, exc)
+
+    # 4. Delete root production record
+    await production_repo.delete_production(production_id)
+
+    deleted_at = datetime.now(timezone.utc)
+    log_event(
+        event_type="production.deleted",
+        status=status.HTTP_200_OK,
+        request_id=request_id,
+        production_id=production_id,
+        workspace_id=workspace.workspace_id,
+        user_id=current_user.user_id,
+        deleted_storage_objects_count=deleted_storage_count,
+        message=f"Production '{production_id}' and all associated storage artifacts were deleted successfully",
+    )
+
+    return DeleteProductionResponse(
+        status="deleted",
+        production_id=production_id,
+        deleted_storage_objects_count=deleted_storage_count,
+        deleted_at=deleted_at,
+    )
 
 
 @router.post(

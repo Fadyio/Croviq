@@ -53,6 +53,11 @@ class TranscriptRepository(ABC):
         """Fetch transcript by production_id."""
         pass
 
+    @abstractmethod
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        """Delete transcript associated with a production_id."""
+        pass
+
     def transcript_to_dict(self, transcript: Transcript) -> dict[str, Any]:
         """Serialize Transcript model to Firestore-compatible dictionary."""
         return transcript.model_dump(mode="json")
@@ -85,6 +90,13 @@ class InMemoryTranscriptRepository(TranscriptRepository):
         if t_id and t_id in self._transcripts:
             return self._transcripts[t_id]
         return None
+
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        t_id = self._by_production.pop(production_id, None)
+        if t_id and t_id in self._transcripts:
+            del self._transcripts[t_id]
+            return True
+        return False
 
     def clear(self) -> None:
         self._transcripts.clear()
@@ -214,6 +226,42 @@ class FirestoreTranscriptRepository(TranscriptRepository):
                 exception=exc,
                 error_code="firestore_query_transcript_error",
                 message=f"Firestore query error for production {production_id}: {type(exc).__name__}",
+            )
+            raise
+
+    async def delete_by_production_id(self, production_id: str) -> bool:
+        start_time = time.perf_counter()
+        try:
+            query = (
+                self.client.collection("transcripts")
+                .where("production_id", "==", production_id)
+            )
+            docs = [doc async for doc in query.stream()]
+            if not docs:
+                return False
+            for doc in docs:
+                await doc.reference.delete()
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.write",
+                collection="transcripts",
+                operation="delete",
+                status=200,
+                latency_ms=latency_ms,
+                message=f"Deleted {len(docs)} transcript record(s) for production {production_id}",
+            )
+            return True
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            log_firestore_event(
+                event_type="firestore.error",
+                collection="transcripts",
+                operation="delete",
+                status=500,
+                latency_ms=latency_ms,
+                exception=exc,
+                error_code="firestore_delete_transcript_error",
+                message=f"Firestore delete transcript error for production {production_id}: {type(exc).__name__}",
             )
             raise
 

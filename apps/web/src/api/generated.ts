@@ -144,6 +144,12 @@ export interface paths {
         422: components["schemas"]["HTTPValidationError"];
       };
     };
+    delete: {
+      responses: {
+        200: components["schemas"]["DeleteProductionResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
   };
   "/api/productions/{production_id}/transcribe": {
     post: {
@@ -425,7 +431,7 @@ export interface components {
       source_end_ms: number;
       gcs_bucket: string;
       gcs_object: string;
-      /** Target clip duration in ms (~2000-8000ms) */
+      /** Target clip duration in ms (~2000-10000ms) */
       duration_ms: number;
       status?: components["schemas"]["BRollArtifactStatus"];
       /** Human summary of B-roll visual intent */
@@ -582,6 +588,16 @@ export interface components {
       requires_room_tone?: boolean;
     };
     CutSafetyStatus: "SAFE" | "NEEDS_COVERAGE" | "REJECTED_UNSAFE";
+    DeleteProductionResponse: {
+      /** Operational status ('deleted') */
+      status?: string;
+      /** Unique production identifier */
+      production_id: string;
+      /** Count of GCS media storage objects deleted */
+      deleted_storage_objects_count?: number;
+      /** UTC timestamp of the deletion */
+      deleted_at: string;
+    };
     DirectorDecision: {
       /** ID of the EditorDecision being reviewed */
       editor_decision_id: string;

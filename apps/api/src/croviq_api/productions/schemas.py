@@ -505,3 +505,14 @@ class BRollListResponse(BaseModel):
 
     production_id: str = Field(..., description="Unique production identifier")
     artifacts: list[BRollArtifact] = Field(default_factory=list, description="List of generated B-roll clips")
+
+
+class DeleteProductionResponse(BaseModel):
+    """Response returned upon successful deletion of a production and all associated media storage objects."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = Field(default="deleted", description="Operational status ('deleted')")
+    production_id: str = Field(..., description="Unique production identifier")
+    deleted_storage_objects_count: int = Field(default=0, description="Count of GCS media storage objects deleted")
+    deleted_at: datetime = Field(..., description="UTC timestamp of the deletion")

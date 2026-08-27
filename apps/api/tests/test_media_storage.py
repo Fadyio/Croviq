@@ -73,3 +73,32 @@ async def test_google_media_storage_upload_missing_file_raises(tmp_path: Path):
             object_name="test.mp4",
             source_path=non_existent,
         )
+
+
+@pytest.mark.asyncio
+async def test_fake_media_storage_delete_object_and_prefix(tmp_path: Path):
+    storage = FakeMediaStorage()
+    bucket = "croviq-506602-croviq-media-raw"
+
+    storage.simulate_uploaded_object(bucket, "workspaces/ws_1/productions/prod_1/source/video.mp4", 1000, "video/mp4", b"video")
+    storage.simulate_uploaded_object(bucket, "workspaces/ws_1/productions/prod_1/renders/preview.mp4", 500, "video/mp4", b"preview")
+    storage.simulate_uploaded_object(bucket, "workspaces/ws_1/productions/prod_1/renders/master.mp4", 1500, "video/mp4", b"master")
+    storage.simulate_uploaded_object(bucket, "workspaces/ws_1/productions/prod_2/source/video.mp4", 1000, "video/mp4", b"other")
+
+    # Delete single object
+    deleted = await storage.delete_object(bucket, "workspaces/ws_1/productions/prod_1/renders/preview.mp4")
+    assert deleted is True
+    meta = await storage.get_object_metadata(bucket, "workspaces/ws_1/productions/prod_1/renders/preview.mp4")
+    assert meta.exists is False
+
+    # Deleting absent object returns False safely
+    deleted_again = await storage.delete_object(bucket, "workspaces/ws_1/productions/prod_1/renders/preview.mp4")
+    assert deleted_again is False
+
+    # Delete by prefix for prod_1
+    count = await storage.delete_prefix(bucket, "workspaces/ws_1/productions/prod_1/")
+    assert count == 2  # source and master
+
+    # Verify prod_2 remains intact
+    prod_2_meta = await storage.get_object_metadata(bucket, "workspaces/ws_1/productions/prod_2/source/video.mp4")
+    assert prod_2_meta.exists is True
