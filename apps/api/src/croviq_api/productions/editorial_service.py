@@ -306,10 +306,13 @@ class DirectorEditorService:
                         AgentActivity(
                             activity_id=f"act_sys_silence_{uuid.uuid4().hex[:8]}",
                             production_id=production_id,
-                            agent="system",
-                            action=f"Removed {total_silence_removed_ms / 1000.0:.1f}s of dead air.",
-                            timestamp=datetime.now(timezone.utc),
-                            details={"silence_cuts_count": len([d for d in merged_decisions if d.decision_id.startswith("silence_cut_")]), "removed_ms": total_silence_removed_ms},
+                            run_id=run.run_id,
+                            agent="System",
+                            role="Audio Processor",
+                            activity_type="tool_execution",
+                            message=f"I found and removed {total_silence_removed_ms / 1000.0:.1f}s of dead air.",
+                            related_decision_id=None,
+                            created_at=datetime.now(timezone.utc),
                         )
                     )
 
