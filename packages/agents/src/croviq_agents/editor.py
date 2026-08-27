@@ -1,4 +1,4 @@
-"""Leo (Dialogue Editor) agent implementation."""
+"""Leo (Video Editor) agent implementation."""
 
 from datetime import datetime, timezone
 import uuid
@@ -98,7 +98,7 @@ class LeoDialogueEditor:
                 production_id=analysis_input.production_id,
                 run_id=run_id_val,
                 agent="Leo",
-                role="Dialogue Editor",
+                role="Video Editor",
                 activity_type="proposal",
                 message=proposal.summary,
                 related_decision_id=None,
@@ -116,7 +116,7 @@ class LeoDialogueEditor:
                     production_id=analysis_input.production_id,
                     run_id=run_id_val,
                     agent="Leo",
-                    role="Dialogue Editor",
+                    role="Video Editor",
                     activity_type="decision",
                     message=msg,
                     related_decision_id=decision.decision_id,
@@ -134,7 +134,7 @@ class LeoDialogueEditor:
                     production_id=analysis_input.production_id,
                     run_id=run_id_val,
                     agent="Leo",
-                    role="Dialogue Editor",
+                    role="Video Editor",
                     activity_type="proposal",
                     message=f"Short candidate ({start_tc} - {end_tc}) \"{sc.hook_title}\": {sc.concise_reason}",
                     related_decision_id=None,
@@ -204,7 +204,7 @@ class LeoDialogueEditor:
                 production_id=analysis_input.production_id,
                 run_id=run_id_val,
                 agent="Leo",
-                role="Dialogue Editor",
+                role="Video Editor",
                 activity_type="correction",
                 message="Adjusted the affected section.",
                 related_decision_id=None,
@@ -221,7 +221,7 @@ class LeoDialogueEditor:
                     production_id=analysis_input.production_id,
                     run_id=run_id_val,
                     agent="Leo",
-                    role="Dialogue Editor",
+                    role="Video Editor",
                     activity_type="decision",
                     message=msg,
                     related_decision_id=decision.decision_id,

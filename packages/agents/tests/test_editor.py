@@ -116,7 +116,7 @@ async def test_leo_dialogue_editor_generates_proposal_and_activities() -> None:
     assert len(activities) >= 2
     summary_act = activities[0]
     assert summary_act.agent == "Leo"
-    assert summary_act.role == "Dialogue Editor"
+    assert summary_act.role == "Video Editor"
     assert summary_act.activity_type == "proposal"
     assert summary_act.production_id == "prod_editor_test"
     assert summary_act.run_id == "run_test_01"
@@ -174,4 +174,4 @@ async def test_leo_dialogue_editor_revise() -> None:
     assert len(revised_proposal.decisions) > 0
     assert len(activities) >= 1
     assert activities[0].agent == "Leo"
-    assert activities[0].role == "Dialogue Editor"
+    assert activities[0].role == "Video Editor"

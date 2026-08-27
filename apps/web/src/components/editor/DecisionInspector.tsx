@@ -93,7 +93,7 @@ export const DecisionInspector: React.FC<DecisionInspectorProps> = ({
 
       <dl className="mt-3 space-y-3 border-t border-border-subtle pt-3">
         <div>
-          <dt className="text-[10px] font-semibold text-text-primary">Leo · Dialogue Editor</dt>
+          <dt className="text-[10px] font-semibold text-text-primary">Leo · Video Editor</dt>
           {leoReason && (
             <dd className="mt-1 text-[11px] leading-4 text-text-secondary">{leoReason}</dd>
           )}

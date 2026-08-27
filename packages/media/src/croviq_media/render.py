@@ -662,21 +662,15 @@ class FFmpegRenderService(RenderService):
                 "pad=1080:1920:(1080-iw)/2:(1920-ih)/2:black,setsar=1[v_comp]"
             )
         else:
-            # Landscape video strategy: blurred darkened fill background + centered foreground
+            # Landscape video strategy: 9:16 readable screen focus crop scaled with Lanczos to 1080x1920
+            target_crop_w = max(2, int((source_height * 9 / 16) / 2) * 2)
+            target_crop_h = source_height
+            max_x_offset = max(0, source_width - target_crop_w)
+            target_crop_x = min(max_x_offset, max(0, int(max_x_offset * 0.12)))
             composition_filters.append(
-                "[v_trimmed]split=2[v_bg_in][v_fg_in]"
+                f"[v_trimmed]crop={target_crop_w}:{target_crop_h}:{target_crop_x}:0,"
+                "scale=1080:1920:flags=lanczos,setsar=1[v_comp]"
             )
-            composition_filters.append(
-                "[v_bg_in]scale=1080:1920:force_original_aspect_ratio=increase,"
-                "crop=1080:1920,boxblur=20:5,eq=brightness=-0.15:contrast=0.9[bg]"
-            )
-            composition_filters.append(
-                "[v_fg_in]scale=1080:-2[fg]"
-            )
-            composition_filters.append(
-                "[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1[v_comp]"
-            )
-
         # Subtitle burning
         subtitle_filter = self._resolve_subtitle_filter(ass_file_path)
         if subtitle_filter:

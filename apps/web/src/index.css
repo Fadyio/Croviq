@@ -41,25 +41,29 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Refined custom scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Refined custom scrollbars across all browsers */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #272e37 transparent;
 }
 
-::-webkit-scrollbar-track {
-  background: #0b0d0f;
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #22272f;
-  border-radius: 3px;
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #323a45;
+*::-webkit-scrollbar-thumb {
+  background: #272e37;
+  border-radius: 4px;
 }
 
+*::-webkit-scrollbar-thumb:hover {
+  background: #3b4554;
+}
 /* Smooth caret & focus defaults */
 input,
 button,

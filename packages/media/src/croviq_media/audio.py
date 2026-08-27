@@ -15,10 +15,9 @@ class AudioExtractionError(Exception):
 
 DEFAULT_SPEECH_ENHANCEMENT_FILTER = (
     "highpass=f=80,"
-    "afftdn=nr=10:nf=-25:tn=1,"
-    "acompressor=threshold=-18dB:ratio=2.5:attack=20:release=250:makeup=2dB,"
-    "loudnorm=I=-16:TP=-1.5:LRA=11,"
-    "alimiter=limit=0.8414:attack=5:release=50:asc=1:level=0"
+    "afftdn=nr=12:nf=-45:tn=0,"
+    "acompressor=threshold=-18dB:ratio=2.5:attack=15:release=200:makeup=2dB,"
+    "loudnorm=I=-16:TP=-1.0:LRA=10"
 )
 
 
