@@ -96,24 +96,28 @@ export const deriveProductionRunStages = (
       id: "transcript",
       label: "Transcript",
       status: transcriptComplete ? "completed" : "pending",
+      subStatus: "Listening…",
       durationMs: elapsed(run.uploadedAt, run.transcriptCreatedAt),
     },
     {
       id: "leo-edit",
       label: "Leo Edit",
       status: leoComplete ? "completed" : editorialStatus === "analyzing" ? "active" : "pending",
+      subStatus: "Editing pacing…",
       durationMs: elapsed(run.editorialRun?.started_at, lastActivityAt(activities, "leo")),
     },
     {
       id: "maya-review",
       label: "Maya Review",
       status: mayaComplete ? "completed" : editorialStatus === "reviewing" ? "active" : "pending",
+      subStatus: "Reviewing Leo…",
       durationMs: elapsed(firstActivityAt(activities, "maya"), run.editorialRun?.completed_at),
     },
     {
       id: "edit-plan",
       label: "Edit Plan",
       status: run.edlCreatedAt ? "completed" : "pending",
+      subStatus: "Assembling EDL…",
       durationMs: elapsed(run.editorialRun?.completed_at, run.edlCreatedAt),
     },
     {
@@ -121,13 +125,12 @@ export const deriveProductionRunStages = (
       label: "Render",
       status: renderStatus,
       subStatus:
-        overrides.renderSubStatus ?? (run.needsManualReview ? "Needs manual review" : null),
+        overrides.renderSubStatus ?? (run.needsManualReview ? "Needs manual review" : "Rendering preview…"),
       durationMs:
         run.renderDurationMs ??
         elapsed(run.edlCreatedAt, run.masterCompletedAt ?? run.renderCompletedAt),
     },
   ];
-
   if (overrides.active) {
     const stage = stages.find((candidate) => candidate.id === overrides.active);
     if (stage && stage.status !== "completed") {

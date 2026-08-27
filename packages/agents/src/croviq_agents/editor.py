@@ -3,9 +3,12 @@
 from datetime import datetime, timezone
 import uuid
 
+from typing import Sequence
+
 from croviq_agents.client import AgentUsageMetadata, GenAIClient
 from croviq_domain.editorial import (
     AgentActivity,
+    EditorDecision,
     EditorProposal,
 )
 from croviq_domain.render_review import RenderReview
@@ -24,7 +27,7 @@ def format_timecode_ms(ms: int) -> str:
 
 
 class LeoDialogueEditor:
-    """Dialogue Editor agent responsible for video/audio analysis and editorial proposals."""
+    """Video Editor agent responsible for video/audio analysis and editorial proposals."""
 
     def __init__(self, client: GenAIClient) -> None:
         self._client = client
@@ -34,6 +37,7 @@ class LeoDialogueEditor:
         analysis_input: SourceVideoAnalysisInput,
         channel_profile: ChannelMemoryProfile | None = None,
         lessons: list[ChannelLesson] | None = None,
+        silence_decisions: Sequence[EditorDecision] | None = None,
         run_id: str | None = None,
         request_id: str = "unknown",
     ) -> tuple[EditorProposal, AgentUsageMetadata, list[AgentActivity]]:
@@ -67,9 +71,9 @@ class LeoDialogueEditor:
             production_id=analysis_input.production_id,
             run_id=run_id_val,
             media_summary=media_summary,
+            silence_decisions=silence_decisions,
             request_id=request_id,
         )
-
         log_ai_event(
             event_type=EventType.EDITOR_ANALYSIS_COMPLETED,
             agent="leo",

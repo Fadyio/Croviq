@@ -13,6 +13,42 @@ class AudioExtractionError(Exception):
     """Raised when audio extraction from video fails."""
     pass
 
+DEFAULT_SPEECH_ENHANCEMENT_FILTER = (
+    "highpass=f=80,"
+    "afftdn=nr=10:nf=-25:tn=1,"
+    "acompressor=threshold=-18dB:ratio=2.5:attack=20:release=250:makeup=2dB,"
+    "loudnorm=I=-16:TP=-1.5:LRA=11,"
+    "alimiter=limit=0.8414:attack=5:release=50:asc=1:level=0"
+)
+
+
+class SpeechEnhancementPipeline:
+    """Deterministic, FFmpeg-native speech audio enhancement and loudness mastering pipeline.
+
+    Applies conservative highpass rumble filter, broadband adaptive noise reduction,
+    light dynamic speech compression, EBU R128 (-16 LUFS) loudness normalization,
+    and brickwall peak limiting (<= -1.5 dBTP) without third-party services.
+    """
+
+    def __init__(
+        self,
+        filter_chain: str = DEFAULT_SPEECH_ENHANCEMENT_FILTER,
+        ffmpeg_binary: str = "ffmpeg",
+    ) -> None:
+        self.filter_chain = filter_chain
+        self.ffmpeg_binary = ffmpeg_binary
+
+    def get_filter_chain(self) -> str:
+        """Return the composite FFmpeg audio filter string."""
+        return self.filter_chain
+
+    def build_audio_filter_graph(
+        self,
+        input_label: str = "0:a",
+        output_label: str = "aout",
+    ) -> str:
+        """Construct FFmpeg filtergraph segment connecting input stream label to output stream label."""
+        return f"[{input_label}]{self.filter_chain}[{output_label}]"
 
 class AudioExtractor(ABC):
     """Abstract interface for extracting audio streams from video files."""

@@ -64,7 +64,7 @@ export const ProductionRunStrip: React.FC<ProductionRunStripProps> = ({ stages }
                   <span className="size-1 rounded-full bg-current" />
                 )}
               </span>
-              {stage.id === "render" && stage.status === "active" && stage.subStatus
+              {stage.status === "active" && stage.subStatus
                 ? stage.subStatus
                 : stage.label}
             </span>
