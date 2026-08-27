@@ -190,8 +190,10 @@ class LeoVideoEditor:
                 created_at=now,
             )
         )
+        tools.run_id = run_id_val
+        tools.production_id = analysis_input.production_id
 
-        # Execute real tool inspection activities
+        # 1. Inspection Tool: inspect source media properties
         media_probe_res = tools.execute("inspect_media", {"start_ms": 0, "end_ms": analysis_input.media_metadata.duration_ms})
         if media_probe_res.status == "success" and media_probe_res.human_summary:
             activities.append(
@@ -224,12 +226,29 @@ class LeoVideoEditor:
                 )
             )
 
-        # Real Self-Review step: Leo renders a test cut and inspects result
+        # 2. Manipulation / Test-Render Tool: render test cut of candidate decisions
         test_render_res = tools.execute(
             "render_test_edit",
             {"edl_summary": f"{len(proposal.decisions)} cut points", "decisions_count": len(proposal.decisions)},
         )
-        if test_render_res.status == "success":
+        if test_render_res.status == "success" and test_render_res.human_summary:
+            activities.append(
+                AgentActivity(
+                    activity_id=f"act_tool_{uuid.uuid4().hex[:8]}",
+                    production_id=analysis_input.production_id,
+                    run_id=run_id_val,
+                    agent="Leo",
+                    role="Video Editor",
+                    activity_type="tool_execution",
+                    message=test_render_res.human_summary,
+                    related_decision_id=None,
+                    created_at=now,
+                )
+            )
+
+        # 3. Output Inspection Tool: inspect rendered preview test cut result
+        probe_preview_res = tools.execute("probe_media", {"target": "preview"})
+        if probe_preview_res.status == "success":
             activities.append(
                 AgentActivity(
                     activity_id=f"act_self_review_{uuid.uuid4().hex[:8]}",
@@ -238,12 +257,11 @@ class LeoVideoEditor:
                     agent="Leo",
                     role="Video Editor",
                     activity_type="proposal",
-                    message="I inspected the test cut and verified continuous audio/video flow.",
+                    message="I inspected the test cut preview stream and verified continuous audio/video flow.",
                     related_decision_id=None,
                     created_at=datetime.now(timezone.utc),
                 )
             )
-
         for decision in proposal.decisions:
             start_tc = format_timecode_ms(decision.source_start_ms)
             msg = f"[{decision.decision_type.value}] At {start_tc}: {decision.concise_reason}"

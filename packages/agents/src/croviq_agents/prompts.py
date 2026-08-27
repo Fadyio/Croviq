@@ -333,3 +333,35 @@ MAYA'S POST-RENDER REVIEW & ISSUES:
 
 Produce a complete, revised EditorProposal conforming strictly to the requested schema.
 """
+
+
+def build_narration_rewrite_prompt(
+    original_text: str,
+    available_duration_s: float,
+    attempt: int = 1,
+) -> str:
+    """Construct prompt for Leo to rewrite speech into natural professional spoken English within strict time budget."""
+    target_words = max(2, int(available_duration_s * 2.3))
+    shorten_guidance = (
+        f" This is retry attempt {attempt}; tighten phrasing and use fewer words ({target_words} words max) to ensure the spoken duration strictly fits within {available_duration_s:.2f}s."
+        if attempt > 1
+        else f" Keep length under approximately {target_words} words so spoken duration fits within {available_duration_s:.2f}s."
+    )
+    return f"""You are Leo, the Video Editor and Voice Director on the Croviq autonomous production team.
+
+GOAL:
+Correct grammar and non-native phrasing into natural spoken English while preserving technical meaning and remaining within the exact available time budget.
+
+GUIDELINES:
+1. Fix non-native phrasing, awkward grammar, and speech stumbles into smooth, idiomatic, professional spoken English.
+2. Preserve all technical concepts (e.g. GitHub Actions, Cloudflare, Google Cloud deployment, test verification, workflows).
+3. Match what is visibly demonstrated on screen.
+4. Do NOT make narration more verbose.
+5.{shorten_guidance}
+6. Return ONLY the rewritten spoken sentence without commentary, quotes, or markdown formatting.
+
+ORIGINAL SPOKEN TEXT:
+"{original_text}"
+
+AVAILABLE TIME BUDGET: {available_duration_s:.2f} seconds
+REWRITTEN SPOKEN TEXT:"""

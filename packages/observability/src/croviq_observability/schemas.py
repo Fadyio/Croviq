@@ -41,7 +41,7 @@ class StandardLogEvent(BaseModel):
     trace_id: str = Field(description="Distributed OpenTelemetry / Cloud Trace identifier")
     user_id: str | None = Field(default=None, description="Authenticated creator user ID")
     route: str | None = Field(default=None, description="HTTP route or execution handler")
-    status: int | None = Field(default=None, description="HTTP or execution status code")
+    status: int | str | None = Field(default=None, description="HTTP or execution status code")
     latency_ms: float | None = Field(default=None, description="Execution duration in milliseconds")
     git_sha: str | None = Field(default=None, description="Git commit SHA or image digest")
     error_code: str | None = Field(default=None, description="Machine-readable error classification")

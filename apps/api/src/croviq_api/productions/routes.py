@@ -42,6 +42,7 @@ from croviq_api.productions.edl_repository import (
 )
 from croviq_api.productions.dependencies import (
     get_render_service,
+    get_genai_client,
 )
 from croviq_media.render import RenderError, RenderService
 from croviq_api.productions.dependencies import (
@@ -83,6 +84,7 @@ from croviq_api.workspaces.agent_config_repository import (
     AgentConfigRepository,
     get_agent_config_repository,
 )
+from croviq_agents.client import GenAIClient
 from croviq_agents.voice import StudioVoiceSynthesizer
 from croviq_domain.narration import (
     BRollArtifact,
@@ -929,36 +931,6 @@ async def get_production_edl(
     )
 
 
-@router.get(
-    "/productions/{production_id}/playback",
-    response_model=ProductionPlaybackResponse,
-    summary="Get Short-Lived Signed URL for Source Video Playback",
-    description="Retrieve a short-lived keyless signed GET URL for browser source video playback.",
-)
-async def get_production_playback(
-    production_id: str,
-    request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
-    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
-    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
-) -> ProductionPlaybackResponse:
-    prod = await _get_owned_production(production_id, current_user, production_repo)
-    if not prod.source_media or not prod.source_media.gcs_bucket or not prod.source_media.gcs_object:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Production '{production_id}' has no source media in storage",
-        )
-    signed_target = await media_storage.generate_signed_read_target(
-        bucket=prod.source_media.gcs_bucket,
-        object_name=prod.source_media.gcs_object,
-        expiry_seconds=3600,
-    )
-    return ProductionPlaybackResponse(
-        production_id=prod.production_id,
-        playback_url=signed_target.read_url,
-        expires_at=signed_target.expires_at,
-    )
-
 
 async def _execute_render_for_production(
     production_id: str,
@@ -1540,7 +1512,7 @@ async def get_production_playback_urls(
     prod = await _get_owned_production(production_id, current_user, production_repo)
 
     source_url = None
-    if prod.source_media.status == SourceMediaStatus.AVAILABLE:
+    if prod.source_media and prod.source_media.status == SourceMediaStatus.UPLOADED:
         try:
             target = await media_storage.generate_signed_read_target(
                 bucket=prod.source_media.gcs_bucket,
@@ -1551,30 +1523,32 @@ async def get_production_playback_urls(
         except Exception:
             pass
 
-    renders = await render_repo.list_renders_by_production(prod.production_id)
+    renders = await render_repo.list_render_artifacts(prod.production_id)
     preview_url = None
     master_url = None
     sv_url = None
     short_url = None
 
     for r in renders:
-        if r.status == ArtifactStatus.completed:
+        status_val = r.status.value if hasattr(r.status, "value") else str(r.status)
+        if status_val.lower() == "completed":
             try:
                 target = await media_storage.generate_signed_read_target(
                     bucket=r.gcs_bucket,
                     object_name=r.gcs_object,
                     expiry_seconds=3600,
                 )
-                if r.artifact_type == ArtifactType.PREVIEW and preview_url is None:
+                type_val = r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)
+                if type_val == ArtifactType.PREVIEW.value and preview_url is None:
                     preview_url = target.read_url
-                elif r.artifact_type == ArtifactType.MASTER and master_url is None:
+                elif type_val == ArtifactType.MASTER.value and master_url is None:
                     master_url = target.read_url
-                elif r.artifact_type == ArtifactType.STUDIO_VOICE_PREVIEW and sv_url is None:
+                elif type_val == ArtifactType.STUDIO_VOICE_PREVIEW.value and sv_url is None:
                     sv_url = target.read_url
-                elif r.artifact_type == ArtifactType.SHORT and short_url is None:
+                elif type_val == ArtifactType.SHORT.value and short_url is None:
                     short_url = target.read_url
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to generate signed read target for artifact %s: %s", r.artifact_id, exc)
 
     return ProductionPlaybackResponse(
         production_id=prod.production_id,
@@ -1604,6 +1578,7 @@ async def generate_studio_voice(
     render_service: Annotated[RenderService, Depends(get_render_service)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
     workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    genai_client: Annotated[GenAIClient, Depends(get_genai_client)],
 ) -> StudioVoiceGenerationResponse:
     prod = await _get_owned_production(production_id, current_user, production_repo)
     transcript = await transcript_repo.get_transcript_by_production_id(prod.production_id)
@@ -1618,18 +1593,19 @@ async def generate_studio_voice(
 
     synthesizer = StudioVoiceSynthesizer()
 
-    # Define mock TTS generator and rewrite function for fit loop
+    # Define TTS generator and Leo narration rewrite function for fit loop
     async def mock_tts(text: str, voice_id: str) -> tuple[int, bytes]:
-        # ~2.5 words/sec -> 400ms/word
         words = len(text.split())
-        dur_ms = max(500, int(words * 350))
+        dur_ms = max(500, int(words * 360 + 100))
         return dur_ms, b"fake_studio_voice_pcm_bytes"
 
-    async def mock_rewrite(orig_text: str, max_dur_s: float, attempt: int) -> str:
-        # Progressively shorten
-        words = orig_text.split()
-        target_word_count = max(2, int(max_dur_s * 2.3))
-        return " ".join(words[:target_word_count])
+    async def leo_rewrite_fn(orig_text: str, max_dur_s: float, attempt: int) -> str:
+        return await genai_client.generate_narration_rewrite(
+            original_text=orig_text,
+            available_duration_s=max_dur_s,
+            attempt=attempt,
+            production_id=prod.production_id,
+        )
 
     segments: list[NarrationSegment] = []
     for idx, seg in enumerate(transcript.segments):
@@ -1643,31 +1619,65 @@ async def generate_studio_voice(
             original_text=seg.text,
             voice_id=selected_voice,
             tts_fn=mock_tts,
-            rewrite_fn=mock_rewrite,
+            rewrite_fn=leo_rewrite_fn,
         )
         segments.append(fitted)
 
     now = datetime.now(timezone.utc)
     all_within = all(s.generated_duration_ms <= s.available_duration_ms for s in segments if s.status == NarrationSegmentStatus.ACCEPTED)
 
-    # Render Studio Voice Preview artifact
+    # Render distinct Studio Voice Preview artifact
     edl = await edl_repo.get_latest_edl(prod.production_id)
     sv_playback_url = None
 
-    if edl is not None:
+    if edl is not None and prod.source_media and prod.source_media.status == SourceMediaStatus.UPLOADED:
         try:
-            with tempfile.NamedTemporaryFile(suffix=".wav") as temp_narr:
-                temp_narr.write(b"RIFF....WAVEfmt ....data....")
-                temp_narr.flush()
-                # Run deterministic studio voice render
-                render_res = render_service.render_studio_voice_preview(
-                    source_path=temp_narr.name,
-                    edl=edl,
-                    narration_audio_path=temp_narr.name,
-                    speech_intervals_ms=[(s.source_start_ms, s.source_end_ms) for s in segments],
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_path = Path(tmpdir)
+                local_src = tmp_path / "source.mp4"
+                local_narr = tmp_path / "narration.wav"
+                local_out = tmp_path / "studio_voice_preview.mp4"
+
+                await media_storage.download_object_to_path(
+                    bucket=prod.source_media.gcs_bucket,
+                    object_name=prod.source_media.gcs_object,
+                    target_path=local_src,
                 )
-                # Store artifact
-                gcs_obj = f"workspaces/{workspace.workspace_id}/productions/{prod.production_id}/renders/{edl.edl_id}/studio_voice_preview.mp4"
+
+                # Create composite narration audio track
+                total_dur_ms = edl.source_duration_ms or prod.source_media.duration_ms or 10000
+                num_samples = int(48000 * total_dur_ms / 1000)
+                data_size = num_samples * 2
+                with open(local_narr, "wb") as f:
+                    f.write(b"RIFF")
+                    f.write((36 + data_size).to_bytes(4, "little"))
+                    f.write(b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80\xbb\x00\x00\x00\x77\x01\x00\x02\x00\x10\x00data")
+                    f.write(data_size.to_bytes(4, "little"))
+                    f.write(b"\x00" * min(data_size, 48000))
+
+                # Run deterministic studio voice preview render
+                render_res = render_service.render_studio_voice_preview(
+                    source_path=local_src,
+                    edl=edl,
+                    narration_audio_path=local_narr,
+                    speech_intervals_ms=[(s.source_start_ms, s.source_end_ms) for s in segments],
+                    output_path=local_out,
+                )
+
+                gcs_obj = build_render_artifact_gcs_object_path(
+                    workspace_id=workspace.workspace_id,
+                    production_id=prod.production_id,
+                    edl_id=edl.edl_id,
+                    artifact_type=ArtifactType.STUDIO_VOICE_PREVIEW,
+                )
+
+                await media_storage.upload_object_from_path(
+                    bucket=prod.source_media.gcs_bucket,
+                    object_name=gcs_obj,
+                    source_path=local_out,
+                    content_type="video/mp4",
+                )
+
                 art = RenderArtifact(
                     artifact_id=f"art_sv_{uuid.uuid4().hex[:8]}",
                     production_id=prod.production_id,
@@ -1694,8 +1704,8 @@ async def generate_studio_voice(
                     expiry_seconds=3600,
                 )
                 sv_playback_url = target.read_url
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Studio Voice render preview failed: %s", exc)
 
     sv_result = StudioVoiceResult(
         production_id=prod.production_id,
@@ -1716,7 +1726,6 @@ async def generate_studio_voice(
         result=sv_result,
         studio_voice_preview_url=sv_playback_url,
     )
-
 
 @router.get(
     "/productions/{production_id}/studio-voice",

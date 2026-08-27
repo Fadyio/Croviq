@@ -1,13 +1,12 @@
 from datetime import datetime, timezone
 from croviq_agents.prompts import (
     build_director_prompt,
-    build_editor_prompt,
-    format_channel_memory_summary,
-    format_transcript_for_prompt,
-)
-from croviq_agents.prompts import (
     build_director_render_review_prompt,
     build_editor_correction_prompt,
+    build_editor_prompt,
+    build_narration_rewrite_prompt,
+    format_channel_memory_summary,
+    format_transcript_for_prompt,
 )
 from croviq_domain.edl import EditDecisionList
 from croviq_domain.render_review import (
@@ -328,3 +327,15 @@ def test_build_editor_correction_prompt() -> None:
     assert "rrv_123" in prompt
     assert "Audio clip audible at word boundary." in prompt
     assert "Revise ONLY affected decisions" in prompt
+
+
+def test_build_narration_rewrite_prompt() -> None:
+    prompt = build_narration_rewrite_prompt(
+        original_text="Also there is a lot of other devices one to verify that the GitHub the Cloudflare action is working.",
+        available_duration_s=10.2,
+        attempt=1,
+    )
+    assert "Correct grammar and non-native phrasing into natural spoken English" in prompt
+    assert "remaining within the exact available time budget" in prompt
+    assert "Do NOT make narration more verbose" in prompt
+    assert "10.20 seconds" in prompt

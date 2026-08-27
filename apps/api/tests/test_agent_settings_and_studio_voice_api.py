@@ -44,6 +44,7 @@ from croviq_domain.production import Production, ProductionStatus, SourceMedia, 
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
 from croviq_domain.user import User
 from croviq_media.render import FakeRenderService
+from croviq_domain.render import ArtifactType
 
 
 @pytest.fixture
@@ -87,6 +88,7 @@ def api_test_context():
         "transcript_repo": transcript_repo,
         "edl_repo": edl_repo,
         "sv_repo": sv_repo,
+        "render_repo": render_repo,
     }
 
     app.dependency_overrides.clear()
@@ -254,6 +256,15 @@ async def test_studio_voice_generation_endpoint(api_test_context):
     assert result["accepted_segments"] == 2
     assert result["all_within_budget"] is True
 
+    assert gen_data["studio_voice_preview_url"] is not None
+
+    # Verify distinct RenderArtifact persistence
+    render_repo = api_test_context["render_repo"]
+    artifacts = await render_repo.list_render_artifacts(prod_id)
+    sv_artifacts = [a for a in artifacts if a.artifact_type == ArtifactType.STUDIO_VOICE_PREVIEW]
+    assert len(sv_artifacts) == 1
+    assert "studio_voice_preview.mp4" in sv_artifacts[0].gcs_object
+
     # Retrieve Studio Voice result
     get_resp = client.get(f"/api/productions/{prod_id}/studio-voice")
     assert get_resp.status_code == 200
@@ -265,3 +276,4 @@ async def test_studio_voice_generation_endpoint(api_test_context):
     playback_data = playback_resp.json()
     assert playback_data["production_id"] == prod_id
     assert playback_data["playback_url"] is not None
+    assert playback_data["studio_voice_preview_url"] is not None

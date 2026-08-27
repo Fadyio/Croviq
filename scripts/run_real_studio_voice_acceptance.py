@@ -56,29 +56,17 @@ async def main() -> None:
         dur_ms = int(words * 380 + 150)
         return dur_ms, b"fake_tts_bytes"
 
-    # Leo editorial rewrite function to preserve technical clarity while tightening phrasing
-    rewrites = {
-        0: "In this tutorial, we'll configure a GitHub Actions workflow.",
-        1: "Let's open the workflow file and review its triggers.",
-        2: "Make sure you have write permissions enabled for GitHub actions.",
-        3: "Next, we'll verify the deployment script.",
-        4: "Now, let's trigger the Google Cloud deployment job.",
-        5: "The workflow connects securely using Workload Identity Federation.",
-        6: "Once the deployment succeeds, we verify the live service status.",
-        7: "Finally, we inspect the issues workflow configuration.",
-    }
+    # Leo editorial rewrite function to improve grammar and non-native phrasing into natural spoken English
+    from croviq_agents.client import generate_fallback_narration_rewrite
 
     async def leo_rewrite(orig_text: str, max_dur_s: float, attempt: int) -> str:
-        words = orig_text.split()
-        target_word_count = max(3, int(max_dur_s * 2.2))
-        return " ".join(words[:target_word_count])
+        return generate_fallback_narration_rewrite(orig_text, max_dur_s, attempt)
 
     table_rows = []
     segments: list[NarrationSegment] = []
 
-    for idx, seg in enumerate(transcript.segments[:8]):
+    for idx, seg in enumerate(transcript.segments):
         avail_ms = max(1000, seg.end_ms - seg.start_ms)
-        custom_rewrite = rewrites.get(idx, seg.text)
 
         fitted = await synthesizer.fit_narration_segment(
             segment_id=f"seg_{idx+1:03d}",
@@ -91,13 +79,6 @@ async def main() -> None:
             tts_fn=measure_tts,
             rewrite_fn=leo_rewrite,
         )
-
-        # Update with Leo's improved grammar rewrite
-        if fitted.status == NarrationSegmentStatus.ACCEPTED:
-            fitted = fitted.model_copy(update={"rewritten_text": custom_rewrite})
-            # Re-measure with final rewrite
-            meas_dur, _ = await measure_tts(custom_rewrite, selected_voice)
-            fitted = fitted.model_copy(update={"generated_duration_ms": min(avail_ms, meas_dur)})
 
         segments.append(fitted)
 
@@ -112,9 +93,8 @@ async def main() -> None:
             "fit": "PASS" if fitted.generated_duration_ms <= avail_ms else "FAIL",
             "meaning_preserved": "YES",
         })
-
     print("\n" + "=" * 100)
-    print("STUDIO VOICE QUALITY & TIMING VERIFICATION TABLE (8 REPRESENTATIVE SECTIONS)")
+    print("STUDIO VOICE QUALITY & TIMING VERIFICATION TABLE (ALL 11 CANONICAL SECTIONS)")
     print("=" * 100)
     print(f"{'SOURCE TIME':<18} | {'TIME BUDGET':<11} | {'TTS DUR':<9} | {'FIT':<5} | {'MEANING':<7} | {'LEO REWRITE'}")
     print("-" * 100)

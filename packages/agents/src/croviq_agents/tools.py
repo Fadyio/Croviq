@@ -26,6 +26,8 @@ from croviq_domain.narration import (
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import Transcript
 
+from croviq_observability import log_agent_tool_event
+from croviq_observability.events import EventType
 logger = logging.getLogger(__name__)
 
 
@@ -120,8 +122,10 @@ class SynthesizeVoiceSegmentArgs(BaseModel):
 class ToolRegistry:
     """Central registry and dispatcher for internal agent tools."""
 
-    def __init__(self) -> None:
+    def __init__(self, production_id: str = "unknown", run_id: str | None = None) -> None:
         self._tools: dict[str, ToolDefinition] = {}
+        self.production_id = production_id
+        self.run_id = run_id
 
     def register(self, tool: ToolDefinition) -> None:
         self._tools[tool.name] = tool
@@ -135,10 +139,37 @@ class ToolRegistry:
     def list_tools(self) -> list[ToolDefinition]:
         return list(self._tools.values())
 
-    def execute(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
-        """Validate arguments and safely execute the named tool."""
+    def execute(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        production_id: str | None = None,
+        run_id: str | None = None,
+    ) -> ToolResult:
+        """Validate arguments and safely execute the named tool with structured audit logging."""
+        prod_id = production_id or self.production_id
+        r_id = run_id or self.run_id
+
+        # Emit agent.tool.started
+        log_agent_tool_event(
+            event_type=EventType.AGENT_TOOL_STARTED,
+            tool_name=tool_name,
+            production_id=prod_id,
+            run_id=r_id,
+            status="started",
+        )
+
         tool = self._tools.get(tool_name)
         if not tool:
+            log_agent_tool_event(
+                event_type=EventType.AGENT_TOOL_FAILED,
+                tool_name=tool_name,
+                production_id=prod_id,
+                run_id=r_id,
+                latency_ms=0,
+                status="failed",
+                error_code="TOOL_NOT_REGISTERED",
+            )
             return ToolResult(
                 tool_name=tool_name,
                 status="error",
@@ -159,6 +190,16 @@ class ToolRegistry:
                 except Exception:
                     pass
 
+            # Emit agent.tool.completed
+            log_agent_tool_event(
+                event_type=EventType.AGENT_TOOL_COMPLETED,
+                tool_name=tool_name,
+                production_id=prod_id,
+                run_id=r_id,
+                latency_ms=duration_ms,
+                status="completed",
+            )
+
             return ToolResult(
                 tool_name=tool_name,
                 status="success",
@@ -168,6 +209,15 @@ class ToolRegistry:
             )
         except ValidationError as val_err:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
+            log_agent_tool_event(
+                event_type=EventType.AGENT_TOOL_FAILED,
+                tool_name=tool_name,
+                production_id=prod_id,
+                run_id=r_id,
+                latency_ms=duration_ms,
+                status="failed",
+                error_code="VALIDATION_ERROR",
+            )
             return ToolResult(
                 tool_name=tool_name,
                 status="error",
@@ -177,6 +227,15 @@ class ToolRegistry:
             )
         except Exception as exc:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
+            log_agent_tool_event(
+                event_type=EventType.AGENT_TOOL_FAILED,
+                tool_name=tool_name,
+                production_id=prod_id,
+                run_id=r_id,
+                latency_ms=duration_ms,
+                status="failed",
+                error_code=type(exc).__name__,
+            )
             return ToolResult(
                 tool_name=tool_name,
                 status="error",
@@ -184,7 +243,6 @@ class ToolRegistry:
                 latency_ms=duration_ms,
                 error_message=f"Tool execution failed: {type(exc).__name__}: {exc}",
             )
-
     def to_genai_function_declarations(self) -> list[dict[str, Any]]:
         """Generate Google GenAI SDK compatible function declarations."""
         declarations = []
@@ -223,7 +281,7 @@ def build_default_editor_tool_registry(
     terminal_runner: SandboxedTerminalRunner | None = None,
 ) -> ToolRegistry:
     """Create and wire the standard internal tool registry for Leo (Video Editor)."""
-    registry = ToolRegistry()
+    registry = ToolRegistry(production_id=production_id)
     runner = terminal_runner or SandboxedTerminalRunner(production_id=production_id)
 
     # 1. inspect_media

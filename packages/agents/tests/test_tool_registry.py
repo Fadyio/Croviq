@@ -78,3 +78,23 @@ def test_tool_registry_generates_genai_declarations():
     assert decl["description"] == "Search for items"
     assert "properties" in decl["parameters"]
     assert "query" in decl["parameters"]["properties"]
+
+
+def test_tool_registry_logs_execution_with_context():
+    registry = ToolRegistry(production_id="prod_123", run_id="run_456")
+
+    def inspect_sample(query: str, limit: int = 1) -> dict:
+        return {"found": query}
+
+    tool = ToolDefinition(
+        name="inspect_sample",
+        description="Sample inspect",
+        parameters_schema=DummyArgs,
+        handler=inspect_sample,
+    )
+    registry.register(tool)
+
+    res = registry.execute("inspect_sample", {"query": "test_inspect"})
+    assert res.status == "success"
+    assert res.latency_ms >= 0
+    assert res.output["found"] == "test_inspect"

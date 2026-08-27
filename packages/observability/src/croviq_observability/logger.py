@@ -75,7 +75,7 @@ class StructuredLogger:
         event_type: str,
         *,
         severity: LogSeverity | None = None,
-        status: int | None = None,
+        status: int | str | None = None,
         request_id: str | None = None,
         trace_id: str | None = None,
         user_id: str | None = None,
@@ -315,6 +315,38 @@ def log_ai_event(
         latency_ms=latency_ms,
         error_code=error_code,
         message=message,
+        **kwargs,
+    )
+
+
+def log_agent_tool_event(
+    event_type: str | EventType,
+    tool_name: str,
+    production_id: str,
+    run_id: str | None = None,
+    latency_ms: float | None = None,
+    status: str | int = "completed",
+    error_code: str | None = None,
+    message: str | None = None,
+    request_id: str | None = None,
+    git_sha: str | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Emit a canonical structured log event for internal agent tool execution."""
+    ev_str = event_type.value if isinstance(event_type, EventType) else str(event_type)
+    severity: LogSeverity = "ERROR" if str(status).lower() in ("failed", "error") else "INFO"
+    return _default_logger.log(
+        event_type=ev_str,
+        severity=severity,
+        tool_name=tool_name,
+        production_id=production_id,
+        run_id=run_id,
+        latency_ms=latency_ms,
+        status=status,
+        error_code=error_code,
+        message=message or f"Agent tool {tool_name} {status}",
+        request_id=request_id,
+        git_sha=git_sha,
         **kwargs,
     )
 

@@ -68,6 +68,10 @@ class RenderRepository(ABC):
     ) -> list[RenderArtifact]:
         """List all RenderArtifact records associated with a production."""
         pass
+    async def list_renders_by_production(self, production_id: str) -> list[RenderArtifact]:
+        """Alias for list_render_artifacts."""
+        return await self.list_render_artifacts(production_id)
+
 
     def _deserialize_render_artifact(self, data: dict[str, Any]) -> RenderArtifact:
         """Deserialize raw Firestore dictionary into validated RenderArtifact."""

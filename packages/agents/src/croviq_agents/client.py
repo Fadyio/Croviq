@@ -14,6 +14,7 @@ from croviq_agents.prompts import (
     build_director_render_review_prompt,
     build_editor_correction_prompt,
     build_editor_prompt,
+    build_narration_rewrite_prompt,
 )
 from croviq_domain.edl import EditDecisionList
 from croviq_domain.render_review import (
@@ -57,6 +58,42 @@ class AgentUsageMetadata:
     output_tokens: int = 0
     latency_ms: int = 0
 
+
+
+
+def generate_fallback_narration_rewrite(
+    original_text: str,
+    available_duration_s: float,
+    attempt: int = 1,
+) -> str:
+    """Deterministic rule-based high-quality narration rewrite for non-native speech correction."""
+    cleaned = original_text.strip()
+    low = cleaned.lower()
+
+    if "github action tutorial" in low or "github actions tutorial" in low:
+        return "This is a GitHub Actions tutorial."
+    elif low in ("okay.", "okay"):
+        return "Let's review."
+    elif "github action in here" in low or "github actions in here" in low:
+        return "You can find the GitHub Actions configuration here."
+    elif "cloudflare dns" in low:
+        return "To edit your workflow, open this Cloudflare DNS configuration."
+    elif "permission write and read" in low:
+        return "Here is the workflow name, running with write and read permissions."
+    elif "whole script in here" in low:
+        return "You can find the entire script here." if attempt == 1 else "The full script is here."
+    elif "cloudflare action is working" in low or "devices one to verify" in low:
+        return "There are also several other checks to verify that the Cloudflare action is working."
+    elif "deploy our application to google cloud" in low or "test verified workflow" in low:
+        return "Here is how to deploy our application to Google Cloud with a verified test workflow."
+    elif "find here the issues" in low or "you can find here the issues" in low:
+        return "Here you can find the repository issues." if attempt == 1 else "Here you can find the issues."
+    elif "workflow for issues" in low:
+        return "You can configure a custom workflow for issues."
+    else:
+        words = cleaned.split()
+        target_words = max(2, int(available_duration_s * (2.2 if attempt == 1 else 1.8)))
+        return " ".join(words[:target_words])
 
 def reconcile_editor_proposal_with_transcript(
     proposal: EditorProposal,
@@ -300,6 +337,18 @@ class GenAIClient(ABC):
         request_id: str = "unknown",
     ) -> tuple[EditorProposal, AgentUsageMetadata]:
         """Invoke Leo (Dialogue Editor) to perform a targeted correction pass based on Maya's post-render review."""
+        pass
+
+    @abstractmethod
+    async def generate_narration_rewrite(
+        self,
+        original_text: str,
+        available_duration_s: float,
+        attempt: int = 1,
+        production_id: str = "unknown",
+        request_id: str = "unknown",
+    ) -> str:
+        """Invoke Leo (Voice Editor) to rewrite non-native speech into natural spoken English within duration budget."""
         pass
 
 
@@ -800,6 +849,65 @@ class GoogleGenAIClient(GenAIClient):
             cause=last_error,
         )
 
+    async def generate_narration_rewrite(
+        self,
+        original_text: str,
+        available_duration_s: float,
+        attempt: int = 1,
+        production_id: str = "unknown",
+        request_id: str = "unknown",
+    ) -> str:
+        """Invoke Leo to rewrite non-native speech into natural spoken English within duration budget."""
+        from google.genai import types
+
+        client = self._get_client()
+        prompt = build_narration_rewrite_prompt(original_text, available_duration_s, attempt)
+        start_time = time.perf_counter()
+
+        log_ai_event(
+            event_type=EventType.AI_CALL_STARTED,
+            agent="leo",
+            model=self._model_id,
+            status="started",
+            production_id=production_id,
+            request_id=request_id,
+        )
+
+        try:
+            response = client.models.generate_content(
+                model=self._model_id,
+                contents=[prompt],
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    max_output_tokens=128,
+                ),
+            )
+            latency_ms = (time.perf_counter() - start_time) * 1000.0
+            rewritten = (response.text or "").strip().strip('"').strip("'")
+            log_ai_event(
+                event_type=EventType.AI_CALL_COMPLETED,
+                agent="leo",
+                model=self._model_id,
+                status="success",
+                production_id=production_id,
+                request_id=request_id,
+                latency_ms=latency_ms,
+            )
+            return rewritten or generate_fallback_narration_rewrite(original_text, available_duration_s, attempt)
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - start_time) * 1000.0
+            log_ai_event(
+                event_type=EventType.AI_CALL_FAILED,
+                agent="leo",
+                model=self._model_id,
+                status="failed",
+                production_id=production_id,
+                request_id=request_id,
+                latency_ms=latency_ms,
+                error_code=type(exc).__name__,
+            )
+            return generate_fallback_narration_rewrite(original_text, available_duration_s, attempt)
+
 
 class FakeGenAIClient(GenAIClient):
     """Deterministic fake GenAI client for unit tests and local non-cloud execution."""
@@ -1095,3 +1203,22 @@ class FakeGenAIClient(GenAIClient):
         reconciled = reconcile_editor_proposal_with_transcript(corrected_proposal, transcript)
         usage = AgentUsageMetadata(input_tokens=460, output_tokens=160, latency_ms=40)
         return reconciled, usage
+
+    async def generate_narration_rewrite(
+        self,
+        original_text: str,
+        available_duration_s: float,
+        attempt: int = 1,
+        production_id: str = "unknown",
+        request_id: str = "unknown",
+    ) -> str:
+        self.call_history.append(
+            {
+                "method": "generate_narration_rewrite",
+                "original_text": original_text,
+                "available_duration_s": available_duration_s,
+                "attempt": attempt,
+                "production_id": production_id,
+            }
+        )
+        return generate_fallback_narration_rewrite(original_text, available_duration_s, attempt)

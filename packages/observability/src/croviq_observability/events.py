@@ -54,6 +54,10 @@ class EventType(StrEnum):
     AI_CALL_COMPLETED = "ai.call.completed"
     AI_CALL_FAILED = "ai.call.failed"
 
+    # Agent Tool lifecycle events
+    AGENT_TOOL_STARTED = "agent.tool.started"
+    AGENT_TOOL_COMPLETED = "agent.tool.completed"
+    AGENT_TOOL_FAILED = "agent.tool.failed"
     # Editor / Leo events
     EDITOR_ANALYSIS_STARTED = "editor.analysis.started"
     EDITOR_ANALYSIS_COMPLETED = "editor.analysis.completed"

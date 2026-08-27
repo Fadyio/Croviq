@@ -107,10 +107,8 @@ class StudioVoiceSynthesizer:
         max_dur_s = available_duration_ms / 1000.0
 
         for attempt in range(1, max_attempts + 1):
-            if attempt > 1:
-                # Ask Leo to shorten / tighten the rewrite for this duration budget
-                current_text = await rewrite_fn(original_text, max_dur_s, attempt)
-
+            # Ask Leo to rewrite into natural English adhering to duration budget
+            current_text = await rewrite_fn(original_text, max_dur_s, attempt)
             measured_duration_ms, audio_bytes = await tts_fn(current_text, voice_id)
 
             # Check hard duration budget
