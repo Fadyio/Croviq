@@ -35,6 +35,30 @@ def format_timecode_ms(ms: int) -> str:
     seconds = total_seconds % 60
     return f"{minutes:02d}:{seconds:04.1f}"
 
+def format_leo_decision_message(decision: EditorDecision) -> str:
+    """Format clean, product-facing natural conversational message for Leo's edit decisions."""
+    reason = decision.concise_reason.strip()
+    if reason.startswith("I "):
+        return reason
+
+    if decision.decision_type == EditorDecisionType.REMOVE_FALSE_START:
+        clean = reason.removeprefix("Remove false start ").removeprefix("Removed false start ").removeprefix("Remove ").removeprefix("Removed ")
+        if clean.lower().startswith("before ") or clean.lower().startswith("on ") or clean.lower().startswith("during "):
+            return f"I removed a false start {clean}"
+        return f"I removed a false start: {clean}"
+    elif decision.decision_type == EditorDecisionType.REMOVE_FILLER:
+        clean = reason.removeprefix("Remove filler ").removeprefix("Removed filler ").removeprefix("Remove ").removeprefix("Removed ")
+        return f"I removed filler hesitation: {clean}"
+    elif decision.decision_type == EditorDecisionType.TRIM_PAUSE:
+        clean = reason.removeprefix("Trim dead air ").removeprefix("Trim silence ").removeprefix("Trim pause ").removeprefix("Trim ").removeprefix("Trimmed ")
+        return f"I trimmed a speech pause: {clean}"
+    elif decision.decision_type == EditorDecisionType.REMOVE_REPETITION:
+        clean = reason.removeprefix("Remove repetition ").removeprefix("Removed repetition ").removeprefix("Remove ").removeprefix("Removed ")
+        return f"I removed a repetition: {clean}"
+    elif decision.decision_type in (EditorDecisionType.KEEP, EditorDecisionType.KEEP_FOR_CLARITY):
+        clean = reason.removeprefix("Preserve ").removeprefix("Keep ").removeprefix("Retain ")
+        return f"I preserved this segment: {clean}"
+    return reason
 
 def ensure_full_timeline_coverage(
     sections: list[VideoSectionDecision],
@@ -264,7 +288,7 @@ class LeoVideoEditor:
             )
         for decision in proposal.decisions:
             start_tc = format_timecode_ms(decision.source_start_ms)
-            msg = f"[{decision.decision_type.value}] At {start_tc}: {decision.concise_reason}"
+            msg = format_leo_decision_message(decision)
             activities.append(
                 AgentActivity(
                     activity_id=f"act_leo_dec_{uuid.uuid4().hex[:8]}",
@@ -363,7 +387,7 @@ class LeoVideoEditor:
 
         for decision in revised_proposal.decisions:
             start_tc = format_timecode_ms(decision.source_start_ms)
-            msg = f"[{decision.decision_type.value}] At {start_tc}: {decision.concise_reason}"
+            msg = format_leo_decision_message(decision)
             activities.append(
                 AgentActivity(
                     activity_id=f"act_leo_rev_dec_{uuid.uuid4().hex[:8]}",

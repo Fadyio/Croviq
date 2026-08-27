@@ -11,10 +11,10 @@
   "original_lufs": "-27.12",
   "enhanced_lufs": "-16.29",
   "enhanced_true_peak": "-0.54",
-  "preview_artifact_id": "art_prev_e636937b",
+  "preview_artifact_id": "art_prev_889e780a",
   "preview_duration_ms": 60000,
-  "preview_render_time_ms": 6583.075458009262,
-  "master_artifact_id": "art_mast_488c97ae",
+  "preview_render_time_ms": 6298.16762500559,
+  "master_artifact_id": "art_mast_52ef636f",
   "master_duration_ms": 60000,
   "cut_quality_table": [
     {

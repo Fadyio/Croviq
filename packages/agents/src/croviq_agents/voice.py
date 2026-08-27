@@ -25,7 +25,7 @@ from croviq_domain.transcript import Transcript, TranscriptSegment
 logger = logging.getLogger(__name__)
 
 
-# Official Google Gemini TTS / Vertex AI Voice Catalog
+# Official Google Cloud TTS (Journey / Neural2) Voice Catalog
 GOOGLE_GEMINI_VOICES: list[VoiceCatalogItem] = [
     VoiceCatalogItem(
         voice_id="en-US-Journey-F",
@@ -59,7 +59,7 @@ GOOGLE_GEMINI_VOICES: list[VoiceCatalogItem] = [
 
 
 class VoiceCatalog:
-    """Official Google Gemini TTS voice catalog registry."""
+    """Official Google Cloud TTS / Studio Voice catalog registry."""
 
     @classmethod
     def list_voices(cls) -> list[VoiceCatalogItem]:

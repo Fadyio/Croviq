@@ -32,7 +32,7 @@ class NarrationSegment(BaseModel):
     available_duration_ms: int = Field(..., ge=0, description="Strict maximum duration budget in ms")
     original_text: str = Field(..., min_length=1, description="Original spoken transcript text")
     rewritten_text: str = Field(..., min_length=1, description="Leo's editorial rewritten text")
-    voice_id: str = Field(..., min_length=1, description="Selected Google Gemini TTS voice identifier")
+    voice_id: str = Field(..., min_length=1, description="Selected Studio Voice identifier")
     generated_duration_ms: int = Field(default=0, ge=0, description="Actual measured TTS audio duration in ms")
     status: NarrationSegmentStatus = Field(default=NarrationSegmentStatus.PENDING)
     audio_artifact_reference: str | None = Field(default=None, description="GCS object or storage key")

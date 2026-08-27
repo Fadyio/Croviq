@@ -24,7 +24,7 @@ class TerminalCommandResult:
     exit_code: int
     stdout: str
     stderr: str
-    duration_ms: int
+    duration_ms: float = 0.0
     timed_out: bool = False
     truncated: bool = False
 
@@ -151,7 +151,7 @@ class SandboxedTerminalRunner:
             exit_code = -1
             stderr = f"Execution failed: {type(exc).__name__}: {exc}"
 
-        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        duration_ms = round((time.perf_counter() - start_time) * 1000.0, 3)
 
         # Output truncation
         if len(stdout) > self.max_output_bytes:

@@ -263,7 +263,7 @@ async def update_voice_settings_endpoint(
     "/workspace/agent-settings/voice/sample",
     response_model=VoiceSampleResponse,
     summary="Audition Voice Sample",
-    description="Preview audio sample for a selected Google Gemini TTS voice.",
+    description="Preview audio sample for a selected Studio Voice (Journey) voice.",
 )
 async def get_voice_sample_endpoint(
     payload: VoiceSampleRequest,

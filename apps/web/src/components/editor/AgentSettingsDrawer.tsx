@@ -510,7 +510,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                     {
                       id: "studio_voice" as NarrationMode,
                       label: "Studio Voice",
-                      desc: "Replace spoken narration with a selected Google Gemini TTS voice, timed to original speech.",
+                      desc: "Replace spoken narration with Studio Voice (Journey F), timed to original speech.",
                     },
                   ].map((mode) => (
                     <label

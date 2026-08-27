@@ -405,7 +405,7 @@
       "post": {
         "tags": ["Workspaces"],
         "summary": "Audition Voice Sample",
-        "description": "Preview audio sample for a selected Google Gemini TTS voice.",
+        "description": "Preview audio sample for a selected Studio Voice (Journey) voice.",
         "operationId": "get_voice_sample_endpoint_api_workspace_agent_settings_voice_sample_post",
         "requestBody": {
           "content": {
@@ -907,6 +907,16 @@
             "schema": {
               "type": "string",
               "title": "Production Id"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Force"
             }
           }
         ],
@@ -3732,7 +3742,7 @@
             "type": "string",
             "minLength": 1,
             "title": "Voice Id",
-            "description": "Selected Google Gemini TTS voice identifier"
+            "description": "Selected Studio Voice identifier"
           },
           "generated_duration_ms": {
             "type": "integer",
@@ -4588,14 +4598,14 @@
           "width": {
             "type": "number",
             "maximum": 1.0,
-            "exclusiveMinimum": 0.0,
+            "minimum": 0.01,
             "title": "Width",
             "description": "Normalized width (0.0 to 1.0) of focus region"
           },
           "height": {
             "type": "number",
             "maximum": 1.0,
-            "exclusiveMinimum": 0.0,
+            "minimum": 0.01,
             "title": "Height",
             "description": "Normalized height (0.0 to 1.0) of focus region"
           },
@@ -5370,7 +5380,7 @@
         "type": "object",
         "required": ["voice_id", "display_name"],
         "title": "VoiceCatalogItem",
-        "description": "Official Google Gemini TTS voice catalog entry."
+        "description": "Studio Voice catalog entry."
       },
       "VoiceSampleRequest": {
         "properties": {

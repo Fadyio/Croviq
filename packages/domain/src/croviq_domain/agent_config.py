@@ -44,7 +44,7 @@ class NarrationMode(StrEnum):
 
 
 class VoiceCatalogItem(BaseModel):
-    """Official Google Gemini TTS voice catalog entry."""
+    """Studio Voice catalog entry."""
 
     model_config = ConfigDict(
         extra="forbid",

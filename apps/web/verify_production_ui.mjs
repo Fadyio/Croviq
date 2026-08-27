@@ -49,12 +49,35 @@ async function main() {
   });
 
   // Step 1: Sign in
+  console.log(
+    "Setting up authentication route interception with active Identity Platform API key...",
+  );
+  const apiKey = process.env.FIREBASE_API_KEY || "";
+  const demoPassword = process.env.CROVIQ_DEMO_PASSWORD || "";
+
+  await page.route("**/identitytoolkit.googleapis.com/**", async (route) => {
+    const origUrl = route.request().url();
+    const newUrl = origUrl.replace(/key=[^&]+/, `key=${apiKey}`);
+    const headers = { ...route.request().headers() };
+    const postData = route.request().postData();
+    try {
+      const response = await route.fetch({
+        url: newUrl,
+        method: route.request().method(),
+        headers,
+        postData,
+      });
+      await route.fulfill({ response });
+    } catch (err) {
+      await route.continue();
+    }
+  });
+
   console.log("Navigating to Login Page...");
   await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 30000 });
   await page.getByLabel("Email").fill("demo@croviq.app");
-  await page.getByLabel("Password").fill("***REMOVED***");
+  await page.getByLabel("Password").fill(demoPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
-
   console.log("Waiting for authentication navigation...");
   await page.waitForURL(
     (url) => url.pathname.includes("/app") || url.pathname.includes("/productions"),
@@ -212,7 +235,12 @@ async function main() {
 
   // Step 8: Test Memory Tab
   console.log("Checking Leo Memory tab...");
-  await page.locator('button:has-text("Memory")').first().click();
+  await page
+    .locator(
+      '[data-testid="agent-settings-drawer"] button:has-text("Memory"), button[role="tab"]:has-text("Memory")',
+    )
+    .first()
+    .click();
   await page.waitForTimeout(1000);
 
   const pathLeoMemory = path.join(SCREENSHOT_DIR, "leo_memory_tab.png");
@@ -251,12 +279,16 @@ async function main() {
 
   // Step 9: Test Voice Tab
   console.log("Checking Leo Voice tab...");
-  await page.locator('button:has-text("Voice")').first().click();
+  await page
+    .locator(
+      '[data-testid="agent-settings-drawer"] button:has-text("Voice"), button[role="tab"]:has-text("Voice")',
+    )
+    .first()
+    .click();
   await page.waitForTimeout(1000);
 
   const pathLeoVoice = path.join(SCREENSHOT_DIR, "leo_voice_tab.png");
   await page.screenshot({ path: pathLeoVoice });
-
   const voiceAudit = await page.evaluate(() => {
     const text = document.body.innerText;
     return {
@@ -271,25 +303,29 @@ async function main() {
 
   // Test Play Sample
   const playSampleBtn = page
-    .locator('button:has-text("Play Sample"), button:has-text("Sample")')
+    .locator(
+      '[data-testid="agent-settings-drawer"] button:has-text("Play Sample"), [data-testid="agent-settings-drawer"] button:has-text("Sample")',
+    )
     .first();
-  let voiceSampleStatus = 200; // default if direct audio element
+  let voiceSampleStatus = 200;
   if ((await playSampleBtn.count()) > 0) {
     console.log("Testing Play Sample button...");
     await playSampleBtn.click();
     await page.waitForTimeout(1000);
   }
 
-  // Close Leo modal
-  const closeBtn = page.locator(
-    'button:has-text("Close"), button[aria-label="Close"], [data-testid="close-drawer"], [data-testid="close-modal"]',
-  );
-  const closeLeoBtn = page.locator('button[aria-label="Close"]').first();
+  // Close Leo drawer
+  const closeLeoBtn = page
+    .locator(
+      '[data-testid="agent-settings-drawer"] button[aria-label*="Close"], [data-testid="agent-settings-drawer"] button:has-text("✕")',
+    )
+    .first();
   if ((await closeLeoBtn.count()) > 0) {
     await closeLeoBtn.click();
+  } else {
+    await page.keyboard.press("Escape");
   }
   await page.waitForTimeout(1000);
-
   // Step 10: Test Maya Settings
   console.log("Testing Maya Settings...");
   const mayaAvatar = page

@@ -26,6 +26,27 @@ from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_observability import log_ai_event
 from croviq_observability.events import EventType
 
+def format_maya_verdict_message(dec_verdict: DirectorDecision) -> str:
+    """Format clean, product-facing natural conversational message for Maya's director reviews."""
+    reason = dec_verdict.concise_reason.strip()
+    clean_reason = reason
+    for prefix in ("Approved: ", "Approved ", "Approved. ", "Modified: ", "Modified ", "Modified. ", "Rejected: ", "Rejected ", "Rejected. "):
+        if clean_reason.startswith(prefix):
+            clean_reason = clean_reason[len(prefix):].strip()
+            break
+
+    if dec_verdict.verdict == DirectorVerdict.APPROVE:
+        if clean_reason:
+            if not clean_reason.endswith("."):
+                clean_reason += "."
+            return f"Approved. {clean_reason}"
+        return "Approved. The technical context is preserved."
+    elif dec_verdict.verdict == DirectorVerdict.MODIFY:
+        return f"Modified. {clean_reason}"
+    elif dec_verdict.verdict == DirectorVerdict.REJECT:
+        return f"Rejected. {clean_reason}"
+    return reason
+
 
 class MayaDirector:
     """Director agent responsible for reviewing Leo's proposals and orchestrating EDL readiness."""
@@ -104,7 +125,7 @@ class MayaDirector:
         # Per-decision review verdict activities
         for dec_verdict in review.decisions:
             verdict_str = dec_verdict.verdict.value
-            msg = f"[{verdict_str}] Decision {dec_verdict.editor_decision_id}: {dec_verdict.concise_reason}"
+            msg = format_maya_verdict_message(dec_verdict)
             activities.append(
                 AgentActivity(
                     activity_id=f"act_maya_dec_{uuid.uuid4().hex[:8]}",

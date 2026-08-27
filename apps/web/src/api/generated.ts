@@ -199,14 +199,6 @@ export interface paths {
       };
     };
   };
-  "/api/productions/{production_id}/playback": {
-    get: {
-      responses: {
-        200: components["schemas"]["ProductionPlaybackResponse"];
-        422: components["schemas"]["HTTPValidationError"];
-      };
-    };
-  };
   "/api/productions/{production_id}/renders/preview": {
     post: {
       responses: {
@@ -259,6 +251,14 @@ export interface paths {
     get: {
       responses: {
         200: components["schemas"]["RenderReviewDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/playback": {
+    get: {
+      responses: {
+        200: components["schemas"]["ProductionPlaybackResponse"];
         422: components["schemas"]["HTTPValidationError"];
       };
     };
@@ -792,7 +792,7 @@ export interface components {
       original_text: string;
       /** Leo's editorial rewritten text */
       rewritten_text: string;
-      /** Selected Google Gemini TTS voice identifier */
+      /** Selected Studio Voice identifier */
       voice_id: string;
       /** Actual measured TTS audio duration in ms */
       generated_duration_ms?: number;

@@ -424,7 +424,7 @@ async def test_analyze_production_with_director_rejections_and_modifications(
     activities = detail_data["activities"]
     maya_reject_acts = [a for a in activities if a["related_decision_id"] == "dec_02" and a["agent"] == "Maya"]
     assert len(maya_reject_acts) == 1
-    assert "REJECT" in maya_reject_acts[0]["message"]
+    assert "Rejected" in maya_reject_acts[0]["message"]
 @pytest.mark.asyncio
 async def test_analyze_production_model_failure_maps_to_failed_run(app_and_deps, test_user: User):
     client, prod_repo, transcript_repo, editorial_repo, _, _ = app_and_deps

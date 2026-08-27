@@ -65,16 +65,16 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
         }
       }
 
-      // Clean up bracketed enum prefixes from message text (e.g. "[TRIM_DEAD_AIR] At 00:15: ...")
+      // Clean up any internal raw enums, decision IDs, or timecode prefixes
       let cleanText = act.message;
-      if (cleanText.startsWith("[") && cleanText.includes("]")) {
-        const bracketEnd = cleanText.indexOf("]");
-        cleanText = cleanText.substring(bracketEnd + 1).trim();
-        if (cleanText.startsWith("At ") && cleanText.includes(":")) {
-          const colonIdx = cleanText.indexOf(":");
-          cleanText = cleanText.substring(colonIdx + 1).trim();
-        }
-      }
+      // Strip bracketed enums (e.g. "[REMOVE_FALSE_START]", "[APPROVE]")
+      cleanText = cleanText.replace(/^\[[A-Z0-9_]+\]\s*/, "");
+      // Strip decision ID prefixes (e.g. "Decision dec_001_false_start_edit: ")
+      cleanText = cleanText.replace(/^Decision\s+dec_[a-zA-Z0-9_-]+:\s*/i, "");
+      cleanText = cleanText.replace(/^dec_[a-zA-Z0-9_-]+:\s*/i, "");
+      // Strip "At MM:SS: " prefix if present
+      cleanText = cleanText.replace(/^At\s+\d{2}:\d{2}(?:\.\d+)?:\s*/i, "");
+      cleanText = cleanText.trim();
 
       items.push({
         id: act.activity_id,

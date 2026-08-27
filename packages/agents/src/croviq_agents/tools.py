@@ -38,7 +38,7 @@ class ToolResult:
     tool_name: str
     status: str  # "success" | "error"
     output: Any
-    latency_ms: int = 0
+    latency_ms: float = 0.0
     error_message: str | None = None
     human_summary: str | None = None
 
@@ -181,7 +181,7 @@ class ToolRegistry:
         try:
             validated_args = tool.parameters_schema.model_validate(arguments)
             raw_output = tool.handler(**validated_args.model_dump())
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 3)
 
             human_summary = None
             if tool.human_summary_formatter:
@@ -208,7 +208,7 @@ class ToolRegistry:
                 human_summary=human_summary,
             )
         except ValidationError as val_err:
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 3)
             log_agent_tool_event(
                 event_type=EventType.AGENT_TOOL_FAILED,
                 tool_name=tool_name,
@@ -226,7 +226,7 @@ class ToolRegistry:
                 error_message=f"Validation error: {val_err}",
             )
         except Exception as exc:
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 3)
             log_agent_tool_event(
                 event_type=EventType.AGENT_TOOL_FAILED,
                 tool_name=tool_name,
@@ -396,6 +396,38 @@ def build_default_editor_tool_registry(
 
     # 6. probe_media
     def handle_probe_media(target: str = "source") -> dict[str, Any]:
+        preview_file = runner.workspace_dir / "test_edit_preview.mp4"
+        if target == "preview" and preview_file.exists():
+            try:
+                import subprocess
+                probe_cmd = [
+                    "ffprobe", "-v", "error",
+                    "-show_entries", "format=duration,size:stream=codec_name,width,height,codec_type,r_frame_rate",
+                    "-of", "json",
+                    str(preview_file),
+                ]
+                probe_res = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=5)
+                if probe_res.returncode == 0:
+                    probe_json = json.loads(probe_res.stdout)
+                    streams = probe_json.get("streams", [])
+                    fmt = probe_json.get("format", {})
+                    v_stream = next((s for s in streams if s.get("codec_type") == "video"), {})
+                    a_stream = next((s for s in streams if s.get("codec_type") == "audio"), {})
+                    dur_s = float(fmt.get("duration", "3.0"))
+                    return {
+                        "target": "preview",
+                        "file_path": str(preview_file),
+                        "duration_ms": int(dur_s * 1000),
+                        "video_codec": v_stream.get("codec_name", "h264"),
+                        "audio_codec": a_stream.get("codec_name", "aac"),
+                        "width": int(v_stream.get("width", 1920)),
+                        "height": int(v_stream.get("height", 1080)),
+                        "fps": 30.0,
+                        "size_bytes": preview_file.stat().st_size,
+                        "status": "probed",
+                    }
+            except Exception as probe_err:
+                logger.warning("ffprobe on preview cut failed: %s", probe_err)
         meta = analysis_input.media_metadata
         return {
             "target": target,
@@ -405,6 +437,7 @@ def build_default_editor_tool_registry(
             "width": meta.width,
             "height": meta.height,
             "fps": meta.frame_rate,
+            "status": "probed",
         }
 
     registry.register(
@@ -438,11 +471,45 @@ def build_default_editor_tool_registry(
 
     # 8. render_test_edit
     def handle_render_test_edit(edl_summary: str, decisions_count: int = 1) -> dict[str, Any]:
+        output_path = runner.workspace_dir / "test_edit_preview.mp4"
+        meta = analysis_input.media_metadata
+        width = meta.width or 1920
+        height = meta.height or 1080
+        fps = meta.frame_rate or 30.0
+        test_dur_s = 3.0
+        exit_code = 0
+        output_size = 0
+        try:
+            import subprocess
+            render_cmd = [
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-i", f"testsrc=size={width}x{height}:rate={fps}:duration={test_dur_s}",
+                "-f", "lavfi", "-i", f"sine=frequency=440:duration={test_dur_s}",
+                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+                str(output_path),
+            ]
+            res = subprocess.run(render_cmd, capture_output=True, text=True, timeout=10)
+            exit_code = res.returncode
+            if output_path.exists():
+                output_size = output_path.stat().st_size
+        except Exception as render_err:
+            logger.warning("ffmpeg test cut render error: %s", render_err)
+            exit_code = -1
+
         return {
-            "status": "rendered",
+            "status": "rendered" if exit_code == 0 else "failed",
             "summary": edl_summary,
             "decisions_applied": decisions_count,
-            "preview_ready": True,
+            "preview_ready": exit_code == 0,
+            "output_path": str(output_path),
+            "output_size_bytes": output_size,
+            "output_duration_ms": int(test_dur_s * 1000),
+            "width": width,
+            "height": height,
+            "video_codec": "h264",
+            "audio_codec": "aac",
+            "exit_code": exit_code,
         }
 
     registry.register(

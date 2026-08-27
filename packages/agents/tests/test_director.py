@@ -196,7 +196,7 @@ async def test_maya_director_can_reject_or_modify_decisions() -> None:
 
     reject_acts = [a for a in activities if a.related_decision_id == "dec_01"]
     assert len(reject_acts) == 1
-    assert "[REJECT]" in reject_acts[0].message
+    assert "Rejected" in reject_acts[0].message
 
 
 @pytest.mark.asyncio
