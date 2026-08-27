@@ -15,10 +15,11 @@ def test_frontend_build_fails_when_firebase_env_missing():
 
     Must NOT silently fall back or substitute baked dummy constants.
     """
-    clean_env = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": os.environ.get("HOME", ""),
-    }
+    clean_env = dict(os.environ)
+    clean_env["CI"] = "true"
+    clean_env.pop("VITE_FIREBASE_API_KEY", None)
+    clean_env.pop("VITE_FIREBASE_AUTH_DOMAIN", None)
+    clean_env.pop("VITE_FIREBASE_PROJECT_ID", None)
     proc = subprocess.run(
         ["pnpm", "--filter", "@croviq/web", "build"],
         cwd=REPO_ROOT,
@@ -40,14 +41,11 @@ def test_frontend_build_succeeds_and_bundle_diagnostic_passes():
     test_domain = "croviq-test-diag.firebaseapp.com"
     test_project = "croviq-test-diag"
 
-    build_env = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": os.environ.get("HOME", ""),
-        "VITE_FIREBASE_API_KEY": test_key,
-        "VITE_FIREBASE_AUTH_DOMAIN": test_domain,
-        "VITE_FIREBASE_PROJECT_ID": test_project,
-    }
-
+    build_env = dict(os.environ)
+    build_env["CI"] = "true"
+    build_env["VITE_FIREBASE_API_KEY"] = test_key
+    build_env["VITE_FIREBASE_AUTH_DOMAIN"] = test_domain
+    build_env["VITE_FIREBASE_PROJECT_ID"] = test_project
     proc = subprocess.run(
         ["pnpm", "--filter", "@croviq/web", "build"],
         cwd=REPO_ROOT,
