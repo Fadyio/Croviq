@@ -434,4 +434,279 @@ async def test_delete_production_missing_storage_succeeds_cleanly(test_setup, us
     assert data["production_id"] == "prod_empty_01"
     assert data["deleted_storage_objects_count"] == 0
 
+
+
+@pytest.mark.asyncio
+async def test_delete_production_partial_gcs_source_already_missing(test_setup, user_a: User):
+    """Partial failure case: GCS source object already missing or deleted."""
+    client: TestClient = test_setup["client"]
+    prod_repo: InMemoryProductionRepository = test_setup["prod_repo"]
+    workspace_repo: InMemoryWorkspaceRepository = test_setup["workspace_repo"]
+    media_storage: FakeMediaStorage = test_setup["media_storage"]
+    render_repo: InMemoryRenderRepository = test_setup["render_repo"]
+
+    now = datetime.now(timezone.utc)
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(user_a)
+    production_id = "prod_partial_gcs_01"
+    bucket = "croviq-506602-croviq-media-raw"
+
+    prod = Production(
+        production_id=production_id,
+        workspace_id=workspace.workspace_id,
+        channel_id="croviq_syn_ai_eng_01",
+        owner_user_id=user_a.user_id,
+        source_media=SourceMedia(
+            upload_id="upl_missing_01",
+            original_filename="raw_interview.mp4",
+            content_type="video/mp4",
+            size_bytes=10_000_000,
+            gcs_bucket=bucket,
+            gcs_object=f"workspaces/{workspace.workspace_id}/productions/{production_id}/source/upl_missing_01/raw_interview.mp4",
+            status=SourceMediaStatus.UPLOADED,
+            created_at=now,
+            uploaded_at=now,
+        ),
+        status=ProductionStatus.UPLOADED,
+        created_at=now,
+        updated_at=now,
+    )
+    await prod_repo.create_production(prod)
+
+    # Add render artifact in GCS, but NO source video in GCS (source already missing)
+    render_obj = f"workspaces/{workspace.workspace_id}/productions/{production_id}/renders/edl_01/preview.mp4"
+    render_art = RenderArtifact(
+        artifact_id="art_prev_missing",
+        production_id=production_id,
+        edl_id="edl_01",
+        artifact_type=ArtifactType.PREVIEW,
+        status=ArtifactStatus.completed,
+        gcs_bucket=bucket,
+        gcs_object=render_obj,
+        created_at=now,
+        completed_at=now,
+    )
+    await render_repo.save_render_artifact(render_art)
+    media_storage.simulate_uploaded_object(bucket, render_obj, 5_000_000, "video/mp4", b"preview")
+
+    response = client.delete(f"/api/productions/{production_id}")
+    assert response.status_code == 200
+    assert response.json()["status"] == "deleted"
+    assert response.json()["deleted_storage_objects_count"] == 1
+    assert await prod_repo.get_production(production_id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_production_renders_already_missing(test_setup, user_a: User):
+    """Partial failure case: renders already deleted or missing."""
+    client: TestClient = test_setup["client"]
+    prod_repo: InMemoryProductionRepository = test_setup["prod_repo"]
+    workspace_repo: InMemoryWorkspaceRepository = test_setup["workspace_repo"]
+    media_storage: FakeMediaStorage = test_setup["media_storage"]
+    transcript_repo: InMemoryTranscriptRepository = test_setup["transcript_repo"]
+
+    now = datetime.now(timezone.utc)
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(user_a)
+    production_id = "prod_partial_render_01"
+    bucket = "croviq-506602-croviq-media-raw"
+
+    prod = Production(
+        production_id=production_id,
+        workspace_id=workspace.workspace_id,
+        channel_id="croviq_syn_ai_eng_01",
+        owner_user_id=user_a.user_id,
+        status=ProductionStatus.UPLOADED,
+        created_at=now,
+        updated_at=now,
+    )
+    await prod_repo.create_production(prod)
+
+    # Only transcript exists; renders do not exist
+    transcript = Transcript(
+        transcript_id="tr_missing_render",
+        production_id=production_id,
+        language_code="en",
+        duration_ms=5000,
+        words=[],
+        segments=[],
+        created_at=now,
+    )
+    await transcript_repo.save_transcript(transcript)
+
+    response = client.delete(f"/api/productions/{production_id}")
+    assert response.status_code == 200
+    assert response.json()["status"] == "deleted"
+    assert await prod_repo.get_production(production_id) is None
+    assert await transcript_repo.get_transcript_by_production_id(production_id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_production_subcollection_missing(test_setup, user_a: User):
+    """Partial failure case: some Firestore subcollections are absent."""
+    client: TestClient = test_setup["client"]
+    prod_repo: InMemoryProductionRepository = test_setup["prod_repo"]
+    workspace_repo: InMemoryWorkspaceRepository = test_setup["workspace_repo"]
+    broll_repo: InMemoryBRollRepository = test_setup["broll_repo"]
+
+    now = datetime.now(timezone.utc)
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(user_a)
+    production_id = "prod_partial_subcoll_01"
+
+    prod = Production(
+        production_id=production_id,
+        workspace_id=workspace.workspace_id,
+        channel_id="croviq_syn_ai_eng_01",
+        owner_user_id=user_a.user_id,
+        status=ProductionStatus.UPLOADED,
+        created_at=now,
+        updated_at=now,
+    )
+    await prod_repo.create_production(prod)
+
+    # Only BRoll exists; no transcript, no renders, no edl, no editorial
+    broll = BRollArtifact(
+        artifact_id="broll_only_01",
+        production_id=production_id,
+        source_start_ms=0,
+        source_end_ms=2000,
+        gcs_bucket="croviq-506602-croviq-media-raw",
+        gcs_object=f"workspaces/{workspace.workspace_id}/productions/{production_id}/broll/broll.mp4",
+        duration_ms=2000,
+        status=BRollArtifactStatus.ACCEPTED,
+        created_at=now,
+    )
+    await broll_repo.save(broll)
+
+    response = client.delete(f"/api/productions/{production_id}")
+    assert response.status_code == 200
+    assert response.json()["status"] == "deleted"
+    assert await prod_repo.get_production(production_id) is None
+    assert len(await broll_repo.list_by_production_id(production_id)) == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_production_root_exists_artifacts_missing(test_setup, user_a: User):
+    """Case: Root production exists, but zero artifacts/subcollections exist."""
+    client: TestClient = test_setup["client"]
+    prod_repo: InMemoryProductionRepository = test_setup["prod_repo"]
+    workspace_repo: InMemoryWorkspaceRepository = test_setup["workspace_repo"]
+
+    now = datetime.now(timezone.utc)
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(user_a)
+    production_id = "prod_root_only_01"
+
+    prod = Production(
+        production_id=production_id,
+        workspace_id=workspace.workspace_id,
+        channel_id="croviq_syn_ai_eng_01",
+        owner_user_id=user_a.user_id,
+        status=ProductionStatus.PENDING,
+        created_at=now,
+        updated_at=now,
+    )
+    await prod_repo.create_production(prod)
+
+    response = client.delete(f"/api/productions/{production_id}")
+    assert response.status_code == 200
+    assert response.json()["status"] == "deleted"
+    assert response.json()["deleted_storage_objects_count"] == 0
+    assert await prod_repo.get_production(production_id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_production_second_delete_returns_404(test_setup, user_a: User):
+    """Case: Second DELETE after successful deletion returns 404."""
+    client: TestClient = test_setup["client"]
+    prod_repo: InMemoryProductionRepository = test_setup["prod_repo"]
+    workspace_repo: InMemoryWorkspaceRepository = test_setup["workspace_repo"]
+
+    now = datetime.now(timezone.utc)
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(user_a)
+    production_id = "prod_second_del_01"
+
+    prod = Production(
+        production_id=production_id,
+        workspace_id=workspace.workspace_id,
+        channel_id="croviq_syn_ai_eng_01",
+        owner_user_id=user_a.user_id,
+        status=ProductionStatus.UPLOADED,
+        created_at=now,
+        updated_at=now,
+    )
+    await prod_repo.create_production(prod)
+
+    # First DELETE -> 200 OK
+    res1 = client.delete(f"/api/productions/{production_id}")
+    assert res1.status_code == 200
+    assert res1.json()["status"] == "deleted"
+
+    # Second DELETE -> 404 Not Found
+    res2 = client.delete(f"/api/productions/{production_id}")
+    assert res2.status_code == 404
+    assert "not found" in res2.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_delete_production_zero_orphaned_gcs_objects(test_setup, user_a: User):
+    """Verify zero orphaned GCS objects remain for the deleted production."""
+    client: TestClient = test_setup["client"]
+    prod_repo: InMemoryProductionRepository = test_setup["prod_repo"]
+    workspace_repo: InMemoryWorkspaceRepository = test_setup["workspace_repo"]
+    media_storage: FakeMediaStorage = test_setup["media_storage"]
+
+    now = datetime.now(timezone.utc)
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(user_a)
+    production_id = "prod_orphan_check_01"
+    bucket = "croviq-506602-croviq-media-raw"
+    prod = Production(
+        production_id=production_id,
+        workspace_id=workspace.workspace_id,
+        channel_id="croviq_syn_ai_eng_01",
+        owner_user_id=user_a.user_id,
+        source_media=SourceMedia(
+            upload_id="upl_orphan_01",
+            original_filename="raw.mp4",
+            content_type="video/mp4",
+            size_bytes=1000,
+            gcs_bucket=bucket,
+            gcs_object=f"workspaces/{workspace.workspace_id}/productions/{production_id}/source/upl_orphan_01/raw.mp4",
+            status=SourceMediaStatus.UPLOADED,
+            created_at=now,
+            uploaded_at=now,
+        ),
+        status=ProductionStatus.UPLOADED,
+        created_at=now,
+        updated_at=now,
+    )
+    await prod_repo.create_production(prod)
+    # Seed 5 objects in this production prefix and 2 objects in another production prefix
+    prefix = f"workspaces/{workspace.workspace_id}/productions/{production_id}/"
+    other_prefix = f"workspaces/{workspace.workspace_id}/productions/prod_other_999/"
+
+    for i in range(5):
+        media_storage.simulate_uploaded_object(
+            bucket, f"{prefix}artifact_{i}.mp4", 1000, "video/mp4", b"data"
+        )
+    for i in range(2):
+        media_storage.simulate_uploaded_object(
+            bucket, f"{other_prefix}artifact_{i}.mp4", 1000, "video/mp4", b"other"
+        )
+
+    # Delete target production
+    res = client.delete(f"/api/productions/{production_id}")
+    assert res.status_code == 200
+    assert res.json()["deleted_storage_objects_count"] == 5
+
+    # Verify 0 objects remain in target production prefix
+    remaining_target = [
+        meta.object_name for meta in media_storage._objects.values()
+        if meta.bucket == bucket and meta.object_name.startswith(prefix)
+    ]
+    assert len(remaining_target) == 0, f"Found orphaned GCS objects: {remaining_target}"
+
+    # Verify unrelated production objects remain intact
+    remaining_other = [
+        meta.object_name for meta in media_storage._objects.values()
+        if meta.bucket == bucket and meta.object_name.startswith(other_prefix)
+    ]
+    assert len(remaining_other) == 2
     assert await prod_repo.get_production("prod_empty_01") is None

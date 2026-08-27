@@ -350,9 +350,9 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
             <span className="w-1.5 h-1.5 rounded-full bg-primary" />
             <span>Autonomous Video Operations</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-text-primary mt-1">
-            Croviq
-          </h1>
+          <div className="my-1 flex items-center justify-center">
+            <CroviqLogo height={36} className="h-9 sm:h-10 w-auto" />
+          </div>
           <p className="text-xs sm:text-sm text-text-secondary max-w-lg">
             Your autonomous video production team.
           </p>
@@ -380,7 +380,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
 
         {/* Upload Station Card */}
         <section className="p-5 sm:p-6 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col items-center text-center gap-1">
             <h2 className="text-xs font-semibold tracking-wider text-text-primary uppercase font-mono">
               Upload raw footage
             </h2>

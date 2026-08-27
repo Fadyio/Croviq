@@ -542,7 +542,7 @@ async def get_production(
     response_model=DeleteProductionResponse,
     status_code=status.HTTP_200_OK,
     summary="Delete Production",
-    description="Delete a production, its Firestore state and subcollections, and all associated media storage objects.",
+    description="Idempotent coordinated deletion of a production: sets status to deleting, removes GCS production prefix, purges external transcript records and subcollections, and deletes root production document last.",
 )
 async def delete_production(
     production_id: str,
@@ -581,6 +581,14 @@ async def delete_production(
         else settings.media_bucket_name
     )
 
+    # 0. Set status to deleting
+    prod.status = ProductionStatus.DELETING
+    prod.updated_at = datetime.now(timezone.utc)
+    try:
+        await production_repo.update_production(prod)
+    except Exception as exc:
+        logger.warning("Could not set production %s to deleting status: %s", production_id, exc)
+
     deleted_storage_count = 0
     # 1. Delete production prefix objects in GCS
     prefix = f"workspaces/{prod.workspace_id}/productions/{production_id}/"
@@ -588,7 +596,6 @@ async def delete_production(
         deleted_storage_count += await media_storage.delete_prefix(bucket_name, prefix)
     except Exception as exc:
         logger.warning("Error deleting storage prefix %s: %s", prefix, exc)
-
     # 2. Delete source media object if located outside prefix
     if prod.source_media and prod.source_media.gcs_object:
         if not prod.source_media.gcs_object.startswith(prefix):

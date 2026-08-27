@@ -103,29 +103,40 @@ class CreateEdlCandidateArgs(BaseModel):
 
 
 class GenerateBRollArgs(BaseModel):
-    prompt: str = Field(..., min_length=1, description="Visual description for Gemini Omni 1.1 Flash (gemini-omni-1.1-flash) video generation")
-    duration_ms: int = Field(default=4000, ge=2000, le=10000, description="Duration in ms (2000-10000ms with scene extension)")
-    source_start_ms: int = Field(..., ge=0)
-    source_end_ms: int = Field(..., ge=0)
-    mode: Literal["draft", "standard", "cinematic"] = Field(
-        default="standard",
-        description="Generation quality mode: 'draft' (360p fast iteration), 'standard' (720p), 'cinematic' (1080p)",
+    prompt: str = Field(..., min_length=1, description="Visual prompt description for Gemini Omni 1.1 Flash video generation")
+    duration_ms: int = Field(default=4000, ge=2000, le=10000, description="Duration in ms (2000-10000ms per shot/extension increment)")
+    source_start_ms: int = Field(..., ge=0, description="Start timestamp on timeline in ms")
+    source_end_ms: int = Field(..., ge=0, description="End timestamp on timeline in ms")
+    resolution: Literal["360p", "720p", "1080p", "4k"] = Field(
+        default="360p",
+        description="Output resolution: '360p' (fast draft iteration), '720p' (standard), '1080p' (full HD), '4k' (finishing)",
     )
-    first_frame_description: str | None = Field(
-        default=None,
-        description="Optional initial keyframe visual description for camera orbit or zoom initiation",
+    aspect_ratio: Literal["9:16", "16:9", "1:1"] = Field(
+        default="9:16",
+        description="Target aspect ratio for video output",
     )
-    last_frame_description: str | None = Field(
+    first_frame_uri: str | None = Field(
         default=None,
-        description="Optional terminal keyframe visual description for smooth timeline transition",
+        description="GCS URI or storage path of initial frame for transition interpolation",
+    )
+    last_frame_uri: str | None = Field(
+        default=None,
+        description="GCS URI or storage path of terminal frame for transition interpolation",
+    )
+    reference_video_uri: str | None = Field(
+        default=None,
+        description="Optional GCS URI of short reference video context",
+    )
+    previous_interaction_id: str | None = Field(
+        default=None,
+        description="Prior interaction identifier for extending previous visual context",
     )
     scene_extension_prior_context_ms: int | None = Field(
         default=None,
         ge=0,
         le=10000,
-        description="Prior video context window up to 10s (10000ms) for seamless narrative extension",
+        description="Prior video context window up to 10s (10000ms) for seamless scene extension",
     )
-
 class InspectBRollArgs(BaseModel):
     artifact_id: str = Field(..., min_length=1, description="BRoll artifact identifier")
 
@@ -584,9 +595,12 @@ def build_default_editor_tool_registry(
         duration_ms: int = 4000,
         source_start_ms: int = 0,
         source_end_ms: int = 4000,
-        mode: str = "standard",
-        first_frame_description: str | None = None,
-        last_frame_description: str | None = None,
+        resolution: str = "360p",
+        aspect_ratio: str = "9:16",
+        first_frame_uri: str | None = None,
+        last_frame_uri: str | None = None,
+        reference_video_uri: str | None = None,
+        previous_interaction_id: str | None = None,
         scene_extension_prior_context_ms: int | None = None,
     ) -> dict[str, Any]:
         artifact_id = f"broll_{source_start_ms}_{int(time.time())}"
@@ -596,10 +610,14 @@ def build_default_editor_tool_registry(
             "duration_ms": duration_ms,
             "source_start_ms": source_start_ms,
             "source_end_ms": source_end_ms,
-            "mode": mode,
-            "model": "gemini-omni-1.1-flash",
-            "first_frame_description": first_frame_description,
-            "last_frame_description": last_frame_description,
+            "resolution": resolution,
+            "aspect_ratio": aspect_ratio,
+            "model": "gemini-omni-1.1-flash-preview",
+            "is_draft": resolution == "360p",
+            "first_frame_uri": first_frame_uri,
+            "last_frame_uri": last_frame_uri,
+            "reference_video_uri": reference_video_uri,
+            "previous_interaction_id": previous_interaction_id,
             "scene_extension_prior_context_ms": scene_extension_prior_context_ms,
             "status": "generated",
         }
@@ -607,10 +625,10 @@ def build_default_editor_tool_registry(
     registry.register(
         ToolDefinition(
             name="generate_broll",
-            description="Generate visual coverage B-roll video clip via Gemini Omni 1.1 Flash (gemini-omni-1.1-flash) for an abstract or transition section",
+            description="Generate visual coverage B-roll video clip via Gemini Omni 1.1 Flash preview (gemini-omni-1.1-flash-preview) with 360p draft, interpolation, and scene extension controls",
             parameters_schema=GenerateBRollArgs,
             handler=handle_generate_broll,
-            human_summary_formatter=lambda args, out: f"Leo created visual coverage for {args.get('prompt', 'transition')} ({args.get('mode', 'standard')} mode).",
+            human_summary_formatter=lambda args, out: f"Leo generated visual coverage for {args.get('prompt', 'transition')} ({args.get('resolution', '360p')}).",
         )
     )
 

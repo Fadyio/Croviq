@@ -436,6 +436,20 @@ export interface components {
       status?: components["schemas"]["BRollArtifactStatus"];
       /** Human summary of B-roll visual intent */
       prompt_summary?: string;
+      /** Output resolution: 360p, 720p, 1080p, 4k */
+      resolution?: string;
+      /** Model ID */
+      model?: string;
+      /** True if generated at 360p draft resolution */
+      is_draft?: boolean;
+      /** Initial keyframe URI for transition interpolation */
+      first_frame_uri?: string | null;
+      /** Terminal keyframe URI for transition interpolation */
+      last_frame_uri?: string | null;
+      /** Optional video reference URI */
+      reference_video_uri?: string | null;
+      /** Scene extension prior context in ms */
+      scene_extension_prior_context_ms?: number | null;
       created_at: string;
     };
     BRollArtifactStatus: "pending" | "accepted" | "rejected" | "failed";
@@ -861,7 +875,7 @@ export interface components {
       /** Social Short video playback URL */
       short_playback_url?: string | null;
     };
-    ProductionStatus: "pending" | "uploading" | "uploaded" | "failed";
+    ProductionStatus: "pending" | "uploading" | "uploaded" | "deleting" | "failed";
     RenderArtifactResponse: {
       /** Canonical unique render artifact identifier */
       artifact_id: string;

@@ -212,12 +212,12 @@ test.describe("Product Home and Creator Flow", () => {
     await login(page);
 
     // Verify minimal header
-    await expect(page.getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
     await expect(page.getByText(DEMO_EMAIL)).toBeVisible();
     await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
 
     // Verify main intro
-    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
     await expect(page.getByText("Your autonomous video production team.")).toBeVisible();
     // Verify upload dropzone
     await expect(page.getByRole("heading", { name: "Upload raw footage" })).toBeVisible();
@@ -523,7 +523,7 @@ test.describe("Product Home and Creator Flow", () => {
     await mockBackendApis(page, []);
     await login(page);
 
-    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
     await page.screenshot({ path: "e2e/screenshots/studio-cockpit-390px.png", fullPage: true });
   });
 
@@ -543,5 +543,41 @@ test.describe("Product Home and Creator Flow", () => {
       page.getByText("Please select a valid video file (.mp4, .mov, or .webm)"),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Upload video" })).toHaveCount(0);
+  });
+
+  test("allows vertical page scrolling when content exceeds viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 600 });
+    const sampleProductions = Array.from({ length: 8 }, (_, i) => ({
+      production_id: `prod_${i + 1}`,
+      workspace_id: "ws_demo",
+      channel_id: "croviq_syn_ai_eng_01",
+      owner_user_id: "demo_user_123",
+      status: "uploaded",
+      source_media: {
+        upload_id: `upl_${i + 1}`,
+        original_filename: `Project ${i + 1}.mp4`,
+        content_type: "video/mp4",
+        size_bytes: 10485760,
+        gcs_bucket: "croviq-506602-croviq-media-raw",
+        gcs_object: `workspaces/ws_demo/productions/prod_${i + 1}/source/upl_${i + 1}/project.mp4`,
+      },
+      created_at: "2026-08-26T00:00:00Z",
+    }));
+    await mockFirebasePasswordSignIn(page);
+    await mockBackendApis(page, sampleProductions);
+    await login(page);
+
+    await expect(page.getByText("Project 1.mp4")).toBeVisible();
+    const initialScrollY = await page.evaluate(
+      () => window.scrollY || document.documentElement.scrollTop,
+    );
+    expect(initialScrollY).toBe(0);
+
+    // Scroll down
+    await page.evaluate(() => window.scrollTo(0, 400));
+    const scrolledY = await page.evaluate(
+      () => window.scrollY || document.documentElement.scrollTop,
+    );
+    expect(scrolledY).toBeGreaterThan(0);
   });
 });

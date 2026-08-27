@@ -25,8 +25,8 @@ class ProductionStatus(str, Enum):
     PENDING = "pending"
     UPLOADING = "uploading"
     UPLOADED = "uploaded"
+    DELETING = "deleting"
     FAILED = "failed"
-
 
 class SourceMediaStatus(str, Enum):
     PENDING = "pending"

@@ -41,7 +41,7 @@ Google Global External Application Load Balancer
 - **Multimodal AI Reasoning**: Gemini 3.7 Flash (`gemini-3.7-flash`) via Google GenAI SDK (`google-genai`) on Vertex AI.
 - **Speech Transcription**: Gemini 3.5 Transcribe Preview (`gemini-3.5-transcribe-preview`) on Vertex AI.
 - **Studio Voice**: Gemini 3.1 Flash TTS (`gemini-3.1-flash-tts-preview`) with prebuilt voice catalog (Puck, Charon, Aoede, Kore, Fenrir, Leda, Orus, Zephyr) via Google GenAI SDK.
-- **Generative Video / B-Roll**: Gemini Omni 1.1 Flash (`gemini-omni-1.1-flash`) on Vertex AI with scene extension (up to 10s), keyframe control, and 360p drafting mode.
+- **Generative Video / B-Roll**: Gemini Omni 1.1 Flash (endpoint identifier: `gemini-omni-1.1-flash-preview` on Vertex AI / Google Cloud ADC) with economical 360p draft workflow, first/last-frame transition interpolation, bounded scene extension (up to 10s increments, max 40s cumulative), video reference input, and standard 720p / 1080p / 4K finishing.
 - **Agent Tool Runtime**: Deterministic `ToolRegistry` with 13 internal sandboxed tools for media inspection, audio demuxing, waveform analysis, and EDL candidate generation.
 - **Silence / Pause Processing**: Deterministic silence/pause cleanup with cut-safety validation.
 - **Authentication**: Firebase JS SDK (`12.18.0`) on client + Google Cloud Identity Platform + Firebase Admin token verification on FastAPI backend.

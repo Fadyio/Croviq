@@ -148,17 +148,19 @@ def test_default_editor_tool_registry_generate_broll_omni_1_1():
             "duration_ms": 6000,
             "source_start_ms": 10000,
             "source_end_ms": 16000,
-            "mode": "draft",
-            "first_frame_description": "Close-up of motherboard",
-            "last_frame_description": "Wide shot of complete device",
+            "resolution": "360p",
+            "aspect_ratio": "9:16",
+            "first_frame_uri": "gs://croviq-media-raw/frames/frame_before_cut.jpg",
+            "last_frame_uri": "gs://croviq-media-raw/frames/frame_after_cut.jpg",
             "scene_extension_prior_context_ms": 5000,
         },
     )
     assert res.status == "success"
-    assert res.output["model"] == "gemini-omni-1.1-flash"
-    assert res.output["mode"] == "draft"
+    assert res.output["model"] == "gemini-omni-1.1-flash-preview"
+    assert res.output["resolution"] == "360p"
+    assert res.output["is_draft"] is True
     assert res.output["duration_ms"] == 6000
-    assert res.output["first_frame_description"] == "Close-up of motherboard"
-    assert res.output["last_frame_description"] == "Wide shot of complete device"
+    assert res.output["first_frame_uri"] == "gs://croviq-media-raw/frames/frame_before_cut.jpg"
+    assert res.output["last_frame_uri"] == "gs://croviq-media-raw/frames/frame_after_cut.jpg"
     assert res.output["scene_extension_prior_context_ms"] == 5000
-    assert "draft mode" in res.human_summary
+    assert "360p" in res.human_summary
