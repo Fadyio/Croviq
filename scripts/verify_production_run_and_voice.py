@@ -1,21 +1,42 @@
-import urllib.request
-import urllib.parse
 import json
-import time
+import os
+import subprocess
 import sys
+import time
+import urllib.parse
+import urllib.request
 
-PRODUCTION_ID = "prod_473209137802"
-BASE_URL = "https://app.croviq.app"
-API_KEY = "***REMOVED***"
+PRODUCTION_ID = os.getenv("CROVIQ_PRODUCTION_ID", "prod_473209137802")
+BASE_URL = os.getenv("CROVIQ_BASE_URL", "https://app.croviq.app")
 
-def get_auth_token():
-    url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={API_KEY}"
-    payload = json.dumps({"email": "demo@croviq.app", "password": "***REMOVED***", "returnSecureToken": True}).encode()
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as resp:
-        data = json.loads(resp.read().decode())
-        return data["idToken"]
 
+def get_auth_token() -> str:
+    """Retrieve authentication token from environment or Identity Platform."""
+    custom_token = os.getenv("CROVIQ_AUTH_TOKEN")
+    if custom_token:
+        return custom_token
+
+    api_key = os.getenv("VITE_FIREBASE_API_KEY") or os.getenv("FIREBASE_API_KEY")
+    email = os.getenv("CROVIQ_DEMO_EMAIL", "demo@croviq.app")
+    password = os.getenv("CROVIQ_DEMO_PASSWORD")
+
+    if api_key and password:
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}"
+        payload = json.dumps({"email": email, "password": password, "returnSecureToken": True}).encode()
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+            return data["idToken"]
+
+    # Fallback to local gcloud identity token
+    try:
+        token = subprocess.check_output(["gcloud", "auth", "print-identity-token"], text=True).strip()
+        if token:
+            return token
+    except Exception:
+        pass
+
+    raise ValueError("No authentication method available. Set CROVIQ_AUTH_TOKEN or VITE_FIREBASE_API_KEY + CROVIQ_DEMO_PASSWORD.")
 def api_request(path, method="GET", body=None, token=None):
     url = f"{BASE_URL}{path}"
     headers = {"Content-Type": "application/json"}
