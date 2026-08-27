@@ -17,6 +17,14 @@ RUN pnpm install --frozen-lockfile
 # Copy web application source code
 COPY apps/web/ ./apps/web/
 
+# Build configuration arguments for Vite
+ARG VITE_FIREBASE_API_KEY=AIzaSyCO3iaT5LpxgAeiJ8oSMgFkXj0zCIIeNM0
+ARG VITE_FIREBASE_AUTH_DOMAIN=croviq-506602.firebaseapp.com
+ARG VITE_FIREBASE_PROJECT_ID=croviq-506602
+ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
+ENV VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
+ENV VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
+
 # Build production bundle
 RUN pnpm --filter @croviq/web build
 

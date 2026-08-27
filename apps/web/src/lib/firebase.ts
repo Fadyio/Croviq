@@ -12,7 +12,7 @@ import {
  * Configured via Vite environment variables with production defaults.
  */
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDummyClientKeyForLocalTesting00",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCO3iaT5LpxgAeiJ8oSMgFkXj0zCIIeNM0",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "croviq-506602.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "croviq-506602",
 };
