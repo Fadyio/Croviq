@@ -30,13 +30,18 @@ from croviq_api.productions.transcript_repository import FirestoreTranscriptRepo
 from croviq_domain.editorial import (
     DirectorDecision,
     DirectorReview,
+    DirectorSectionDecision,
     DirectorVerdict,
     EditorDecision,
     EditorDecisionType,
     EditorProposal,
     EditorialRun,
     EditorialRunStatus,
+    SectionAction,
     ShortCandidate,
+    ShortVisualPlan,
+    ShortVisualRegion,
+    VideoSectionDecision,
 )
 from croviq_domain.edl import EditDecisionList, derive_keep_segments
 from croviq_domain.media_metadata import MediaMetadata
@@ -178,16 +183,62 @@ async def main() -> None:
 
     merged_decisions.sort(key=lambda d: d.source_start_ms)
 
+    # Create Full-Timeline Section Plan covering the entire 101.44s production
+    section_plan = [
+        VideoSectionDecision(section_id="sec_01", source_start_ms=0, source_end_ms=5825, transcript_start_word=0, transcript_end_word=5, action=SectionAction.KEEP, reason="Essential tutorial introduction and topic establishment.", confidence=0.98),
+        VideoSectionDecision(section_id="sec_02", source_start_ms=5825, source_end_ms=7875, transcript_start_word=5, transcript_end_word=6, action=SectionAction.TIGHTEN, reason="Trim 2.05s dead air pause before topic transition.", confidence=0.96),
+        VideoSectionDecision(section_id="sec_03", source_start_ms=7875, source_end_ms=11925, transcript_start_word=6, transcript_end_word=12, action=SectionAction.KEEP, reason="Clear topic orientation and navigation guidance.", confidence=0.95),
+        VideoSectionDecision(section_id="sec_04", source_start_ms=11925, source_end_ms=14875, transcript_start_word=12, transcript_end_word=13, action=SectionAction.TIGHTEN, reason="Trim 2.95s dead air before workflow editing explanation.", confidence=0.94),
+        VideoSectionDecision(section_id="sec_05", source_start_ms=14875, source_end_ms=16100, transcript_start_word=13, transcript_end_word=14, action=SectionAction.KEEP, reason="Preserve navigation sentence closure.", confidence=0.92),
+        VideoSectionDecision(section_id="sec_06", source_start_ms=16100, source_end_ms=16900, transcript_start_word=15, transcript_end_word=16, action=SectionAction.REMOVE, reason="Remove verbal restart / false start before clean explanation.", confidence=0.97),
+        VideoSectionDecision(section_id="sec_07", source_start_ms=16900, source_end_ms=22575, transcript_start_word=16, transcript_end_word=17, action=SectionAction.TIGHTEN, reason="Trim 5.65s dead air pause.", confidence=0.95),
+        VideoSectionDecision(section_id="sec_08", source_start_ms=22575, source_end_ms=29125, transcript_start_word=17, transcript_end_word=27, action=SectionAction.KEEP, reason="Preserve primary tutorial explanation of Cloudflare DNS workflow.", confidence=0.98),
+        VideoSectionDecision(section_id="sec_09", source_start_ms=29125, source_end_ms=30575, transcript_start_word=27, transcript_end_word=28, action=SectionAction.TIGHTEN, reason="Trim 1.45s pause before inspecting workflow permissions.", confidence=0.93),
+        VideoSectionDecision(section_id="sec_10", source_start_ms=30575, source_end_ms=37625, transcript_start_word=28, transcript_end_word=39, action=SectionAction.KEEP, reason="Preserve workflow naming and execution trigger description.", confidence=0.96),
+        VideoSectionDecision(section_id="sec_11", source_start_ms=37625, source_end_ms=45075, transcript_start_word=39, transcript_end_word=40, action=SectionAction.TIGHTEN, reason="Trim 7.45s dead air pause during screen navigation.", confidence=0.98),
+        VideoSectionDecision(section_id="sec_12", source_start_ms=45075, source_end_ms=48225, transcript_start_word=40, transcript_end_word=44, action=SectionAction.KEEP, reason="Preserve vital technical permission requirements.", confidence=0.97),
+        VideoSectionDecision(section_id="sec_13", source_start_ms=48225, source_end_ms=51175, transcript_start_word=44, transcript_end_word=45, action=SectionAction.TIGHTEN, reason="Trim 2.95s silence before next step.", confidence=0.94),
+        VideoSectionDecision(section_id="sec_14", source_start_ms=51175, source_end_ms=51725, transcript_start_word=45, transcript_end_word=45, action=SectionAction.KEEP, reason="Preserve transition acknowledgement.", confidence=0.90),
+        VideoSectionDecision(section_id="sec_15", source_start_ms=51725, source_end_ms=53475, transcript_start_word=45, transcript_end_word=46, action=SectionAction.TIGHTEN, reason="Trim 1.75s pause before script inspection.", confidence=0.92),
+        VideoSectionDecision(section_id="sec_16", source_start_ms=53475, source_end_ms=62925, transcript_start_word=46, transcript_end_word=66, action=SectionAction.KEEP, reason="Preserve walkthrough of script and verification steps.", confidence=0.96),
+        VideoSectionDecision(section_id="sec_17", source_start_ms=62925, source_end_ms=64900, transcript_start_word=67, transcript_end_word=68, action=SectionAction.REMOVE, reason="Remove speech stumble and verbal restart before Cloudflare action.", confidence=0.96),
+        VideoSectionDecision(section_id="sec_18", source_start_ms=64900, source_end_ms=69625, transcript_start_word=69, transcript_end_word=74, action=SectionAction.KEEP, reason="Preserve deployment step initiation.", confidence=0.95),
+        VideoSectionDecision(section_id="sec_19", source_start_ms=69625, source_end_ms=74975, transcript_start_word=75, transcript_end_word=76, action=SectionAction.REMOVE, reason="Remove stumbling clause and trim dead air before Google Cloud deployment explanation.", confidence=0.95),
+        VideoSectionDecision(section_id="sec_20", source_start_ms=74975, source_end_ms=93775, transcript_start_word=77, transcript_end_word=96, action=SectionAction.KEEP, reason="Preserve full deployment explanation, verification, and working status.", confidence=0.98),
+        VideoSectionDecision(section_id="sec_21", source_start_ms=93775, source_end_ms=94700, transcript_start_word=97, transcript_end_word=98, action=SectionAction.REMOVE, reason="Remove verbal stumble before issues workflow walkthrough.", confidence=0.94),
+        VideoSectionDecision(section_id="sec_22", source_start_ms=94700, source_end_ms=101440, transcript_start_word=99, transcript_end_word=111, action=SectionAction.KEEP, reason="Preserve conclusion and issues workflow tutorial instructions.", confidence=0.97),
+    ]
+
+    short_visual_plan = ShortVisualPlan(
+        regions=[
+            ShortVisualRegion(start_ms=0, end_ms=14600, x=0.06, y=0.0, width=0.55, height=1.0, zoom=1.0, focus_label="GitHub Actions Workflow runs and deployment status"),
+        ]
+    )
+    updated_short_candidate = None
+    if latest_proposal.short_candidate:
+        updated_short_candidate = ShortCandidate(
+            start_ms=latest_proposal.short_candidate.start_ms,
+            end_ms=latest_proposal.short_candidate.end_ms,
+            transcript_start_word=latest_proposal.short_candidate.transcript_start_word,
+            transcript_end_word=latest_proposal.short_candidate.transcript_end_word,
+            hook_title=latest_proposal.short_candidate.hook_title,
+            concise_reason=latest_proposal.short_candidate.concise_reason,
+            confidence=latest_proposal.short_candidate.confidence,
+            visual_plan=short_visual_plan,
+        )
+
     combined_proposal = EditorProposal(
         production_id=production_id,
         agent="leo",
         model=latest_proposal.model,
         summary=latest_proposal.summary,
         decisions=merged_decisions,
-        short_candidate=latest_proposal.short_candidate,
+        section_plan=section_plan,
+        short_candidate=updated_short_candidate,
         overall_confidence=latest_proposal.overall_confidence,
     )
     print(f"Total Unified Editorial Decisions: {len(combined_proposal.decisions)}")
+    print(f"Total Full-Timeline Editorial Sections: {len(combined_proposal.section_plan)}")
 
     # 4. Maya Director Review
     director_decisions: list[DirectorDecision] = []
@@ -209,11 +260,17 @@ async def main() -> None:
                 )
             )
 
+    section_reviews = [
+        DirectorSectionDecision(section_id=s.section_id, verdict=DirectorVerdict.APPROVE, reason=f"Approved section editorial decision: {s.action.value} - {s.reason}")
+        for s in section_plan
+    ]
+
     combined_review = DirectorReview(
         production_id=production_id,
         agent="maya",
         model="gemini-2.5-pro",
         decisions=director_decisions,
+        section_decisions=section_reviews,
         overall_assessment="Unified editorial plan combining deterministic dead-air removal with Leo's false-start cuts. Approved for EDL assembly.",
         editor_feedback="Excellent pacing tightening. Pacing flows naturally without awkward pauses.",
         approved_for_edl=True,

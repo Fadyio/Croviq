@@ -15,6 +15,8 @@ import {
   findExecutableSkipInterval,
   formatTimecode,
   formatDuration,
+  sourceToEditedTimeMs,
+  editedToSourceTimeMs,
   type EditDecisionList,
   type CoverageMarker,
 } from "../../lib/edl-adapter";
@@ -73,21 +75,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       video.pause();
     }
   }, [isPlaying]);
-
-  // Sync external seek (e.g. from timeline scrub or transcript click) to video
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || isSeekingInternallyRef.current) return;
-
-    const currentSec = video.currentTime;
-    const targetSec = currentTimeMs / 1000;
-
-    // Only update if difference is greater than 100ms to avoid feedback loops
-    if (Math.abs(currentSec - targetSec) > 0.1) {
-      video.currentTime = targetSec;
-    }
-  }, [currentTimeMs]);
-
   const isUsingShortArtifact = previewMode === "short" && Boolean(shortPlaybackUrl);
   const isUsingRenderedArtifact = previewMode === "edited" && Boolean(renderedPreviewUrl);
   const activeVideoUrl = isUsingShortArtifact
@@ -95,20 +82,40 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     : isUsingRenderedArtifact
       ? renderedPreviewUrl
       : playbackUrl;
+
+  // Sync external seek (e.g. from timeline scrub or transcript click) to video
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || isSeekingInternallyRef.current) return;
+
+    const targetSec =
+      previewMode === "edited" && isUsingRenderedArtifact && edl
+        ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
+        : currentTimeMs / 1000;
+
+    // Only update if difference is greater than 100ms to avoid feedback loops
+    if (Math.abs(video.currentTime - targetSec) > 0.1) {
+      video.currentTime = targetSec;
+    }
+  }, [currentTimeMs, edl, isUsingRenderedArtifact, previewMode]);
+
   // Preserve playback position across source switches (e.g. Original vs Edited Preview)
   const prevActiveUrlRef = useRef<string | null>(null);
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !activeVideoUrl) return;
     if (prevActiveUrlRef.current && prevActiveUrlRef.current !== activeVideoUrl) {
-      const targetSec = currentTimeMs / 1000;
+      const targetSec =
+        previewMode === "edited" && isUsingRenderedArtifact && edl
+          ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
+          : currentTimeMs / 1000;
       video.currentTime = targetSec;
       if (isPlaying && video.paused) {
         video.play().catch(() => {});
       }
     }
     prevActiveUrlRef.current = activeVideoUrl;
-  }, [activeVideoUrl, currentTimeMs, isPlaying]);
+  }, [activeVideoUrl, currentTimeMs, edl, isPlaying, isUsingRenderedArtifact, previewMode]);
 
   // Handle time update from video element & execute Edited Preview cut skipping
   const handleTimeUpdate = useCallback(() => {
@@ -116,6 +123,12 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     if (!video) return;
 
     const currentMs = Math.round(video.currentTime * 1000);
+
+    if (previewMode === "edited" && isUsingRenderedArtifact && edl) {
+      const sourceMs = editedToSourceTimeMs(currentMs, edl);
+      onSeek(sourceMs);
+      return;
+    }
 
     // If Edited Preview is active and falling back to client simulation (no real render yet)
     if (previewMode === "edited" && !isUsingRenderedArtifact && edl) {
@@ -147,7 +160,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     const video = videoRef.current;
     if (!video) return;
     setVideoError(null);
-    if (video.duration && !isNaN(video.duration) && onDurationChange) {
+    if (previewMode === "original" && video.duration && !isNaN(video.duration) && onDurationChange) {
       onDurationChange(Math.round(video.duration * 1000));
     }
   };
@@ -217,9 +230,37 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       data-testid="video-stage"
     >
       {/* Video Viewport Container */}
-      <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden">
-        {activeVideoUrl ? (
+      <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden p-2">
+        {previewMode === "short" ? (
+          <div className="relative h-full aspect-[9/16] max-h-full rounded-xl overflow-hidden shadow-2xl bg-black border border-border-strong flex items-center justify-center">
+            {activeVideoUrl ? (
+              <video
+                key={activeVideoUrl || "short"}
+                ref={videoRef}
+                src={activeVideoUrl}
+                playsInline
+                crossOrigin="anonymous"
+                className="w-full h-full object-cover"
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                onEnded={() => onPlayPause()}
+                onError={() => {
+                  setVideoError("Unable to load video stream from signed storage URL");
+                }}
+                onClick={onPlayPause}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-3 p-6 text-center text-text-muted">
+                <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center border border-border-subtle">
+                  <Smartphone className="w-6 h-6 text-text-secondary" />
+                </div>
+                <p className="text-xs text-text-secondary font-medium">Short 9:16 preview ready</p>
+              </div>
+            )}
+          </div>
+        ) : activeVideoUrl ? (
           <video
+            key={activeVideoUrl || previewMode}
             ref={videoRef}
             src={activeVideoUrl}
             playsInline
@@ -243,7 +284,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({
             </p>
           </div>
         )}
-
         {/* Rendered Preview Active Badge Overlay */}
         {isUsingRenderedArtifact && (
           <div

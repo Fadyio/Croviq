@@ -67,7 +67,7 @@ const presentActivity = (
     if (verdict) message = mayaMessages[verdict];
   }
   if (!message && decision) {
-    message = leoMessages[decision.decision_type] ?? "Reviewed this section.";
+    message = leoMessages[decision.decision_type] || decision.concise_reason || "Reviewed this section.";
   }
   if (!message) {
     let raw = activity.message

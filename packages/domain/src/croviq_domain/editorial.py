@@ -1,5 +1,4 @@
-"""Canonical Editorial domain models for Leo (Dialogue Editor) and Maya (Director) agents."""
-
+"""Canonical Editorial domain models for Leo (Video Editor) and Maya (Director) agents."""
 from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any
@@ -9,8 +8,7 @@ from croviq_domain.validators import validate_timezone_aware
 
 
 class EditorDecisionType(StrEnum):
-    """Semantic action types supported by Dialogue Editor (Leo)."""
-
+    """Semantic action types supported by Video Editor (Leo)."""
     KEEP = "KEEP"
     REMOVE_FILLER = "REMOVE_FILLER"
     REMOVE_FALSE_START = "REMOVE_FALSE_START"
@@ -21,6 +19,123 @@ class EditorDecisionType(StrEnum):
     BROLL_COVER_CANDIDATE = "BROLL_COVER_CANDIDATE"
     SHORT_CANDIDATE = "SHORT_CANDIDATE"
 
+
+class SectionAction(StrEnum):
+    """Editorial action applied to a full-timeline production section."""
+
+    KEEP = "KEEP"
+    TIGHTEN = "TIGHTEN"
+    REMOVE = "REMOVE"
+    COVERAGE = "COVERAGE"
+
+
+class VideoSectionDecision(BaseModel):
+    """Comprehensive full-timeline section decision proposed by Leo (Video Editor)."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    section_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Unique identifier for the timeline section",
+    )
+    source_start_ms: int = Field(
+        ...,
+        ge=0,
+        description="Start time in milliseconds on the source video timeline",
+    )
+    source_end_ms: int = Field(
+        ...,
+        ge=0,
+        description="End time in milliseconds on the source video timeline",
+    )
+    transcript_start_word: int = Field(
+        ...,
+        ge=0,
+        description="Canonical 0-indexed transcript start word index",
+    )
+    transcript_end_word: int = Field(
+        ...,
+        ge=0,
+        description="Canonical 0-indexed transcript end word index",
+    )
+    action: SectionAction = Field(
+        ...,
+        description="Editorial action: KEEP, TIGHTEN, REMOVE, or COVERAGE",
+    )
+    reason: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Editorial justification for why this section is kept, tightened, or removed",
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Model confidence score for this section decision",
+    )
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "VideoSectionDecision":
+        if self.source_end_ms < self.source_start_ms:
+            raise ValueError(
+                f"source_end_ms ({self.source_end_ms}) must be >= source_start_ms ({self.source_start_ms})"
+            )
+        if self.transcript_end_word < self.transcript_start_word:
+            raise ValueError(
+                f"transcript_end_word ({self.transcript_end_word}) must be >= transcript_start_word ({self.transcript_start_word})"
+            )
+        return self
+
+
+class ShortVisualRegion(BaseModel):
+    """Normalized focus rectangle identifying the readable screen region for a Short scene."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    start_ms: int = Field(..., ge=0, description="Start timestamp in ms relative to Short timeline")
+    end_ms: int = Field(..., ge=0, description="End timestamp in ms relative to Short timeline")
+    x: float = Field(..., ge=0.0, le=1.0, description="Normalized x coordinate (0.0 to 1.0) of crop top-left in source frame")
+    y: float = Field(..., ge=0.0, le=1.0, description="Normalized y coordinate (0.0 to 1.0) of crop top-left in source frame")
+    width: float = Field(..., gt=0.0, le=1.0, description="Normalized width (0.0 to 1.0) of focus region")
+    height: float = Field(..., gt=0.0, le=1.0, description="Normalized height (0.0 to 1.0) of focus region")
+    zoom: float = Field(default=1.0, ge=1.0, le=3.0, description="Optional zoom factor")
+    focus_label: str = Field(..., min_length=1, max_length=100, description="Visual description of focus area (e.g. YAML editor, status)")
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "ShortVisualRegion":
+        if self.end_ms <= self.start_ms:
+            raise ValueError(f"end_ms ({self.end_ms}) must be > start_ms ({self.start_ms})")
+        if self.x + self.width > 1.001:
+            raise ValueError(f"x + width ({self.x + self.width}) exceeds normalized frame width 1.0")
+        if self.y + self.height > 1.001:
+            raise ValueError(f"y + height ({self.y + self.height}) exceeds normalized frame height 1.0")
+        return self
+
+
+class ShortVisualPlan(BaseModel):
+    """Visual reframe plan for social Short rendering."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    regions: list[ShortVisualRegion] = Field(
+        default_factory=list,
+        description="List of chronological visual focus regions for the Short",
+    )
 
 class DirectorVerdict(StrEnum):
     """Review verdicts issued by Director (Maya)."""
@@ -87,6 +202,10 @@ class ShortCandidate(BaseModel):
         le=1.0,
         description="Model confidence score for the candidate excerpt",
     )
+    visual_plan: ShortVisualPlan | None = Field(
+        default=None,
+        description="Optional visual focus regions for 9:16 reframe",
+    )
 
     @model_validator(mode="after")
     def validate_bounds(self) -> "ShortCandidate":
@@ -100,7 +219,7 @@ class ShortCandidate(BaseModel):
 
 
 class EditorDecision(BaseModel):
-    """Individual editorial decision proposed by Leo (Dialogue Editor)."""
+    """Individual editorial decision proposed by Leo (Video Editor)."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -193,7 +312,7 @@ class EditorDecision(BaseModel):
 
 
 class EditorProposal(BaseModel):
-    """Complete batch proposal emitted by Dialogue Editor (Leo)."""
+    """Complete batch proposal emitted by Leo (Video Editor)."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -227,6 +346,10 @@ class EditorProposal(BaseModel):
     short_candidate: ShortCandidate | None = Field(
         default=None,
         description="Optional Short candidate excerpt identified during analysis",
+    )
+    section_plan: list[VideoSectionDecision] = Field(
+        default_factory=list,
+        description="Full-timeline editorial section plan covering the whole production",
     )
     overall_confidence: float = Field(
         ...,
@@ -310,6 +433,19 @@ class DirectorDecision(BaseModel):
         return self
 
 
+class DirectorSectionDecision(BaseModel):
+    """Director review verdict for a full-timeline VideoSectionDecision."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    section_id: str = Field(..., min_length=1, max_length=64)
+    verdict: DirectorVerdict = Field(..., description="Verdict: APPROVE, REJECT, or MODIFY")
+    reason: str = Field(..., min_length=1, max_length=500)
+
 class DirectorReview(BaseModel):
     """Complete review output emitted by Director (Maya)."""
 
@@ -341,6 +477,10 @@ class DirectorReview(BaseModel):
     decisions: list[DirectorDecision] = Field(
         default_factory=list,
         description="Per-decision review verdicts",
+    )
+    section_decisions: list[DirectorSectionDecision] = Field(
+        default_factory=list,
+        description="Review verdicts on Leo's full-timeline section plan",
     )
     editor_feedback: str = Field(
         ...,
@@ -390,8 +530,7 @@ class AgentActivity(BaseModel):
     )
     role: str = Field(
         ...,
-        min_length=1,
-        description="Agent role (e.g. Dialogue Editor, Director)",
+        description="Agent role (e.g. Video Editor, Director)",
     )
     activity_type: str = Field(
         ...,

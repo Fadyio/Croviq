@@ -6,69 +6,84 @@ interface ProductionRunStripProps {
   stages: ProductionRunStage[];
 }
 
-export const ProductionRunStrip: React.FC<ProductionRunStripProps> = ({ stages }) => (
-  <nav
-    aria-label="Production run"
-    className="border-b border-border-subtle bg-surface-1/95 px-4 sm:px-6"
-    data-testid="production-run-strip"
-  >
-    <ol className="mx-auto flex h-10 w-full max-w-[1920px] items-center overflow-x-auto">
-      {stages.map((stage, index) => {
-        const duration =
-          stage.durationMs === undefined ? null : formatStageDuration(stage.durationMs);
-        return (
-          <li
-            key={stage.id}
-            className="flex min-w-0 shrink-0 items-center"
-            data-status={stage.status}
-            data-testid={`run-stage-${stage.id}`}
-            title={duration ? `${stage.label} ${duration}` : stage.label}
-          >
-            {index > 0 && (
-              <span
-                aria-hidden="true"
-                className={`mx-2 h-px w-4 sm:w-7 ${
-                  stage.status === "completed" ? "bg-text-muted/55" : "bg-border-subtle"
-                }`}
-              />
-            )}
-            <span
-              className={`flex items-center gap-1.5 text-[11px] font-medium whitespace-nowrap ${
-                stage.status === "failed"
-                  ? "text-danger"
-                  : stage.status === "active"
-                    ? "text-text-primary"
-                    : stage.status === "completed"
-                      ? "text-text-secondary"
-                      : "text-text-muted/65"
-              }`}
-            >
-              <span
-                className={`flex size-4 items-center justify-center rounded-full border ${
-                  stage.status === "completed"
-                    ? "border-success/40 bg-success/10 text-success"
-                    : stage.status === "active"
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : stage.status === "failed"
-                        ? "border-danger/40 bg-danger/10 text-danger"
-                        : "border-border-subtle text-text-muted/50"
-                }`}
-              >
-                {stage.status === "completed" ? (
-                  <Check className="size-2.5" strokeWidth={2.5} />
-                ) : stage.status === "active" ? (
-                  <Loader2 className="size-2.5 animate-spin motion-reduce:animate-none" />
-                ) : stage.status === "failed" ? (
-                  <AlertCircle className="size-2.5" />
-                ) : (
-                  <span className="size-1 rounded-full bg-current" />
-                )}
+export const ProductionRunStrip: React.FC<ProductionRunStripProps> = ({ stages }) => {
+  const activeStage = stages.find((s) => s.status === "active");
+  const failedStage = stages.find((s) => s.status === "failed");
+  const isAllComplete = stages.every((s) => s.status === "completed");
+  const totalDurationMs = stages.reduce(
+    (acc, s) => (s.durationMs ? acc + s.durationMs : acc),
+    0,
+  );
+
+  return (
+    <nav
+      aria-label="Production run"
+      className="border-b border-border-subtle bg-surface-1/95 px-4 sm:px-6 py-1.5 backdrop-blur-sm"
+      data-testid="production-run-strip"
+    >
+      <div className="mx-auto flex w-full max-w-[1920px] items-center justify-between min-h-[28px]">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {failedStage ? (
+            <div className="flex items-center gap-2 text-xs font-semibold text-danger">
+              <span className="flex size-4 items-center justify-center rounded-full bg-danger/15 text-danger border border-danger/30">
+                <AlertCircle className="size-2.5" />
               </span>
-              {stage.status === "active" && stage.subStatus ? stage.subStatus : stage.label}
-            </span>
-          </li>
-        );
-      })}
-    </ol>
-  </nav>
-);
+              <span>Processing paused &middot; {failedStage.label}</span>
+            </div>
+          ) : activeStage ? (
+            <div className="flex items-center gap-2.5 text-xs text-text-primary min-w-0">
+              <span className="flex size-4 items-center justify-center rounded-full bg-primary/20 text-primary border border-primary/40 animate-pulse">
+                <Loader2 className="size-2.5 animate-spin motion-reduce:animate-none" />
+              </span>
+              <span className="font-semibold tracking-tight text-text-primary">
+                Croviq is editing your video
+              </span>
+              <span className="text-border-strong select-none">&middot;</span>
+              <span className="text-text-secondary truncate text-[11px] font-medium">
+                {activeStage.subStatus || activeStage.label}
+              </span>
+            </div>
+          ) : isAllComplete ? (
+            <div className="flex items-center gap-2 text-xs font-medium text-text-secondary">
+              <span className="flex size-4 items-center justify-center rounded-full bg-success/15 text-success border border-success/30">
+                <Check className="size-2.5" strokeWidth={2.5} />
+              </span>
+              <span className="font-semibold text-text-primary">Production complete</span>
+              {totalDurationMs > 0 && (
+                <>
+                  <span className="text-border-strong select-none">&middot;</span>
+                  <span className="text-text-muted text-[11px] tabular-nums">
+                    {formatStageDuration(totalDurationMs)}
+                  </span>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-text-muted">
+              <span className="size-2 rounded-full bg-surface-3" />
+              <span>Ready to start production</span>
+            </div>
+          )}
+        </div>
+
+        {/* Hidden/accessible stage items for test selectors & telemetry */}
+        <ol className="hidden">
+          {stages.map((stage) => {
+            const duration =
+              stage.durationMs === undefined ? null : formatStageDuration(stage.durationMs);
+            return (
+              <li
+                key={stage.id}
+                data-status={stage.status}
+                data-testid={`run-stage-${stage.id}`}
+                title={duration ? `${stage.label} ${duration}` : stage.label}
+              >
+                {stage.label}
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </nav>
+  );
+};

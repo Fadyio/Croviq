@@ -1096,7 +1096,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
       .click();
     await expect(page.locator("[data-testid='decision-inspector']")).toBeVisible();
     await expect(page.locator("[data-testid='active-coverage-overlay']")).toBeVisible();
-    await expect(page.getByText("Leo · Dialogue Editor")).toBeVisible();
+    await expect(page.getByText("Leo · Video Editor")).toBeVisible();
     await expect(page.getByText("Maya · Director")).toBeVisible();
     await expect(
       page.locator("[data-testid='decision-inspector']").getByText("Approved", { exact: true }),

@@ -106,6 +106,48 @@ export function deriveKeepSegments(edl?: EditDecisionList | null): Array<[number
 }
 
 /**
+ * Map source timeline timestamp in ms to edited timeline timestamp in ms based on EDL keep segments.
+ */
+export function sourceToEditedTimeMs(sourceMs: number, edl?: EditDecisionList | null): number {
+  if (!edl) return sourceMs;
+  const keepSegments = deriveKeepSegments(edl);
+  if (keepSegments.length === 0) return sourceMs;
+
+  let accumulatedEditedMs = 0;
+  for (const [startMs, endMs] of keepSegments) {
+    if (sourceMs < startMs) {
+      return accumulatedEditedMs;
+    }
+    if (sourceMs >= startMs && sourceMs <= endMs) {
+      return accumulatedEditedMs + (sourceMs - startMs);
+    }
+    accumulatedEditedMs += endMs - startMs;
+  }
+  return accumulatedEditedMs;
+}
+
+/**
+ * Map edited timeline timestamp in ms back to source timeline timestamp in ms based on EDL keep segments.
+ */
+export function editedToSourceTimeMs(editedMs: number, edl?: EditDecisionList | null): number {
+  if (!edl) return editedMs;
+  const keepSegments = deriveKeepSegments(edl);
+  if (keepSegments.length === 0) return editedMs;
+
+  let accumulatedEditedMs = 0;
+  for (const [startMs, endMs] of keepSegments) {
+    const segDuration = endMs - startMs;
+    if (editedMs <= accumulatedEditedMs + segDuration) {
+      const offset = Math.max(0, editedMs - accumulatedEditedMs);
+      return startMs + offset;
+    }
+    accumulatedEditedMs += segDuration;
+  }
+  const lastSeg = keepSegments[keepSegments.length - 1];
+  return lastSeg ? lastSeg[1] : edl.source_duration_ms || editedMs;
+}
+
+/**
  * Check if the given playback time (in ms) falls into an executable cut range.
  * Returns the cut interval if it should be skipped in Edited Preview mode.
  */
