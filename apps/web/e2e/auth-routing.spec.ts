@@ -350,6 +350,38 @@ test.describe("Email/password authentication", () => {
     expect(totalSignOutCalls).toBe(1);
   });
 
+  test("regression guard: setPersistence is not invoked at runtime outside canonical initializeAuth", () => {
+    const srcDir = path.resolve(import.meta.dirname, "../src");
+    const getAllTsFiles = (dir: string): string[] => {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      const files: string[] = [];
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          files.push(...getAllTsFiles(fullPath));
+        } else if (
+          entry.isFile() &&
+          (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) &&
+          !entry.name.endsWith(".spec.ts")
+        ) {
+          files.push(fullPath);
+        }
+      }
+      return files;
+    };
+
+    const stripComments = (code: string) => code.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "");
+    const files = getAllTsFiles(srcDir);
+    let totalSetPersistenceCalls = 0;
+    for (const file of files) {
+      const content = fs.readFileSync(file, "utf-8");
+      const executableCode = stripComments(content);
+      const matches = Array.from(executableCode.matchAll(/setPersistence\s*\(/g));
+      totalSetPersistenceCalls += matches.length;
+    }
+    expect(totalSetPersistenceCalls).toBe(0);
+  });
+
   test("approved mocked sign-in reaches /app and persists across refresh", async ({ page }) => {
     const events: Record<string, unknown>[] = [];
     await mockClientEvents(page, events);

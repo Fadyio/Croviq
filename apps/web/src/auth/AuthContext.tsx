@@ -1,8 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
-  browserLocalPersistence,
   onIdTokenChanged,
-  setPersistence,
   signInWithEmailAndPassword,
   signOut,
   type User as FirebaseUser,
@@ -136,11 +134,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let isMounted = true;
-
-    void setPersistence(auth, browserLocalPersistence).catch(() => {
-      // Persistence failure fallback
-    });
-
     const unsubscribe = onIdTokenChanged(auth, async (nextFirebaseUser) => {
       if (!isMounted) return;
 
@@ -194,7 +187,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       void recordClientAuthEvent({ event_type: "auth.login_attempt" });
 
       try {
-        await setPersistence(auth, browserLocalPersistence);
         await signInWithEmailAndPassword(auth, email, password);
       } catch {
         setError(INVALID_CREDENTIALS_MESSAGE);
