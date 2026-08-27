@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -264,6 +264,33 @@ class ChannelPublicMetadata(BaseModel):
     @classmethod
     def check_timezone_aware(cls, v: datetime) -> datetime:
         return validate_timezone_aware(v)
+
+
+class ChannelAnalyticsPoint(BaseModel):
+    """Canonical daily channel analytics returned by every Channel Data Provider."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    date: date
+    views: int = Field(..., ge=0)
+    watch_time_minutes: float = Field(..., ge=0)
+    subscribers_gained: int = Field(..., ge=0)
+    subscribers_lost: int = Field(..., ge=0)
+    average_view_percentage: float = Field(..., ge=0, le=100)
+
+
+class ChannelAnalyticsTimeSeries(BaseModel):
+    """Chronological daily channel metrics for a bounded inclusive period."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    start_date: date
+    end_date: date
+    points: list[ChannelAnalyticsPoint]
+    is_modeled: bool = Field(
+        default=False,
+        description="True only for deterministically modeled sample-channel daily distribution.",
+    )
 
 
 class ChannelPrivateAnalytics(BaseModel):

@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
+from datetime import date, timedelta
 import json
+from math import exp
 from pathlib import Path
 
 from croviq_domain.channel import (
     Channel,
+    ChannelAnalyticsPoint,
+    ChannelAnalyticsTimeSeries,
     ChannelPrivateAnalytics,
     ChannelVideo,
     SampleChannelFixture,
@@ -39,6 +43,13 @@ class ChannelDataProvider(ABC):
     @abstractmethod
     async def get_video_analytics(self, video_id: str) -> VideoPrivateAnalytics | None:
         """Retrieve private analytics for a specific video."""
+        pass
+
+    @abstractmethod
+    async def get_channel_timeseries(
+        self, *, start_date: date, end_date: date
+    ) -> ChannelAnalyticsTimeSeries:
+        """Retrieve canonical daily analytics for an inclusive date range."""
         pass
 
 
@@ -99,3 +110,79 @@ class SampleChannelDataProvider(ChannelDataProvider):
         if video is None:
             return None
         return video.analytics
+
+    async def get_channel_timeseries(
+        self, *, start_date: date, end_date: date
+    ) -> ChannelAnalyticsTimeSeries:
+        if end_date < start_date:
+            raise ValueError("end_date must not precede start_date")
+
+        reference_date = self.fixture.generated_at.date()
+        aggregates: dict[date, dict[str, float]] = {}
+        for video in self.fixture.channel.videos:
+            published_date = video.public.published_at.date()
+            available_days = (reference_date - published_date).days + 1
+            if available_days <= 0:
+                continue
+            weights = [exp(-day / 45) for day in range(available_days)]
+            weight_total = sum(weights)
+            for day_offset, weight in enumerate(weights):
+                point_date = published_date + timedelta(days=day_offset)
+                share = weight / weight_total
+                daily_views = round(video.analytics.views * share)
+                bucket = aggregates.setdefault(
+                    point_date,
+                    {
+                        "views": 0,
+                        "watch_time_minutes": 0.0,
+                        "subscribers_gained": 0,
+                        "subscribers_lost": 0,
+                        "retention_weighted_views": 0.0,
+                    },
+                )
+                bucket["views"] += daily_views
+                bucket["watch_time_minutes"] += (
+                    video.analytics.watch_time_minutes * share
+                )
+                bucket["subscribers_gained"] += round(
+                    video.analytics.subscribers_gained * share
+                )
+                bucket["subscribers_lost"] += round(
+                    video.analytics.subscribers_lost * share
+                )
+                bucket["retention_weighted_views"] += (
+                    video.analytics.avg_view_percentage * daily_views
+                )
+
+        points: list[ChannelAnalyticsPoint] = []
+        cursor = start_date
+        while cursor <= end_date:
+            bucket = aggregates.get(cursor)
+            views = int(bucket["views"]) if bucket else 0
+            weighted_retention = bucket["retention_weighted_views"] if bucket else 0
+            points.append(
+                ChannelAnalyticsPoint(
+                    date=cursor,
+                    views=views,
+                    watch_time_minutes=(
+                        float(bucket["watch_time_minutes"]) if bucket else 0
+                    ),
+                    subscribers_gained=(
+                        int(bucket["subscribers_gained"]) if bucket else 0
+                    ),
+                    subscribers_lost=(
+                        int(bucket["subscribers_lost"]) if bucket else 0
+                    ),
+                    average_view_percentage=(
+                        weighted_retention / views if views else 0
+                    ),
+                )
+            )
+            cursor += timedelta(days=1)
+
+        return ChannelAnalyticsTimeSeries(
+            start_date=start_date,
+            end_date=end_date,
+            points=points,
+            is_modeled=True,
+        )

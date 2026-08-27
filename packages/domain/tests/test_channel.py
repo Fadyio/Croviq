@@ -1,5 +1,5 @@
 import asyncio
-from datetime import timezone
+from datetime import date, timezone
 import json
 from pathlib import Path
 import sys
@@ -197,6 +197,25 @@ class TestSampleChannelDataProvider:
             sample_provider.get_video_analytics("non_existent_id")
         )
         assert missing_analytics is None
+
+    def test_provider_returns_canonical_daily_series(
+        self, sample_provider: SampleChannelDataProvider
+    ) -> None:
+        series = asyncio.run(
+            sample_provider.get_channel_timeseries(
+                start_date=date(2026, 8, 1),
+                end_date=date(2026, 8, 26),
+            )
+        )
+
+        assert series.start_date == date(2026, 8, 1)
+        assert series.end_date == date(2026, 8, 26)
+        assert series.is_modeled is True
+        assert len(series.points) == 26
+        assert [point.date for point in series.points] == sorted(
+            point.date for point in series.points
+        )
+        assert sum(point.views for point in series.points) > 0
     def test_missing_fixture_raises_error(self, tmp_path: Path) -> None:
         """Verify provider fails loudly if fixture is missing or malformed."""
         with pytest.raises(FileNotFoundError):
