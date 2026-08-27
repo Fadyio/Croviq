@@ -58,7 +58,7 @@ Unlike generic auto-cutters, silence-strippers, or opaque black-box video genera
 - **Logos & Assets**: `brandkit/croviq-logo-horizontal.svg` (primary top bar), `brandkit/croviq-symbol.svg` (emblem/favicon), `brandkit/croviq-logo-stacked.svg` (sign-in screen).
 - **Team Personas**:
   - Maya (`Clapperboard`): Senior Production Lead / Director
-  - Leo (`Scissors`): Dialogue Editor
+  - Leo (`Scissors`): Video Editor
   - Alex (`TrendingUp`): Statistical Intelligence & Data Scientist
   - Nina (`Sparkles`): Packaging & Presentation
   - Iris (`ShieldCheck`): Quality Assurance & Compliance
