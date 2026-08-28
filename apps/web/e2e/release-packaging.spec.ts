@@ -191,12 +191,18 @@ const loginAndNavigateToRelease = async (
 
   await page.goto("/login");
   await page.getByLabel("Email").fill(DEMO_EMAIL);
-  await page.getByLabel("Password").fill("valid-password");
+  await page.getByLabel("Password").fill("valid-password-123");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await page.waitForURL("**/app*");
-  await page.goto(`/productions/${FAIRPHONE_PRODUCTION_ID}/release`);
-  await expect(page.getByTestId("release-workspace")).toBeVisible();
+  await page.waitForURL("/app");
+
+  // Client-side navigate to release
+  await page.evaluate((id) => {
+    window.history.pushState(null, "", `/productions/${id}/release`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, FAIRPHONE_PRODUCTION_ID);
+
+  await page.waitForSelector("[data-testid='release-workspace']");
 };
 const mockReleaseApis = async (
   page: Page,
@@ -205,7 +211,7 @@ const mockReleaseApis = async (
     overrides: null,
   },
 ) => {
-  await page.route("**/api/auth/verify", async (route) => {
+  await page.route("**/api/auth/me", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -213,6 +219,49 @@ const mockReleaseApis = async (
     });
   });
 
+  await page.route("**/api/channels/youtube/connection", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        connected: false,
+        channel_id: "croviq_syn_ai_eng_01",
+        title: "Modern AI Engineering",
+      }),
+    });
+  });
+
+  await page.route("**/api/channels/sample/dashboard**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        summary: {
+          total_views: 125000,
+          total_watch_time_hours: 4500,
+          subscribers_gained: 1200,
+          average_view_duration_seconds: 245,
+        },
+        videos: [],
+      }),
+    });
+  });
+
+  await page.route("**/api/channels/research/findings**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([]),
+    });
+  });
+
+  await page.route("**/api/auth/verify", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(APPROVED_USER),
+    });
+  });
   await page.route("**/api/workspace", async (route) => {
     await route.fulfill({
       status: 200,
