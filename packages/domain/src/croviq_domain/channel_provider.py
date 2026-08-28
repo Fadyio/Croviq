@@ -117,7 +117,7 @@ class SampleChannelDataProvider(ChannelDataProvider):
         if end_date < start_date:
             raise ValueError("end_date must not precede start_date")
 
-        reference_date = self.fixture.generated_at.date()
+        reference_date = max(end_date, self.fixture.generated_at.date())
         aggregates: dict[date, dict[str, float]] = {}
         for video in self.fixture.channel.videos:
             published_date = video.public.published_at.date()

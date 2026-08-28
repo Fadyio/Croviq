@@ -68,3 +68,21 @@ def test_dashboard_contains_evidence_backed_insight_and_experiment() -> None:
     assert dashboard.proposed_experiment.baseline_value == pytest.approx(59.01, abs=0.01)
     assert dashboard.topic_clusters[0].median_views > 0
     assert len(dashboard.video_performance) == 100
+
+
+def test_sample_timeseries_does_not_drop_to_zero_at_later_end_date() -> None:
+    dashboard = asyncio.run(
+        build_channel_dashboard(
+            SampleChannelDataProvider(),
+            days=28,
+            end_date=date(2026, 8, 28),
+        )
+    )
+
+    assert len(dashboard.trend) == 28
+    assert dashboard.trend[-1].date == date(2026, 8, 28)
+    # Trailing dates beyond fixture generated_at must not drop to 0
+    for point in dashboard.trend:
+        assert point.views > 500, f"Expected non-zero views on {point.date}, got {point.views}"
+        assert point.watch_time_hours > 50.0
+        assert point.net_subscribers != 0

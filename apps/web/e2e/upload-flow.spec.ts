@@ -130,26 +130,19 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
             change_percentage: 7.9,
           },
         ],
-        trend: [
-          {
-            date: "2026-08-25",
-            views: 1800,
-            previous_views: 1400,
-            watch_time_hours: 110,
-            previous_watch_time_hours: 90,
-            net_subscribers: 8,
-            previous_net_subscribers: 5,
-          },
-          {
-            date: "2026-08-26",
-            views: 2100,
-            previous_views: 1600,
-            watch_time_hours: 140,
-            previous_watch_time_hours: 100,
-            net_subscribers: 10,
-            previous_net_subscribers: 7,
-          },
-        ],
+        trend: Array.from({ length: 28 }, (_, i) => {
+          const day = i + 1;
+          const dateStr = `2026-08-${String(day).padStart(2, "0")}`;
+          return {
+            date: dateStr,
+            views: 1400 + Math.round(Math.sin(i / 3) * 350 + i * 20),
+            previous_views: 1200 + Math.round(Math.cos(i / 3) * 200 + i * 15),
+            watch_time_hours: 90 + Math.round(i * 1.8),
+            previous_watch_time_hours: 80 + Math.round(i * 1.5),
+            net_subscribers: 6 + Math.round(Math.sin(i / 2) * 3),
+            previous_net_subscribers: 5 + Math.round(Math.cos(i / 2) * 2),
+          };
+        }),
         latest_video: {
           video_id: "vid_syn_100",
           title: "Google GenAI SDK Tutorial for Beginners (Part 5)",
@@ -161,22 +154,64 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
           net_subscribers: 303,
           view_delta_percentage: 18,
           subscriber_conversion_delta_percentage: -2.84,
-          retention_percentage: 33.4,
+          retention_percentage: 54.8,
           retention_delta_points: -25.61,
         },
         video_performance: [
           {
             video_id: "vid_syn_100",
-            title: "Google GenAI SDK Tutorial",
+            title: "Google GenAI SDK Tutorial (Part 5)",
             views: 23314,
-            ctr_percentage: 4.29,
-            average_retention: 33.4,
-            subscribers_gained: 334,
+            ctr_percentage: 4.8,
+            average_retention: 54.8,
+            subscribers_gained: 303,
             content_pillar: "Gemini & Vertex AI",
+          },
+          {
+            video_id: "vid_syn_99",
+            title: "LangGraph Multi-Agent Architecture",
+            views: 18400,
+            ctr_percentage: 6.2,
+            average_retention: 61.2,
+            subscribers_gained: 240,
+            content_pillar: "Agent Architecture",
+          },
+          {
+            video_id: "vid_syn_98",
+            title: "FastAPI + WebSockets Production Guide",
+            views: 15200,
+            ctr_percentage: 5.1,
+            average_retention: 52.0,
+            subscribers_gained: 180,
+            content_pillar: "Backend Systems",
+          },
+          {
+            video_id: "vid_syn_97",
+            title: "Llama 3 Fine-Tuning on Custom Dataset",
+            views: 29800,
+            ctr_percentage: 7.4,
+            average_retention: 58.5,
+            subscribers_gained: 410,
+            content_pillar: "Open Source LLMs",
+          },
+          {
+            video_id: "vid_syn_96",
+            title: "Vite + React 19 Performance Secrets",
+            views: 12100,
+            ctr_percentage: 3.9,
+            average_retention: 46.2,
+            subscribers_gained: 95,
+            content_pillar: "Frontend Engineering",
           },
         ],
         topic_clusters: [],
-        traffic_sources: [{ source: "youtube_search", views: 17000, percentage: 40.4 }],
+        traffic_sources: [
+          { source: "suggested_videos", views: 15200, percentage: 36.1 },
+          { source: "youtube_search", views: 13100, percentage: 31.1 },
+          { source: "browse_features", views: 9800, percentage: 23.3 },
+          { source: "external", views: 2400, percentage: 5.7 },
+          { source: "direct_or_other", views: 1600, percentage: 3.8 },
+        ],
         insights: [
           {
             insight_id: "insight-1",
@@ -489,17 +524,18 @@ test.describe("Product Home and Creator Flow", () => {
       page.getByRole("heading", { name: "AI Engineering & Agent Systems" }),
     ).toBeVisible();
     await expect(page.getByText("Sample channel", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("Channel trend")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Channel Performance" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Video performance map" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Traffic sources" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Alex Briefing" })).toBeVisible();
-    await expect(page.getByText("Topic Radar")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
+    await expect(page.getByText("Worth watching")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Upload raw footage" })).toHaveCount(0);
     await expect(page.getByText("Owner User ID")).toHaveCount(0);
     await expect(page.getByText("Git SHA")).toHaveCount(0);
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1440x900.png" });
+    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-fullpage.png", fullPage: true });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1280x800.png" });
     expect(consoleErrors).toEqual([]);
