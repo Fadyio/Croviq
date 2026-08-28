@@ -310,6 +310,8 @@ class FirestoreYouTubeConnectionRepository(YouTubeConnectionRepository):
         if record is None:
             return None
         return self._record_to_connection(record, self.encryptor)
+
+    async def save_connection(self, connection: YouTubeConnection) -> YouTubeConnection:
         effective_refresh_token = connection.refresh_token
         if not effective_refresh_token:
             existing = await self.get_connection(connection.workspace_id)

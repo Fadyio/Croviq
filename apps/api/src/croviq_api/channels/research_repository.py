@@ -193,16 +193,16 @@ class FirestoreResearchRepository(ResearchRepository):
 
     async def list_due_configs(self, now: datetime | None = None) -> list[ResearchConfig]:
         current_time = now or datetime.now(UTC)
-        query = (
-            self._get_db()
-            .collection_group("channel_intelligence")
-            .where("enabled", "==", True)
-            .where("next_run_at", "<=", current_time.isoformat())
-        )
-        configs = []
+        query = self._get_db().collection_group("channel_intelligence")
+        configs: list[ResearchConfig] = []
         for doc in query.stream():
             try:
-                configs.append(ResearchConfig.model_validate(doc.to_dict()))
+                data = doc.to_dict()
+                if not data:
+                    continue
+                cfg = ResearchConfig.model_validate(data)
+                if cfg.enabled and cfg.next_run_at <= current_time:
+                    configs.append(cfg)
             except Exception:
                 pass
         return configs
@@ -234,8 +234,8 @@ class FirestoreResearchRepository(ResearchRepository):
         query = self._findings_collection()
         if channel_id:
             query = query.where("channel_id", "==", channel_id)
-        docs = query.order_by("opportunity_score", direction="DESCENDING").limit(limit).stream()
-        results = []
+        docs = query.stream()
+        results: list[ResearchFinding] = []
         for doc in docs:
             try:
                 f = ResearchFinding.model_validate(doc.to_dict())
@@ -243,7 +243,8 @@ class FirestoreResearchRepository(ResearchRepository):
                     results.append(f)
             except Exception:
                 pass
-        return results
+        results.sort(key=lambda x: x.opportunity_score, reverse=True)
+        return results[:limit]
 
     async def get_finding(self, finding_id: str) -> ResearchFinding | None:
         doc = self._findings_collection().document(finding_id).get()

@@ -25,19 +25,19 @@ def encryptor() -> OAuthTokenEncryptor:
 
 def test_token_payload_model() -> None:
     payload = TokenPayload(
-        access_token="ya29.access_token_12345",
-        refresh_token="1//refresh_token_67890",
+        access_token="mock_access_token_12345",
+        refresh_token="mock_refresh_token_67890",
         token_type="Bearer",
     )
-    assert payload.access_token == "ya29.access_token_12345"
-    assert payload.refresh_token == "1//refresh_token_67890"
+    assert payload.access_token == "mock_access_token_12345"
+    assert payload.refresh_token == "mock_refresh_token_67890"
     assert payload.token_type == "Bearer"
 
 
 def test_tink_aead_encrypt_decrypt_roundtrip(encryptor: OAuthTokenEncryptor) -> None:
     payload = TokenPayload(
-        access_token="ya29.sample_access_token",
-        refresh_token="1//sample_refresh_token",
+        access_token="mock_sample_access_token",
+        refresh_token="mock_sample_refresh_token",
     )
     workspace_id = "ws_test_01"
     user_id = "usr_creator_01"
@@ -67,8 +67,8 @@ def test_tink_aead_encrypt_decrypt_roundtrip(encryptor: OAuthTokenEncryptor) -> 
 
 def test_tink_aead_aad_tamper_protection(encryptor: OAuthTokenEncryptor) -> None:
     payload = TokenPayload(
-        access_token="ya29.secret_token",
-        refresh_token="1//secret_refresh",
+        access_token="mock_secret_token",
+        refresh_token="mock_secret_refresh",
     )
     ciphertext_b64 = encryptor.encrypt_tokens(
         payload,
@@ -134,8 +134,8 @@ async def test_in_memory_repository_stores_and_retrieves_encrypted_connection(
         channel_title="Test YouTube Channel",
         avatar_url="https://example.com/avatar.png",
         subscriber_count=12500,
-        access_token="ya29.live_access_test",
-        refresh_token="1//live_refresh_test",
+        access_token="mock_live_access_test",
+        refresh_token="mock_live_refresh_test",
         token_expiry=now,
         scopes=["https://www.googleapis.com/auth/youtube.readonly"],
         connected_at=now,
@@ -156,8 +156,8 @@ async def test_in_memory_repository_stores_and_retrieves_encrypted_connection(
     # Retrieved connection is decrypted in memory
     retrieved = await repo.get_connection("ws_mem_01")
     assert retrieved is not None
-    assert retrieved.access_token == "ya29.live_access_test"
-    assert retrieved.refresh_token == "1//live_refresh_test"
+    assert retrieved.access_token == "mock_live_access_test"
+    assert retrieved.refresh_token == "mock_live_refresh_test"
 
     # Disconnect deletes record
     deleted = await repo.delete_connection("ws_mem_01")
