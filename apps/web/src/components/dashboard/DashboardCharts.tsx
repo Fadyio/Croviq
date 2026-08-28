@@ -67,8 +67,7 @@ export const ChannelTrendChart: React.FC<{ data: TrendPoint[] }> = ({ data }) =>
 
   const currentValues = useMemo(() => data.map((point) => point[metric] ?? 0), [data, metric]);
   const previousValues = useMemo(
-    () =>
-      data.map((point) => (point[`previous_${metric}` as keyof TrendPoint] as number) ?? 0),
+    () => data.map((point) => (point[`previous_${metric}` as keyof TrendPoint] as number) ?? 0),
     [data, metric],
   );
 
@@ -359,10 +358,7 @@ export const ChannelTrendChart: React.FC<{ data: TrendPoint[] }> = ({ data }) =>
           <div
             className="pointer-events-none absolute z-20 rounded-lg border border-border-strong bg-surface-2/95 px-3 py-2.5 shadow-xl backdrop-blur-sm transition-transform duration-75 text-xs"
             style={{
-              left: `${Math.min(
-                Math.max(hoveredX / 8, 12),
-                88,
-              )}%`,
+              left: `${Math.min(Math.max(hoveredX / 8, 12), 88)}%`,
               top: "12px",
               transform: "translateX(-50%)",
             }}
@@ -440,7 +436,10 @@ export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }
       aria-labelledby="performance-title"
     >
       <div className="mb-4">
-        <h2 id="performance-title" className="text-sm font-semibold tracking-tight text-text-primary">
+        <h2
+          id="performance-title"
+          className="text-sm font-semibold tracking-tight text-text-primary"
+        >
           Video performance map
         </h2>
         <p className="mt-0.5 text-xs text-text-muted">
@@ -621,9 +620,7 @@ export const TrafficSourceChart: React.FC<{ data: TrafficSource[] }> = ({ data }
         <h2 id="traffic-title" className="text-sm font-semibold tracking-tight text-text-primary">
           Traffic sources
         </h2>
-        <p className="mt-0.5 text-xs text-text-muted">
-          How viewers discover your channel content
-        </p>
+        <p className="mt-0.5 text-xs text-text-muted">How viewers discover your channel content</p>
       </div>
 
       <div className="space-y-3.5 pt-1">

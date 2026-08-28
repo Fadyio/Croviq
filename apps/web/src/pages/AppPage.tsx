@@ -1,9 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-} from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   BarChart3,
   Beaker,
@@ -398,15 +394,25 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
             aria-label="Open Alex settings"
             title="Alex · Data Scientist"
           >
-            <img src={alexAvatar} alt="Alex" className="h-6 w-6 rounded-full object-cover ring-1 ring-border-subtle" />
+            <img
+              src={alexAvatar}
+              alt="Alex"
+              className="h-6 w-6 rounded-full object-cover ring-1 ring-border-subtle"
+            />
             <div className="hidden sm:block">
-              <span className="block text-xs font-semibold leading-tight text-text-primary">Alex</span>
-              <span className="block text-[10px] leading-tight text-text-muted">Data Scientist</span>
+              <span className="block text-xs font-semibold leading-tight text-text-primary">
+                Alex
+              </span>
+              <span className="block text-[10px] leading-tight text-text-muted">
+                Data Scientist
+              </span>
             </div>
           </button>
 
           <div className="hidden md:flex items-center gap-3 border-l border-border-subtle pl-3">
-            <span className="max-w-[130px] truncate text-xs text-text-secondary">{user?.email}</span>
+            <span className="max-w-[130px] truncate text-xs text-text-secondary">
+              {user?.email}
+            </span>
             <button
               type="button"
               onClick={logout}
@@ -423,7 +429,6 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
       {/* 1. Desktop Layout: Main Workspace + Alex Rail (NO Permanent Left Sidebar) */}
       <div className="mx-auto max-w-[1560px] px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
-          
           {/* Main Intelligence Workspace */}
           <main id="overview" className="min-w-0 space-y-6">
             {error && (
@@ -533,40 +538,69 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                       Since your last upload
                     </span>
                     <span className="text-[11px] text-text-muted">
-                      Published {new Date(dashboard.latest_video.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      Published{" "}
+                      {new Date(dashboard.latest_video.published_at).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
                     </span>
                   </div>
 
                   <div className="mt-3.5 grid gap-4 lg:grid-cols-[1.2fr_1fr] items-center">
                     <div>
-                      <h2 id="latest-upload-title" className="text-sm font-semibold text-text-primary line-clamp-1">
+                      <h2
+                        id="latest-upload-title"
+                        className="text-sm font-semibold text-text-primary line-clamp-1"
+                      >
                         {dashboard.latest_video.title}
                       </h2>
                       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
                         <span className="font-mono font-semibold text-text-primary">
-                          {compactNumber.format(dashboard.latest_video.views)} <span className="font-sans font-normal text-text-muted">views</span>
+                          {compactNumber.format(dashboard.latest_video.views)}{" "}
+                          <span className="font-sans font-normal text-text-muted">views</span>
                         </span>
                         <span className="text-border-strong">·</span>
                         <span className="font-mono font-semibold text-text-primary">
-                          {dashboard.latest_video.net_subscribers >= 0 ? "+" : ""}{dashboard.latest_video.net_subscribers} <span className="font-sans font-normal text-text-muted">subscribers</span>
+                          {dashboard.latest_video.net_subscribers >= 0 ? "+" : ""}
+                          {dashboard.latest_video.net_subscribers}{" "}
+                          <span className="font-sans font-normal text-text-muted">subscribers</span>
                         </span>
                         <span className="text-border-strong">·</span>
                         <span className="font-mono font-semibold text-text-primary">
-                          {dashboard.latest_video.retention_percentage.toFixed(1)}% <span className="font-sans font-normal text-text-muted">retention</span>
+                          {dashboard.latest_video.retention_percentage.toFixed(1)}%{" "}
+                          <span className="font-sans font-normal text-text-muted">retention</span>
                         </span>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end text-xs">
                       <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary">
-                        <span className={dashboard.latest_video.view_delta_percentage >= 0 ? "text-success font-semibold" : "text-danger font-semibold"}>
-                          {dashboard.latest_video.view_delta_percentage >= 0 ? "+" : ""}{dashboard.latest_video.view_delta_percentage.toFixed(1)}%
+                        <span
+                          className={
+                            dashboard.latest_video.view_delta_percentage >= 0
+                              ? "text-success font-semibold"
+                              : "text-danger font-semibold"
+                          }
+                        >
+                          {dashboard.latest_video.view_delta_percentage >= 0 ? "+" : ""}
+                          {dashboard.latest_video.view_delta_percentage.toFixed(1)}%
                         </span>{" "}
                         views vs channel median
                       </span>
                       <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary">
-                        <span className={dashboard.latest_video.subscriber_conversion_delta_percentage >= 0 ? "text-success font-semibold" : "text-danger font-semibold"}>
-                          {dashboard.latest_video.subscriber_conversion_delta_percentage >= 0 ? "+" : ""}{dashboard.latest_video.subscriber_conversion_delta_percentage.toFixed(1)}%
+                        <span
+                          className={
+                            dashboard.latest_video.subscriber_conversion_delta_percentage >= 0
+                              ? "text-success font-semibold"
+                              : "text-danger font-semibold"
+                          }
+                        >
+                          {dashboard.latest_video.subscriber_conversion_delta_percentage >= 0
+                            ? "+"
+                            : ""}
+                          {dashboard.latest_video.subscriber_conversion_delta_percentage.toFixed(1)}
+                          %
                         </span>{" "}
                         conversion
                       </span>
@@ -592,7 +626,10 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Beaker className="h-4 w-4 text-primary" />
-                      <h2 id="experiments-title" className="text-sm font-semibold tracking-tight text-text-primary">
+                      <h2
+                        id="experiments-title"
+                        className="text-sm font-semibold tracking-tight text-text-primary"
+                      >
                         Channel Experiment
                       </h2>
                     </div>
@@ -608,7 +645,9 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                   <div className="mt-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-lg bg-surface-2/60 p-3 text-xs border border-border-subtle">
                     <div>
                       <span className="text-[10px] text-text-muted block">Primary metric</span>
-                      <span className="font-medium text-text-primary mt-0.5 block">Average retention</span>
+                      <span className="font-medium text-text-primary mt-0.5 block">
+                        Average retention
+                      </span>
                     </div>
                     <div>
                       <span className="text-[10px] text-text-muted block">Baseline</span>
@@ -948,7 +987,11 @@ const KpiCell: React.FC<{ kpi: DashboardKpi }> = ({ kpi }) => {
           }`}
         >
           {kpi.change_percentage !== null &&
-            (isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />)}
+            (isPositive ? (
+              <TrendingUp className="h-3 w-3" />
+            ) : (
+              <TrendingDown className="h-3 w-3" />
+            ))}
           <span>{formatChange(kpi.change_percentage)}</span>
         </p>
       </div>

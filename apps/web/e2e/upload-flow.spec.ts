@@ -520,9 +520,7 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByText(DEMO_EMAIL)).toBeVisible();
     await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Modern AI Engineering" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
     await expect(page.getByText("Sample channel", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("51,317 subscribers · 100 videos")).toBeVisible();
     await expect(page.getByText("Here's what changed.")).toBeVisible();
@@ -551,7 +549,9 @@ test.describe("Product Home and Creator Flow", () => {
 
     // Verify progressive disclosure: View Evidence opens modal with FACT/INFERENCE
     await page.getByRole("button", { name: "View evidence" }).first().click();
-    const evidenceModal = page.getByRole("dialog", { name: "Evidence Analysis" }).or(page.locator("div.fixed.inset-0"));
+    const evidenceModal = page
+      .getByRole("dialog", { name: "Evidence Analysis" })
+      .or(page.locator("div.fixed.inset-0"));
     await expect(evidenceModal).toBeVisible();
     await expect(page.getByText("Supporting Evidence")).toBeVisible();
     await page.getByRole("button", { name: "Close" }).last().click();
@@ -560,11 +560,18 @@ test.describe("Product Home and Creator Flow", () => {
 
     // Capture Evidence Screenshots at 1440x900 and 1280x800
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-after-rework-1440x900.png" });
+    await page.screenshot({
+      path: "e2e/screenshots/channel-intelligence-after-rework-1440x900.png",
+    });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1440x900.png" });
-    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-fullpage.png", fullPage: true });
+    await page.screenshot({
+      path: "e2e/screenshots/channel-intelligence-fullpage.png",
+      fullPage: true,
+    });
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-after-rework-1280x800.png" });
+    await page.screenshot({
+      path: "e2e/screenshots/channel-intelligence-after-rework-1280x800.png",
+    });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1280x800.png" });
     expect(consoleErrors).toEqual([]);
   });
