@@ -276,9 +276,15 @@ class YouTubePublishService:
         short_title = proposal.short_package.title if (proposal and proposal.short_package) else "Short"
         short_description = proposal.short_package.description if (proposal and proposal.short_package) else ""
 
-        # Synthetic Media Detection strictly derived from Master artifact type
+        # Synthetic Media Detection strictly derived from Master artifact type or accepted generated Omni B-roll
+        broll_items = await self.broll_repo.list_by_production_id(production_id)
+        has_omni_broll = any(
+            getattr(b, "status", None) == "accepted" and not getattr(b, "is_draft", True)
+            for b in broll_items
+        )
         contains_synthetic_media_suggested = bool(
-            master_artifact and master_artifact.artifact_type == ArtifactType.STUDIO_VOICE_MASTER
+            (master_artifact and master_artifact.artifact_type == ArtifactType.STUDIO_VOICE_MASTER)
+            or has_omni_broll
         )
         return {
             "production_id": production_id,
@@ -462,10 +468,6 @@ class YouTubePublishService:
 
         has_upload_scope = bool(connection and SCOPE_YOUTUBE_UPLOAD in connection.scopes)
         initial_status = PublishJobStatus.PENDING if has_upload_scope else PublishJobStatus.AUTH_REQUIRED
-
-        short_art = None
-        if upload_short:
-            short_art = next((r for r in renders if r.artifact_type == ArtifactType.SHORT and r.status == ArtifactStatus.completed), None)
 
         publish_job_id = f"pub_{uuid.uuid4().hex[:12]}"
         now = datetime.now(timezone.utc)

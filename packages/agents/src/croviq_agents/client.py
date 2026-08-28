@@ -30,7 +30,7 @@ from croviq_domain.packaging import (
     TitleCandidate,
     format_ms_as_timestamp,
 )
-from croviq_domain.edl import EditDecisionList
+from croviq_domain.edl import EditDecisionList, map_source_time_to_edited
 from croviq_domain.render_review import (
     EditorSelfReview,
     EditorSelfReviewVerdict,
@@ -318,6 +318,7 @@ def reconcile_packaging_proposal(
     proposal: PackagingProposal,
     master_duration_ms: int | None = None,
     chapters: Sequence[ChapterMarker] | None = None,
+    edl_keep_segments: list[tuple[int, int]] | None = None,
 ) -> PackagingProposal:
     """Ensure packaging proposal adheres strictly to canonical timestamps, valid candidates, and bounds."""
     candidates = list(proposal.title_candidates) if proposal.title_candidates else []
@@ -344,14 +345,17 @@ def reconcile_packaging_proposal(
                 confidence=proposal.confidence or 0.9,
             ),
         )
-
     reconciled_chapters: list[PackagingChapter] = []
     if chapters:
         for idx, ch in enumerate(chapters):
-            start = ch.source_start_ms
-            end = ch.source_end_ms
+            if edl_keep_segments:
+                start = map_source_time_to_edited(ch.source_start_ms, edl_keep_segments)
+                end = map_source_time_to_edited(ch.source_end_ms, edl_keep_segments)
+            else:
+                start = ch.source_start_ms
+                end = ch.source_end_ms
+
             if master_duration_ms and (end > master_duration_ms or start > master_duration_ms):
-                # Scale or snap to master duration
                 start = min(max(0, start), master_duration_ms)
                 end = min(max(start, end), master_duration_ms)
             if idx == 0:
@@ -385,7 +389,6 @@ def reconcile_packaging_proposal(
                     summary=ch.summary,
                 )
             )
-
     if reconciled_chapters and reconciled_chapters[0].start_ms > 0:
         reconciled_chapters[0] = PackagingChapter(
             title=reconciled_chapters[0].title,
