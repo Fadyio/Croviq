@@ -55,7 +55,7 @@ const KPI_LABELS: Record<string, string> = {
 
 const formatKpiValue = (kpi: DashboardKpi): string => {
   if (kpi.metric === "average_retention") return `${kpi.current_value.toFixed(1)}%`;
-  if (kpi.metric === "watch_time_hours") return `${compactNumber.format(kpi.current_value)}h`;
+  if (kpi.metric === "watch_time_hours") return `${compactNumber.format(kpi.current_value)} hours`;
   if (kpi.metric === "net_subscribers") {
     return `${kpi.current_value >= 0 ? "+" : ""}${compactNumber.format(kpi.current_value)}`;
   }
@@ -482,7 +482,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                 </div>
               </div>
 
-              {/* Compact Navigation Tabs & Section Lead */}
+              {/* Compact Navigation Tabs */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle pb-3">
                 <nav className="flex items-center gap-1" aria-label="Dashboard sections">
                   {[
@@ -509,24 +509,26 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                     );
                   })}
                 </nav>
-                <p className="text-xs text-text-muted">Here's what changed.</p>
               </div>
             </header>
-
             {isLoading || !dashboard ? (
               <DashboardSkeleton />
             ) : (
               <div className="space-y-6">
-                {/* 5. KPI Hierarchy: Unified row container, max 4 KPIs */}
-                <section
-                  className="grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-border-subtle bg-surface-1 divide-y lg:divide-y-0 lg:divide-x divide-border-subtle shadow-sm"
-                  aria-label="Channel KPIs"
-                >
-                  {dashboard.kpis.map((kpi) => (
-                    <KpiCell key={kpi.metric} kpi={kpi} />
-                  ))}
-                </section>
-
+                {/* 5. KPI Hierarchy: Unified row container with section introduction */}
+                <div className="space-y-2.5">
+                  <h2 className="text-xs font-semibold tracking-tight text-text-secondary">
+                    Here's what changed
+                  </h2>
+                  <section
+                    className="grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-border-subtle bg-surface-1 divide-y lg:divide-y-0 lg:divide-x divide-border-subtle shadow-sm"
+                    aria-label="Channel KPIs"
+                  >
+                    {dashboard.kpis.map((kpi) => (
+                      <KpiCell key={kpi.metric} kpi={kpi} />
+                    ))}
+                  </section>
+                </div>
                 {/* 8. Since Your Last Upload: Concise contextual summary */}
                 <section
                   className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm"
@@ -617,35 +619,36 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                   <TrafficSourceChart data={dashboard.traffic_sources} />
                 </section>
 
-                {/* 15. Channel Experiment: Reduced footprint, supporting card */}
+                {/* 15. Channel Experiment: Reduced vertical footprint */}
                 <section
                   id="experiments"
-                  className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm"
+                  className="rounded-xl border border-border-subtle bg-surface-1 p-4 sm:p-4.5 shadow-sm"
                   aria-labelledby="experiments-title"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <Beaker className="h-4 w-4 text-primary" />
+                      <Beaker className="h-3.5 w-3.5 text-primary" />
                       <h2
                         id="experiments-title"
-                        className="text-sm font-semibold tracking-tight text-text-primary"
+                        className="text-xs font-semibold tracking-tight text-text-primary"
                       >
                         Channel Experiment
                       </h2>
                     </div>
-                    <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[10px] font-semibold text-primary">
+                    <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
                       {dashboard.proposed_experiment.status}
                     </span>
                   </div>
 
-                  <p className="mt-2.5 text-xs font-medium text-text-primary leading-relaxed">
+                  <p className="mt-2 text-xs font-normal text-text-secondary leading-relaxed">
+                    <span className="font-semibold text-text-primary">Hypothesis: </span>
                     {dashboard.proposed_experiment.hypothesis}
                   </p>
 
-                  <div className="mt-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-lg bg-surface-2/60 p-3 text-xs border border-border-subtle">
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5 rounded-lg bg-surface-2/60 p-2.5 text-xs border border-border-subtle">
                     <div>
                       <span className="text-[10px] text-text-muted block">Primary metric</span>
-                      <span className="font-medium text-text-primary mt-0.5 block">
+                      <span className="font-medium text-text-primary mt-0.5 block truncate">
                         Average retention
                       </span>
                     </div>
@@ -669,8 +672,8 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
             )}
           </main>
 
-          {/* 9. Alex Rail: Primary Agent Data Scientist */}
-          <aside className="space-y-6">
+          {/* 9. Alex Rail: Sticky Primary Agent Data Scientist */}
+          <aside className="space-y-6 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
             <div className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm space-y-5">
               {/* 9. Alex Header: Team Member identity */}
               <div className="flex items-center justify-between border-b border-border-subtle pb-4">
@@ -696,12 +699,12 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                 </button>
               </div>
 
-              {/* 10. Natural Prose Alex Insights */}
+              {/* 10. Natural Prose Alex Insights (Reduced Nesting) */}
               <div className="space-y-4">
                 {dashboard?.insights.map((insight) => (
                   <article
                     key={insight.insight_id}
-                    className="rounded-lg bg-surface-2/50 border border-border-subtle p-4 text-xs space-y-3 transition-colors hover:border-border-strong"
+                    className="rounded-lg bg-surface-2/40 p-4 text-xs space-y-3"
                   >
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
                       <TrendingUp className="h-3 w-3" />
@@ -716,7 +719,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                       {insight.statement}
                     </p>
 
-                    <div className="rounded-md bg-surface-1 p-2.5 border border-border-subtle text-[11px] leading-relaxed">
+                    <div className="rounded-md border-l-2 border-primary/70 bg-surface-3/50 px-3 py-2 text-[11px] leading-relaxed">
                       <span className="font-semibold text-text-primary">Next: </span>
                       <span className="text-text-secondary">{insight.recommended_action}</span>
                     </div>
@@ -735,7 +738,6 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                   </article>
                 ))}
               </div>
-
               {/* 11 & 12. Worth Watching / Topic Radar */}
               <div className="border-t border-border-subtle pt-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -756,7 +758,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                         initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="rounded-lg border border-border-subtle bg-surface-2/40 p-3.5 text-xs space-y-2"
+                        className="rounded-lg bg-surface-2/40 p-3.5 text-xs space-y-2"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[9px] font-medium text-text-muted">
@@ -771,7 +773,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                           {finding.title}
                         </h4>
 
-                        <div className="rounded bg-surface-1/80 p-2 text-[10px] leading-relaxed text-text-secondary border border-border-subtle/50">
+                        <div className="rounded border-l-2 border-border-strong bg-surface-3/40 px-2.5 py-1.5 text-[10px] leading-relaxed text-text-secondary">
                           <span className="font-semibold text-text-primary">Why it matters: </span>
                           <span>{finding.why_it_matters}</span>
                         </div>

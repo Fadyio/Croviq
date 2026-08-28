@@ -523,7 +523,7 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
     await expect(page.getByText("Sample channel", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("51,317 subscribers · 100 videos")).toBeVisible();
-    await expect(page.getByText("Here's what changed.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Here's what changed" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Channel Performance" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Video performance map" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Traffic sources" })).toBeVisible();
@@ -558,12 +558,25 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByText("Supporting Evidence")).toHaveCount(0);
     await page.waitForTimeout(300);
 
-    // Capture Evidence Screenshots at 1440x900 and 1280x800
+    // Capture Evidence Screenshots at 1600x900, 1440x900, and 1280x800 (Top and Scrolled)
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1600x900-top.png" });
+    await page.evaluate(() => window.scrollTo(0, 450));
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1600x900-scrolled.png" });
+
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.screenshot({
       path: "e2e/screenshots/channel-intelligence-after-rework-1440x900.png",
     });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1440x900.png" });
+    await page.screenshot({ path: "e2e/screenshots/production-home-top-1440x900.png" });
+    await page.evaluate(() => window.scrollTo(0, 450));
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: "e2e/screenshots/production-home-scrolled-1440x900.png" });
+
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: "e2e/screenshots/channel-intelligence-fullpage.png",
       fullPage: true,
@@ -573,6 +586,11 @@ test.describe("Product Home and Creator Flow", () => {
       path: "e2e/screenshots/channel-intelligence-after-rework-1280x800.png",
     });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1280x800.png" });
+    await page.screenshot({ path: "e2e/screenshots/production-home-top-1280x800.png" });
+    await page.evaluate(() => window.scrollTo(0, 450));
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: "e2e/screenshots/production-home-scrolled-1280x800.png" });
+
     expect(consoleErrors).toEqual([]);
   });
 

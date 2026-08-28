@@ -30,15 +30,16 @@ const fullDateLabel = (value: string): string =>
 
 const formatMetricValue = (metric: TrendMetric, value: number): string => {
   if (metric === "views") return compactNumber.format(value);
-  if (metric === "watch_time_hours") return `${compactNumber.format(value)}h`;
+  if (metric === "watch_time_hours") return `${compactNumber.format(value)} h`;
   if (metric === "net_subscribers") return `${value >= 0 ? "+" : ""}${compactNumber.format(value)}`;
   return compactNumber.format(value);
 };
 
 const formatMetricFullValue = (metric: TrendMetric, value: number): string => {
   if (metric === "views") return `${standardNumber.format(value)} views`;
-  if (metric === "watch_time_hours") return `${value.toFixed(1)} hours`;
-  if (metric === "net_subscribers") return `${value >= 0 ? "+" : ""}${value} subscribers`;
+  if (metric === "watch_time_hours") return `${standardNumber.format(value)} hours`;
+  if (metric === "net_subscribers")
+    return `${value >= 0 ? "+" : ""}${standardNumber.format(value)} subscribers`;
   return String(value);
 };
 
@@ -261,7 +262,8 @@ export const ChannelTrendChart: React.FC<{ data: TrendPoint[] }> = ({ data }) =>
                 x2={paddingLeft + plotWidth}
                 y1={tick.y}
                 y2={tick.y}
-                stroke="var(--color-border-subtle)"
+                stroke="var(--color-border-strong)"
+                strokeOpacity="0.5"
                 strokeDasharray="2 4"
                 strokeWidth="1"
                 vectorEffect="non-scaling-stroke"
@@ -270,9 +272,9 @@ export const ChannelTrendChart: React.FC<{ data: TrendPoint[] }> = ({ data }) =>
                 x={paddingLeft - 8}
                 y={tick.y + 3.5}
                 textAnchor="end"
-                fill="var(--color-text-muted)"
+                fill="var(--color-text-secondary)"
                 fontSize="10"
-                className="font-mono"
+                className="font-mono font-medium"
               >
                 {formatMetricValue(metric, tick.value)}
               </text>
@@ -310,9 +312,9 @@ export const ChannelTrendChart: React.FC<{ data: TrendPoint[] }> = ({ data }) =>
               x={tick.x}
               y={paddingTop + plotHeight + 20}
               textAnchor="middle"
-              fill="var(--color-text-muted)"
+              fill="var(--color-text-secondary)"
               fontSize="10"
-              className="font-sans"
+              className="font-sans font-medium"
             >
               {dateLabel(tick.date)}
             </text>
@@ -356,17 +358,19 @@ export const ChannelTrendChart: React.FC<{ data: TrendPoint[] }> = ({ data }) =>
         {/* Hover Tooltip Overlay */}
         {hoverIndex !== null && hoveredPoint && (
           <div
-            className="pointer-events-none absolute z-20 rounded-lg border border-border-strong bg-surface-2/95 px-3 py-2.5 shadow-xl backdrop-blur-sm transition-transform duration-75 text-xs"
+            className="pointer-events-none absolute z-20 min-w-[200px] rounded-lg border border-border-strong bg-surface-2/95 px-3.5 py-3 shadow-2xl backdrop-blur-md transition-transform duration-75 text-xs"
             style={{
-              left: `${Math.min(Math.max(hoveredX / 8, 12), 88)}%`,
+              left: `${Math.min(Math.max(hoveredX / 8, 14), 86)}%`,
               top: "12px",
               transform: "translateX(-50%)",
             }}
           >
-            <p className="font-semibold text-text-primary">{fullDateLabel(hoveredPoint.date)}</p>
-            <div className="mt-1.5 space-y-1">
+            <p className="font-semibold text-text-primary text-[13px]">
+              {fullDateLabel(hoveredPoint.date)}
+            </p>
+            <div className="mt-2 space-y-1.5">
               <div className="flex items-center justify-between gap-4">
-                <span className="flex items-center gap-1.5 text-text-secondary">
+                <span className="flex items-center gap-1.5 text-text-secondary font-medium">
                   <span className="h-2 w-2 rounded-full bg-primary" />
                   Current:
                 </span>
@@ -375,17 +379,17 @@ export const ChannelTrendChart: React.FC<{ data: TrendPoint[] }> = ({ data }) =>
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4 text-text-muted">
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5 font-medium">
                   <span className="h-1.5 w-1.5 rounded-full bg-text-muted" />
                   Previous:
                 </span>
-                <span className="font-mono">
+                <span className="font-mono text-text-secondary">
                   {formatMetricFullValue(metric, hoveredPrevious ?? 0)}
                 </span>
               </div>
               {hoveredDelta !== null && (
-                <div className="pt-1 border-t border-border-subtle flex items-center justify-between gap-4 text-[11px]">
-                  <span className="text-text-muted">Change:</span>
+                <div className="pt-1.5 border-t border-border-subtle flex items-center justify-between gap-4 text-[11px]">
+                  <span className="text-text-muted font-medium">Period Change:</span>
                   <span
                     className={`font-semibold ${
                       hoveredDelta >= 0 ? "text-success" : "text-danger"
@@ -465,7 +469,8 @@ export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }
                   x2={width}
                   y1={yPos}
                   y2={yPos}
-                  stroke="var(--color-border-subtle)"
+                  stroke="var(--color-border-strong)"
+                  strokeOpacity="0.4"
                   strokeDasharray="2 4"
                   strokeWidth="1"
                 />
@@ -473,9 +478,9 @@ export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }
                   x={paddingLeft - 6}
                   y={yPos + 3.5}
                   textAnchor="end"
-                  fill="var(--color-text-muted)"
-                  fontSize="9"
-                  className="font-mono"
+                  fill="var(--color-text-secondary)"
+                  fontSize="10"
+                  className="font-mono font-medium"
                 >
                   {Math.round(yVal)}%
                 </text>
@@ -493,7 +498,8 @@ export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }
                   x2={xPos}
                   y1={0}
                   y2={plotH}
-                  stroke="var(--color-border-subtle)"
+                  stroke="var(--color-border-strong)"
+                  strokeOpacity="0.4"
                   strokeDasharray="2 4"
                   strokeWidth="1"
                 />
@@ -501,16 +507,15 @@ export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }
                   x={xPos}
                   y={plotH + 14}
                   textAnchor="middle"
-                  fill="var(--color-text-muted)"
-                  fontSize="9"
-                  className="font-mono"
+                  fill="var(--color-text-secondary)"
+                  fontSize="10"
+                  className="font-mono font-medium"
                 >
                   {Math.round(xVal)}%
                 </text>
               </g>
             );
           })}
-
           {/* Scatter Bubbles */}
           {data.map((point) => {
             const discoveryVal = point.discovery_value ?? point.ctr_percentage ?? 0;
