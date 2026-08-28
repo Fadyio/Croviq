@@ -107,26 +107,29 @@ def test_identity_platform_keeps_phone_auth_disabled() -> None:
         re.DOTALL,
     )
 
-def test_groq_secret_manager_metadata_retained_without_cloud_run_injection() -> None:
-    """Verify Groq secret metadata is retained for rollback safety without Cloud Run secret injection."""
+def test_youtube_oauth_secret_manager_wiring_and_groq_removal() -> None:
+    """Verify YouTube OAuth secret is wired via Secret Manager, Groq is removed, and speech API is removed."""
     content = get_infra_main_content()
 
     assert '"secretmanager.googleapis.com"' in content
     assert '"speech.googleapis.com"' not in content
+    assert "groq" not in content.lower()
+
     assert 'resource "google_project_iam_member" "deployer_secretmanager_admin"' in content
     assert 'role    = "roles/secretmanager.admin"' in content
     assert 'member  = "serviceAccount:${google_service_account.github_deployer.email}"' in content
+
     secret_resource = re.search(
-        r'resource\s+"google_secret_manager_secret"\s+"groq_api_key"\s*{(.*?)\n}',
+        r'resource\s+"google_secret_manager_secret"\s+"youtube_oauth_client_secret"\s*{(.*?)\n}',
         content,
         re.DOTALL,
     )
     assert secret_resource is not None
-    assert 'secret_id = "groq-api-key"' in secret_resource.group(1)
+    assert 'secret_id = "youtube-oauth-client-secret"' in secret_resource.group(1)
     assert "depends_on = [google_project_service.required_services]" in secret_resource.group(1)
 
-    assert 'resource "google_secret_manager_secret_iam_member" "api_runtime_groq_accessor"' in content
-    assert 'secret_id = google_secret_manager_secret.groq_api_key.id' in content
+    assert 'resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_secret_accessor"' in content
+    assert 'secret_id = google_secret_manager_secret.youtube_oauth_client_secret.id' in content
     assert 'role      = "roles/secretmanager.secretAccessor"' in content
     assert 'member    = "serviceAccount:${google_service_account.api_runtime.email}"' in content
 
@@ -136,8 +139,8 @@ def test_groq_secret_manager_metadata_retained_without_cloud_run_injection() -> 
         re.DOTALL,
     )
     assert api_service is not None
-    assert 'name = "GROQ_API_KEY"' not in api_service.group(1)
-
+    assert 'name = "GOOGLE_OAUTH_CLIENT_SECRET"' in api_service.group(1)
+    assert "youtube_oauth_client_secret" in api_service.group(1)
 
 def test_cloud_run_liveness_probe_configuration() -> None:
     """Verify Cloud Run API service liveness probe has adequate timeout for heavy media execution."""

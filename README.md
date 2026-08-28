@@ -33,8 +33,8 @@ Croviq is an autonomous, visible multi-agent production team that learns a creat
 
 - **Creator Authentication**: Built with Firebase JS SDK (`12.18.0`) on the frontend client and Google Cloud Identity Platform on the backend. Creators authenticate via Email/Password. FastAPI verifies Firebase ID tokens on every request.
 - **YouTube Channel Integration**: A separate Google OAuth 2.0 channel connection for read-only YouTube Data API and YouTube Analytics API authorization.
-- **Envelope Encryption**: YouTube OAuth access and refresh tokens are encrypted using **Tink + Google Cloud KMS** symmetric key encryption (`youtube-oauth-kek`) with Additional Authenticated Data (AAD binding `workspace_id`, `channel_id`, `user_id`). **Zero plaintext tokens are ever stored in Firestore or emitted in logs.**
-
+- **Application OAuth Secret Protection**: The Google OAuth client secret is securely stored in **Google Secret Manager** (`youtube-oauth-client-secret`) and injected into Cloud Run via native container `value_source.secret_key_ref` (never stored in Terraform state or repository code).
+- **User YouTube Token Envelope Encryption**: User-authorized YouTube OAuth access and refresh tokens are encrypted at rest using **Tink + Google Cloud KMS** symmetric key encryption (`youtube-oauth-kek`) with Additional Authenticated Data (AAD binding `workspace_id`, `channel_id`, `user_id`) before storage in Firestore. **Zero plaintext tokens are ever stored in Firestore or emitted in logs.**
 ---
 
 ## Data & Storage Architecture

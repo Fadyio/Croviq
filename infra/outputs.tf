@@ -242,3 +242,8 @@ output "kms_crypto_key_name" {
   value       = google_kms_crypto_key.youtube_oauth_kek.name
   description = "The name of the Cloud KMS CryptoKey used for OAuth token envelope encryption."
 }
+
+output "youtube_oauth_client_secret_name" {
+  value       = google_secret_manager_secret.youtube_oauth_client_secret.secret_id
+  description = "The secret ID in Secret Manager for the YouTube OAuth application client secret."
+}

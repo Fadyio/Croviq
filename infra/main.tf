@@ -22,6 +22,8 @@ locals {
     "secretmanager.googleapis.com",
     "cloudscheduler.googleapis.com",
     "cloudkms.googleapis.com",
+    "youtube.googleapis.com",
+    "youtubeanalytics.googleapis.com",
   ]
 }
 
@@ -263,21 +265,26 @@ resource "google_project_iam_member" "deployer_sa_admin" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
-# Groq key metadata only. The owner creates secret versions outside Terraform.
-resource "google_secret_manager_secret" "groq_api_key" {
+# YouTube OAuth application client secret metadata only. The owner creates secret versions outside Terraform.
+resource "google_secret_manager_secret" "youtube_oauth_client_secret" {
   project   = var.project_id
-  secret_id = "groq-api-key"
+  secret_id = "youtube-oauth-client-secret"
 
   replication {
     auto {}
   }
 
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+  }
+
   depends_on = [google_project_service.required_services]
 }
 
-resource "google_secret_manager_secret_iam_member" "api_runtime_groq_accessor" {
+resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_secret_accessor" {
   project   = var.project_id
-  secret_id = google_secret_manager_secret.groq_api_key.id
+  secret_id = google_secret_manager_secret.youtube_oauth_client_secret.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.api_runtime.email}"
 }
@@ -482,6 +489,16 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.cloud_run_service_url
       }
 
+      env {
+        name = "GOOGLE_OAUTH_CLIENT_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.youtube_oauth_client_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+
       startup_probe {
         http_get {
           path = "/api/health"
@@ -514,6 +531,8 @@ resource "google_cloud_run_v2_service" "api" {
     google_project_service.required_services,
     google_artifact_registry_repository.api_repo,
     google_service_account.api_runtime,
+    google_secret_manager_secret.youtube_oauth_client_secret,
+    google_secret_manager_secret_iam_member.api_runtime_youtube_oauth_secret_accessor,
   ]
   lifecycle {
     ignore_changes = [

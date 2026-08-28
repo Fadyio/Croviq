@@ -428,7 +428,7 @@
     <!-- ======================================================================= -->
     <g transform="translate(20, 535)">
       <rect x="0" y="0" width="1385" height="260" rx="12" fill="#0c1e24" stroke="#059669" stroke-width="1.5" />
-      <text x="20" y="26" fill="#34d399" font-size="14" font-weight="700" letter-spacing="0.5">DETERMINISTIC MEDIA &amp; AUDIO PROCESSING PIPELINE (FFMPEG &amp; GROQ WHISPER)</text>
+      <text x="20" y="26" fill="#34d399" font-size="14" font-weight="700" letter-spacing="0.5">DETERMINISTIC MEDIA &amp; AUDIO PROCESSING PIPELINE (FFMPEG &amp; GEMINI TRANSCRIBE)</text>
 
       <!-- 1. Media Inspector & Audio Extractor -->
       <g transform="translate(20, 42)">
