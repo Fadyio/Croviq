@@ -150,6 +150,12 @@ resource "google_service_account_iam_member" "deployer_web_sa_user" {
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.github_deployer.email}"
 }
+# Allow deployment service account to act as scheduler service account when creating the Cloud Scheduler job
+resource "google_service_account_iam_member" "deployer_scheduler_sa_user" {
+  service_account_id = google_service_account.scheduler.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.github_deployer.email}"
+}
 
 
 # Allow deployment service account to inspect service usage / enabled APIs for Terraform state refresh
