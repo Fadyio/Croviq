@@ -63,6 +63,15 @@ const formatChange = (value: number | null): string => {
   if (value === null) return "No comparable baseline";
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}% vs previous period`;
 };
+const formatDiscoveredAgo = (isoDate: string): string => {
+  const discovered = new Date(isoDate);
+  const diffMinutes = Math.max(1, Math.floor((Date.now() - discovered.getTime()) / 60000));
+  if (diffMinutes < 60) return `Discovered ${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `Discovered ${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `Discovered ${diffDays}d ago`;
+};
 
 export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
   const { user, firebaseUser, logout } = useAuth();
@@ -283,7 +292,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                     <span>
                       <span className="block font-medium leading-none">Croviq Sample Channel</span>
                       <span className="mt-1 block text-[10px] text-text-muted">
-                        Synthetic AI engineering fixture
+                        Synthetic analytics modeled on YouTube Data and Analytics APIs
                       </span>
                     </span>
                   </span>
@@ -485,7 +494,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                     title={
                       channelMode === "youtube"
                         ? "Real YouTube analytics from connected Google account"
-                        : "Synthetic analytics modeled on the YouTube Data and Analytics APIs"
+                        : "Synthetic analytics modeled on YouTube Data and Analytics APIs."
                     }
                   >
                     {channelMode === "youtube" ? "Connected YouTube" : "Sample channel"}
@@ -694,6 +703,9 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                         {(finding.opportunity_score * 100).toFixed(0)}% fit
                       </span>
                     </div>
+                    <p className="mt-1 text-[10px] text-text-muted">
+                      {formatDiscoveredAgo(finding.discovered_at)}
+                    </p>
 
                     <h4 className="mt-2 text-xs font-semibold leading-snug text-text-primary">
                       {finding.title}
@@ -736,8 +748,8 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
             </section>
 
             <p className="text-[9px] leading-4 text-text-muted">
-              Sample daily trends are deterministically modeled from the canonical synthetic
-              fixture. Research is live Grounded Google Search.
+              Synthetic analytics modeled on YouTube Data and Analytics APIs. Research is live
+              Grounded Google Search.
             </p>
           </div>
         </aside>

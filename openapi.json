@@ -2037,24 +2037,6 @@
         "summary": "Cloud Scheduler Background Research Tick",
         "description": "Internal idempotent endpoint invoked by Cloud Scheduler to process due Alex research runs.",
         "operationId": "process_scheduler_tick_api_channels_research_tick_post",
-        "parameters": [
-          {
-            "name": "X-Scheduler-Auth",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Scheduler-Auth"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2062,16 +2044,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SchedulerTickResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }

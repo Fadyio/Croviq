@@ -369,7 +369,6 @@ export interface paths {
     post: {
       responses: {
         200: components["schemas"]["SchedulerTickResponse"];
-        422: components["schemas"]["HTTPValidationError"];
       };
     };
   };

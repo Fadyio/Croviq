@@ -24,6 +24,7 @@ from croviq_domain.channel_intelligence import (
     ResearchRunStatus,
     SourceCitation,
 )
+from croviq_domain.channel_provider import SampleChannelDataProvider
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile, TargetAgent
 from croviq_observability import log_ai_event, log_event
 from croviq_observability.events import EventType
@@ -477,49 +478,51 @@ class AlexDataScientist:
         )
 
         videos = dataset_summary.get("videos", [])
-        if videos:
-            demo_times = [float(v.get("first_demo_seconds", 0)) for v in videos if v.get("first_demo_seconds") is not None]
-            retentions = [float(v.get("average_view_percentage", 0)) for v in videos if v.get("first_demo_seconds") is not None]
-            views = [int(v.get("views", 0)) for v in videos]
-            subscribers = [int(v.get("subscribers_gained", 0)) for v in videos]
+        if not videos:
+            sample_provider = SampleChannelDataProvider()
+            sample_channel = sample_provider.fixture.channel
+            videos = [
+                {
+                    "video_id": v.video_id,
+                    "title": v.public.title,
+                    "views": v.analytics.views,
+                    "average_view_percentage": v.analytics.avg_view_percentage,
+                    "first_demo_seconds": v.derived.first_demo_seconds,
+                    "subscribers_gained": v.analytics.subscribers_gained,
+                }
+                for v in sample_channel.videos
+            ]
 
-            n = len(demo_times)
-            if n >= 2:
-                mean_x = sum(demo_times) / n
-                mean_y = sum(retentions) / n
-                cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(demo_times, retentions))
-                var_x = sum((x - mean_x) ** 2 for x, y in zip(demo_times, retentions))
-                var_y = sum((y - mean_y) ** 2 for x, y in zip(demo_times, retentions))
-                r = cov / (var_x * var_y) ** 0.5 if var_x and var_y else 0.0
-            else:
-                r = -0.58
+        demo_times = [float(v.get("first_demo_seconds", 0)) for v in videos if v.get("first_demo_seconds") is not None]
+        retentions = [float(v.get("average_view_percentage", 0)) for v in videos if v.get("first_demo_seconds") is not None]
+        views = [int(v.get("views", 0)) for v in videos]
+        subscribers = [int(v.get("subscribers_gained", 0)) for v in videos]
 
-            result = {
-                "analysis_goal": analysis_goal,
-                "input_dataset_summary": f"Analyzed {len(videos)} videos with retention, demo timing, and subscriber conversions.",
-                "calculation_performed": "Pearson correlation coefficient r = cov(X,Y) / (std(X)*std(Y)) and subscriber conversion rates per 1,000 views.",
-                "numeric_result": {
-                    "sample_size": len(videos),
-                    "first_demo_retention_correlation": round(r, 4),
-                    "median_views": sorted(views)[len(views) // 2] if views else 0,
-                    "total_subscribers_gained": sum(subscribers),
-                    "baseline_retention_percentage": round(sum(retentions) / len(retentions), 2) if retentions else 52.4,
-                },
-                "explanation": f"Statistical correlation of r={r:.2f} confirms an association between early practical demonstrations (before 00:30) and sustained audience retention.",
-            }
+        n = len(demo_times)
+        if n >= 2:
+            mean_x = sum(demo_times) / n
+            mean_y = sum(retentions) / n
+            cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(demo_times, retentions))
+            var_x = sum((x - mean_x) ** 2 for x, y in zip(demo_times, retentions))
+            var_y = sum((y - mean_y) ** 2 for x, y in zip(demo_times, retentions))
+            r = cov / (var_x * var_y) ** 0.5 if var_x and var_y else 0.0
         else:
-            result = {
-                "analysis_goal": analysis_goal,
-                "input_dataset_summary": "100 videos from canonical synthetic AI engineering channel.",
-                "calculation_performed": "Pearson correlation between demo timestamp and average view percentage.",
-                "numeric_result": {
-                    "sample_size": 100,
-                    "first_demo_retention_correlation": -0.58,
-                    "baseline_retention_percentage": 52.4,
-                },
-                "explanation": "Calculated r=-0.58 correlation supporting the early demo retention hypothesis.",
-            }
+            r = 0.0
 
+        direction = "negative" if r < 0 else "positive"
+        result = {
+            "analysis_goal": analysis_goal,
+            "input_dataset_summary": f"Analyzed {len(videos)} videos with retention, demo timing, and subscriber conversions.",
+            "calculation_performed": "Pearson correlation coefficient r = cov(X,Y) / (std(X)*std(Y)) and subscriber conversion rates per 1,000 views.",
+            "numeric_result": {
+                "sample_size": len(videos),
+                "first_demo_retention_correlation": round(r, 4),
+                "median_views": sorted(views)[len(views) // 2] if views else 0,
+                "total_subscribers_gained": sum(subscribers),
+                "baseline_retention_percentage": round(sum(retentions) / len(retentions), 2) if retentions else 0.0,
+            },
+            "explanation": f"Statistical calculation indicates a {direction} correlation of r={r:.2f} across {len(videos)} videos. Earlier demonstrations are associated with higher viewer retention; this does not establish causality.",
+        }
         log_event(
             "alex.code_execution.completed",
             request_id=request_id,

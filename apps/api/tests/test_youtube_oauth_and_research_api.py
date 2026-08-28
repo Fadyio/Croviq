@@ -96,7 +96,7 @@ def test_generate_youtube_auth_url(client: TestClient) -> None:
     assert "https://www.googleapis.com/auth/youtube.readonly" in data["scopes"]
 
 
-def test_handle_youtube_callback_stores_connection(client: TestClient) -> None:
+def test_handle_youtube_callback_stores_connection(client: TestClient, repos: tuple) -> None:
     # 1. Generate auth URL to produce valid CSRF state
     auth_resp = client.post(
         "/api/channels/youtube/auth-url",
@@ -119,21 +119,32 @@ def test_handle_youtube_callback_stores_connection(client: TestClient) -> None:
     assert summary["channel_title"] != ""
     assert summary["subscriber_count"] >= 0
 
-    # 3. Verify status endpoint returns connected state
+    # 3. Verify server-side persisted record is encrypted (NO plaintext tokens)
+    _, _, yt_repo = repos
+    import asyncio
+    raw_record = yt_repo.get_raw_record("ws_usr_creator_01")
+    assert raw_record is not None
+    assert raw_record.encrypted_token_payload != ""
+    assert "mock-auth-code-12345" not in raw_record.encrypted_token_payload
+
+    # 4. Verify status endpoint returns connected state
     status_resp = client.get("/api/channels/youtube/connection")
     assert status_resp.status_code == 200
     assert status_resp.json()["connected"] is True
     assert status_resp.json()["channel_id"] == summary["channel_id"]
 
-    # 4. Disconnect
+    # 5. Disconnect
     disconnect_resp = client.post("/api/channels/youtube/disconnect")
     assert disconnect_resp.status_code == 204
 
-    # 5. Verify status returns disconnected
+    # 6. Verify status returns disconnected
     status_after = client.get("/api/channels/youtube/connection")
     assert status_after.status_code == 200
     assert status_after.json()["connected"] is False
 
+    # 7. Disconnect is idempotent
+    disconnect_again = client.post("/api/channels/youtube/disconnect")
+    assert disconnect_again.status_code == 204
 
 def test_youtube_callback_rejects_invalid_or_consumed_state(client: TestClient) -> None:
     # Attempt with non-existent state
@@ -175,9 +186,8 @@ def test_manual_research_run_trigger(client: TestClient) -> None:
     assert findings[0]["topic_fingerprint"] != ""
 
 
-def test_scheduler_tick_endpoint(client: TestClient, repos: tuple) -> None:
+def test_scheduler_tick_requires_oidc_authorization(client: TestClient, repos: tuple) -> None:
     _, research_repo, _ = repos
-    # Configure due research config
     past = datetime(2026, 8, 27, 0, 0, tzinfo=UTC)
     config = ResearchConfig(
         workspace_id="ws-test-sched",
@@ -198,20 +208,40 @@ def test_scheduler_tick_endpoint(client: TestClient, repos: tuple) -> None:
     import asyncio
     asyncio.run(research_repo.save_config(config))
 
-    # Trigger scheduler tick
-    response = client.post("/api/channels/research/tick")
-    assert response.status_code == 200, response.text
-    data = response.json()
+    # 1. Unauthenticated request rejected with 401
+    resp_no_auth = client.post("/api/channels/research/tick")
+    assert resp_no_auth.status_code == 401
+
+    # 2. Unauthorized token rejected with 403
+    resp_bad_auth = client.post(
+        "/api/channels/research/tick",
+        headers={"Authorization": "Bearer test-scheduler-unauthorized"},
+    )
+    assert resp_bad_auth.status_code == 403
+
+    # 3. Valid scheduler OIDC token accepted with 200
+    resp_valid = client.post(
+        "/api/channels/research/tick",
+        headers={"Authorization": "Bearer test-scheduler-valid"},
+    )
+    assert resp_valid.status_code == 200, resp_valid.text
+    data = resp_valid.json()
     assert data["runs_evaluated"] >= 1
     assert data["runs_executed"] >= 1
     assert data["findings_created"] >= 2
     assert data["status"] == "completed"
 
-    # Verify next_run_at was advanced
-    saved_cfg = asyncio.run(research_repo.get_config("ws-test-sched"))
-    assert saved_cfg.next_run_at > past
-
-
+    # 4. Immediate second tick skips due config (Idempotent - 0 duplicates)
+    resp_dup = client.post(
+        "/api/channels/research/tick",
+        headers={"Authorization": "Bearer test-scheduler-valid"},
+    )
+    assert resp_dup.status_code == 200
+    data_dup = resp_dup.json()
+    assert data_dup["runs_evaluated"] == 0
+    assert data_dup["runs_executed"] == 0
+    assert data_dup["findings_created"] == 0
+    assert data_dup["status"] == "skipped"
 # -----------------------------------------------------------------------------
 # Code Execution & Memory Distillation Tests
 # -----------------------------------------------------------------------------

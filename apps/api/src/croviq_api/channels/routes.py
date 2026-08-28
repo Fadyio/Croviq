@@ -39,6 +39,7 @@ from croviq_domain.channel_intelligence import (
     ResearchRunStatus,
 )
 from croviq_domain.channel_provider import SampleChannelDataProvider
+from croviq_api.channels.scheduler_auth import verify_scheduler_identity
 from croviq_domain.memory import ChannelLesson
 from croviq_domain.user import User
 from croviq_observability import log_event
@@ -362,8 +363,20 @@ async def disconnect_youtube_channel(
     youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
 ) -> None:
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
-    await youtube_repo.delete_connection(workspace.workspace_id)
+    connection = await youtube_repo.get_connection(workspace.workspace_id)
+    if connection and (connection.access_token or connection.refresh_token):
+        try:
+            token_to_revoke = connection.refresh_token or connection.access_token
+            async with httpx.AsyncClient(timeout=10) as http_client:
+                await http_client.post(
+                    "https://oauth2.googleapis.com/revoke",
+                    params={"token": token_to_revoke},
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+        except Exception as exc:
+            logger.warning("Google OAuth token revocation attempt ignored: %s", exc)
 
+    await youtube_repo.delete_connection(workspace.workspace_id)
 
 @router.get(
     "/youtube/dashboard",
@@ -529,7 +542,10 @@ async def trigger_manual_research_run(
     config = await research_repo.get_config(workspace.workspace_id)
     existing = await research_repo.list_findings(workspace_id=workspace.workspace_id, channel_id=config.channel_id)
 
-    alex = AlexDataScientist()
+    alex = AlexDataScientist(
+        project_id=get_settings().gcp_project_id,
+        location=get_settings().vertexai_location,
+    )
     run, findings = await alex.run_grounded_research(
         prompts=config.prompts,
         existing_findings=existing,
@@ -561,16 +577,9 @@ async def trigger_manual_research_run(
 async def process_scheduler_tick(
     request: Request,
     research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
-    x_scheduler_auth: Annotated[str | None, Header(alias="X-Scheduler-Auth")] = None,
+    scheduler_principal: Annotated[str, Depends(verify_scheduler_identity)],
 ) -> SchedulerTickResponse:
     request_id = getattr(request.state, "request_id", "unknown")
-    expected_token = get_settings().scheduler_auth_token
-    if expected_token and x_scheduler_auth != expected_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized Cloud Scheduler invocation.",
-        )
-
     log_event("research.scheduler.tick", request_id=request_id)
     now = datetime.now(UTC)
     due_configs = await research_repo.list_due_configs(now)
@@ -584,7 +593,10 @@ async def process_scheduler_tick(
             status="skipped",
         )
 
-    alex = AlexDataScientist()
+    alex = AlexDataScientist(
+        project_id=get_settings().gcp_project_id,
+        location=get_settings().vertexai_location,
+    )
     total_findings = 0
     executed = 0
 

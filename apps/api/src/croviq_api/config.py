@@ -153,10 +153,17 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("GOOGLE_OAUTH_REDIRECT_URI", "YOUTUBE_OAUTH_REDIRECT_URI"),
     )
-    scheduler_auth_token: str = Field(
+    scheduler_service_account_email: str = Field(
         default="",
-        validation_alias=AliasChoices("SCHEDULER_AUTH_TOKEN", "CROVIQ_SCHEDULER_SECRET"),
+        validation_alias=AliasChoices("SCHEDULER_SERVICE_ACCOUNT_EMAIL"),
     )
+    cloud_run_service_url: str = Field(
+        default="https://croviq-api-uhz5nod4gq-uc.a.run.app",
+        validation_alias=AliasChoices("CLOUD_RUN_SERVICE_URL", "API_SERVICE_URL"),
+    )
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
 
     @field_validator("allowed_emails", mode="after")
     @classmethod
@@ -191,6 +198,11 @@ class Settings(BaseSettings):
                 f"croviq-api-runtime@{self.gcp_project_id}.iam.gserviceaccount.com"
             )
 
+
+        if not self.scheduler_service_account_email and self.gcp_project_id:
+            self.scheduler_service_account_email = (
+                f"croviq-scheduler@{self.gcp_project_id}.iam.gserviceaccount.com"
+            )
         return self
 
 

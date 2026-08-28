@@ -21,6 +21,8 @@ locals {
     "aiplatform.googleapis.com",
     "speech.googleapis.com",
     "secretmanager.googleapis.com",
+    "cloudscheduler.googleapis.com",
+    "cloudkms.googleapis.com",
   ]
 }
 
@@ -88,6 +90,15 @@ resource "google_service_account" "web_runtime" {
 }
 
 
+# Dedicated Service Account for Cloud Scheduler Invoker
+resource "google_service_account" "scheduler" {
+  project      = var.project_id
+  account_id   = var.scheduler_service_account_id
+  display_name = "Croviq Cloud Scheduler Service Account"
+  description  = "Dedicated identity used by Cloud Scheduler for invoking internal API endpoints"
+
+  depends_on = [google_project_service.required_services]
+}
 # Deployment Service Account for GitHub Actions CI/CD
 resource "google_service_account" "github_deployer" {
   project      = var.project_id
@@ -243,6 +254,39 @@ resource "google_secret_manager_secret_iam_member" "api_runtime_groq_accessor" {
   secret_id = google_secret_manager_secret.groq_api_key.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
+# -----------------------------------------------------------------------------
+# 4b. Cloud KMS: KeyRing & CryptoKey for YouTube OAuth Token Envelope Encryption
+# -----------------------------------------------------------------------------
+resource "google_kms_key_ring" "croviq_keyring" {
+  project  = var.project_id
+  name     = "croviq-keyring"
+  location = var.region
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_kms_crypto_key" "youtube_oauth_kek" {
+  name            = "youtube-oauth-kek"
+  key_ring        = google_kms_key_ring.croviq_keyring.id
+  purpose         = "ENCRYPT_DECRYPT"
+  rotation_period = "7776000s" # 90-day automatic rotation
+
+  version_template {
+    algorithm        = "GOOGLE_SYMMETRIC_ENCRYPTION"
+    protection_level = "SOFTWARE"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_kms_crypto_key_iam_member" "api_runtime_kms_encrypter_decrypter" {
+  crypto_key_id = google_kms_crypto_key.youtube_oauth_kek.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:${google_service_account.api_runtime.email}"
 }
 
 
@@ -454,6 +498,47 @@ resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
   name     = google_cloud_run_v2_service.api.name
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# Dedicated Cloud Scheduler invoker IAM member for Cloud Run API
+resource "google_cloud_run_v2_service_iam_member" "scheduler_api_invoker" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.api.location
+  name     = google_cloud_run_v2_service.api.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
+}
+
+# -----------------------------------------------------------------------------
+# 6b. Cloud Scheduler: Hourly Background Research Tick
+# -----------------------------------------------------------------------------
+resource "google_cloud_scheduler_job" "research_tick" {
+  project          = var.project_id
+  name             = "croviq-research-tick"
+  description      = "Hourly background research tick for Alex Data Scientist agent"
+  schedule         = "0 * * * *"
+  time_zone        = "Etc/UTC"
+  region           = var.region
+  attempt_deadline = "320s"
+
+  retry_config {
+    retry_count = 1
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.api.uri}/api/channels/research/tick"
+
+    oidc_token {
+      service_account_email = google_service_account.scheduler.email
+      audience              = google_cloud_run_v2_service.api.uri
+    }
+  }
+
+  depends_on = [
+    google_project_service.required_services,
+    google_cloud_run_v2_service_iam_member.scheduler_api_invoker,
+  ]
 }
 
 # -----------------------------------------------------------------------------

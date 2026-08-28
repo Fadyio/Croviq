@@ -222,3 +222,23 @@ output "media_bucket_url" {
   value       = google_storage_bucket.media_raw.url
   description = "The GCS URL of the private media storage bucket."
 }
+
+output "scheduler_service_account_email" {
+  value       = google_service_account.scheduler.email
+  description = "The service account email used for Cloud Scheduler OIDC invocation."
+}
+
+output "scheduler_job_name" {
+  value       = google_cloud_scheduler_job.research_tick.name
+  description = "The name of the Cloud Scheduler job for background research ticks."
+}
+
+output "kms_key_ring_name" {
+  value       = google_kms_key_ring.croviq_keyring.name
+  description = "The name of the Cloud KMS KeyRing."
+}
+
+output "kms_crypto_key_name" {
+  value       = google_kms_crypto_key.youtube_oauth_kek.name
+  description = "The name of the Cloud KMS CryptoKey used for OAuth token envelope encryption."
+}

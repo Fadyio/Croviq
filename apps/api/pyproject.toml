@@ -17,6 +17,8 @@ dependencies = [
     "google-genai>=2.20.0",
     "pydantic-settings>=2.15.0",
     "httpx>=0.28.0",
+    "tink>=1.16.1",
+    "google-cloud-kms>=3.16.0",
 ]
 
 [tool.uv.sources]

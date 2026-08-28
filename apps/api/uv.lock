@@ -8,6 +8,15 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "absl-py"
+version = "2.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/4f/d79676ab82f2e42fc3611618139f13a9c4c31d0cff4b486982047679a802/absl_py-2.5.0.tar.gz", hash = "sha256:0c996f25c0490700fadabe6351630f6111534fa0ae252cc6d2014ea3b141135f", size = 118119, upload-time = "2026-07-03T10:57:48.157Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/58/0a/a10b45aab35b175aded078a462dc8d0c698f5b13946e7cb0869097b78bb6/absl_py-2.5.0-py3-none-any.whl", hash = "sha256:0f17b89f2a4eaaedc4f28c622998aa690564b3012a396a4ffad0821007fe03ba", size = 137410, upload-time = "2026-07-03T10:57:46.735Z" },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -36,6 +45,14 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/61/cc/a381afa6efea9f496eff839d4a6a1aed3bfafc7b3ab4b0d1b243a12573dd/anyio-4.14.2.tar.gz", hash = "sha256:cfa139f3ed1a23ee8f88a145ddb5ac7605b8bbfd8592baacd7ce3d8bb4313c7f", size = 260176, upload-time = "2026-07-12T20:29:07.082Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/da/35/f2287558c17e29fafc8ef3daf819bb9834061cfa43bff8014f7df7f63bdc/anyio-4.14.2-py3-none-any.whl", hash = "sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494", size = 125813, upload-time = "2026-07-12T20:29:05.763Z" },
+]
+
+[[package]]
+name = "bazel-runfiles"
+version = "2.3.2"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/8a/ee68d39bb8729fd4ed0668dbf6d0909e2364ea573442356667bba7687acd/bazel_runfiles-2.3.2-py3-none-any.whl", hash = "sha256:1e69e329f824e05384cad02979e3a186da6c59b4424b805e15d41a386f157617", size = 10356, upload-time = "2026-08-22T16:30:55.475Z" },
 ]
 
 [[package]]
@@ -335,11 +352,13 @@ dependencies = [
     { name = "firebase-admin" },
     { name = "google-api-core" },
     { name = "google-cloud-aiplatform" },
+    { name = "google-cloud-kms" },
     { name = "google-cloud-storage" },
     { name = "google-genai" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "tink" },
     { name = "uvicorn" },
 ]
 
@@ -359,11 +378,13 @@ requires-dist = [
     { name = "firebase-admin", specifier = ">=7.5.0" },
     { name = "google-api-core", specifier = "<2.35.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.111.0" },
+    { name = "google-cloud-kms", specifier = ">=3.16.0" },
     { name = "google-cloud-storage", specifier = ">=2.18.0" },
     { name = "google-genai", specifier = ">=2.20.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
+    { name = "tink", specifier = ">=1.16.1" },
     { name = "uvicorn", specifier = ">=0.34.0" },
 ]
 
@@ -672,6 +693,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/fa/e0/e63f6389903fded5c8fd60f464f0e0c443d1a9f4d447165ce8a88bd3a8d7/google_cloud_firestore-2.29.0.tar.gz", hash = "sha256:605a8463959da450531b09b60d4093c427d063e8880a38ed36f9bc02adc8ab99", size = 655284, upload-time = "2026-08-25T19:18:51.747Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4e/a6/e7e2c1d83eda1bc022c50b4ed100782134348352b7fe43bf1a4721261d62/google_cloud_firestore-2.29.0-py3-none-any.whl", hash = "sha256:dd4e686610090a918da29f7e97a7f0cc6cb9e9b98c7d06b86471df45048cad2b", size = 432144, upload-time = "2026-08-24T21:55:36.901Z" },
+]
+
+[[package]]
+name = "google-cloud-kms"
+version = "3.16.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpc-google-iam-v1" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/73/53/4bde1d2c31e72e898c2bdfac25ac27da52c3b4e1936a411fbe96f01d65a4/google_cloud_kms-3.16.0.tar.gz", hash = "sha256:c89c66ccffc1358f973801ed1b45bd92b35ddbbc2545db9032af6d4643b20c76", size = 448119, upload-time = "2026-07-16T20:36:20.6Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/b0/f102b5c077df60cfeac7ace7a1ccbe6d5e934dfadf37ff8b8ddbcdce8a24/google_cloud_kms-3.16.0-py3-none-any.whl", hash = "sha256:ad3c102961ba58179f7261814d9cd28dded93603bd33c8224b4b072897bbe81e", size = 359027, upload-time = "2026-07-16T20:35:57.575Z" },
 ]
 
 [[package]]
@@ -1303,6 +1341,31 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
+]
+
+[[package]]
+name = "tink"
+version = "1.16.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "absl-py" },
+    { name = "bazel-runfiles" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d3/e2/06a2836b499abddff5127ac4a849667b721f1e1b38742572e0cf9a53f327/tink-1.16.1.tar.gz", hash = "sha256:8d82f934f31d1ba8fa6014c37edddc0b3f61cfdbbd9317eb6269cfe7eeb1fa86", size = 280107, upload-time = "2026-08-13T02:13:07.172Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/2b/af400c2f829ca70a691f957963dd14eb2dbc88d59bf9bc278ff2990194cc/tink-1.16.1-cp312-cp312-macosx_11_0_universal2.whl", hash = "sha256:9305eaf686fc67552925ef4d1e1f5dc2254fd8d24d55f3090987d0d6803d2636", size = 5158162, upload-time = "2026-08-13T02:12:47.27Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/19/ad7313e5fc3750104dd1a4fd7c72314b6c1c0e466ef71861867a9c629cd8/tink-1.16.1-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e453324348208e5cb81e35d506717ed83c8c4cf2473f4b31f6269fd8bca81fb2", size = 4088392, upload-time = "2026-08-13T02:12:48.86Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/ac/411c91392a2a86edb7db2637a7290ac708eec94a782b301e9806452f6373/tink-1.16.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:af3519dfa01704e9f1ae1020db6076dcff89b5f799deba08a1adf901d977fc4e", size = 4280151, upload-time = "2026-08-13T02:12:50.515Z" },
+    { url = "https://files.pythonhosted.org/packages/51/f7/20136d551645883b4ac46a3ffbbaf19e27953f38742dc9a4265596daaaf0/tink-1.16.1-cp312-cp312-win_amd64.whl", hash = "sha256:99766688b84b362516488fbf371b4f801c5b2833a86cc8b70f58d607a636d951", size = 2293549, upload-time = "2026-08-13T02:12:51.941Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/64/d2a0da68b96e9aeb1c532d0f1a0af033a15d2facac7b6007006f07ba600c/tink-1.16.1-cp313-cp313-macosx_11_0_universal2.whl", hash = "sha256:f8451ed5c3867d083638f126c4430a743b584177f64a2a65cbf5f218d24647cc", size = 5158491, upload-time = "2026-08-13T02:12:53.466Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/44/be7787f47fc02b3b12ff8806e80d2595e64df0ab64c05b56166e9aa40dbe/tink-1.16.1-cp313-cp313-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:de70e92c0888344573662d463e56f0f281f75bfe5de02254b292753a638584ca", size = 4088463, upload-time = "2026-08-13T02:12:55.196Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/78/4023bb4a09d7e8d6a51c341756ae137946d7609f96414cf59cb8b098e38d/tink-1.16.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a33da9474ee43a21e0c7261ad8af1a3b394d1607db2d79a0a21e3d5305285e68", size = 4280993, upload-time = "2026-08-13T02:12:56.898Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/dc/a951bb9a0d206aec9176a27cac586eddf9ff456c88a5da70e5cc0f20894e/tink-1.16.1-cp313-cp313-win_amd64.whl", hash = "sha256:33818c06bd17397de1e3a122fb2db7aa2658eed06d01f299ce004d7ff3612b98", size = 2293519, upload-time = "2026-08-13T02:12:58.21Z" },
+    { url = "https://files.pythonhosted.org/packages/86/63/9e6febbdbbefef621b2c2fd44361464e5835b29e36978a446585d15a98fb/tink-1.16.1-cp314-cp314-macosx_11_0_universal2.whl", hash = "sha256:a97a79378bfaa7653a882397851c58d317dd49ed78d5452e671d15f06735417b", size = 5158512, upload-time = "2026-08-13T02:12:59.71Z" },
+    { url = "https://files.pythonhosted.org/packages/86/d1/c3ea8c6fc2ed957a4fc517aa5da9947b5cbe4eb9ae8d4ec83163e39e56d3/tink-1.16.1-cp314-cp314-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3fb1727c002ec27c3ea988d0e7d4220536d979ed7148f71456fed6c438497820", size = 4088999, upload-time = "2026-08-13T02:13:01.183Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/de/df187ce387bc35dd9a8634c9899d4fbcfea49eabdb9979e576f2b2f1b05b/tink-1.16.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:645f8764f0fd68ccaf891c4c0047095930c9499d26850eabfba4e43d4d5fb222", size = 4281282, upload-time = "2026-08-13T02:13:02.87Z" },
+    { url = "https://files.pythonhosted.org/packages/30/e7/3bab019d3e6bd8d1e4ca1b3b1c4f99fd34c144fbe3086110d601cce54bf7/tink-1.16.1-cp314-cp314-win_amd64.whl", hash = "sha256:b34150c97f0f25468262911810a0b8fc53b11c31af685b2b1531aee2539d5677", size = 2349041, upload-time = "2026-08-13T02:13:04.612Z" },
 ]
 
 [[package]]

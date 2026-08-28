@@ -56,6 +56,11 @@ variable "github_deployer_service_account_id" {
   description = "The service account ID for GitHub Actions deployment."
   default     = "croviq-github-deployer"
 }
+variable "scheduler_service_account_id" {
+  type        = string
+  description = "The service account ID for the dedicated Cloud Scheduler runtime."
+  default     = "croviq-scheduler"
+}
 
 variable "workload_identity_pool_id" {
   type        = string
