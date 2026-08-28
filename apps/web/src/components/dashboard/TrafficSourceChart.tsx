@@ -9,7 +9,8 @@ interface TrafficSourceChartProps {
   data: TrafficSource[];
 }
 
-const formatSourceName = (source: string): string => {
+const formatSourceName = (source?: string): string => {
+  if (!source) return "Other";
   const map: Record<string, string> = {
     suggested_videos: "Suggested videos",
     youtube_search: "YouTube search",
