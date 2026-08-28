@@ -604,6 +604,52 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
               confidence: 0.96,
             },
           ],
+          chapters: [
+            {
+              title: "Introduction & Upgraded Specs",
+              source_start_ms: 0,
+              source_end_ms: 15000,
+              summary: "Opening hook establishing Fairphone 6 Plus upgraded brains and memory.",
+              confidence: 0.98,
+            },
+            {
+              title: "Hardware Overview",
+              source_start_ms: 15000,
+              source_end_ms: 26160,
+              summary: "Physical device tour, chassis comparison, and design.",
+              confidence: 0.95,
+            },
+            {
+              title: "Modular Teardown & Screws",
+              source_start_ms: 26160,
+              source_end_ms: 42340,
+              summary: "Unscrewing and swapping rear plate accessory.",
+              confidence: 0.96,
+            },
+            {
+              title: "Repairability & Parts",
+              source_start_ms: 42340,
+              source_end_ms: 75520,
+              summary: "Replaceable parts, display, and modularity breakdown.",
+              confidence: 0.97,
+            },
+            {
+              title: "Performance & Verdict",
+              source_start_ms: 75520,
+              source_end_ms: 113824,
+              summary: "Snapdragon 7S Gen 4 chip, RAM, and final thoughts.",
+              confidence: 0.95,
+            },
+          ],
+          short_candidate: {
+            start_ms: 22260,
+            end_ms: 42340,
+            transcript_start_word: 60,
+            transcript_end_word: 121,
+            hook_title: "Fairphone Teardown & Screws",
+            concise_reason: "High energy, witty accessory swap and repairability demo.",
+            confidence: 0.95,
+          },
         },
         review: {
           production_id: FAIRPHONE_PRODUCTION_ID,
@@ -745,6 +791,20 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
       });
       return;
     }
+    const activeEdlAny = activeEdl as any;
+    const cuts = activeEdlAny.cuts || [];
+    const removed = cuts.reduce(
+      (acc: number, c: any) =>
+        c.safety_status !== "REJECTED_UNSAFE"
+          ? acc + (c.removed_duration_ms || Math.max(0, c.safe_end_ms - c.safe_start_ms))
+          : acc,
+      0,
+    );
+    const computedPreviewDur = Math.max(
+      1000,
+      (activeEdlAny.source_duration_ms || 113824) - removed,
+    );
+
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -754,10 +814,10 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
           {
             artifact_id: "art_preview_001",
             production_id: FAIRPHONE_PRODUCTION_ID,
-            edl_id: defaultFairphoneEdl.edl_id,
+            edl_id: activeEdlAny.edl_id || defaultFairphoneEdl.edl_id,
             artifact_type: "PREVIEW",
             status: "completed",
-            duration_ms: 113824,
+            duration_ms: computedPreviewDur,
             size_bytes: 1542000,
             width: 1280,
             height: 720,
@@ -801,16 +861,30 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
         return;
       }
       state.render = true;
+      const activeEdlAny = activeEdl as any;
+      const prevCuts = activeEdlAny.cuts || [];
+      const prevRemoved = prevCuts.reduce(
+        (acc: number, c: any) =>
+          c.safety_status !== "REJECTED_UNSAFE"
+            ? acc + (c.removed_duration_ms || Math.max(0, c.safe_end_ms - c.safe_start_ms))
+            : acc,
+        0,
+      );
+      const computedPreviewDur = Math.max(
+        1000,
+        (activeEdlAny.source_duration_ms || 113824) - prevRemoved,
+      );
+
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           artifact_id: "art_preview_001",
           production_id: FAIRPHONE_PRODUCTION_ID,
-          edl_id: defaultFairphoneEdl.edl_id,
+          edl_id: activeEdlAny.edl_id || defaultFairphoneEdl.edl_id,
           artifact_type: "PREVIEW",
           status: "completed",
-          duration_ms: 113824,
+          duration_ms: computedPreviewDur,
           size_bytes: 1542000,
           width: 1280,
           height: 720,
@@ -1256,6 +1330,82 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByText("REMOVE FILLER")).toHaveCount(0);
     // Verify Edited Preview button has active cut count badge "1"
     await expect(page.getByRole("button", { name: /Edited Preview 1/i })).toBeVisible();
+  });
+
+  test("active 2-cut EDL calculates expected edited duration ~109.304s without fallback contradiction", async ({
+    page,
+  }) => {
+    const twoCutEdl = {
+      edl_id: "edl_2cut_acceptance",
+      production_id: FAIRPHONE_PRODUCTION_ID,
+      source_duration_ms: 113824,
+      cuts: [
+        {
+          cut_id: "cut_acc_01",
+          decision_id: "dec_acc_01",
+          decision_type: "TRIM_PAUSE",
+          transcript_start_word: 27,
+          transcript_end_word: 28,
+          requested_start_ms: 12540,
+          requested_end_ms: 15000,
+          safe_start_ms: 12540,
+          safe_end_ms: 15000,
+          removed_duration_ms: 2460,
+          left_anchor: "out.",
+          right_anchor: "Now",
+          safety_status: "SAFE",
+          safety_reason: "Clean pause boundary between sentences",
+          confidence: 0.96,
+        },
+        {
+          cut_id: "cut_acc_02",
+          decision_id: "dec_acc_02",
+          decision_type: "REMOVE_FALSE_START",
+          transcript_start_word: 121,
+          transcript_end_word: 125,
+          requested_start_ms: 42340,
+          requested_end_ms: 44400,
+          safe_start_ms: 42340,
+          safe_end_ms: 44400,
+          removed_duration_ms: 2060,
+          left_anchor: "fingers.",
+          right_anchor: "And",
+          safety_status: "SAFE",
+          safety_reason: "Stumbled phrase restart cleanly excised",
+          confidence: 0.94,
+        },
+      ],
+      coverage_markers: [
+        {
+          marker_id: "cov_acc_01",
+          decision_id: "dec_002",
+          source_start_ms: 26160,
+          source_end_ms: 42340,
+          coverage_type: "BROLL_CANDIDATE",
+          reason: "Close-up macro teardown insert",
+        },
+      ],
+      created_at: "2026-08-26T00:02:40Z",
+    };
+
+    await loginAndNavigateToEditor(page, { customEdl: twoCutEdl });
+
+    // 1. Verify 2 active cuts badge on Edited Preview toggle
+    await expect(page.getByRole("button", { name: /Edited Preview 2/i })).toBeVisible();
+
+    // 2. Verify human-readable cut labels (NO raw enum strings)
+    await expect(page.getByText(/Silence removed 2.5s|Silence removed/i)).toBeVisible();
+    await expect(page.getByText(/False start removed 2.1s|False start removed/i)).toBeVisible();
+    await expect(page.getByText("TRIM_PAUSE")).toHaveCount(0);
+    await expect(page.getByText("REMOVE_FALSE_START")).toHaveCount(0);
+
+    // 3. Verify Media Bin displays truthful non-fallback duration
+    const mediaBin = page.getByTestId("project-bin").or(page.getByTestId("media-bin"));
+    await expect(mediaBin.getByText("1m 49s")).toBeVisible();
+
+    // 4. Verify chapters, short, and b-roll appear on timeline
+    await expect(page.getByText("Modular Teardown & Screws")).toBeVisible();
+    await expect(page.getByText("Fairphone Teardown & Screws")).toBeVisible();
   });
 
   test("verifies bounded 100dvh desktop layout at 1440x900 without document scroll", async ({

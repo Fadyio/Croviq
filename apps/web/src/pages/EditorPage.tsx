@@ -240,6 +240,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     setTranscript(transcriptPayload);
     setEdl(actualEdl);
 
+    const initialDur = actualEdl?.source_duration_ms || transcriptPayload?.duration_ms || 113824;
+    if (initialDur > 0) {
+      setDurationMs(initialDur);
+    }
+
     if (runPayload) {
       setProposal(runPayload.proposal as EditorProposal | null);
       setReview(runPayload.review as DirectorReview | null);
@@ -449,6 +454,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
         activeCutCount: 0,
         coverageMarkerCount: 0,
         keepSegments: [[0, durationMs]] as Array<[number, number]>,
+        audioRegions: [{ type: "speech" as const, startMs: 0, endMs: durationMs }],
         chapters: proposal?.chapters || [],
         shortCandidate: proposal?.short_candidate,
       };
@@ -457,16 +463,28 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
   }, [edl, durationMs, proposal, review, transcript]);
   // Compute actual or estimated edited duration
   const derivedEditedDurationMs = useMemo(() => {
-    if (previewArtifact?.duration_ms && previewArtifact.duration_ms > 0) {
+    if (
+      previewArtifact?.duration_ms &&
+      previewArtifact.duration_ms > 0 &&
+      (!edl || previewArtifact.edl_id === edl.edl_id)
+    ) {
       return previewArtifact.duration_ms;
     }
     if (edl) {
       const keeps = deriveKeepSegments(edl);
       const total = keeps.reduce((acc, [s, e]) => acc + (e - s), 0);
       if (total > 0) return total;
+      const removed = (edl.cuts || []).reduce(
+        (acc, c) =>
+          c.safety_status !== "REJECTED_UNSAFE"
+            ? acc + (c.removed_duration_ms || Math.max(0, c.safe_end_ms - c.safe_start_ms))
+            : acc,
+        0,
+      );
+      if (removed > 0) return Math.max(1000, edl.source_duration_ms - removed);
     }
     return durationMs;
-  }, [previewArtifact?.duration_ms, edl, durationMs]);
+  }, [previewArtifact, edl, durationMs]);
   const selectedDecision = useMemo(() => {
     if (!selectedDecisionId || !proposal || !proposal.decisions) return null;
     return (
@@ -526,10 +544,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     if (editorialRun?.status === "reviewing") return "Maya is reviewing Leo's edit…";
     if (failedProcessingStage) return "Editing pass encountered an issue";
     if (previewArtifact?.status === "completed") {
-      const durSec = Math.round((previewArtifact.duration_ms || durationMs) / 1000);
-      const mins = Math.floor(durSec / 60);
-      const secs = durSec % 60;
-      return `Production complete · ${mins}m ${secs}s`;
+      return "Production complete";
     }
     return "Ready";
   }, [

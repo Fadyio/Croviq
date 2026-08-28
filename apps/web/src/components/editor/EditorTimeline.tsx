@@ -246,12 +246,13 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             <Scissors className="w-3 h-3 text-primary shrink-0" />
             <span className="truncate">Edits</span>
           </div>
-
-          {/* Track 4 Header: B-roll (Always shown or collapsible) */}
-          <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
-            <Layers className="w-3 h-3 text-info shrink-0" />
-            <span className="truncate">B-roll</span>
-          </div>
+          {/* Track 4 Header: B-roll */}
+          {coverageBlocks.length > 0 && (
+            <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
+              <Layers className="w-3 h-3 text-info shrink-0" />
+              <span className="truncate">B-roll</span>
+            </div>
+          )}
 
           {/* Track 5 Header: Chapters */}
           {chapterBlocks.length > 0 && (
@@ -266,6 +267,22 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-purple-400">
               <Smartphone className="w-3 h-3 text-purple-400 shrink-0" />
               <span className="truncate">Short</span>
+            </div>
+          )}
+
+          {/* Track 7 Header: Narration */}
+          {narrationBlocks.length > 0 && (
+            <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-blue-400">
+              <Sparkles className="w-3 h-3 text-blue-400 shrink-0" />
+              <span className="truncate">Narration</span>
+            </div>
+          )}
+
+          {/* Track 8 Header: Captions */}
+          {captionBlocks.length > 0 && (
+            <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-secondary">
+              <FileText className="w-3 h-3 text-text-muted shrink-0" />
+              <span className="truncate">Captions</span>
             </div>
           )}
         </div>
@@ -322,11 +339,39 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               </div>
             </div>
 
-            {/* 3. Track 2 Content: AUDIO (Waveform/speech representation) */}
-            <div className="h-5 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-2/10">
-              <div className="absolute inset-x-1 h-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30" />
+            {/* 3. Track 2 Content: AUDIO (Media Analysis Grounded: Speech, Silence, Removed) */}
+            <div className="h-5 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-2/10 overflow-hidden">
+              <div className="absolute inset-x-1 h-0.5 bg-surface-3/40 rounded-full" />
+              {twickData.audioRegions && twickData.audioRegions.length > 0 ? (
+                twickData.audioRegions.map((region, idx) => {
+                  const leftPx = msToPixels(region.startMs);
+                  const widthPx = Math.max(2, msToPixels(region.endMs) - leftPx);
+                  if (region.type === "speech") {
+                    return (
+                      <div
+                        key={`aud-${idx}`}
+                        className="absolute top-1 bottom-1 bg-emerald-500/50 border-t border-b border-emerald-400/80 rounded-xs"
+                        style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                        title={`Speech segment ${formatTimecode(region.startMs)} → ${formatTimecode(region.endMs)}`}
+                      />
+                    );
+                  }
+                  if (region.type === "removed") {
+                    return (
+                      <div
+                        key={`aud-${idx}`}
+                        className="absolute top-1 bottom-1 bg-danger/40 border border-danger/60 rounded-xs"
+                        style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                        title={`Cut removed region ${formatTimecode(region.startMs)} → ${formatTimecode(region.endMs)}`}
+                      />
+                    );
+                  }
+                  return null;
+                })
+              ) : (
+                <div className="absolute inset-x-1 h-1.5 rounded-full bg-emerald-500/30 border border-emerald-500/40" />
+              )}
             </div>
-
             {/* 4. Track 3 Content: EDITS (Clean Human Tooltips & Badges) */}
             <div className="h-8 border-b border-border-subtle/30 relative flex items-center px-1 bg-surface-2/20 shrink-0">
               {dialogueCutBlocks.length === 0 ? (
@@ -362,38 +407,40 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 })
               )}
             </div>
-
             {/* 5. Track 4 Content: B-ROLL & COVERAGE */}
-            <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-1">
-              {coverageBlocks.map((cov) => {
-                const leftPx = msToPixels(cov.startMs);
-                const widthPx = Math.max(16, msToPixels(cov.endMs) - leftPx);
-                const isSelected = selectedBlockId === cov.id;
-                const isCurrentActive = currentTimeMs >= cov.startMs && currentTimeMs <= cov.endMs;
+            {coverageBlocks.length > 0 && (
+              <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-1">
+                {coverageBlocks.map((cov) => {
+                  const leftPx = msToPixels(cov.startMs);
+                  const widthPx = Math.max(16, msToPixels(cov.endMs) - leftPx);
+                  const isSelected = selectedBlockId === cov.id;
+                  const isCurrentActive =
+                    currentTimeMs >= cov.startMs && currentTimeMs <= cov.endMs;
 
-                return (
-                  <div
-                    key={cov.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectBlock(cov);
-                    }}
-                    className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium ${
-                      cov.type === "coverage-broll"
-                        ? "bg-info/25 border border-info/70 text-info hover:bg-info/35"
-                        : "bg-surface-3 border border-border-strong text-text-secondary hover:bg-surface-3/80"
-                    } ${isSelected ? "ring-2 ring-primary shadow-md" : ""} ${
-                      isCurrentActive ? "ring-1 ring-info animate-pulse" : ""
-                    }`}
-                    style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                    title={`Coverage: ${cov.label} (${formatTimecode(cov.startMs)} → ${formatTimecode(cov.endMs)})`}
-                  >
-                    <Layers className="w-2.5 h-2.5 shrink-0" />
-                    <span className="truncate font-semibold">{cov.label}</span>
-                  </div>
-                );
-              })}
-            </div>
+                  return (
+                    <div
+                      key={cov.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectBlock(cov);
+                      }}
+                      className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium ${
+                        cov.type === "coverage-broll"
+                          ? "bg-info/25 border border-info/70 text-info hover:bg-info/35"
+                          : "bg-surface-3 border border-border-strong text-text-secondary hover:bg-surface-3/80"
+                      } ${isSelected ? "ring-2 ring-primary shadow-md" : ""} ${
+                        isCurrentActive ? "ring-1 ring-info animate-pulse" : ""
+                      }`}
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                      title={`Coverage: ${cov.label} (${formatTimecode(cov.startMs)} → ${formatTimecode(cov.endMs)})`}
+                    >
+                      <Layers className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate font-semibold">{cov.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* 6. Track 5 Content: CHAPTERS (Semantic Chapter Markers) */}
             {chapterBlocks.length > 0 && (
@@ -443,6 +490,54 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                     >
                       <Smartphone className="w-2.5 h-2.5 shrink-0 text-purple-400" />
                       <span className="truncate font-semibold">{sc.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* 8. Track 7 Content: NARRATION */}
+            {narrationBlocks.length > 0 && (
+              <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-blue-500/5">
+                {narrationBlocks.map((narr) => {
+                  const leftPx = msToPixels(narr.startMs);
+                  const widthPx = Math.max(20, msToPixels(narr.endMs) - leftPx);
+                  return (
+                    <div
+                      key={narr.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectBlock(narr);
+                      }}
+                      className="absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-2 text-[9px] font-medium bg-blue-500/20 border border-blue-500/60 text-blue-200 truncate"
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                      title={`${narr.label} (${formatTimecode(narr.startMs)} → ${formatTimecode(narr.endMs)})`}
+                    >
+                      <Sparkles className="w-2.5 h-2.5 shrink-0 text-blue-400" />
+                      <span className="truncate font-semibold">{narr.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 9. Track 8 Content: CAPTIONS */}
+            {captionBlocks.length > 0 && (
+              <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-2/10">
+                {captionBlocks.map((cap) => {
+                  const leftPx = msToPixels(cap.startMs);
+                  const widthPx = Math.max(16, msToPixels(cap.endMs) - leftPx);
+                  return (
+                    <div
+                      key={cap.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectBlock(cap);
+                      }}
+                      className="absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium bg-surface-3/80 border border-border-strong text-text-muted truncate"
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                      title={`${cap.label} (${formatTimecode(cap.startMs)} → ${formatTimecode(cap.endMs)})`}
+                    >
+                      <span className="truncate">{cap.label}</span>
                     </div>
                   );
                 })}

@@ -15,7 +15,7 @@ from croviq_domain.edl import EditDecisionList
 from croviq_domain.production import Production
 from croviq_domain.transcript import Transcript
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
-from croviq_domain.render_review import RenderReview
+from croviq_domain.render_review import EditorSelfReview, RenderReview
 from croviq_domain.narration import BRollArtifact, StudioVoiceResult
 class CreateUploadRequest(BaseModel):
     """Request payload to initiate a direct GCS media upload."""
@@ -433,6 +433,10 @@ class ReviewPreviewResponse(BaseModel):
     review: RenderReview = Field(
         ...,
         description="Maya's post-render review record",
+    )
+    self_review: EditorSelfReview | None = Field(
+        default=None,
+        description="Leo's post-render self-review record",
     )
     master_artifact: RenderArtifactResponse | None = Field(
         default=None,

@@ -70,6 +70,13 @@ export interface TimelineBlock {
   };
 }
 
+export interface AudioTrackRegion {
+  type: "speech" | "silence" | "removed";
+  startMs: number;
+  endMs: number;
+  label?: string;
+}
+
 export interface TwickTimelineRepresentation {
   tracks: Track[];
   blocks: TimelineBlock[];
@@ -77,6 +84,7 @@ export interface TwickTimelineRepresentation {
   activeCutCount: number;
   coverageMarkerCount: number;
   keepSegments: Array<[number, number]>;
+  audioRegions: AudioTrackRegion[];
   chapters: ChapterMarker[];
   shortCandidate?: ShortCandidate | null;
 }
@@ -158,6 +166,77 @@ export function deriveKeepSegments(edl?: EditDecisionList | null): Array<[number
   }
 
   return keepSegments.length > 0 ? keepSegments : [[0, sourceDurationMs]];
+}
+/**
+ * Deterministically derive audio classification regions (speech, silence, removed) from transcript and EDL.
+ */
+export function deriveAudioRegions(
+  edl: EditDecisionList,
+  transcript?: Transcript | null,
+): AudioTrackRegion[] {
+  const totalMs = edl.source_duration_ms || 113824;
+  if (totalMs <= 0) return [];
+
+  const executableCuts = getExecutableCuts(edl);
+  const cutIntervals = executableCuts.map(
+    (c) => [c.safe_start_ms, c.safe_end_ms] as [number, number],
+  );
+
+  const speechIntervals: Array<[number, number]> = [];
+  if (transcript?.segments && transcript.segments.length > 0) {
+    for (const seg of transcript.segments) {
+      if (seg.end_ms > seg.start_ms) {
+        speechIntervals.push([seg.start_ms, seg.end_ms]);
+      }
+    }
+  } else if (transcript?.words && transcript.words.length > 0) {
+    let curStart = transcript.words[0].start_ms;
+    let curEnd = transcript.words[0].end_ms;
+    for (let i = 1; i < transcript.words.length; i++) {
+      const w = transcript.words[i];
+      if (w.start_ms - curEnd <= 300) {
+        curEnd = Math.max(curEnd, w.end_ms);
+      } else {
+        speechIntervals.push([curStart, curEnd]);
+        curStart = w.start_ms;
+        curEnd = w.end_ms;
+      }
+    }
+    speechIntervals.push([curStart, curEnd]);
+  } else {
+    speechIntervals.push([0, totalMs]);
+  }
+
+  const regions: AudioTrackRegion[] = [];
+
+  for (const [spStart, spEnd] of speechIntervals) {
+    let cursor = spStart;
+    for (const [cStart, cEnd] of cutIntervals) {
+      if (cStart >= cursor && cStart < spEnd) {
+        if (cStart > cursor) {
+          regions.push({ type: "speech", startMs: cursor, endMs: cStart });
+        }
+        cursor = Math.max(cursor, cEnd);
+      } else if (cStart < cursor && cEnd > cursor) {
+        cursor = Math.max(cursor, cEnd);
+      }
+    }
+    if (cursor < spEnd) {
+      regions.push({ type: "speech", startMs: cursor, endMs: spEnd });
+    }
+  }
+
+  for (const cut of executableCuts) {
+    regions.push({
+      type: "removed",
+      startMs: cut.safe_start_ms,
+      endMs: cut.safe_end_ms,
+      label: formatCutLabel(cut.decision_type, cut.safe_end_ms - cut.safe_start_ms),
+    });
+  }
+
+  regions.sort((a, b) => a.startMs - b.startMs);
+  return regions;
 }
 
 /**
@@ -405,6 +484,7 @@ export function edlToTwickTimeline(
   ];
 
   const keepSegments = deriveKeepSegments(edl);
+  const audioRegions = deriveAudioRegions(edl, transcript);
 
   return {
     tracks,
@@ -413,6 +493,7 @@ export function edlToTwickTimeline(
     activeCutCount: getExecutableCuts(edl).length,
     coverageMarkerCount: coverageMarkers.length,
     keepSegments,
+    audioRegions,
     chapters: rawChapters,
     shortCandidate: proposal?.short_candidate,
   };

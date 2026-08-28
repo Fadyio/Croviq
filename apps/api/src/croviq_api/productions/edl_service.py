@@ -153,12 +153,12 @@ class EDLService:
                     detail="Editorial review has not been approved for EDL assembly by the Director (approved_for_edl is false)",
                 )
 
-            # 8. Idempotency Check
+            # 8. Idempotency Check (Check if current run's proposal and review already have an EDL)
             existing_edl = await self._edl_repo.get_latest_edl(production_id)
             if existing_edl is not None:
                 if (
-                    existing_edl.editor_proposal_id == proposal.production_id
-                    and existing_edl.director_review_id == review.production_id
+                    existing_edl.editor_proposal_id == run.editor_proposal_id
+                    and existing_edl.director_review_id == run.director_review_id
                 ):
                     latency_ms = (time.monotonic() - start_time) * 1000
                     log_edl_event(
@@ -187,6 +187,8 @@ class EDLService:
                 media_metadata=metadata,
                 version=next_version,
                 analyzer=self._cut_safety_analyzer,
+                editor_proposal_id=run.editor_proposal_id,
+                director_review_id=run.director_review_id,
             )
 
             # 10. Persist EDL in Firestore

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import {
   deriveKeepSegments,
+  deriveAudioRegions,
   getExecutableCuts,
   findExecutableSkipInterval,
   edlToTwickTimeline,
@@ -152,6 +153,11 @@ test.describe("EDL Adapter & Playback Logic", () => {
     expect(covBlock?.startMs).toBe(26160);
     expect(covBlock?.endMs).toBe(42340);
     expect(covBlock?.type).toBe("coverage-broll");
+  });
+  test("deriveAudioRegions identifies speech and removed cut regions", () => {
+    const audioRegions = deriveAudioRegions(fairphoneEDL);
+    expect(audioRegions.length).toBeGreaterThanOrEqual(1);
+    expect(audioRegions[0].type).toBe("speech");
   });
 
   test("formatCutLabel produces clean human-facing strings", () => {

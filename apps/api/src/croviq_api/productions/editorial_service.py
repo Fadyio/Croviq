@@ -43,7 +43,12 @@ from croviq_domain.render import (
     RenderArtifact,
     build_render_artifact_gcs_object_path,
 )
-from croviq_domain.render_review import RenderReview, RenderReviewVerdict
+from croviq_domain.render_review import (
+    EditorSelfReview,
+    EditorSelfReviewVerdict,
+    RenderReview,
+    RenderReviewVerdict,
+)
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import Transcript
 from croviq_domain.user import User
@@ -323,6 +328,8 @@ class DirectorEditorService:
                     summary=raw_proposal.summary,
                     decisions=merged_decisions,
                     short_candidate=raw_proposal.short_candidate,
+                    section_plan=raw_proposal.section_plan,
+                    chapters=raw_proposal.chapters,
                     overall_confidence=raw_proposal.overall_confidence,
                 )
 
@@ -787,15 +794,14 @@ class DirectorEditorService:
             )
             status_str = "complete" if (master_art and master_art.status == ArtifactStatus.completed) else ("approved" if existing_review.approved_for_master else "needs_manual_review")
             activities = await self._editorial_repo.list_activities(production_id)
-            return existing_review, master_art, None, status_str, activities
+            return existing_review, master_art, None, status_str, activities, None
 
         # 4. Check prior review history for bounded correction limit
         prior_reviews = await self._render_review_repo.list_render_reviews(production_id)
         if len(prior_reviews) >= 2:
             latest_prior = prior_reviews[0]
             activities = await self._editorial_repo.list_activities(production_id)
-            return latest_prior, None, None, "needs_manual_review", activities
-
+            return latest_prior, None, None, "needs_manual_review", activities, None
         # 5. Load inputs for Maya review
         transcript = await self._transcript_repo.get_transcript_by_production_id(production_id)
         if not transcript:
@@ -828,7 +834,144 @@ class DirectorEditorService:
 
         channel_profile, lessons = await self._load_memory_context(prod.channel_id)
 
-        # 6. Maya (Director) watches rendered preview video
+        # 6. Leo (Video Editor) watches rendered preview video (Multimodal Self-Review)
+        leo = LeoDialogueEditor(client=self._genai_client)
+        self_review, leo_sr_usage, leo_sr_activities = await leo.self_review_render(
+            preview_gcs_bucket=preview_artifact.gcs_bucket,
+            preview_gcs_object=preview_artifact.gcs_object,
+            preview_artifact_id=preview_artifact.artifact_id,
+            edl=edl,
+            proposal=proposal,
+            transcript=transcript,
+            production_id=production_id,
+            preview_mime_type=preview_artifact.content_type or "video/mp4",
+            channel_profile=channel_profile,
+            lessons=lessons,
+            run_id=latest_run.run_id if latest_run else None,
+            request_id=request_id,
+        )
+        await self._editorial_repo.save_activities(leo_sr_activities)
+        all_activities = list(leo_sr_activities)
+
+        # If Leo self-review detects issues before director review, execute one revision pass
+        if self_review.verdict == EditorSelfReviewVerdict.NEEDS_REVISION and len(prior_reviews) == 0:
+            analysis_input = self._build_analysis_input(prod, transcript)
+            pseudo_maya_review = RenderReview(
+                review_id=f"rev_sr_{uuid.uuid4().hex[:8]}",
+                production_id=production_id,
+                edl_id=edl.edl_id,
+                preview_artifact_id=preview_artifact.artifact_id,
+                agent="maya",
+                model=self_review.model,
+                verdict=RenderReviewVerdict.CORRECT,
+                summary=self_review.summary,
+                issues=[
+                    RenderReviewIssue(
+                        issue_id=f"iss_sr_{i+1}",
+                        issue_type=RenderReviewIssueType.OVER_AGGRESSIVE_CUT,
+                        source_start_ms=0,
+                        source_end_ms=edl.source_duration_ms,
+                        related_decision_id=None,
+                        severity=RenderReviewSeverity.MEDIUM,
+                        message=f,
+                        suggested_action="Refine edit boundaries and pacing per self-review findings",
+                    )
+                    for i, f in enumerate(self_review.findings)
+                ] or [
+                    RenderReviewIssue(
+                        issue_id="iss_sr_1",
+                        issue_type=RenderReviewIssueType.PACING,
+                        source_start_ms=0,
+                        source_end_ms=edl.source_duration_ms,
+                        related_decision_id=None,
+                        severity=RenderReviewSeverity.MEDIUM,
+                        message=self_review.summary,
+                        suggested_action="Refine edit boundaries per self-review findings",
+                    )
+                ],
+                approved_for_master=False,
+                confidence=self_review.confidence,
+                created_at=datetime.now(timezone.utc),
+            )
+            revised_proposal, leo_rev_usage, leo_rev_activities = await leo.revise(
+                analysis_input=analysis_input,
+                proposal=proposal,
+                render_review=pseudo_maya_review,
+                channel_profile=channel_profile,
+                lessons=lessons,
+                run_id=latest_run.run_id if latest_run else None,
+                request_id=request_id,
+            )
+            revised_proposal_id = f"prop_sr_{uuid.uuid4().hex[:8]}"
+            await self._editorial_repo.save_editor_proposal(
+                revised_proposal, proposal_id=revised_proposal_id
+            )
+            await self._editorial_repo.save_activities(leo_rev_activities)
+            all_activities.extend(leo_rev_activities)
+
+            maya = MayaDirector(client=self._genai_client)
+            new_director_review, plan_usage, plan_activities = await maya.review(
+                analysis_input=analysis_input,
+                proposal=revised_proposal,
+                channel_profile=channel_profile,
+                lessons=lessons,
+                run_id=latest_run.run_id if latest_run else None,
+                request_id=request_id,
+            )
+            revised_review_id = f"rev_sr_{uuid.uuid4().hex[:8]}"
+            await self._editorial_repo.save_director_review(
+                new_director_review, review_id=revised_review_id
+            )
+            await self._editorial_repo.save_activities(plan_activities)
+            all_activities.extend(plan_activities)
+
+            corr_run_id = latest_run.run_id if latest_run else f"run_{uuid.uuid4().hex[:12]}"
+            corr_run = EditorialRun(
+                run_id=corr_run_id,
+                production_id=production_id,
+                status=EditorialRunStatus.COMPLETED,
+                editor_proposal_id=revised_proposal_id,
+                director_review_id=revised_review_id,
+                started_at=latest_run.started_at if latest_run else datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc),
+            )
+            await self._editorial_repo.save_editorial_run(corr_run)
+
+            if self._edl_service:
+                edl = await self._edl_service.assemble_edl(
+                    production_id=production_id,
+                    current_user=current_user,
+                    request_id=request_id,
+                )
+
+            preview_artifact = await self._render_media(
+                prod=prod,
+                edl=edl,
+                artifact_type=ArtifactType.PREVIEW,
+                request_id=request_id,
+            )
+            proposal = revised_proposal
+            director_review = new_director_review
+
+            # Leo watches revised preview v2
+            self_review, _, sr_v2_acts = await leo.self_review_render(
+                preview_gcs_bucket=preview_artifact.gcs_bucket,
+                preview_gcs_object=preview_artifact.gcs_object,
+                preview_artifact_id=preview_artifact.artifact_id,
+                edl=edl,
+                proposal=proposal,
+                transcript=transcript,
+                production_id=production_id,
+                preview_mime_type=preview_artifact.content_type or "video/mp4",
+                channel_profile=channel_profile,
+                lessons=lessons,
+                run_id=latest_run.run_id if latest_run else None,
+                request_id=request_id,
+            )
+            await self._editorial_repo.save_activities(sr_v2_acts)
+            all_activities.extend(sr_v2_acts)
+
+        # 7. Maya (Director) watches final rendered preview video
         maya = MayaDirector(client=self._genai_client)
         render_review, maya_usage, maya_activities = await maya.review_render(
             preview_gcs_bucket=preview_artifact.gcs_bucket,
@@ -849,11 +992,11 @@ class DirectorEditorService:
         # Save review and activities
         await self._render_review_repo.save_render_review(render_review)
         await self._editorial_repo.save_activities(maya_activities)
-        all_activities = list(maya_activities)
+        all_activities.extend(maya_activities)
 
         settings = get_settings()
 
-        # 7. Branch on verdict
+        # 8. Branch on verdict
         if render_review.verdict == RenderReviewVerdict.APPROVE:
             log_master_approved_event(
                 production_id=production_id,
@@ -883,12 +1026,11 @@ class DirectorEditorService:
                     )
                 except Exception as short_exc:
                     logger.warning("Automatic Short render failed after Master approval: %s", short_exc)
-            return render_review, master_art, None, "complete", all_activities
+            return render_review, master_art, None, "complete", all_activities, self_review
 
-        # 8. CORRECT: Execute ONE bounded correction loop
+        # 9. CORRECT: Execute ONE bounded correction loop
         if len(prior_reviews) == 0:
             # Step A: Leo correction pass
-            leo = LeoDialogueEditor(client=self._genai_client)
             analysis_input = self._build_analysis_input(prod, transcript)
             revised_proposal, leo_usage, leo_activities = await leo.revise(
                 analysis_input=analysis_input,
@@ -1000,10 +1142,10 @@ class DirectorEditorService:
                         )
                     except Exception as short_exc:
                         logger.warning("Automatic Short render failed after Master approval: %s", short_exc)
-                return render_review, master_art, second_render_review, "complete", all_activities
+                return render_review, master_art, second_render_review, "complete", all_activities, self_review
             else:
                 # Second post-render review is FINAL -> needs_manual_review
-                return render_review, None, second_render_review, "needs_manual_review", all_activities
+                return render_review, None, second_render_review, "needs_manual_review", all_activities, self_review
 
         # Prior reviews already exist and returned CORRECT again -> needs_manual_review
-        return render_review, None, None, "needs_manual_review", all_activities
+        return render_review, None, None, "needs_manual_review", all_activities, self_review

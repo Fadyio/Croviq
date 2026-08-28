@@ -14,10 +14,13 @@ from croviq_agents.prompts import (
     build_director_render_review_prompt,
     build_editor_correction_prompt,
     build_editor_prompt,
+    build_editor_self_review_prompt,
     build_narration_rewrite_prompt,
 )
 from croviq_domain.edl import EditDecisionList
 from croviq_domain.render_review import (
+    EditorSelfReview,
+    EditorSelfReviewVerdict,
     RenderReview,
     RenderReviewIssue,
     RenderReviewIssueType,
@@ -339,6 +342,24 @@ class GenAIClient(ABC):
         request_id: str = "unknown",
     ) -> tuple[RenderReview, AgentUsageMetadata]:
         """Invoke Maya (Director) to review rendered preview video output."""
+        pass
+
+    @abstractmethod
+    async def generate_editor_self_review(
+        self,
+        preview_video_uri: str,
+        preview_mime_type: str,
+        transcript: Transcript,
+        proposal: EditorProposal,
+        edl: EditDecisionList,
+        production_id: str,
+        preview_artifact_id: str,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[EditorSelfReview, AgentUsageMetadata]:
+        """Invoke Leo (Video Editor) to perform multimodal self-review by watching the rendered preview MP4."""
         pass
 
     @abstractmethod
@@ -765,6 +786,128 @@ class GoogleGenAIClient(GenAIClient):
             cause=last_error,
         )
 
+    async def generate_editor_self_review(
+        self,
+        preview_video_uri: str,
+        preview_mime_type: str,
+        transcript: Transcript,
+        proposal: EditorProposal,
+        edl: EditDecisionList,
+        production_id: str,
+        preview_artifact_id: str,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[EditorSelfReview, AgentUsageMetadata]:
+        from google.genai import types
+
+        client = self._get_client()
+        prompt = build_editor_self_review_prompt(
+            transcript=transcript,
+            proposal=proposal,
+            edl=edl,
+            production_id=production_id,
+            preview_artifact_id=preview_artifact_id,
+            channel_profile=channel_profile,
+            lessons=lessons,
+        )
+
+        video_part = types.Part.from_uri(file_uri=preview_video_uri, mime_type=preview_mime_type)
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=EditorSelfReview,
+            temperature=0.2,
+            max_output_tokens=8192,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+
+        log_ai_event(
+            event_type=EventType.EDITOR_ANALYSIS_STARTED,
+            agent="leo",
+            model=self._model_id,
+            status="started",
+            production_id=production_id,
+            run_id=run_id,
+            request_id=request_id,
+        )
+
+        start_time = time.perf_counter()
+        last_error: Exception | None = None
+
+        for attempt in range(2):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=self._model_id,
+                    contents=[video_part, prompt],
+                    config=config,
+                )
+
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                input_tokens = 0
+                output_tokens = 0
+                if hasattr(response, "usage_metadata") and response.usage_metadata:
+                    input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                    output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+
+                raw_self_review: EditorSelfReview
+                if hasattr(response, "parsed") and response.parsed is not None and isinstance(response.parsed, EditorSelfReview):
+                    raw_self_review = response.parsed
+                elif hasattr(response, "text") and response.text:
+                    raw_self_review = EditorSelfReview.model_validate_json(response.text)
+                else:
+                    raise GenAIError("Gemini response did not include parsed EditorSelfReview or text payload")
+
+                usage = AgentUsageMetadata(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                log_ai_event(
+                    event_type=EventType.EDITOR_ANALYSIS_COMPLETED,
+                    agent="leo",
+                    model=self._model_id,
+                    status="success",
+                    production_id=production_id,
+                    run_id=run_id,
+                    request_id=request_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                return raw_self_review, usage
+
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "Leo editor multimodal self-review attempt %d failed: %s",
+                    attempt + 1,
+                    str(exc),
+                )
+                if attempt == 0:
+                    time.sleep(1.0)
+
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+        log_ai_event(
+            event_type=EventType.EDITOR_ANALYSIS_FAILED,
+            agent="leo",
+            model=self._model_id,
+            status="failed",
+            production_id=production_id,
+            run_id=run_id,
+            request_id=request_id,
+            latency_ms=latency_ms,
+            error_code="EDITOR_SELF_REVIEW_FAILURE",
+        )
+        raise GenAIError(
+            f"Leo editor multimodal self-review generation failed after retry: {last_error}",
+            error_code="EDITOR_SELF_REVIEW_FAILURE",
+            cause=last_error,
+        )
+
     async def generate_editor_correction(
         self,
         video_uri: str,
@@ -954,21 +1097,25 @@ class FakeGenAIClient(GenAIClient):
         self,
         canned_proposal: EditorProposal | None = None,
         canned_review: DirectorReview | None = None,
+        canned_self_review: EditorSelfReview | None = None,
         canned_render_review: RenderReview | None = None,
         canned_render_reviews: list[RenderReview] | None = None,
         canned_correction: EditorProposal | None = None,
         fail_on_editor: bool = False,
         fail_on_director: bool = False,
+        fail_on_self_review: bool = False,
         fail_on_render_review: bool = False,
         fail_on_correction: bool = False,
     ) -> None:
         self._canned_proposal = canned_proposal
         self._canned_review = canned_review
+        self._canned_self_review = canned_self_review
         self._canned_render_review = canned_render_review
         self._canned_render_reviews = list(canned_render_reviews) if canned_render_reviews else []
         self._canned_correction = canned_correction
         self._fail_on_editor = fail_on_editor
         self._fail_on_director = fail_on_director
+        self._fail_on_self_review = fail_on_self_review
         self._fail_on_render_review = fail_on_render_review
         self._fail_on_correction = fail_on_correction
         self.call_history: list[dict[str, Any]] = []
@@ -1194,6 +1341,63 @@ class FakeGenAIClient(GenAIClient):
         reconciled = reconcile_render_review_with_transcript(review, transcript)
         usage = AgentUsageMetadata(input_tokens=550, output_tokens=120, latency_ms=42)
         return reconciled, usage
+    async def generate_editor_self_review(
+        self,
+        preview_video_uri: str,
+        preview_mime_type: str,
+        transcript: Transcript,
+        proposal: EditorProposal,
+        edl: EditDecisionList,
+        production_id: str,
+        preview_artifact_id: str,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[EditorSelfReview, AgentUsageMetadata]:
+        self.call_history.append(
+            {
+                "agent": "leo_self_review",
+                "production_id": production_id,
+                "preview_video_uri": preview_video_uri,
+                "preview_artifact_id": preview_artifact_id,
+                "edl_id": edl.edl_id,
+                "run_id": run_id,
+            }
+        )
+        if self._fail_on_self_review:
+            raise GenAIError("Simulated Leo self-review failure", error_code="SIMULATED_SELF_REVIEW_FAILURE")
+
+        if self._canned_self_review is not None:
+            self_review = self._canned_self_review
+        else:
+            self_review = EditorSelfReview(
+                review_id=f"srv_{production_id[:8]}",
+                production_id=production_id,
+                edl_id=edl.edl_id,
+                preview_artifact_id=preview_artifact_id,
+                agent="leo",
+                model="fake-gemini-3.7-flash",
+                verdict=EditorSelfReviewVerdict.APPROVE_UNCHANGED,
+                summary="Multimodal preview verification confirmed smooth pacing, clean audio transitions, and natural screen flow.",
+                narrative_pacing_assessment="Narrative energy is brisk and engaging without rushing key explanations.",
+                removals_assessment="Removed hesitations and dead air significantly improved tutorial cadence.",
+                visual_continuity_assessment="Visual continuity across screen demonstrations remains clear with no jarring jump cuts.",
+                audio_joins_assessment="Micro-crossfades produce seamless audio joins with zero audible phoneme clipping.",
+                coverage_needed=False,
+                short_assessment="Vertical Short excerpt maintains punchy pacing and strong visual hook.",
+                findings=[
+                    "Pacing is crisp with dead air removed",
+                    "Audio joins decode cleanly across all cut boundaries",
+                    "Short candidate hook is effective",
+                ],
+                confidence=0.96,
+                created_at=datetime.now(timezone.utc),
+            )
+
+        usage = AgentUsageMetadata(input_tokens=520, output_tokens=140, latency_ms=40)
+        return self_review, usage
+
 
     async def generate_editor_correction(
         self,

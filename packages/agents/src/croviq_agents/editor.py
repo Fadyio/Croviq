@@ -19,12 +19,13 @@ from croviq_domain.editorial import (
     SectionAction,
     VideoSectionDecision,
 )
+from croviq_domain.edl import EditDecisionList
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile
-from croviq_domain.render_review import RenderReview
+from croviq_domain.render_review import EditorSelfReview, EditorSelfReviewVerdict, RenderReview
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
+from croviq_domain.transcript import Transcript
 from croviq_observability import log_ai_event
 from croviq_observability.events import EventType
-
 logger = logging.getLogger(__name__)
 
 
@@ -459,6 +460,73 @@ class LeoVideoEditor:
         )
 
         return revised_proposal, usage, activities
+
+    async def self_review_render(
+        self,
+        preview_gcs_bucket: str,
+        preview_gcs_object: str,
+        preview_artifact_id: str,
+        edl: EditDecisionList,
+        proposal: EditorProposal,
+        transcript: Transcript,
+        production_id: str,
+        preview_mime_type: str = "video/mp4",
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        run_id: str | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[EditorSelfReview, AgentUsageMetadata, list[AgentActivity]]:
+        """Perform multimodal video self-review by watching the rendered preview MP4."""
+        preview_video_uri = f"gs://{preview_gcs_bucket}/{preview_gcs_object}"
+        run_id_val = run_id or f"run_{uuid.uuid4().hex[:8]}"
+
+        self_review, usage = await self._client.generate_editor_self_review(
+            preview_video_uri=preview_video_uri,
+            preview_mime_type=preview_mime_type,
+            transcript=transcript,
+            proposal=proposal,
+            edl=edl,
+            production_id=production_id,
+            preview_artifact_id=preview_artifact_id,
+            channel_profile=channel_profile,
+            lessons=lessons,
+            run_id=run_id_val,
+            request_id=request_id,
+        )
+
+        activities: list[AgentActivity] = []
+        now = datetime.now(timezone.utc)
+
+        activities.append(
+            AgentActivity(
+                activity_id=f"act_leo_sr_{uuid.uuid4().hex[:8]}",
+                production_id=production_id,
+                run_id=run_id_val,
+                agent="Leo",
+                role="Video Editor",
+                activity_type="self_review",
+                message=self_review.summary,
+                related_decision_id=None,
+                created_at=now,
+            )
+        )
+
+        for finding in self_review.findings:
+            activities.append(
+                AgentActivity(
+                    activity_id=f"act_leo_fnd_{uuid.uuid4().hex[:8]}",
+                    production_id=production_id,
+                    run_id=run_id_val,
+                    agent="Leo",
+                    role="Video Editor",
+                    activity_type="self_review_finding",
+                    message=finding,
+                    related_decision_id=None,
+                    created_at=now,
+                )
+            )
+
+        return self_review, usage, activities
 
 
 # Backward-compatible alias

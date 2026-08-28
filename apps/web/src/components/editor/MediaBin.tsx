@@ -72,7 +72,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
       name: "Edited Preview",
       category: "output",
       mode: "edited",
-      durationMs: editedDurationMs > 0 ? editedDurationMs : sourceDurationMs,
+      durationMs: editedDurationMs > 0 ? editedDurationMs : 0,
       isAvailable: true,
       typeLabel: hasRenderedPreview ? "Rendered" : "EDL",
     },
@@ -83,7 +83,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
             name: "Studio Voice",
             category: "output" as const,
             mode: "studio_voice" as PreviewMode,
-            durationMs: studioVoiceDurationMs || editedDurationMs || sourceDurationMs,
+            durationMs: studioVoiceDurationMs || 0,
             isAvailable: true,
             typeLabel: "Narrated",
           },
@@ -96,7 +96,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
             name: "Master Video",
             category: "output" as const,
             mode: "edited" as PreviewMode,
-            durationMs: masterDurationMs || editedDurationMs || sourceDurationMs,
+            durationMs: masterDurationMs || 0,
             isAvailable: true,
             typeLabel: "Master",
           },
@@ -109,7 +109,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
             name: "Vertical Short",
             category: "output" as const,
             mode: "short" as PreviewMode,
-            durationMs: shortDurationMs || Math.min(60000, Math.max(15000, editedDurationMs)),
+            durationMs: shortDurationMs || 0,
             isAvailable: true,
             typeLabel: "9:16",
           },
@@ -219,7 +219,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
                     </div>
                   </div>
                   <span className="text-[10px] font-mono text-text-muted tabular-nums shrink-0 ml-2">
-                    {formatDuration(item.durationMs)}
+                    {item.durationMs > 0 ? formatDuration(item.durationMs) : "--"}
                   </span>
                 </button>
               );

@@ -69,6 +69,8 @@ from croviq_domain.render import (
     build_render_artifact_gcs_object_path,
 )
 from croviq_domain.render_review import (
+    EditorSelfReview,
+    EditorSelfReviewVerdict,
     RenderReview,
     RenderReviewIssue,
     RenderReviewIssueType,
@@ -166,6 +168,8 @@ __all__ = [
     "ArtifactType",
     "RenderArtifact",
     "build_render_artifact_gcs_object_path",
+    "EditorSelfReview",
+    "EditorSelfReviewVerdict",
     "RenderReview",
     "RenderReviewIssue",
     "RenderReviewIssueType",

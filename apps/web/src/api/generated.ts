@@ -935,6 +935,43 @@ export interface components {
       /** Overall confidence in the proposal */
       overall_confidence: number;
     };
+    EditorSelfReview: {
+      /** Unique identifier for the self-review record */
+      review_id: string;
+      /** Associated Production entity identifier */
+      production_id: string;
+      /** Originating Edit Decision List identifier */
+      edl_id: string;
+      /** Associated RenderArtifact identifier of the rendered preview video */
+      preview_artifact_id: string;
+      /** Agent identifier (Leo) */
+      agent?: string;
+      /** Model identifier used for the multimodal video self-review */
+      model: string;
+      /** Self-review verdict: APPROVE_UNCHANGED or NEEDS_REVISION */
+      verdict: components["schemas"]["EditorSelfReviewVerdict"];
+      /** Concise editorial summary of the rendered preview inspection findings */
+      summary: string;
+      /** Assessment of narrative pacing and energy across the edit */
+      narrative_pacing_assessment: string;
+      /** Evaluation of whether each removal improved the overall edit */
+      removals_assessment: string;
+      /** Evaluation of visual continuity, jump cuts, and screen flow */
+      visual_continuity_assessment: string;
+      /** Evaluation of audio joins, room tone, and speech tails */
+      audio_joins_assessment: string;
+      /** Whether additional B-roll visual coverage is recommended */
+      coverage_needed?: boolean;
+      /** Evaluation of whether the vertical Short still works after editing */
+      short_assessment: string;
+      /** Concise findings without chain-of-thought */
+      findings?: string[];
+      /** Leo's confidence in the self-review assessment */
+      confidence: number;
+      /** Creation timestamp in UTC */
+      created_at?: string;
+    };
+    EditorSelfReviewVerdict: "APPROVE_UNCHANGED" | "NEEDS_REVISION";
     EditorialRun: {
       /** Unique identifier for the editorial run */
       run_id: string;
@@ -1251,6 +1288,8 @@ export interface components {
       production_id: string;
       /** Maya's post-render review record */
       review: components["schemas"]["RenderReview"];
+      /** Leo's post-render self-review record */
+      self_review?: components["schemas"]["EditorSelfReview"] | null;
       /** Master render artifact if approved and rendered */
       master_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
       /** Second post-render review if bounded correction was performed */

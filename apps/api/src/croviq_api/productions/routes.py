@@ -1571,12 +1571,12 @@ async def review_preview_video(
         second_review,
         status_str,
         activities,
+        self_review,
     ) = await editorial_service.review_preview(
         production_id=production_id,
         current_user=current_user,
         request_id=request_id,
     )
-
     master_response = None
     if master_art is not None and master_art.status == ArtifactStatus.completed:
         playback_url = None
@@ -1599,6 +1599,7 @@ async def review_preview_video(
     return ReviewPreviewResponse(
         production_id=production_id,
         review=review,
+        self_review=self_review,
         master_artifact=master_response,
         second_review=second_review,
         status=status_str,

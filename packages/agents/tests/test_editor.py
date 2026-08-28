@@ -12,7 +12,10 @@ from croviq_domain.editorial import (
     EditorDecisionType,
     EditorProposal,
 )
+from croviq_domain.edl import EditDecisionList
 from croviq_domain.render_review import (
+    EditorSelfReview,
+    EditorSelfReviewVerdict,
     RenderReview,
     RenderReviewIssue,
     RenderReviewIssueType,
@@ -175,3 +178,47 @@ async def test_leo_dialogue_editor_revise() -> None:
     assert len(activities) >= 1
     assert activities[0].agent == "Leo"
     assert activities[0].role == "Video Editor"
+
+
+@pytest.mark.asyncio
+async def test_leo_video_editor_self_review_render() -> None:
+    fake_client = FakeGenAIClient()
+    editor = LeoDialogueEditor(client=fake_client)
+    analysis_input = _sample_analysis_input()
+
+    proposal, _, _ = await editor.analyze(
+        analysis_input=analysis_input,
+        run_id="run_01",
+    )
+
+    edl = EditDecisionList(
+        edl_id="edl_test_01",
+        production_id="prod_editor_test",
+        source_duration_ms=10000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=datetime.now(timezone.utc),
+    )
+
+    self_review, usage, activities = await editor.self_review_render(
+        preview_gcs_bucket="croviq-media-raw",
+        preview_gcs_object="workspaces/ws_1/productions/prod_editor_test/renders/edl_test_01/preview.mp4",
+        preview_artifact_id="art_prev_01",
+        edl=edl,
+        proposal=proposal,
+        transcript=analysis_input.transcript,
+        production_id="prod_editor_test",
+        run_id="run_01",
+    )
+
+    assert self_review.production_id == "prod_editor_test"
+    assert self_review.agent == "leo"
+    assert self_review.verdict == EditorSelfReviewVerdict.APPROVE_UNCHANGED
+    assert self_review.narrative_pacing_assessment is not None
+    assert self_review.visual_continuity_assessment is not None
+    assert self_review.audio_joins_assessment is not None
+    assert len(self_review.findings) > 0
+    assert len(activities) >= 1
+    assert activities[0].agent == "Leo"
+    assert activities[0].role == "Video Editor"
+    assert activities[0].activity_type == "self_review"

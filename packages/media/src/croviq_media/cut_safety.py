@@ -363,6 +363,8 @@ def assemble_edl_from_review(
     media_metadata: MediaMetadata,
     version: int = 1,
     analyzer: CutSafetyAnalyzer | None = None,
+    editor_proposal_id: str | None = None,
+    director_review_id: str | None = None,
 ) -> EditDecisionList:
     """Assemble a canonical Edit Decision List (EDL) deterministically from Director-approved review state."""
     if analyzer is None:
@@ -430,8 +432,8 @@ def assemble_edl_from_review(
         edl_id=edl_id,
         production_id=production_id,
         source_duration_ms=media_metadata.duration_ms,
-        editor_proposal_id=proposal.production_id,
-        director_review_id=review.production_id,
+        editor_proposal_id=editor_proposal_id or proposal.production_id,
+        director_review_id=director_review_id or review.production_id,
         version=version,
         cuts=cuts,
         coverage_markers=coverage_markers,

@@ -279,6 +279,105 @@ Produce a complete, structured RenderReview conforming strictly to the requested
 """
 
 
+def build_editor_self_review_prompt(
+    transcript: Transcript,
+    proposal: EditorProposal,
+    edl: EditDecisionList,
+    production_id: str,
+    preview_artifact_id: str,
+    channel_profile: ChannelMemoryProfile | None = None,
+    lessons: list[ChannelLesson] | None = None,
+) -> str:
+    """Construct the structured multimodal self-review prompt for Leo (Video Editor) to evaluate rendered preview video."""
+    memory_context = format_channel_memory_summary(channel_profile, lessons)
+    formatted_transcript = format_transcript_for_prompt(transcript)
+
+    edl_summary_lines: list[str] = [
+        f"EDL ID: {edl.edl_id}",
+        f"Source Duration: {edl.source_duration_ms}ms",
+        f"Total Removed Duration: {edl.total_removed_duration_ms}ms",
+        f"Estimated Target Duration: {edl.estimated_target_duration_ms}ms",
+        f"Active Cuts ({len(edl.cuts)}):",
+    ]
+    for cut in edl.cuts:
+        edl_summary_lines.append(
+            f"- Cut [{cut.cut_id}]: {cut.safe_start_ms}ms - {cut.safe_end_ms}ms (removed: {cut.removed_duration_ms}ms) "
+            f"Type: {cut.decision_type}, Left: '{cut.left_anchor}', Right: '{cut.right_anchor}', Safety: {cut.safety_status}"
+        )
+    if edl.coverage_markers:
+        edl_summary_lines.append(f"Coverage Markers ({len(edl.coverage_markers)}):")
+        for marker in edl.coverage_markers:
+            edl_summary_lines.append(
+                f"- Marker [{marker.marker_id}]: {marker.source_start_ms}ms - {marker.source_end_ms}ms, Type: {marker.coverage_type}, Reason: {marker.reason}"
+            )
+    edl_text = "\n".join(edl_summary_lines)
+
+    decisions_lines = [f"Proposed Decisions ({len(proposal.decisions)}):"]
+    for d in proposal.decisions:
+        decisions_lines.append(
+            f"- [{d.decision_id}] {d.decision_type} ({d.source_start_ms}ms-{d.source_end_ms}ms): {d.concise_reason} (\"{d.original_text}\")"
+        )
+    decisions_text = "\n".join(decisions_lines)
+
+    short_text = (
+        f"Selected Short Candidate: '{proposal.short_candidate.hook_title}' ({proposal.short_candidate.start_ms}ms → {proposal.short_candidate.end_ms}ms) - {proposal.short_candidate.concise_reason}"
+        if proposal.short_candidate
+        else "No Short candidate selected."
+    )
+
+    chapters_text = (
+        "\n".join(f"- Chapter: {c.title} ({c.source_start_ms}ms → {c.source_end_ms}ms) - {c.summary}" for c in proposal.chapters)
+        if proposal.chapters
+        else "No chapters defined."
+    )
+
+    return f"""You are Leo, the Video Editor on the Croviq autonomous production team.
+
+YOUR ROLE & MISSION: MULTIMODAL POST-RENDER SELF-REVIEW
+You are now watching and evaluating the actual rendered preview MP4 video output that was produced from your Edit Decision List.
+
+EVALUATION CRITERIA:
+1. Narrative pacing: Is the video engaging, energetic, and free of dead air without feeling unnatural or abrupt?
+2. Edit removals: Did each cut/removal genuinely improve the edit, or does any cut feel too aggressive or jarring?
+3. Visual continuity: Are talking-head cuts natural? Are there awkward jump cuts, cursor teleportations, or jarring screen switches?
+4. Audio joins: Do audio cuts transition smoothly without clipped word tails, missing phonemes, or harsh room tone drops?
+5. Coverage / B-roll: Is visual B-roll or screen coverage needed to mask any talking-head jumps or illustrate complex concepts?
+6. Vertical Short viability: Does the selected Short candidate excerpt still make sense and hook the viewer in the rendered timeline?
+
+STRUCTURED OUTPUT RULES:
+- Verdict: APPROVE_UNCHANGED or NEEDS_REVISION.
+- If APPROVE_UNCHANGED: All removals improved the video, visual and audio continuity are clean, and no further adjustments are needed.
+- If NEEDS_REVISION: Specific observable problems must be identified in the assessment fields and findings.
+- Assessment fields must contain concise, product-facing natural evaluations (no internal chain-of-thought).
+- Findings must be concise bullet points summarizing what was observed.
+
+PRODUCTION & ARTIFACT METADATA:
+Production ID: {production_id}
+Preview Artifact ID: {preview_artifact_id}
+EDL ID: {edl.edl_id}
+
+CHANNEL INTELLIGENCE (MEMORY BANK):
+{memory_context}
+
+WORD-INDEXED TRANSCRIPT ({len(transcript.words)} words):
+{formatted_transcript}
+
+YOUR EDITORIAL PROPOSAL:
+{decisions_text}
+
+SHORT CANDIDATE:
+{short_text}
+
+CHAPTERS:
+{chapters_text}
+
+EXECUTED EDIT DECISION LIST (EDL):
+{edl_text}
+
+Produce a complete, structured EditorSelfReview conforming strictly to the requested schema.
+"""
+
+
 def build_editor_correction_prompt(
     transcript: Transcript,
     proposal: EditorProposal,

@@ -4597,6 +4597,148 @@
         "title": "EditorProposal",
         "description": "Complete batch proposal emitted by Leo (Video Editor)."
       },
+      "EditorSelfReview": {
+        "properties": {
+          "review_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Review Id",
+            "description": "Unique identifier for the self-review record"
+          },
+          "production_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated Production entity identifier"
+          },
+          "edl_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Edl Id",
+            "description": "Originating Edit Decision List identifier"
+          },
+          "preview_artifact_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Preview Artifact Id",
+            "description": "Associated RenderArtifact identifier of the rendered preview video"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent",
+            "description": "Agent identifier (Leo)",
+            "default": "leo"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model",
+            "description": "Model identifier used for the multimodal video self-review"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/EditorSelfReviewVerdict",
+            "description": "Self-review verdict: APPROVE_UNCHANGED or NEEDS_REVISION"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Summary",
+            "description": "Concise editorial summary of the rendered preview inspection findings"
+          },
+          "narrative_pacing_assessment": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Narrative Pacing Assessment",
+            "description": "Assessment of narrative pacing and energy across the edit"
+          },
+          "removals_assessment": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Removals Assessment",
+            "description": "Evaluation of whether each removal improved the overall edit"
+          },
+          "visual_continuity_assessment": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Visual Continuity Assessment",
+            "description": "Evaluation of visual continuity, jump cuts, and screen flow"
+          },
+          "audio_joins_assessment": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Audio Joins Assessment",
+            "description": "Evaluation of audio joins, room tone, and speech tails"
+          },
+          "coverage_needed": {
+            "type": "boolean",
+            "title": "Coverage Needed",
+            "description": "Whether additional B-roll visual coverage is recommended",
+            "default": false
+          },
+          "short_assessment": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Short Assessment",
+            "description": "Evaluation of whether the vertical Short still works after editing"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Findings",
+            "description": "Concise findings without chain-of-thought"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Leo's confidence in the self-review assessment"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Creation timestamp in UTC"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_id",
+          "production_id",
+          "edl_id",
+          "preview_artifact_id",
+          "model",
+          "verdict",
+          "summary",
+          "narrative_pacing_assessment",
+          "removals_assessment",
+          "visual_continuity_assessment",
+          "audio_joins_assessment",
+          "short_assessment",
+          "confidence"
+        ],
+        "title": "EditorSelfReview",
+        "description": "Complete multimodal self-review output emitted by Leo (Video Editor) after watching preview MP4."
+      },
+      "EditorSelfReviewVerdict": {
+        "type": "string",
+        "enum": ["APPROVE_UNCHANGED", "NEEDS_REVISION"],
+        "title": "EditorSelfReviewVerdict",
+        "description": "Verdicts emitted by Leo (Video Editor) during multimodal self-review of rendered preview video."
+      },
       "EditorialRun": {
         "properties": {
           "run_id": {
@@ -5978,6 +6120,17 @@
           "review": {
             "$ref": "#/components/schemas/RenderReview",
             "description": "Maya's post-render review record"
+          },
+          "self_review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditorSelfReview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Leo's post-render self-review record"
           },
           "master_artifact": {
             "anyOf": [
