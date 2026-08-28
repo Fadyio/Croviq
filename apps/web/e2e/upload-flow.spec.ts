@@ -101,7 +101,7 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
         channel: {
           channel_id: "croviq_syn_ai_eng_01",
           source_type: "synthetic",
-          title: "AI Engineering & Agent Systems",
+          title: "Modern AI Engineering",
           description: "Sample channel",
           avatar_url: null,
           subscriber_count: 51317,
@@ -521,22 +521,50 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "AI Engineering & Agent Systems" }),
+      page.getByRole("heading", { name: "Modern AI Engineering" }),
     ).toBeVisible();
     await expect(page.getByText("Sample channel", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("51,317 subscribers · 100 videos")).toBeVisible();
+    await expect(page.getByText("Here's what changed.")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Channel Performance" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Video performance map" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Traffic sources" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
     await expect(page.getByText("Worth watching")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Channel Experiment" })).toBeVisible();
+
+    // DOM Regression Guards (Negative Assertions)
+    await expect(page.getByText("Alex Briefing")).toHaveCount(0);
+    await expect(page.getByText("Evidence-backed channel intelligence")).toHaveCount(0);
+    await expect(page.getByText("Grounded")).toHaveCount(0);
+    await expect(page.getByText("thumbnail_ctr")).toHaveCount(0);
+    await expect(page.getByText("Alex memory")).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Sidebar navigation" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Upload raw footage" })).toHaveCount(0);
     await expect(page.getByText("Owner User ID")).toHaveCount(0);
     await expect(page.getByText("Git SHA")).toHaveCount(0);
 
+    // Verify Alex rail default view does not show raw FACT / INFERENCE tags
+    const alexRail = page.getByRole("complementary");
+    await expect(alexRail.getByText("FACT")).toHaveCount(0);
+    await expect(alexRail.getByText("INFERENCE")).toHaveCount(0);
+
+    // Verify progressive disclosure: View Evidence opens modal with FACT/INFERENCE
+    await page.getByRole("button", { name: "View evidence" }).first().click();
+    const evidenceModal = page.getByRole("dialog", { name: "Evidence Analysis" }).or(page.locator("div.fixed.inset-0"));
+    await expect(evidenceModal).toBeVisible();
+    await expect(page.getByText("Supporting Evidence")).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).last().click();
+    await expect(page.getByText("Supporting Evidence")).toHaveCount(0);
+    await page.waitForTimeout(300);
+
+    // Capture Evidence Screenshots at 1440x900 and 1280x800
     await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-after-rework-1440x900.png" });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1440x900.png" });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-fullpage.png", fullPage: true });
     await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-after-rework-1280x800.png" });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1280x800.png" });
     expect(consoleErrors).toEqual([]);
   });
