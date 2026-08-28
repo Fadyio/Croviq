@@ -185,7 +185,7 @@
       "get": {
         "tags": ["Workspaces"],
         "summary": "Get Agent Settings",
-        "description": "Retrieve creator-configured prompts for Leo and Maya, narration voice settings, and official Google voice catalog.",
+        "description": "Retrieve creator-configured prompts for Alex, Leo, and Maya, narration voice settings, and official Google voice catalog.",
         "operationId": "get_agent_settings_api_workspace_agent_settings_get",
         "responses": {
           "200": {
@@ -1627,6 +1627,136 @@
           }
         }
       }
+    },
+    "/api/channels/sample/dashboard": {
+      "get": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Get Sample Channel Intelligence Dashboard",
+        "description": "Compute channel intelligence from the canonical deterministic sample channel. Daily sample trends are modeled from the fixture and disclosed in the response.",
+        "operationId": "get_sample_channel_dashboard_api_channels_sample_dashboard_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 28,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Enddate"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelDashboard"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channels/research/config": {
+      "get": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Get Alex Research Settings",
+        "operationId": "get_research_config_api_channels_research_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchConfig"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Update Alex Research Settings",
+        "operationId": "update_research_config_api_channels_research_config_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateResearchConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchConfig"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -1709,7 +1839,7 @@
       },
       "AgentId": {
         "type": "string",
-        "enum": ["leo", "maya"],
+        "enum": ["leo", "maya", "alex"],
         "title": "AgentId",
         "description": "Supported Croviq agents."
       },
@@ -1748,13 +1878,13 @@
         "properties": {
           "agent_id": {
             "$ref": "#/components/schemas/AgentId",
-            "description": "Target agent identifier (leo or maya)"
+            "description": "Target agent identifier (alex, leo, or maya)"
           },
           "prompt_text": {
             "type": "string",
             "minLength": 1,
             "title": "Prompt Text",
-            "description": "Complete editorial working prompt text"
+            "description": "Complete agent working prompt text"
           },
           "version": {
             "type": "integer",
@@ -1790,6 +1920,9 @@
           "maya_prompt": {
             "$ref": "#/components/schemas/AgentPromptConfig"
           },
+          "alex_prompt": {
+            "$ref": "#/components/schemas/AgentPromptConfig"
+          },
           "voice_settings": {
             "$ref": "#/components/schemas/VoiceSettingsConfig"
           },
@@ -1803,7 +1936,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["leo_prompt", "maya_prompt", "voice_settings", "voices"],
+        "required": ["leo_prompt", "maya_prompt", "alex_prompt", "voice_settings", "voices"],
         "title": "AgentSettingsResponse",
         "description": "Complete Agent Settings state returned to client."
       },
@@ -2466,6 +2599,302 @@
         "title": "BrandKit",
         "description": "Canonical BrandKit configuration model for a Croviq Workspace."
       },
+      "ChannelDashboard": {
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/DashboardChannel"
+          },
+          "period_days": {
+            "type": "integer",
+            "title": "Period Days"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date",
+            "title": "Period End"
+          },
+          "kpis": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardKpi"
+            },
+            "type": "array",
+            "title": "Kpis"
+          },
+          "trend": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardTrendPoint"
+            },
+            "type": "array",
+            "title": "Trend"
+          },
+          "latest_video": {
+            "$ref": "#/components/schemas/LatestVideoAnalysis"
+          },
+          "video_performance": {
+            "items": {
+              "$ref": "#/components/schemas/VideoPerformancePoint"
+            },
+            "type": "array",
+            "title": "Video Performance"
+          },
+          "topic_clusters": {
+            "items": {
+              "$ref": "#/components/schemas/TopicClusterPerformance"
+            },
+            "type": "array",
+            "title": "Topic Clusters"
+          },
+          "traffic_sources": {
+            "items": {
+              "$ref": "#/components/schemas/TrafficSourceMetric"
+            },
+            "type": "array",
+            "title": "Traffic Sources"
+          },
+          "insights": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelInsight"
+            },
+            "type": "array",
+            "title": "Insights"
+          },
+          "active_experiment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelExperiment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposed_experiment": {
+            "$ref": "#/components/schemas/ChannelExperiment"
+          },
+          "is_sample_modeled_timeseries": {
+            "type": "boolean",
+            "title": "Is Sample Modeled Timeseries"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel",
+          "period_days",
+          "period_end",
+          "kpis",
+          "trend",
+          "latest_video",
+          "video_performance",
+          "topic_clusters",
+          "traffic_sources",
+          "insights",
+          "active_experiment",
+          "proposed_experiment",
+          "is_sample_modeled_timeseries"
+        ],
+        "title": "ChannelDashboard"
+      },
+      "ChannelExperiment": {
+        "properties": {
+          "experiment_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Experiment Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Channel Id"
+          },
+          "hypothesis": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Hypothesis"
+          },
+          "primary_metric": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Primary Metric"
+          },
+          "baseline_value": {
+            "type": "number",
+            "title": "Baseline Value"
+          },
+          "expected_direction": {
+            "type": "string",
+            "pattern": "^(INCREASE|DECREASE)$",
+            "title": "Expected Direction"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExperimentStatus"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "video_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Video Ids"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "effect_size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Size"
+          },
+          "confidence_summary": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Confidence Summary"
+          },
+          "created_by": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Created By"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "experiment_id",
+          "channel_id",
+          "hypothesis",
+          "primary_metric",
+          "baseline_value",
+          "expected_direction",
+          "status",
+          "started_at",
+          "completed_at",
+          "video_ids",
+          "result",
+          "effect_size",
+          "confidence_summary",
+          "created_by"
+        ],
+        "title": "ChannelExperiment"
+      },
+      "ChannelInsight": {
+        "properties": {
+          "insight_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Insight Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Channel Id"
+          },
+          "type": {
+            "$ref": "#/components/schemas/InsightType"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "statement": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Statement"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/InsightEvidence"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Evidence"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "recommended_action": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Recommended Action"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "insight_id",
+          "channel_id",
+          "type",
+          "title",
+          "statement",
+          "evidence",
+          "confidence",
+          "recommended_action",
+          "created_at"
+        ],
+        "title": "ChannelInsight"
+      },
       "ChannelLesson": {
         "properties": {
           "lesson_id": {
@@ -2993,6 +3422,133 @@
         "enum": ["SAFE", "NEEDS_COVERAGE", "REJECTED_UNSAFE"],
         "title": "CutSafetyStatus",
         "description": "Deterministic safety classification for proposed cuts."
+      },
+      "DashboardChannel": {
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "subscriber_count": {
+            "type": "integer",
+            "title": "Subscriber Count"
+          },
+          "video_count": {
+            "type": "integer",
+            "title": "Video Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel_id",
+          "source_type",
+          "title",
+          "description",
+          "avatar_url",
+          "subscriber_count",
+          "video_count"
+        ],
+        "title": "DashboardChannel"
+      },
+      "DashboardKpi": {
+        "properties": {
+          "metric": {
+            "type": "string",
+            "title": "Metric"
+          },
+          "current_value": {
+            "type": "number",
+            "title": "Current Value"
+          },
+          "previous_value": {
+            "type": "number",
+            "title": "Previous Value"
+          },
+          "change_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Percentage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["metric", "current_value", "previous_value", "change_percentage"],
+        "title": "DashboardKpi"
+      },
+      "DashboardTrendPoint": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "views": {
+            "type": "integer",
+            "title": "Views"
+          },
+          "previous_views": {
+            "type": "integer",
+            "title": "Previous Views"
+          },
+          "watch_time_hours": {
+            "type": "number",
+            "title": "Watch Time Hours"
+          },
+          "previous_watch_time_hours": {
+            "type": "number",
+            "title": "Previous Watch Time Hours"
+          },
+          "net_subscribers": {
+            "type": "integer",
+            "title": "Net Subscribers"
+          },
+          "previous_net_subscribers": {
+            "type": "integer",
+            "title": "Previous Net Subscribers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "date",
+          "views",
+          "previous_views",
+          "watch_time_hours",
+          "previous_watch_time_hours",
+          "net_subscribers",
+          "previous_net_subscribers"
+        ],
+        "title": "DashboardTrendPoint"
       },
       "DeleteProductionResponse": {
         "properties": {
@@ -3671,6 +4227,16 @@
         "title": "EditorialRunStatus",
         "description": "Operational state of an editorial analysis run."
       },
+      "EvidenceKind": {
+        "type": "string",
+        "enum": ["FACT", "INFERENCE", "RESEARCH", "RECOMMENDATION"],
+        "title": "EvidenceKind"
+      },
+      "ExperimentStatus": {
+        "type": "string",
+        "enum": ["PROPOSED", "ACTIVE", "COMPLETED", "INCONCLUSIVE"],
+        "title": "ExperimentStatus"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3707,6 +4273,112 @@
         "type": "object",
         "required": ["git_sha"],
         "title": "HealthResponse"
+      },
+      "InsightEvidence": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/EvidenceKind"
+          },
+          "statement": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Statement"
+          },
+          "metric_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Metric Refs"
+          },
+          "citation_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Citation Urls"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["kind", "statement"],
+        "title": "InsightEvidence"
+      },
+      "InsightType": {
+        "type": "string",
+        "enum": ["PERFORMANCE", "RETENTION", "AUDIENCE", "TRAFFIC", "TOPIC", "EXPERIMENT"],
+        "title": "InsightType"
+      },
+      "LatestVideoAnalysis": {
+        "properties": {
+          "video_id": {
+            "type": "string",
+            "title": "Video Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "views": {
+            "type": "integer",
+            "title": "Views"
+          },
+          "watch_time_hours": {
+            "type": "number",
+            "title": "Watch Time Hours"
+          },
+          "subscribers_gained": {
+            "type": "integer",
+            "title": "Subscribers Gained"
+          },
+          "subscribers_lost": {
+            "type": "integer",
+            "title": "Subscribers Lost"
+          },
+          "net_subscribers": {
+            "type": "integer",
+            "title": "Net Subscribers"
+          },
+          "view_delta_percentage": {
+            "type": "number",
+            "title": "View Delta Percentage"
+          },
+          "subscriber_conversion_delta_percentage": {
+            "type": "number",
+            "title": "Subscriber Conversion Delta Percentage"
+          },
+          "retention_percentage": {
+            "type": "number",
+            "title": "Retention Percentage"
+          },
+          "retention_delta_points": {
+            "type": "number",
+            "title": "Retention Delta Points"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "video_id",
+          "title",
+          "published_at",
+          "views",
+          "watch_time_hours",
+          "subscribers_gained",
+          "subscribers_lost",
+          "net_subscribers",
+          "view_delta_percentage",
+          "subscriber_conversion_delta_percentage",
+          "retention_percentage",
+          "retention_delta_points"
+        ],
+        "title": "LatestVideoAnalysis"
       },
       "MediaMetadata": {
         "properties": {
@@ -4561,6 +5233,112 @@
         "title": "RenderReviewVerdict",
         "description": "Post-render review verdicts issued by Director (Maya)."
       },
+      "ResearchCadence": {
+        "type": "string",
+        "enum": [
+          "EVERY_HOUR",
+          "EVERY_6_HOURS",
+          "EVERY_12_HOURS",
+          "EVERY_DAY",
+          "EVERY_3_DAYS",
+          "EVERY_WEEK"
+        ],
+        "title": "ResearchCadence"
+      },
+      "ResearchConfig": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Workspace Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Channel Id"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "cadence": {
+            "$ref": "#/components/schemas/ResearchCadence"
+          },
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchPrompt"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Prompts"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "next_run_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Next Run At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["workspace_id", "channel_id", "cadence", "next_run_at", "updated_at"],
+        "title": "ResearchConfig"
+      },
+      "ResearchPrompt": {
+        "properties": {
+          "prompt_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Prompt Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "use_broad_web_search": {
+            "type": "boolean",
+            "title": "Use Broad Web Search",
+            "default": true
+          },
+          "preferred_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Preferred Sources"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["prompt_id", "text"],
+        "title": "ResearchPrompt"
+      },
       "ReviewPreviewResponse": {
         "properties": {
           "production_id": {
@@ -5046,6 +5824,68 @@
         "enum": ["director", "editor", "packaging", "qa"],
         "title": "TargetAgent"
       },
+      "TopicClusterPerformance": {
+        "properties": {
+          "topic_cluster": {
+            "type": "string",
+            "title": "Topic Cluster"
+          },
+          "video_count": {
+            "type": "integer",
+            "title": "Video Count"
+          },
+          "median_views": {
+            "type": "number",
+            "title": "Median Views"
+          },
+          "median_retention": {
+            "type": "number",
+            "title": "Median Retention"
+          },
+          "median_ctr": {
+            "type": "number",
+            "title": "Median Ctr"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "topic_cluster",
+          "video_count",
+          "median_views",
+          "median_retention",
+          "median_ctr"
+        ],
+        "title": "TopicClusterPerformance"
+      },
+      "TrafficSourceMetric": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source",
+            "description": "Traffic source name (e.g. youtube_search, suggested_videos, browse_features)"
+          },
+          "views": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Views",
+            "description": "Views originating from this source"
+          },
+          "percentage": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Percentage",
+            "description": "Percentage share of total views"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["source", "views", "percentage"],
+        "title": "TrafficSourceMetric",
+        "description": "Breakdown of views by traffic source."
+      },
       "TranscribeProductionResponse": {
         "properties": {
           "status": {
@@ -5300,6 +6140,28 @@
         "title": "UpdatePromptRequest",
         "description": "Request payload for updating an agent's working prompt."
       },
+      "UpdateResearchConfigRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "cadence": {
+            "$ref": "#/components/schemas/ResearchCadence"
+          },
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchPrompt"
+            },
+            "type": "array",
+            "title": "Prompts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["enabled", "cadence", "prompts"],
+        "title": "UpdateResearchConfigRequest"
+      },
       "UpdateVoiceSettingsRequest": {
         "properties": {
           "narration_mode": {
@@ -5411,6 +6273,50 @@
         "type": "object",
         "required": ["loc", "msg", "type"],
         "title": "ValidationError"
+      },
+      "VideoPerformancePoint": {
+        "properties": {
+          "video_id": {
+            "type": "string",
+            "title": "Video Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "views": {
+            "type": "integer",
+            "title": "Views"
+          },
+          "ctr_percentage": {
+            "type": "number",
+            "title": "Ctr Percentage"
+          },
+          "average_retention": {
+            "type": "number",
+            "title": "Average Retention"
+          },
+          "subscribers_gained": {
+            "type": "integer",
+            "title": "Subscribers Gained"
+          },
+          "content_pillar": {
+            "type": "string",
+            "title": "Content Pillar"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "video_id",
+          "title",
+          "views",
+          "ctr_percentage",
+          "average_retention",
+          "subscribers_gained",
+          "content_pillar"
+        ],
+        "title": "VideoPerformancePoint"
       },
       "VideoSectionDecision": {
         "properties": {

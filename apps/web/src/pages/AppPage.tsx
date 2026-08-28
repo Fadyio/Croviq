@@ -1,764 +1,481 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  AlertCircle,
-  CheckCircle2,
-  FileVideo,
-  HardDrive,
+  BarChart3,
+  Beaker,
+  BookOpen,
+  ChevronDown,
+  ExternalLink,
+  LayoutDashboard,
   LogOut,
-  Upload,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
   Video,
-  X,
-  ArrowRight,
-  Trash2,
-  Loader2,
 } from "lucide-react";
-import { CroviqLogo } from "../components/CroviqLogo";
-import { useAuth } from "../auth/AuthContext";
 import type { components } from "../api/generated";
+import alexAvatar from "../assets/agents/Alex.png";
+import { useAuth } from "../auth/AuthContext";
+import { CroviqLogo } from "../components/CroviqLogo";
+import { AlexSettingsDrawer } from "../components/dashboard/AlexSettingsDrawer";
+import {
+  ChannelTrendChart,
+  TrafficSourceChart,
+  VideoPerformanceChart,
+} from "../components/dashboard/DashboardCharts";
 
-type Production = components["schemas"]["Production"];
-type CreateUploadResponse = components["schemas"]["CreateUploadResponse"];
+type ChannelDashboard = components["schemas"]["ChannelDashboard"];
+type DashboardKpi = components["schemas"]["DashboardKpi"];
 
-const SAMPLE_CHANNEL_ID = "croviq_syn_ai_eng_01";
-const MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB
-
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+type AppPageProps = {
+  onNavigateNewProject: () => void;
 };
 
-interface AppPageProps {
-  onNavigateToEditor?: (productionId: string) => void;
-}
+const compactNumber = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 
-export const AppPage: React.FC<AppPageProps> = ({ onNavigateToEditor }) => {
+const KPI_LABELS: Record<string, string> = {
+  views: "Views",
+  watch_time_hours: "Watch time",
+  net_subscribers: "Net subscribers",
+  average_retention: "Average retention",
+};
+
+const formatKpiValue = (kpi: DashboardKpi): string => {
+  if (kpi.metric === "average_retention") return `${kpi.current_value.toFixed(1)}%`;
+  if (kpi.metric === "watch_time_hours") return `${compactNumber.format(kpi.current_value)}h`;
+  if (kpi.metric === "net_subscribers") {
+    return `${kpi.current_value >= 0 ? "+" : ""}${compactNumber.format(kpi.current_value)}`;
+  }
+  return compactNumber.format(kpi.current_value);
+};
+
+const formatChange = (value: number | null): string => {
+  if (value === null) return "No comparable baseline";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}% vs previous period`;
+};
+
+export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
   const { user, firebaseUser, logout } = useAuth();
+  const [period, setPeriod] = useState<28 | 90 | 365>(28);
+  const [dashboard, setDashboard] = useState<ChannelDashboard | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [youtubeNotice, setYoutubeNotice] = useState(false);
 
-  // Channel Selection State - Defaulted to canonical channel automatically
-  const [selectedChannelId] = useState<string>(SAMPLE_CHANNEL_ID);
-
-  // Upload Flow State
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<
-    "idle" | "initiating" | "uploading" | "verifying" | "uploaded" | "failed"
-  >("idle");
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
-  const [activeProductionId, setActiveProductionId] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isDragOver, setIsDragOver] = useState<boolean>(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const activeXhrRef = useRef<XMLHttpRequest | null>(null);
-
-  // Recent Productions List State
-  const [productions, setProductions] = useState<Production[]>([]);
-  const [isLoadingProductions, setIsLoadingProductions] = useState<boolean>(false);
-
-  // Deletion Flow State
-  const [productionToDelete, setProductionToDelete] = useState<Production | null>(null);
-  const [isDeletingProduction, setIsDeletingProduction] = useState<boolean>(false);
-  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
-  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
-
-  const fetchProductions = useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     if (!firebaseUser) return;
-    setIsLoadingProductions(true);
+    setIsLoading(true);
+    setError(null);
     try {
       const token = await firebaseUser.getIdToken();
-
-      // Ensure workspace is initialized in background
-      fetch("/api/workspace", {
+      const response = await fetch(`/api/channels/sample/dashboard?days=${period}`, {
         headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {});
-
-      // Load productions
-      try {
-        const res = await fetch("/api/productions", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setProductions(data.productions || []);
-        }
-      } catch {
-        // Non-blocking
-      }
-    } catch {
-      // Non-blocking
+      });
+      if (!response.ok) throw new Error("Channel intelligence could not be loaded");
+      setDashboard((await response.json()) as ChannelDashboard);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Channel intelligence could not be loaded",
+      );
     } finally {
-      setIsLoadingProductions(false);
+      setIsLoading(false);
     }
-  }, [firebaseUser]);
+  }, [firebaseUser, period]);
 
   useEffect(() => {
-    fetchProductions();
-  }, [fetchProductions]);
-
-  // Handle file selection and local validation
-  const handleFileChange = (file: File | null) => {
-    if (!file) {
-      setSelectedFile(null);
-      setErrorMessage(null);
-      return;
-    }
-
-    const validExtensions = [".mp4", ".mov", ".webm", ".mkv", ".m4v"];
-    const ext = `.${file.name.split(".").pop()?.toLowerCase()}`;
-    if (!validExtensions.includes(ext)) {
-      setErrorMessage("Please select a valid video file (.mp4, .mov, or .webm)");
-      setSelectedFile(null);
-      return;
-    }
-
-    if (file.size <= 0) {
-      setErrorMessage("Selected file is empty (0 bytes)");
-      setSelectedFile(null);
-      return;
-    }
-
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setErrorMessage("File exceeds 1 GB maximum upload limit");
-      setSelectedFile(null);
-      return;
-    }
-
-    setSelectedFile(file);
-    setErrorMessage(null);
-    setUploadStatus("idle");
-    setUploadProgress(0);
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileChange(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  };
-
-  // Execute direct GCS upload
-  const handleStartUpload = async () => {
-    if (!selectedFile || !firebaseUser || !selectedChannelId) return;
-
-    setUploadStatus("initiating");
-    setErrorMessage(null);
-    setUploadProgress(0);
-
-    try {
-      const token = await firebaseUser.getIdToken();
-
-      let contentType = selectedFile.type;
-      if (!contentType) {
-        if (selectedFile.name.endsWith(".mp4")) contentType = "video/mp4";
-        else if (selectedFile.name.endsWith(".mov")) contentType = "video/quicktime";
-        else if (selectedFile.name.endsWith(".webm")) contentType = "video/webm";
-        else if (selectedFile.name.endsWith(".mkv")) contentType = "video/x-matroska";
-        else if (selectedFile.name.endsWith(".m4v")) contentType = "video/mp4";
-        else contentType = "video/mp4";
-      }
-
-      // Step 1: Initiate upload with backend
-      const initRes = await fetch("/api/uploads", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          filename: selectedFile.name,
-          content_type: contentType,
-          size_bytes: selectedFile.size,
-          channel_id: selectedChannelId,
-        }),
-      });
-
-      if (!initRes.ok) {
-        const errorData = await initRes.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Upload registration failed (${initRes.status})`);
-      }
-
-      const uploadTarget: CreateUploadResponse = await initRes.json();
-      setActiveUploadId(uploadTarget.upload_id);
-      setActiveProductionId(uploadTarget.production_id);
-
-      // Step 2: Upload directly to storage via signed PUT URL
-      setUploadStatus("uploading");
-
-      const xhr = new XMLHttpRequest();
-      activeXhrRef.current = xhr;
-
-      xhr.open(uploadTarget.method || "PUT", uploadTarget.upload_url, true);
-
-      if (uploadTarget.required_headers) {
-        for (const [headerKey, headerVal] of Object.entries(uploadTarget.required_headers)) {
-          xhr.setRequestHeader(headerKey, String(headerVal));
-        }
-      }
-      xhr.upload.onprogress = (progressEvent) => {
-        if (progressEvent.lengthComputable) {
-          const percentComplete = Math.round((progressEvent.loaded / progressEvent.total) * 100);
-          setUploadProgress(percentComplete);
-        }
-      };
-
-      xhr.onload = async () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          // Step 3: Verify and complete upload on backend
-          setUploadStatus("verifying");
-          try {
-            const currentToken = await firebaseUser.getIdToken();
-            const compRes = await fetch(`/api/uploads/${uploadTarget.upload_id}/complete`, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${currentToken}`,
-              },
-            });
-
-            if (!compRes.ok) {
-              const compErr = await compRes.json().catch(() => ({}));
-              throw new Error(compErr.detail || "Storage verification failed");
-            }
-
-            const finalProduction: Production = await compRes.json();
-            setUploadStatus("uploaded");
-            setUploadProgress(100);
-            setActiveProductionId(finalProduction.production_id);
-            handleOpenProduction(finalProduction.production_id);
-          } catch (err: unknown) {
-            setUploadStatus("failed");
-            setErrorMessage(err instanceof Error ? err.message : "Verification failed");
-          }
-        } else {
-          setUploadStatus("failed");
-          setErrorMessage(`Storage upload failed with HTTP status ${xhr.status}`);
-        }
-      };
-
-      xhr.onerror = () => {
-        setUploadStatus("failed");
-        setErrorMessage("Network error during direct storage upload");
-      };
-
-      xhr.send(selectedFile);
-    } catch (err: unknown) {
-      setUploadStatus("failed");
-      setErrorMessage(err instanceof Error ? err.message : "Upload initialization failed");
-    }
-  };
-
-  const handleResetUpload = () => {
-    if (activeXhrRef.current && uploadStatus === "uploading") {
-      activeXhrRef.current.abort();
-    }
-    setSelectedFile(null);
-    setUploadStatus("idle");
-    setUploadProgress(0);
-    setActiveUploadId(null);
-    setActiveProductionId(null);
-    setErrorMessage(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const handleOpenProduction = (productionId: string) => {
-    if (onNavigateToEditor) {
-      onNavigateToEditor(productionId);
-    } else {
-      window.history.pushState(null, "", `/productions/${productionId}/editor`);
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!productionToDelete || !firebaseUser) return;
-    setIsDeletingProduction(true);
-    setDeleteErrorMessage(null);
-
-    const targetId = productionToDelete.production_id;
-    try {
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch(`/api/productions/${targetId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Failed to delete production (${res.status})`);
-      }
-
-      // Optimistically remove from state
-      setProductions((prev) => prev.filter((p) => p.production_id !== targetId));
-      setProductionToDelete(null);
-      setDeleteSuccessMessage("Production and associated storage artifacts deleted successfully.");
-      setTimeout(() => setDeleteSuccessMessage(null), 4000);
-    } catch (err: unknown) {
-      setDeleteErrorMessage(err instanceof Error ? err.message : "Failed to delete production");
-    } finally {
-      setIsDeletingProduction(false);
-    }
-  };
+    void loadDashboard();
+  }, [loadDashboard, refreshKey]);
 
   return (
-    <div className="min-h-screen bg-background text-text-primary flex flex-col font-sans selection:bg-primary/25">
-      {/* App Header Bar */}
-      <header className="h-14 bg-surface-1 border-b border-border-subtle px-4 sm:px-8 flex items-center justify-between shrink-0 sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <CroviqLogo height={26} className="h-6.5 w-auto" />
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-xs text-text-secondary font-mono">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>{user?.email || "demo@croviq.app"}</span>
+    <div className="min-h-screen bg-background text-text-primary">
+      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border-subtle bg-surface-1 px-4 lg:px-6">
+        <div className="flex min-w-0 items-center gap-5">
+          <CroviqLogo height={24} className="h-6 w-auto shrink-0" />
+          <div className="relative hidden sm:block">
+            <button
+              type="button"
+              className="flex min-w-48 items-center justify-between gap-3 rounded-md border border-border-subtle bg-background px-3 py-2 text-xs text-text-secondary hover:border-border-strong"
+              aria-label="Select channel"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded bg-primary/15 text-[9px] font-bold text-primary">
+                  C
+                </span>
+                <span className="truncate">Croviq · Sample channel</span>
+              </span>
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
           </div>
-
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
-            onClick={logout}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-border-subtle hover:border-border-strong"
-            title="Sign out"
+            type="button"
+            onClick={onNavigateNewProject}
+            className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-background hover:opacity-90"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Logout</span>
+            <Plus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">New Project</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="flex items-center gap-2 rounded-md border border-border-subtle bg-background p-1.5 pr-2.5 text-left hover:border-border-strong"
+            aria-label="Open Alex settings"
+          >
+            <img src={alexAvatar} alt="Alex" className="h-7 w-7 rounded object-cover" />
+            <span className="hidden md:block">
+              <span className="block text-[11px] font-semibold leading-none">Alex</span>
+              <span className="mt-1 block text-[9px] leading-none text-text-muted">
+                Data Scientist
+              </span>
+            </span>
+          </button>
+          <div className="hidden max-w-36 lg:block">
+            <p className="truncate text-[10px] text-text-secondary">{user?.email}</p>
+            <button
+              type="button"
+              onClick={logout}
+              className="mt-0.5 flex items-center gap-1 text-[9px] text-text-muted hover:text-text-primary"
+            >
+              <LogOut className="h-2.5 w-2.5" />
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Main Centered Viewport */}
-      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8 sm:py-10 flex flex-col gap-8">
-        {/* Centered Hero Intro */}
-        <section className="flex flex-col items-center text-center gap-2 pt-2">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-2 border border-border-subtle text-[11px] font-mono text-text-secondary">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-            <span>Autonomous Video Operations</span>
-          </div>
-          <div className="my-1 flex items-center justify-center">
-            <CroviqLogo height={36} className="h-9 sm:h-10 w-auto" />
-          </div>
-          <p className="text-xs sm:text-sm text-text-secondary max-w-lg">
-            Your autonomous video production team.
-          </p>
-        </section>
-
-        {/* Success Banner */}
-        {deleteSuccessMessage && (
-          <div
-            className="p-3 bg-success/10 border border-success/20 rounded-lg text-xs text-emerald-400 flex items-center justify-between gap-2 animate-in fade-in"
-            role="status"
-          >
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
-              <span>{deleteSuccessMessage}</span>
-            </div>
+      <div className="mx-auto grid max-w-[1800px] grid-cols-1 xl:grid-cols-[168px_minmax(0,1fr)_310px]">
+        <aside className="hidden border-r border-border-subtle bg-surface-1/50 px-3 py-5 xl:block">
+          <nav aria-label="Channel intelligence" className="sticky top-20 space-y-1">
+            <a
+              href="#overview"
+              className="flex items-center gap-2 rounded-md bg-surface-2 px-3 py-2 text-xs font-medium"
+            >
+              <LayoutDashboard className="h-3.5 w-3.5 text-primary" />
+              Overview
+            </a>
+            <a
+              href="#performance"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-text-muted hover:bg-surface-2 hover:text-text-secondary"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              Performance
+            </a>
+            <a
+              href="#experiments"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-text-muted hover:bg-surface-2 hover:text-text-secondary"
+            >
+              <Beaker className="h-3.5 w-3.5" />
+              Experiments
+            </a>
             <button
               type="button"
-              onClick={() => setDeleteSuccessMessage(null)}
-              className="text-text-muted hover:text-text-primary p-0.5"
+              onClick={() => setSettingsOpen(true)}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-text-muted hover:bg-surface-2 hover:text-text-secondary"
             >
-              <X className="w-3.5 h-3.5" />
+              <BookOpen className="h-3.5 w-3.5" />
+              Alex memory
             </button>
-          </div>
-        )}
+            <div className="mt-6 border-t border-border-subtle pt-4">
+              <p className="px-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+                Channel source
+              </p>
+              <button
+                type="button"
+                onClick={() => setYoutubeNotice(true)}
+                className="mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-text-muted hover:bg-surface-2"
+              >
+                <Video className="h-3.5 w-3.5" />
+                Connect YouTube
+              </button>
+            </div>
+          </nav>
+        </aside>
 
-        {/* Upload Station Card */}
-        <section className="p-5 sm:p-6 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
-          <div className="flex flex-col items-center text-center gap-1">
-            <h2 className="text-xs font-semibold tracking-wider text-text-primary uppercase font-mono">
-              Upload raw footage
-            </h2>
-            <p className="text-xs text-text-muted">
-              Select or drop source video to enter the autonomous production pipeline.
+        <main id="overview" className="min-w-0 px-4 py-5 sm:px-6 lg:py-6">
+          {error && (
+            <div
+              role="alert"
+              className="mb-5 flex items-center justify-between rounded-md border border-error/30 bg-error/10 p-3 text-xs text-error"
+            >
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => setRefreshKey((key) => key + 1)}
+                className="flex items-center gap-1.5 font-semibold"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Retry
+              </button>
+            </div>
+          )}
+          {youtubeNotice && (
+            <div
+              role="status"
+              className="mb-5 flex items-start justify-between gap-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-text-secondary"
+            >
+              <div>
+                <p className="font-semibold text-text-primary">
+                  YouTube connection is not configured
+                </p>
+                <p className="mt-1">
+                  An administrator must provision the server-side Google OAuth client before
+                  connection can begin. Sample analytics remain isolated.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setYoutubeNotice(false)}
+                className="text-text-muted"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          <section className="mb-5 flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-md border border-border-strong bg-surface-2 text-sm font-bold text-primary">
+                C
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-semibold tracking-tight">
+                    {dashboard?.channel.title ?? "Channel intelligence"}
+                  </h1>
+                  <span
+                    className="rounded border border-border-subtle bg-surface-2 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-muted"
+                    title="Synthetic analytics modeled on the YouTube Data and Analytics APIs"
+                  >
+                    Sample channel
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-text-muted">
+                  {dashboard
+                    ? `${dashboard.channel.subscriber_count.toLocaleString()} subscribers · ${dashboard.channel.video_count} videos`
+                    : "Alex is loading canonical channel data"}
+                </p>
+              </div>
+            </div>
+            <label className="text-[10px] font-medium uppercase tracking-[0.12em] text-text-muted">
+              Time range
+              <select
+                value={period}
+                onChange={(event) => setPeriod(Number(event.target.value) as 28 | 90 | 365)}
+                className="ml-2 rounded-md border border-border-subtle bg-surface-1 px-3 py-2 text-xs normal-case tracking-normal text-text-primary outline-none focus:border-primary"
+              >
+                <option value={28}>Last 28 days</option>
+                <option value={90}>Last 90 days</option>
+                <option value={365}>Last 12 months</option>
+              </select>
+            </label>
+          </section>
+
+          {isLoading || !dashboard ? (
+            <DashboardSkeleton />
+          ) : (
+            <div className="space-y-4">
+              <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Channel KPIs">
+                {dashboard.kpis.map((kpi) => (
+                  <KpiCard key={kpi.metric} kpi={kpi} />
+                ))}
+              </section>
+              <section
+                className="grid gap-3 rounded-lg border border-border-subtle bg-surface-1 p-4 md:grid-cols-[1fr_auto_1fr]"
+                aria-labelledby="latest-upload-title"
+              >
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                    Since your last upload
+                  </p>
+                  <h2 id="latest-upload-title" className="mt-1 line-clamp-1 text-sm font-semibold">
+                    {dashboard.latest_video.title}
+                  </h2>
+                  <p className="mt-1 text-[10px] text-text-muted">
+                    Published {new Date(dashboard.latest_video.published_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="hidden w-px bg-border-subtle md:block" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="font-mono text-xl font-semibold">
+                      {dashboard.latest_video.net_subscribers >= 0 ? "+" : ""}
+                      {dashboard.latest_video.net_subscribers}
+                    </p>
+                    <p className="text-[10px] text-text-muted">
+                      net subscribers ·{" "}
+                      {dashboard.latest_video.subscriber_conversion_delta_percentage >= 0
+                        ? "+"
+                        : ""}
+                      {dashboard.latest_video.subscriber_conversion_delta_percentage.toFixed(1)}% vs
+                      median conversion
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-xl font-semibold">
+                      {compactNumber.format(dashboard.latest_video.views)}
+                    </p>
+                    <p className="text-[10px] text-text-muted">
+                      views · {dashboard.latest_video.view_delta_percentage >= 0 ? "+" : ""}
+                      {dashboard.latest_video.view_delta_percentage.toFixed(1)}% vs channel median
+                    </p>
+                  </div>
+                </div>
+              </section>
+              <ChannelTrendChart data={dashboard.trend} />
+              <section id="performance" className="grid gap-4 lg:grid-cols-2">
+                <VideoPerformanceChart data={dashboard.video_performance} />
+                <TrafficSourceChart data={dashboard.traffic_sources} />
+              </section>
+              <section
+                id="experiments"
+                className="rounded-lg border border-border-subtle bg-surface-1 p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                      Proposed experiment
+                    </p>
+                    <h2 className="mt-1 text-sm font-semibold">
+                      {dashboard.proposed_experiment.hypothesis}
+                    </h2>
+                    <p className="mt-2 max-w-3xl text-xs leading-5 text-text-secondary">
+                      {dashboard.proposed_experiment.confidence_summary}
+                    </p>
+                  </div>
+                  <span className="rounded border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
+                    PROPOSED
+                  </span>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-6 border-t border-border-subtle pt-3 text-xs">
+                  <div>
+                    <p className="text-[10px] text-text-muted">Primary metric</p>
+                    <p className="mt-1 font-mono">Average retention</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted">Baseline</p>
+                    <p className="mt-1 font-mono">
+                      {dashboard.proposed_experiment.baseline_value.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-text-muted">Expected direction</p>
+                    <p className="mt-1 font-mono">Increase</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+        </main>
+
+        <aside className="border-t border-border-subtle bg-surface-1/50 p-4 xl:border-l xl:border-t-0 xl:p-5">
+          <div className="sticky top-20 space-y-4">
+            <div className="flex items-center gap-3">
+              <img
+                src={alexAvatar}
+                alt=""
+                className="h-9 w-9 rounded-md border border-border-strong object-cover"
+              />
+              <div>
+                <h2 className="text-sm font-semibold">Alex Briefing</h2>
+                <p className="text-[10px] text-text-muted">Evidence-backed channel intelligence</p>
+              </div>
+            </div>
+            {dashboard?.insights.map((insight) => (
+              <article
+                key={insight.insight_id}
+                className="rounded-lg border border-border-subtle bg-surface-1 p-4"
+              >
+                <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.13em] text-primary">
+                  <Sparkles className="h-3 w-3" />
+                  {insight.type}
+                </div>
+                <h3 className="mt-2 text-sm font-semibold leading-5">{insight.title}</h3>
+                <p className="mt-2 text-xs leading-5 text-text-secondary">{insight.statement}</p>
+                <div className="mt-3 space-y-2 border-t border-border-subtle pt-3">
+                  {insight.evidence.map((evidence) => (
+                    <div key={`${evidence.kind}-${evidence.statement}`}>
+                      <span className="text-[9px] font-bold text-text-muted">{evidence.kind}</span>
+                      <p className="mt-0.5 text-[10px] leading-4 text-text-secondary">
+                        {evidence.statement}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 rounded bg-primary/8 p-2 text-[10px] leading-4 text-text-secondary">
+                  <strong className="text-text-primary">Recommendation:</strong>{" "}
+                  {insight.recommended_action}
+                </p>
+              </article>
+            ))}
+            <section className="rounded-lg border border-dashed border-border-strong p-4">
+              <div className="flex items-center gap-2">
+                <ExternalLink className="h-3.5 w-3.5 text-text-muted" />
+                <h3 className="text-xs font-semibold">Topic Radar</h3>
+              </div>
+              <p className="mt-2 text-[10px] leading-4 text-text-muted">
+                No grounded research findings yet. Alex will show opportunities here only after a
+                real scheduled search completes with source citations.
+              </p>
+            </section>
+            <p className="text-[9px] leading-4 text-text-muted">
+              Sample daily trends are deterministically modeled from the canonical synthetic
+              fixture. Research is never synthesized.
             </p>
           </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".mp4,.mov,.webm,.mkv,.m4v,video/mp4,video/quicktime,video/webm,video/x-matroska"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files && e.target.files[0]) {
-                handleFileChange(e.target.files[0]);
-              }
-            }}
-          />
-
-          {!selectedFile ? (
-            <div
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border border-dashed rounded-xl py-9 px-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-150 ${
-                isDragOver
-                  ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                  : "border-border-strong hover:border-primary/60 bg-surface-2/40 hover:bg-surface-2/70"
-              }`}
-            >
-              <div className="w-11 h-11 rounded-full bg-surface-3 flex items-center justify-center mb-3 text-text-secondary border border-border-subtle">
-                <Upload className="w-5 h-5 text-primary" />
-              </div>
-              <p className="text-sm font-medium text-text-primary">
-                Drop your raw video here, or{" "}
-                <span className="text-primary underline font-semibold">browse files</span>
-              </p>
-              <p className="text-[11px] text-text-muted mt-1.5 font-mono">
-                MP4 &middot; MOV &middot; WebM &middot; MKV &middot; up to 1 GB
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4 p-4 rounded-lg bg-surface-2 border border-border-subtle">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0">
-                    <FileVideo className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex flex-col">
-                    <span className="text-xs font-semibold text-text-primary truncate">
-                      {selectedFile.name}
-                    </span>
-                    <span className="text-[11px] text-text-muted tabular-nums font-mono">
-                      {formatBytes(selectedFile.size)}
-                    </span>
-                  </div>
-                </div>
-
-                {uploadStatus === "idle" && (
-                  <button
-                    type="button"
-                    onClick={handleResetUpload}
-                    className="p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-3 rounded-md transition-colors"
-                    title="Remove file"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {uploadStatus !== "idle" && (
-                <div className="flex flex-col gap-2 pt-2 border-t border-border-subtle">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-text-secondary flex items-center gap-1.5">
-                      {uploadStatus === "initiating" && "Initiating upload session..."}
-                      {uploadStatus === "uploading" && (
-                        <>
-                          <HardDrive className="w-3.5 h-3.5 text-primary animate-pulse" />
-                          <span>Uploading directly to storage...</span>
-                        </>
-                      )}
-                      {uploadStatus === "verifying" && "Verifying upload..."}
-                      {uploadStatus === "uploaded" && (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                          <span className="text-success font-medium">Upload verified</span>
-                        </>
-                      )}
-                      {uploadStatus === "failed" && (
-                        <>
-                          <AlertCircle className="w-3.5 h-3.5 text-danger" />
-                          <span className="text-danger font-medium">Upload failed</span>
-                        </>
-                      )}
-                    </span>
-                    <span className="font-mono text-text-primary font-medium tabular-nums">
-                      {uploadProgress}%
-                    </span>
-                  </div>
-
-                  <div className="w-full h-1.5 bg-surface-3 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-150 ${
-                        uploadStatus === "uploaded"
-                          ? "bg-success"
-                          : uploadStatus === "failed"
-                            ? "bg-danger"
-                            : "bg-primary"
-                      }`}
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {uploadStatus === "uploaded" && activeProductionId && (
-                <div className="p-3 bg-success/10 border border-success/20 rounded-md text-xs text-text-primary flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-emerald-400 font-medium">
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
-                    <span>Upload complete — production workspace ready</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenProduction(activeProductionId)}
-                    className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
-                  >
-                    <span>Open Editor</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
-              {errorMessage && (
-                <div className="p-3 bg-danger/10 border border-danger/20 rounded-md text-xs text-danger flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{errorMessage}</span>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2.5 pt-1">
-                {uploadStatus === "idle" && (
-                  <button
-                    type="button"
-                    onClick={handleStartUpload}
-                    className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 shadow-sm"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Upload video</span>
-                  </button>
-                )}
-
-                {uploadStatus === "failed" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleResetUpload}
-                      className="px-3 py-1.5 bg-surface-3 text-text-primary hover:bg-elevated text-xs font-medium rounded-md transition-colors border border-border-subtle"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleStartUpload}
-                      className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-md transition-colors"
-                    >
-                      Retry Upload
-                    </button>
-                  </>
-                )}
-
-                {uploadStatus === "uploaded" && (
-                  <button
-                    type="button"
-                    onClick={handleResetUpload}
-                    className="px-3 py-1.5 bg-surface-3 text-text-primary hover:bg-elevated text-xs font-medium rounded-md transition-colors border border-border-subtle"
-                  >
-                    Upload another video
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {!selectedFile && errorMessage && (
-            <div className="p-3 bg-danger/10 border border-danger/20 rounded-md text-xs text-danger flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-        </section>
-
-        {/* Recent Productions Section */}
-        <section className="p-5 sm:p-6 rounded-xl bg-surface-1 border border-border-subtle flex flex-col gap-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xs font-semibold tracking-wider text-text-primary uppercase font-mono">
-                Recent productions
-              </h2>
-              {productions.length > 0 && (
-                <span className="px-1.5 py-0.5 rounded bg-surface-2 border border-border-subtle text-[10px] font-mono text-text-muted">
-                  {productions.length}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {isLoadingProductions ? (
-            <div className="p-8 rounded-lg bg-surface-2/40 border border-border-subtle text-center text-xs text-text-muted flex items-center justify-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-primary" />
-              <span>Loading productions...</span>
-            </div>
-          ) : productions.length === 0 ? (
-            <div className="py-10 px-4 rounded-lg bg-surface-2/30 border border-border-subtle text-center flex flex-col items-center justify-center gap-2">
-              <div className="w-10 h-10 rounded-full bg-surface-3 flex items-center justify-center text-text-muted border border-border-subtle">
-                <Video className="w-5 h-5 text-text-secondary" />
-              </div>
-              <p className="text-xs text-text-secondary font-medium">No productions yet.</p>
-              <p className="text-xs text-text-muted">
-                Upload a video above to enter the production pipeline.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2.5" data-testid="productions-list">
-              {productions.map((prod) => (
-                <div
-                  key={prod.production_id}
-                  className="p-3.5 rounded-lg bg-surface-2/60 hover:bg-surface-2 border border-border-subtle hover:border-border-strong transition-all flex items-center justify-between gap-3 group"
-                  data-testid={`production-row-${prod.production_id}`}
-                >
-                  <div
-                    onClick={() => handleOpenProduction(prod.production_id)}
-                    className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-surface-3 border border-border-subtle flex items-center justify-center shrink-0 group-hover:border-primary/40 transition-colors">
-                      <FileVideo className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="min-w-0 flex flex-col">
-                      <span className="text-xs font-semibold text-text-primary truncate group-hover:text-primary transition-colors">
-                        {prod.source_media?.original_filename || "Untitled Production"}
-                      </span>
-                      <div className="flex items-center gap-2 text-[11px] text-text-muted mt-0.5 font-mono">
-                        {prod.source_media?.size_bytes ? (
-                          <>
-                            <span className="tabular-nums">
-                              {formatBytes(prod.source_media.size_bytes)}
-                            </span>
-                            <span>&middot;</span>
-                          </>
-                        ) : null}
-                        <span>
-                          {new Date(prod.created_at).toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    {prod.status === "failed" && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border bg-danger/10 text-danger border-danger/20 font-mono">
-                        Failed
-                      </span>
-                    )}
-                    {prod.status === "uploading" && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border bg-primary/10 text-primary border-primary/20 font-mono">
-                        Uploading
-                      </span>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => handleOpenProduction(prod.production_id)}
-                      className="px-3 py-1.5 bg-surface-3 hover:bg-primary hover:text-white text-text-primary text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 border border-border-subtle hover:border-transparent shadow-sm"
-                    >
-                      <span>Open Editor</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteErrorMessage(null);
-                        setProductionToDelete(prod);
-                      }}
-                      className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-md transition-colors border border-transparent hover:border-danger/20"
-                      title="Delete production"
-                      aria-label="Delete production"
-                      data-testid={`delete-production-${prod.production_id}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
-
-      {/* Delete Confirmation Modal */}
-      {productionToDelete && (
-        <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-modal-title"
-        >
-          <div className="w-full max-w-md bg-surface-1 border border-border-strong rounded-xl p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-full bg-danger/10 border border-danger/20 flex items-center justify-center shrink-0 text-danger">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col gap-1 min-w-0">
-                <h3 id="delete-modal-title" className="text-sm font-semibold text-text-primary">
-                  Delete production?
-                </h3>
-                <p className="text-xs text-text-secondary leading-relaxed">
-                  Are you sure you want to delete{" "}
-                  <span className="font-semibold text-text-primary truncate">
-                    "{productionToDelete.source_media?.original_filename || "Untitled Production"}"
-                  </span>
-                  ?
-                </p>
-                <p className="text-[11px] text-text-muted mt-1 leading-relaxed">
-                  This will permanently remove the source footage, transcripts, edit decision lists,
-                  and all rendered video artifacts from storage.
-                </p>
-              </div>
-            </div>
-
-            {deleteErrorMessage && (
-              <div className="p-3 bg-danger/10 border border-danger/20 rounded-md text-xs text-danger flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{deleteErrorMessage}</span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
-              <button
-                type="button"
-                disabled={isDeletingProduction}
-                onClick={() => {
-                  setProductionToDelete(null);
-                  setDeleteErrorMessage(null);
-                }}
-                className="px-3.5 py-1.5 bg-surface-2 hover:bg-surface-3 text-text-secondary hover:text-text-primary text-xs font-medium rounded-md transition-colors border border-border-subtle"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isDeletingProduction}
-                onClick={handleConfirmDelete}
-                className="px-4 py-1.5 bg-danger hover:bg-red-600 text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-                data-testid="confirm-delete-button"
-              >
-                {isDeletingProduction ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete production</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        </aside>
+      </div>
+      <AlexSettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 };
+
+const KpiCard: React.FC<{ kpi: DashboardKpi }> = ({ kpi }) => {
+  const change = kpi.change_percentage;
+  const positive = change !== null && change >= 0;
+  return (
+    <article className="rounded-lg border border-border-subtle bg-surface-1 p-3.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-text-muted">
+          {KPI_LABELS[kpi.metric] ?? kpi.metric}
+        </p>
+        {change !== null &&
+          (positive ? (
+            <TrendingUp className="h-3.5 w-3.5 text-success" />
+          ) : (
+            <TrendingDown className="h-3.5 w-3.5 text-error" />
+          ))}
+      </div>
+      <p className="mt-3 font-mono text-xl font-semibold tracking-tight">{formatKpiValue(kpi)}</p>
+      <p
+        className={`mt-1 text-[10px] ${change === null ? "text-text-muted" : positive ? "text-success" : "text-error"}`}
+      >
+        {formatChange(change)}
+      </p>
+    </article>
+  );
+};
+
+const DashboardSkeleton: React.FC = () => (
+  <div aria-busy="true" aria-label="Loading channel intelligence" className="space-y-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {Array.from({ length: 4 }, (_, index) => (
+        <div
+          key={index}
+          className="h-24 animate-pulse rounded-lg border border-border-subtle bg-surface-1"
+        />
+      ))}
+    </div>
+    <div className="h-80 animate-pulse rounded-lg border border-border-subtle bg-surface-1" />
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="h-64 animate-pulse rounded-lg border border-border-subtle bg-surface-1" />
+      <div className="h-64 animate-pulse rounded-lg border border-border-subtle bg-surface-1" />
+    </div>
+  </div>
+);

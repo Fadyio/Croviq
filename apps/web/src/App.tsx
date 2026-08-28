@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { AuthGuard } from "./components/AuthGuard";
 import { LoginPage } from "./pages/LoginPage";
 import { AppPage } from "./pages/AppPage";
+import { NewProjectPage } from "./pages/NewProjectPage";
 import { EditorPage } from "./pages/EditorPage";
 import { LoadingScreen } from "./components/LoadingScreen";
 
@@ -15,6 +16,7 @@ const normalizePath = (pathname: string): string => {
   if (pathname === "" || pathname === "/") return "/";
   if (pathname.startsWith("/app")) return "/app";
   if (pathname.startsWith("/login")) return "/login";
+  if (pathname.startsWith("/projects/new")) return "/projects/new";
   if (parseProductionEditorRoute(pathname)) return pathname;
   return pathname;
 };
@@ -69,7 +71,18 @@ const AppRoutes: React.FC = () => {
   if (currentPath === "/app") {
     return (
       <AuthGuard onRedirectToLogin={() => navigate("/login")}>
-        <AppPage onNavigateToEditor={(prodId) => navigate(`/productions/${prodId}/editor`)} />
+        <AppPage onNavigateNewProject={() => navigate("/projects/new")} />
+      </AuthGuard>
+    );
+  }
+
+  if (currentPath === "/projects/new") {
+    return (
+      <AuthGuard onRedirectToLogin={() => navigate("/login")}>
+        <NewProjectPage
+          onNavigateHome={() => navigate("/app")}
+          onNavigateToEditor={(prodId) => navigate(`/productions/${prodId}/editor`)}
+        />
       </AuthGuard>
     );
   }

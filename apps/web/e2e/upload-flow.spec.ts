@@ -53,6 +53,24 @@ const mockFirebasePasswordSignIn = async (page: Page) => {
 };
 
 const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
+  const researchConfig = {
+    workspace_id: "ws_demo",
+    channel_id: "croviq_syn_ai_eng_01",
+    enabled: true,
+    cadence: "EVERY_DAY",
+    prompts: [
+      {
+        prompt_id: "emerging-topics",
+        text: "Find emerging AI engineering topics relevant to this channel",
+        enabled: true,
+        use_broad_web_search: true,
+        preferred_sources: [],
+      },
+    ],
+    last_run_at: null,
+    next_run_at: "2026-08-29T00:00:00Z",
+    updated_at: "2026-08-28T00:00:00Z",
+  };
   await page.route("**/api/auth/me", async (route) => {
     await route.fulfill({
       status: 200,
@@ -72,6 +90,203 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
         created_at: "2026-08-26T00:00:00Z",
         updated_at: "2026-08-26T00:00:00Z",
       }),
+    });
+  });
+
+  await page.route("**/api/channels/sample/dashboard?*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        channel: {
+          channel_id: "croviq_syn_ai_eng_01",
+          source_type: "synthetic",
+          title: "AI Engineering & Agent Systems",
+          description: "Sample channel",
+          avatar_url: null,
+          subscriber_count: 51317,
+          video_count: 100,
+        },
+        period_days: 28,
+        period_end: "2026-08-26",
+        kpis: [
+          { metric: "views", current_value: 42100, previous_value: 35600, change_percentage: 18.3 },
+          {
+            metric: "watch_time_hours",
+            current_value: 3180,
+            previous_value: 2900,
+            change_percentage: 9.7,
+          },
+          {
+            metric: "net_subscribers",
+            current_value: 184,
+            previous_value: 128,
+            change_percentage: 43.8,
+          },
+          {
+            metric: "average_retention",
+            current_value: 58.4,
+            previous_value: 54.1,
+            change_percentage: 7.9,
+          },
+        ],
+        trend: [
+          {
+            date: "2026-08-25",
+            views: 1800,
+            previous_views: 1400,
+            watch_time_hours: 110,
+            previous_watch_time_hours: 90,
+            net_subscribers: 8,
+            previous_net_subscribers: 5,
+          },
+          {
+            date: "2026-08-26",
+            views: 2100,
+            previous_views: 1600,
+            watch_time_hours: 140,
+            previous_watch_time_hours: 100,
+            net_subscribers: 10,
+            previous_net_subscribers: 7,
+          },
+        ],
+        latest_video: {
+          video_id: "vid_syn_100",
+          title: "Google GenAI SDK Tutorial for Beginners (Part 5)",
+          published_at: "2026-08-13T04:00:00Z",
+          views: 23314,
+          watch_time_hours: 1258.9,
+          subscribers_gained: 334,
+          subscribers_lost: 31,
+          net_subscribers: 303,
+          view_delta_percentage: 18,
+          subscriber_conversion_delta_percentage: -2.84,
+          retention_percentage: 33.4,
+          retention_delta_points: -25.61,
+        },
+        video_performance: [
+          {
+            video_id: "vid_syn_100",
+            title: "Google GenAI SDK Tutorial",
+            views: 23314,
+            ctr_percentage: 4.29,
+            average_retention: 33.4,
+            subscribers_gained: 334,
+            content_pillar: "Gemini & Vertex AI",
+          },
+        ],
+        topic_clusters: [],
+        traffic_sources: [{ source: "youtube_search", views: 17000, percentage: 40.4 }],
+        insights: [
+          {
+            insight_id: "insight-1",
+            channel_id: "croviq_syn_ai_eng_01",
+            type: "RETENTION",
+            title: "First demonstration timing tracks retention",
+            statement:
+              "Across 100 videos, first-demo timing and average retention have a negative correlation.",
+            evidence: [
+              {
+                kind: "FACT",
+                statement: "Pearson correlation calculated across 100 videos.",
+                metric_refs: ["video:firstDemoSeconds"],
+                citation_urls: [],
+              },
+            ],
+            confidence: 0.9,
+            recommended_action: "Test the first practical demonstration before 00:30.",
+            created_at: "2026-08-26T00:00:00Z",
+            expires_at: null,
+          },
+        ],
+        active_experiment: null,
+        proposed_experiment: {
+          experiment_id: "experiment-1",
+          channel_id: "croviq_syn_ai_eng_01",
+          hypothesis:
+            "Showing the first practical demonstration before 00:30 improves average retention.",
+          primary_metric: "averageViewPercentage",
+          baseline_value: 59.01,
+          expected_direction: "INCREASE",
+          status: "PROPOSED",
+          started_at: null,
+          completed_at: null,
+          video_ids: [],
+          result: null,
+          effect_size: null,
+          confidence_summary:
+            "Proposed from a historical correlation; causality is not established.",
+          created_by: "alex",
+        },
+        is_sample_modeled_timeseries: true,
+      }),
+    });
+  });
+
+  await page.route("**/api/workspace/agent-settings", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        alex_prompt: {
+          agent_id: "alex",
+          prompt_text: "You are Alex. Separate facts, inferences, research, and recommendations.",
+          version: 1,
+          updated_at: "2026-08-28T00:00:00Z",
+          is_custom: false,
+        },
+        leo_prompt: {
+          agent_id: "leo",
+          prompt_text: "Leo",
+          version: 1,
+          updated_at: "2026-08-28T00:00:00Z",
+          is_custom: false,
+        },
+        maya_prompt: {
+          agent_id: "maya",
+          prompt_text: "Maya",
+          version: 1,
+          updated_at: "2026-08-28T00:00:00Z",
+          is_custom: false,
+        },
+        voice_settings: {
+          narration_mode: "original",
+          selected_voice: "Puck",
+          language: "en-US",
+          updated_at: "2026-08-28T00:00:00Z",
+        },
+        voices: [],
+      }),
+    });
+  });
+  await page.route("**/api/workspace/agent-settings/memory", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        channel_title: "AI Engineering & Agent Systems",
+        style_guide: "Evidence-backed technical tutorials",
+        creator_preferences: [],
+        lessons: [
+          {
+            topic: "Retention",
+            content: "Earlier practical demonstrations correlate with stronger retention.",
+            learned_from: "100-video sample analysis",
+          },
+        ],
+      }),
+    });
+  });
+  await page.route("**/api/channels/research/config", async (route) => {
+    if (route.request().method() === "PUT") {
+      Object.assign(researchConfig, JSON.parse(route.request().postData() ?? "{}"), {
+        updated_at: "2026-08-28T00:05:00Z",
+      });
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(researchConfig),
     });
   });
 
@@ -190,12 +405,16 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
   });
 };
 
-const login = async (page: Page) => {
+const login = async (page: Page, openNewProject = true) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill(DEMO_EMAIL);
   await page.getByLabel("Password").fill("valid-password-123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL("/app");
+  if (openNewProject) {
+    await page.getByRole("button", { name: "New Project" }).click();
+    await page.waitForURL("/projects/new");
+  }
 };
 
 test.describe("Product Home and Creator Flow", () => {
@@ -209,45 +428,52 @@ test.describe("Product Home and Creator Flow", () => {
 
     await mockFirebasePasswordSignIn(page);
     await mockBackendApis(page, []);
-    await login(page);
+    await login(page, false);
 
-    // Verify minimal header
     await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
     await expect(page.getByText(DEMO_EMAIL)).toBeVisible();
     await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
-
-    // Verify main intro
-    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
-    await expect(page.getByText("Your autonomous video production team.")).toBeVisible();
-    // Verify upload dropzone
-    await expect(page.getByRole("heading", { name: "Upload raw footage" })).toBeVisible();
-    await expect(page.getByText(/MP4 · MOV · WebM · MKV · up to 1 GB/i).first()).toBeVisible();
-
-    // Verify empty Recent productions section without 0 total badge
-    await expect(page.getByRole("heading", { name: "Recent productions" })).toBeVisible();
-    await expect(page.getByText("No productions yet.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
     await expect(
-      page.getByText("Upload a video above to enter the production pipeline."),
+      page.getByRole("heading", { name: "AI Engineering & Agent Systems" }),
     ).toBeVisible();
-    await expect(page.getByText("0 total")).toHaveCount(0);
-    // Verify strictly NO engineering/debug clutter
-    await expect(page.getByText("Croviq Demo Workspace")).toHaveCount(0);
-    await expect(page.getByText("Synthetic AI Engineering")).toHaveCount(0);
-    await expect(page.getByText("Modern AI Engineering")).toHaveCount(0);
-    await expect(page.getByText("Day 1 testing")).toHaveCount(0);
-    await expect(page.getByText("Memory Bank")).toHaveCount(0);
-    await expect(page.getByText("Engine Online")).toHaveCount(0);
-    await expect(page.getByText("Direct GCS")).toHaveCount(0);
-    await expect(page.getByText("5 Agents Active")).toHaveCount(0);
-    await expect(page.getByText("Production Studio")).toHaveCount(0);
-    await expect(page.getByText("Use Sample Channel")).toHaveCount(0);
-    await expect(page.getByText("Connect YouTube")).toHaveCount(0);
-    await expect(page.getByText("Workspace ID")).toHaveCount(0);
+    await expect(page.getByText("Sample channel", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Channel trend")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Video performance map" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Traffic sources" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Alex Briefing" })).toBeVisible();
+    await expect(page.getByText("No grounded research findings yet.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Upload raw footage" })).toHaveCount(0);
     await expect(page.getByText("Owner User ID")).toHaveCount(0);
     await expect(page.getByText("Git SHA")).toHaveCount(0);
 
-    await page.screenshot({ path: "e2e/screenshots/studio-cockpit-1440px.png", fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1440x900.png" });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1280x800.png" });
     expect(consoleErrors).toEqual([]);
+  });
+
+  test("persists Alex research schedule and custom public sources", async ({ page }) => {
+    await mockFirebasePasswordSignIn(page);
+    await mockBackendApis(page, []);
+    await login(page, false);
+
+    await page.getByRole("button", { name: "Open Alex settings" }).click();
+    await expect(page.getByRole("dialog", { name: "Alex settings" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Tools" })).toHaveCount(0);
+    await page.getByRole("button", { name: "research", exact: true }).click();
+    await page.getByLabel("Schedule").selectOption("EVERY_6_HOURS");
+    await page.getByPlaceholder("domain or full public URL").fill("ai.google.dev");
+    await page.getByRole("button", { name: "Add preferred source" }).click();
+    await page.getByRole("button", { name: "Save research settings" }).click();
+    await expect(page.getByText("Research schedule saved")).toBeVisible();
+    await page.getByRole("button", { name: "Close Alex settings" }).click();
+
+    await page.getByRole("button", { name: "Open Alex settings" }).click();
+    await page.getByRole("button", { name: "research", exact: true }).click();
+    await expect(page.getByLabel("Schedule")).toHaveValue("EVERY_6_HOURS");
+    await expect(page.getByRole("button", { name: /ai\.google\.dev/ })).toBeVisible();
   });
 
   test("automatically loads existing persisted productions and links to Editor", async ({

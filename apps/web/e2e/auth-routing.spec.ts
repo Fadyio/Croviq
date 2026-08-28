@@ -282,7 +282,7 @@ test.describe("Email/password authentication", () => {
     await signIn(page);
 
     await page.waitForURL("**/app");
-    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
     await expect(page.getByText(DEMO_EMAIL, { exact: true })).toBeVisible();
     expect(authMeCalls).toBeGreaterThanOrEqual(2);
     await expect.poll(() => events.some((e) => e.event_type === "auth.token.refreshed")).toBe(true);
@@ -391,14 +391,14 @@ test.describe("Email/password authentication", () => {
 
     await signIn(page);
     await page.waitForURL("**/app");
-    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
-    await expect(page.getByText("Your autonomous video production team.")).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
     await expect(page.getByText(DEMO_EMAIL, { exact: true })).toBeVisible();
 
     await page.reload();
     await expect(page).toHaveURL(/\/app$/);
-    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
-    await expect(page.getByText("Your autonomous video production team.")).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
     await expect
       .poll(() => events.some((e) => e.event_type === "auth.session.restored"))
       .toBe(true);
@@ -413,7 +413,7 @@ test.describe("Email/password authentication", () => {
 
     await signIn(page);
     await page.waitForURL("**/app");
-    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
 
     // Mock /api/auth/me returning temporary 500
     await page.route("**/api/auth/me", async (route) => {
@@ -440,7 +440,7 @@ test.describe("Email/password authentication", () => {
 
     await signIn(page);
     await page.waitForURL("**/app");
-    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
 
     // Mock /api/auth/me network failure
     await page.route("**/api/auth/me", async (route) => {
@@ -450,7 +450,7 @@ test.describe("Email/password authentication", () => {
     await page.reload();
     // User must remain authenticated on /app
     await expect(page).toHaveURL(/\/app$/);
-    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
     await expect(page.getByText(DEMO_EMAIL, { exact: true })).toBeVisible();
   });
 

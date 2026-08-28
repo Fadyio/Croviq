@@ -291,6 +291,27 @@ export interface paths {
       };
     };
   };
+  "/api/channels/sample/dashboard": {
+    get: {
+      responses: {
+        200: components["schemas"]["ChannelDashboard"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/channels/research/config": {
+    get: {
+      responses: {
+        200: components["schemas"]["ResearchConfig"];
+      };
+    };
+    put: {
+      responses: {
+        200: components["schemas"]["ResearchConfig"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
 }
 
 export interface components {
@@ -315,7 +336,7 @@ export interface components {
       /** Timestamp when the activity occurred */
       created_at?: string;
     };
-    AgentId: "leo" | "maya";
+    AgentId: "leo" | "maya" | "alex";
     AgentMemorySummaryResponse: {
       channel_title: string;
       style_guide: string;
@@ -323,9 +344,9 @@ export interface components {
       lessons?: components["schemas"]["MemoryItemResponse"][];
     };
     AgentPromptConfig: {
-      /** Target agent identifier (leo or maya) */
+      /** Target agent identifier (alex, leo, or maya) */
       agent_id: components["schemas"]["AgentId"];
-      /** Complete editorial working prompt text */
+      /** Complete agent working prompt text */
       prompt_text: string;
       /** Monotonically increasing version number */
       version?: number;
@@ -337,6 +358,7 @@ export interface components {
     AgentSettingsResponse: {
       leo_prompt: components["schemas"]["AgentPromptConfig"];
       maya_prompt: components["schemas"]["AgentPromptConfig"];
+      alex_prompt: components["schemas"]["AgentPromptConfig"];
       voice_settings: components["schemas"]["VoiceSettingsConfig"];
       voices: components["schemas"]["VoiceCatalogItem"][];
     };
@@ -468,6 +490,49 @@ export interface components {
       content_style?: string | null;
       /** Custom production instructions and brand guidelines */
       custom_instructions?: string | null;
+    };
+    ChannelDashboard: {
+      channel: components["schemas"]["DashboardChannel"];
+      period_days: number;
+      period_end: string;
+      kpis: components["schemas"]["DashboardKpi"][];
+      trend: components["schemas"]["DashboardTrendPoint"][];
+      latest_video: components["schemas"]["LatestVideoAnalysis"];
+      video_performance: components["schemas"]["VideoPerformancePoint"][];
+      topic_clusters: components["schemas"]["TopicClusterPerformance"][];
+      traffic_sources: components["schemas"]["TrafficSourceMetric"][];
+      insights: components["schemas"]["ChannelInsight"][];
+      active_experiment: components["schemas"]["ChannelExperiment"] | null;
+      proposed_experiment: components["schemas"]["ChannelExperiment"];
+      is_sample_modeled_timeseries: boolean;
+    };
+    ChannelExperiment: {
+      experiment_id: string;
+      channel_id: string;
+      hypothesis: string;
+      primary_metric: string;
+      baseline_value: number;
+      expected_direction: string;
+      status: components["schemas"]["ExperimentStatus"];
+      started_at: string | null;
+      completed_at: string | null;
+      video_ids: string[];
+      result: string | null;
+      effect_size: number | null;
+      confidence_summary: string;
+      created_by: string;
+    };
+    ChannelInsight: {
+      insight_id: string;
+      channel_id: string;
+      type: components["schemas"]["InsightType"];
+      title: string;
+      statement: string;
+      evidence: components["schemas"]["InsightEvidence"][];
+      confidence: number;
+      recommended_action: string;
+      created_at: string;
+      expires_at?: string | null;
     };
     ChannelLesson: {
       /** Unique identifier for the lesson. */
@@ -602,6 +667,30 @@ export interface components {
       requires_room_tone?: boolean;
     };
     CutSafetyStatus: "SAFE" | "NEEDS_COVERAGE" | "REJECTED_UNSAFE";
+    DashboardChannel: {
+      channel_id: string;
+      source_type: string;
+      title: string;
+      description: string;
+      avatar_url: string | null;
+      subscriber_count: number;
+      video_count: number;
+    };
+    DashboardKpi: {
+      metric: string;
+      current_value: number;
+      previous_value: number;
+      change_percentage: number | null;
+    };
+    DashboardTrendPoint: {
+      date: string;
+      views: number;
+      previous_views: number;
+      watch_time_hours: number;
+      previous_watch_time_hours: number;
+      net_subscribers: number;
+      previous_net_subscribers: number;
+    };
     DeleteProductionResponse: {
       /** Operational status ('deleted') */
       status?: string;
@@ -768,6 +857,8 @@ export interface components {
       activities?: components["schemas"]["AgentActivity"][];
     };
     EditorialRunStatus: "pending" | "analyzing" | "reviewing" | "completed" | "failed";
+    EvidenceKind: "FACT" | "INFERENCE" | "RESEARCH" | "RECOMMENDATION";
+    ExperimentStatus: "PROPOSED" | "ACTIVE" | "COMPLETED" | "INCONCLUSIVE";
     HTTPValidationError: {
       detail?: components["schemas"]["ValidationError"][];
     };
@@ -778,6 +869,27 @@ export interface components {
       service?: string;
       /** Current git commit SHA or environment identifier */
       git_sha: string;
+    };
+    InsightEvidence: {
+      kind: components["schemas"]["EvidenceKind"];
+      statement: string;
+      metric_refs?: string[];
+      citation_urls?: string[];
+    };
+    InsightType: "PERFORMANCE" | "RETENTION" | "AUDIENCE" | "TRAFFIC" | "TOPIC" | "EXPERIMENT";
+    LatestVideoAnalysis: {
+      video_id: string;
+      title: string;
+      published_at: string;
+      views: number;
+      watch_time_hours: number;
+      subscribers_gained: number;
+      subscribers_lost: number;
+      net_subscribers: number;
+      view_delta_percentage: number;
+      subscriber_conversion_delta_percentage: number;
+      retention_percentage: number;
+      retention_delta_points: number;
     };
     MediaMetadata: {
       /** Duration of the media in milliseconds */
@@ -984,6 +1096,30 @@ export interface components {
       | "COVERAGE_NEEDED";
     RenderReviewSeverity: "LOW" | "MEDIUM" | "HIGH";
     RenderReviewVerdict: "APPROVE" | "CORRECT";
+    ResearchCadence:
+      | "EVERY_HOUR"
+      | "EVERY_6_HOURS"
+      | "EVERY_12_HOURS"
+      | "EVERY_DAY"
+      | "EVERY_3_DAYS"
+      | "EVERY_WEEK";
+    ResearchConfig: {
+      workspace_id: string;
+      channel_id: string;
+      enabled?: boolean;
+      cadence: components["schemas"]["ResearchCadence"];
+      prompts?: components["schemas"]["ResearchPrompt"][];
+      last_run_at?: string | null;
+      next_run_at: string;
+      updated_at: string;
+    };
+    ResearchPrompt: {
+      prompt_id: string;
+      text: string;
+      enabled?: boolean;
+      use_broad_web_search?: boolean;
+      preferred_sources?: string[];
+    };
     ReviewPreviewResponse: {
       /** Canonical unique production identifier */
       production_id: string;
@@ -1105,6 +1241,21 @@ export interface components {
       updated_at: string;
     };
     TargetAgent: "director" | "editor" | "packaging" | "qa";
+    TopicClusterPerformance: {
+      topic_cluster: string;
+      video_count: number;
+      median_views: number;
+      median_retention: number;
+      median_ctr: number;
+    };
+    TrafficSourceMetric: {
+      /** Traffic source name (e.g. youtube_search, suggested_videos, browse_features) */
+      source: string;
+      /** Views originating from this source */
+      views: number;
+      /** Percentage share of total views */
+      percentage: number;
+    };
     TranscribeProductionResponse: {
       /** Transcription status ('completed' or 'already_transcribed') */
       status: "completed" | "already_transcribed";
@@ -1173,6 +1324,11 @@ export interface components {
       /** Updated editorial working prompt */
       prompt_text: string;
     };
+    UpdateResearchConfigRequest: {
+      enabled: boolean;
+      cadence: components["schemas"]["ResearchCadence"];
+      prompts: components["schemas"]["ResearchPrompt"][];
+    };
     UpdateVoiceSettingsRequest: {
       /** Selected narration mode */
       narration_mode: components["schemas"]["NarrationMode"];
@@ -1199,6 +1355,15 @@ export interface components {
       type: string;
       input?: unknown;
       ctx?: Record<string, unknown>;
+    };
+    VideoPerformancePoint: {
+      video_id: string;
+      title: string;
+      views: number;
+      ctr_percentage: number;
+      average_retention: number;
+      subscribers_gained: number;
+      content_pillar: string;
     };
     VideoSectionDecision: {
       /** Unique identifier for the timeline section */
