@@ -1692,6 +1692,200 @@
         }
       }
     },
+    "/api/channels/youtube/auth-url": {
+      "post": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Generate YouTube OAuth Authorization URL",
+        "description": "Generate secure Google OAuth 2.0 authorization URL with CSRF state token.",
+        "operationId": "generate_youtube_auth_url_api_channels_youtube_auth_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YouTubeAuthUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeAuthUrlResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/channels/youtube/callback": {
+      "post": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Handle YouTube OAuth Callback",
+        "description": "Exchange authorization code for tokens, verify CSRF state, and store connection server-side.",
+        "operationId": "handle_youtube_callback_api_channels_youtube_callback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YouTubeCallbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeConnectionPublicSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/channels/youtube/connection": {
+      "get": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Get Connected YouTube Channel Status",
+        "operationId": "get_youtube_connection_status_api_channels_youtube_connection_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeConnectionPublicSummary"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/channels/youtube/disconnect": {
+      "post": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Disconnect YouTube Channel",
+        "operationId": "disconnect_youtube_channel_api_channels_youtube_disconnect_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/channels/youtube/dashboard": {
+      "get": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Get Connected Real YouTube Channel Dashboard",
+        "operationId": "get_youtube_channel_dashboard_api_channels_youtube_dashboard_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 28,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Enddate"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelDashboard"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/channels/research/config": {
       "get": {
         "tags": ["Channel Intelligence"],
@@ -1756,6 +1950,224 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/channels/research/findings": {
+      "get": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Get Active Topic Radar Research Findings",
+        "description": "Retrieve ranked, grounded research findings with source citations for the Alex Briefing rail.",
+        "operationId": "get_research_findings_api_channels_research_findings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchFinding"
+                  },
+                  "title": "Response Get Research Findings Api Channels Research Findings Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channels/research/run": {
+      "post": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Trigger Manual Alex Research Run",
+        "operationId": "trigger_manual_research_run_api_channels_research_run_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchFinding"
+                  },
+                  "type": "array",
+                  "title": "Response Trigger Manual Research Run Api Channels Research Run Post"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/channels/research/tick": {
+      "post": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Cloud Scheduler Background Research Tick",
+        "description": "Internal idempotent endpoint invoked by Cloud Scheduler to process due Alex research runs.",
+        "operationId": "process_scheduler_tick_api_channels_research_tick_post",
+        "parameters": [
+          {
+            "name": "X-Scheduler-Auth",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Scheduler-Auth"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulerTickResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channels/analysis/code-execution": {
+      "post": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Run Alex Python Code Execution Statistical Analysis",
+        "operationId": "run_alex_code_execution_api_channels_analysis_code_execution_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeExecutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Run Alex Code Execution Api Channels Analysis Code Execution Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/channels/research/findings/{finding_id}/distill": {
+      "post": {
+        "tags": ["Channel Intelligence"],
+        "summary": "Distill Research Finding into Durable Memory Bank Lesson",
+        "operationId": "distill_research_finding_api_channels_research_findings__finding_id__distill_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "finding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Finding Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DistillFindingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -3137,6 +3549,18 @@
         "required": ["event_type"],
         "title": "ClientErrorEvent"
       },
+      "CodeExecutionRequest": {
+        "properties": {
+          "analysis_goal": {
+            "type": "string",
+            "title": "Analysis Goal",
+            "default": "Evaluate first demonstration timing effect on retention and subscriber conversion"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CodeExecutionRequest"
+      },
       "CoverageMarker": {
         "properties": {
           "marker_id": {
@@ -3778,6 +4202,51 @@
         "title": "DirectorVerdict",
         "description": "Review verdicts issued by Director (Maya)."
       },
+      "DistillFindingResponse": {
+        "properties": {
+          "lesson_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Id"
+          },
+          "directive": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directive"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["lesson_id", "directive", "confidence", "status"],
+        "title": "DistillFindingResponse"
+      },
       "EDLDetailResponse": {
         "properties": {
           "edl": {
@@ -4236,6 +4705,11 @@
         "type": "string",
         "enum": ["PROPOSED", "ACTIVE", "COMPLETED", "INCONCLUSIVE"],
         "title": "ExperimentStatus"
+      },
+      "FindingLifecycle": {
+        "type": "string",
+        "enum": ["NEW", "UPDATED", "SEEN", "EXPIRED"],
+        "title": "FindingLifecycle"
       },
       "HTTPValidationError": {
         "properties": {
@@ -5301,6 +5775,130 @@
         "required": ["workspace_id", "channel_id", "cadence", "next_run_at", "updated_at"],
         "title": "ResearchConfig"
       },
+      "ResearchFinding": {
+        "properties": {
+          "finding_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Finding Id"
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Run Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Channel Id"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Category"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Summary"
+          },
+          "why_it_matters": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Why It Matters"
+          },
+          "relevance_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Relevance Score"
+          },
+          "freshness_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Freshness Score"
+          },
+          "opportunity_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Opportunity Score"
+          },
+          "source_citations": {
+            "items": {
+              "$ref": "#/components/schemas/SourceCitation"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Source Citations"
+          },
+          "topic_fingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Topic Fingerprint"
+          },
+          "discovered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Discovered At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/FindingLifecycle",
+            "default": "NEW"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "finding_id",
+          "run_id",
+          "channel_id",
+          "category",
+          "title",
+          "summary",
+          "why_it_matters",
+          "relevance_score",
+          "freshness_score",
+          "opportunity_score",
+          "source_citations",
+          "topic_fingerprint",
+          "discovered_at"
+        ],
+        "title": "ResearchFinding"
+      },
       "ResearchPrompt": {
         "properties": {
           "prompt_id": {
@@ -5391,6 +5989,30 @@
         "required": ["production_id", "review", "status"],
         "title": "ReviewPreviewResponse",
         "description": "Response returned upon completing post-render preview review and Master render gating."
+      },
+      "SchedulerTickResponse": {
+        "properties": {
+          "runs_evaluated": {
+            "type": "integer",
+            "title": "Runs Evaluated"
+          },
+          "runs_executed": {
+            "type": "integer",
+            "title": "Runs Executed"
+          },
+          "findings_created": {
+            "type": "integer",
+            "title": "Findings Created"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["runs_evaluated", "runs_executed", "findings_created", "status"],
+        "title": "SchedulerTickResponse"
       },
       "SectionAction": {
         "type": "string",
@@ -5577,6 +6199,65 @@
         "required": ["start_ms", "end_ms", "duration_ms"],
         "title": "SilenceInterval",
         "description": "Represents a silence or non-speech interval between spoken words."
+      },
+      "SourceCitation": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Domain"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "grounding_metadata": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Grounding Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["url", "title", "domain"],
+        "title": "SourceCitation"
       },
       "SourceMedia": {
         "properties": {
@@ -5843,7 +6524,14 @@
             "title": "Median Retention"
           },
           "median_ctr": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Median Ctr"
           }
         },
@@ -6289,8 +6977,23 @@
             "title": "Views"
           },
           "ctr_percentage": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Ctr Percentage"
+          },
+          "discovery_metric": {
+            "type": "string",
+            "title": "Discovery Metric"
+          },
+          "discovery_value": {
+            "type": "number",
+            "title": "Discovery Value"
           },
           "average_retention": {
             "type": "number",
@@ -6312,6 +7015,8 @@
           "title",
           "views",
           "ctr_percentage",
+          "discovery_metric",
+          "discovery_value",
           "average_retention",
           "subscribers_gained",
           "content_pillar"
@@ -6571,6 +7276,144 @@
         "required": ["workspace_id", "owner_user_id", "name", "created_at", "updated_at"],
         "title": "Workspace",
         "description": "Canonical Workspace tenant container model for Croviq."
+      },
+      "YouTubeAuthUrlRequest": {
+        "properties": {
+          "redirect_uri": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Redirect Uri"
+          },
+          "include_monetary": {
+            "type": "boolean",
+            "title": "Include Monetary",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["redirect_uri"],
+        "title": "YouTubeAuthUrlRequest"
+      },
+      "YouTubeAuthUrlResponse": {
+        "properties": {
+          "auth_url": {
+            "type": "string",
+            "title": "Auth Url"
+          },
+          "state_token": {
+            "type": "string",
+            "title": "State Token"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["auth_url", "state_token", "scopes"],
+        "title": "YouTubeAuthUrlResponse"
+      },
+      "YouTubeCallbackRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "minLength": 1,
+            "title": "State"
+          },
+          "redirect_uri": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Redirect Uri"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["code", "state", "redirect_uri"],
+        "title": "YouTubeCallbackRequest"
+      },
+      "YouTubeConnectionPublicSummary": {
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "channel_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Title"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "subscriber_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscriber Count"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "has_monetary_access": {
+            "type": "boolean",
+            "title": "Has Monetary Access",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["connected"],
+        "title": "YouTubeConnectionPublicSummary",
+        "description": "Public non-sensitive connection information returned to creator client."
       }
     },
     "securitySchemes": {

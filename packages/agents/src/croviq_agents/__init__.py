@@ -1,4 +1,5 @@
 """Croviq autonomous production agents: Leo (Dialogue Editor) and Maya (Director)."""
+from croviq_agents.alex import AlexDataScientist
 
 from croviq_agents.client import (
     AgentUsageMetadata,
@@ -32,6 +33,7 @@ from croviq_agents.prompts import (
 )
 
 __all__ = [
+    "AlexDataScientist",
     "AgentUsageMetadata",
     "FakeGenAIClient",
     "GenAIClient",

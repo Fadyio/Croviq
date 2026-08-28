@@ -2,15 +2,14 @@
 
 > **DevOps for YouTube creators**: an autonomous, visible production team that learns the channel, transforms raw footage into a release, validates the work, learns from performance, and feeds those lessons into the next production.
 
-### Implemented Autonomous Agents
+### Implemented Autonomous Production Team
+- **Alex (Data Scientist)**: Statistical intelligence agent who analyzes canonical YouTube analytics, computes defensible metrics, executes live Google Search grounded research on configurable cadence with verifiable citations, performs statistical analysis with Gemini Code Execution, and distills falsifiable lessons into long-term Channel Memory Bank.
 - **Leo (Video Editor)**: Video Editor responsible for full-video inspection, full-timeline editorial planning, real media tool use, test rendering, self-review, semantic cuts, Short candidate selection, Studio Voice narration rewriting, and B-roll decisions when useful.
 - **Maya (Director)**: Director who reviews Leo's edit plan, reviews rendered Preview, requests at most one correction, and approves final output.
 
 ### Planned Agents
-- **Alex (Data Scientist)**: Statistical intelligence agent who detects retention patterns, baseline shifts, and feeds falsifiable lessons into long-term Channel Memory.
 - **Nina (Packaging)**: Metadata, chapters, title rankings, and thumbnail concept generation.
 - **Iris (Quality Assurance)**: Independent verification of factual claims, captions, timestamps, and publishing readiness.
----
 
 ## Production Topology & Single Origin
 

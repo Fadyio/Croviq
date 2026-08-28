@@ -29,6 +29,9 @@ class ResearchCadence(StrEnum):
             ResearchCadence.EVERY_WEEK: timedelta(weeks=1),
         }[self]
 
+    def next_run_after(self, scheduled_at: datetime) -> datetime:
+        return scheduled_at + self.interval
+
 
 class ResearchRunStatus(StrEnum):
     PENDING = "PENDING"

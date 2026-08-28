@@ -141,6 +141,22 @@ class Settings(BaseSettings):
         default="global",
         validation_alias=AliasChoices("VERTEXAI_LOCATION"),
     )
+    google_oauth_client_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_OAUTH_CLIENT_ID", "YOUTUBE_OAUTH_CLIENT_ID"),
+    )
+    google_oauth_client_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_OAUTH_CLIENT_SECRET", "YOUTUBE_OAUTH_CLIENT_SECRET"),
+    )
+    google_oauth_redirect_uri: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_OAUTH_REDIRECT_URI", "YOUTUBE_OAUTH_REDIRECT_URI"),
+    )
+    scheduler_auth_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("SCHEDULER_AUTH_TOKEN", "CROVIQ_SCHEDULER_SECRET"),
+    )
 
     @field_validator("allowed_emails", mode="after")
     @classmethod

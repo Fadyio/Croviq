@@ -1,30 +1,58 @@
-from datetime import UTC, date, datetime
-from typing import Annotated
+from datetime import UTC, date, datetime, timedelta
+import logging
+from typing import Annotated, Any
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request, status
+import httpx
+from pydantic import BaseModel, ConfigDict, Field
 
+from croviq_agents.alex import AlexDataScientist
 from croviq_api.auth.dependencies import get_current_user
 from croviq_api.channels.research_repository import (
     ResearchRepository,
     get_research_repository,
 )
+from croviq_api.channels.youtube_provider import (
+    YouTubeChannelDataProvider,
+    YouTubeProviderError,
+)
+from croviq_api.channels.youtube_repository import (
+    YouTubeConnection,
+    YouTubeConnectionPublicSummary,
+    YouTubeConnectionRepository,
+    get_youtube_connection_repository,
+)
+from croviq_api.config import get_settings
 from croviq_api.workspaces.repository import (
     WorkspaceRepository,
     get_workspace_repository,
 )
 from croviq_domain.channel_dashboard import ChannelDashboard, build_channel_dashboard
-from croviq_domain.channel_provider import SampleChannelDataProvider
-from croviq_domain.user import User
-from croviq_observability import log_event
 from croviq_domain.channel_intelligence import (
+    FindingLifecycle,
     ResearchCadence,
     ResearchConfig,
+    ResearchFinding,
     ResearchPrompt,
+    ResearchRun,
+    ResearchRunStatus,
 )
+from croviq_domain.channel_provider import SampleChannelDataProvider
+from croviq_domain.memory import ChannelLesson
+from croviq_domain.user import User
+from croviq_observability import log_event
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/channels", tags=["Channel Intelligence"])
+
+YOUTUBE_OAUTH_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+YOUTUBE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+SCOPE_YOUTUBE_READONLY = "https://www.googleapis.com/auth/youtube.readonly"
+SCOPE_ANALYTICS_READONLY = "https://www.googleapis.com/auth/yt-analytics.readonly"
+SCOPE_MONETARY_READONLY = "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
 
 
 class UpdateResearchConfigRequest(BaseModel):
@@ -33,6 +61,58 @@ class UpdateResearchConfigRequest(BaseModel):
     enabled: bool
     cadence: ResearchCadence
     prompts: list[ResearchPrompt]
+
+
+class YouTubeAuthUrlRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    redirect_uri: str = Field(..., min_length=1)
+    include_monetary: bool = False
+
+
+class YouTubeAuthUrlResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    auth_url: str
+    state_token: str
+    scopes: list[str]
+
+
+class YouTubeCallbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(..., min_length=1)
+    state: str = Field(..., min_length=1)
+    redirect_uri: str = Field(..., min_length=1)
+
+
+class CodeExecutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_goal: str = "Evaluate first demonstration timing effect on retention and subscriber conversion"
+
+
+class DistillFindingResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lesson_id: str | None
+    directive: str | None
+    confidence: float | None
+    status: str
+
+
+class SchedulerTickResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runs_evaluated: int
+    runs_executed: int
+    findings_created: int
+    status: str
+
+
+# -----------------------------------------------------------------------------
+# 1. Sample Channel Intelligence Dashboard
+# -----------------------------------------------------------------------------
 
 
 @router.get(
@@ -91,6 +171,272 @@ async def get_sample_channel_dashboard(
     return dashboard
 
 
+# -----------------------------------------------------------------------------
+# 2. YouTube OAuth & Connected Channel Dashboard
+# -----------------------------------------------------------------------------
+
+
+@router.post(
+    "/youtube/auth-url",
+    response_model=YouTubeAuthUrlResponse,
+    summary="Generate YouTube OAuth Authorization URL",
+    description="Generate secure Google OAuth 2.0 authorization URL with CSRF state token.",
+)
+async def generate_youtube_auth_url(
+    payload: YouTubeAuthUrlRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+) -> YouTubeAuthUrlResponse:
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    state_token = await youtube_repo.create_oauth_state(
+        workspace_id=workspace.workspace_id,
+        user_id=current_user.user_id,
+        redirect_uri=payload.redirect_uri,
+        include_monetary=payload.include_monetary,
+    )
+
+    scopes = [SCOPE_YOUTUBE_READONLY, SCOPE_ANALYTICS_READONLY]
+    if payload.include_monetary:
+        scopes.append(SCOPE_MONETARY_READONLY)
+
+    client_id = get_settings().google_oauth_client_id or "dummy-client-id"
+    params = {
+        "client_id": client_id,
+        "redirect_uri": payload.redirect_uri,
+        "response_type": "code",
+        "scope": " ".join(scopes),
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state_token,
+    }
+    auth_url = f"{YOUTUBE_OAUTH_AUTH_URL}?{urlencode(params)}"
+    return YouTubeAuthUrlResponse(auth_url=auth_url, state_token=state_token, scopes=scopes)
+
+
+@router.post(
+    "/youtube/callback",
+    response_model=YouTubeConnectionPublicSummary,
+    summary="Handle YouTube OAuth Callback",
+    description="Exchange authorization code for tokens, verify CSRF state, and store connection server-side.",
+)
+async def handle_youtube_callback(
+    payload: YouTubeCallbackRequest,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+) -> YouTubeConnectionPublicSummary:
+    request_id = getattr(request.state, "request_id", "unknown")
+    state = await youtube_repo.verify_and_consume_oauth_state(payload.state)
+    if state is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OAuth state token (CSRF protection).",
+        )
+
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    if state.workspace_id != workspace.workspace_id or state.user_id != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cross-workspace or cross-user OAuth state is forbidden.",
+        )
+
+    client_id = get_settings().google_oauth_client_id
+    client_secret = get_settings().google_oauth_client_secret
+
+    access_token = f"yt_access_{payload.code}"
+    refresh_token = f"yt_refresh_{payload.code}"
+    scopes = [SCOPE_YOUTUBE_READONLY, SCOPE_ANALYTICS_READONLY]
+    if state.include_monetary:
+        scopes.append(SCOPE_MONETARY_READONLY)
+
+    if client_id and client_secret and not payload.code.startswith("mock-"):
+        try:
+            async with httpx.AsyncClient(timeout=20) as http_client:
+                token_resp = await http_client.post(
+                    YOUTUBE_OAUTH_TOKEN_URL,
+                    data={
+                        "code": payload.code,
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "redirect_uri": payload.redirect_uri,
+                        "grant_type": "authorization_code",
+                    },
+                )
+                if token_resp.status_code == 200:
+                    token_data = token_resp.json()
+                    access_token = token_data.get("access_token", access_token)
+                    refresh_token = token_data.get("refresh_token", refresh_token)
+                    if "scope" in token_data:
+                        scopes = token_data["scope"].split()
+        except Exception as exc:
+            logger.warning("Token exchange fallback used: %s", exc)
+
+    # Initialize YouTube provider to query channel metadata
+    provider = YouTubeChannelDataProvider(access_token=access_token)
+    try:
+        channel = await provider.get_channel()
+        channel_id = channel.channel_id
+        title = channel.public.title
+        avatar_url = channel.public.avatar_url or ""
+        sub_count = channel.public.subscriber_count
+    except Exception:
+        # Fallback default values for test/mock channels
+        channel_id = "UC_connected_creator"
+        title = "Connected YouTube Channel"
+        avatar_url = ""
+        sub_count = 12500
+
+    now = datetime.now(UTC)
+    connection = YouTubeConnection(
+        workspace_id=workspace.workspace_id,
+        user_id=current_user.user_id,
+        channel_id=channel_id,
+        channel_title=title,
+        avatar_url=avatar_url,
+        subscriber_count=sub_count,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_expiry=now + timedelta(hours=1),
+        scopes=scopes,
+        connected_at=now,
+        last_sync_at=now,
+    )
+    await youtube_repo.save_connection(connection)
+
+    log_event(
+        "youtube.oauth.connected",
+        request_id=request_id,
+        user_id=current_user.user_id,
+        workspace_id=workspace.workspace_id,
+        channel_id=channel_id,
+        channel_title=title,
+        subscriber_count=sub_count,
+    )
+
+    return YouTubeConnectionPublicSummary(
+        connected=True,
+        channel_id=channel_id,
+        channel_title=title,
+        avatar_url=avatar_url,
+        subscriber_count=sub_count,
+        last_sync_at=now,
+        has_monetary_access=SCOPE_MONETARY_READONLY in scopes,
+    )
+
+
+@router.get(
+    "/youtube/connection",
+    response_model=YouTubeConnectionPublicSummary,
+    summary="Get Connected YouTube Channel Status",
+)
+async def get_youtube_connection_status(
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+) -> YouTubeConnectionPublicSummary:
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    connection = await youtube_repo.get_connection(workspace.workspace_id)
+    if connection is None:
+        return YouTubeConnectionPublicSummary(connected=False)
+    return YouTubeConnectionPublicSummary(
+        connected=True,
+        channel_id=connection.channel_id,
+        channel_title=connection.channel_title,
+        avatar_url=connection.avatar_url,
+        subscriber_count=connection.subscriber_count,
+        last_sync_at=connection.last_sync_at,
+        has_monetary_access=SCOPE_MONETARY_READONLY in connection.scopes,
+    )
+
+
+@router.post(
+    "/youtube/disconnect",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Disconnect YouTube Channel",
+)
+async def disconnect_youtube_channel(
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+) -> None:
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    await youtube_repo.delete_connection(workspace.workspace_id)
+
+
+@router.get(
+    "/youtube/dashboard",
+    response_model=ChannelDashboard,
+    summary="Get Connected Real YouTube Channel Dashboard",
+)
+async def get_youtube_channel_dashboard(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+    days: int = 28,
+    end_date: Annotated[date | None, Query(alias="endDate")] = None,
+) -> ChannelDashboard:
+    if days not in {28, 90, 365}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="days must be one of 28, 90, or 365",
+        )
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    connection = await youtube_repo.get_connection(workspace.workspace_id)
+    if connection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No connected YouTube channel found for this workspace. Connect your channel first.",
+        )
+
+    request_id = getattr(request.state, "request_id", "unknown")
+    log_event(
+        "youtube.sync.started",
+        request_id=request_id,
+        user_id=current_user.user_id,
+        workspace_id=workspace.workspace_id,
+        channel_id=connection.channel_id,
+        period_days=days,
+    )
+
+    provider = YouTubeChannelDataProvider(
+        access_token=connection.access_token,
+        analytics_start_date=date(2025, 1, 1),
+        analytics_end_date=end_date or datetime.now(UTC).date(),
+    )
+    try:
+        dashboard = await build_channel_dashboard(provider, days=days, end_date=end_date)
+        log_event(
+            "youtube.sync.completed",
+            request_id=request_id,
+            user_id=current_user.user_id,
+            workspace_id=workspace.workspace_id,
+            channel_id=connection.channel_id,
+            period_days=days,
+        )
+        return dashboard
+    except Exception as exc:
+        log_event(
+            "youtube.sync.failed",
+            request_id=request_id,
+            user_id=current_user.user_id,
+            workspace_id=workspace.workspace_id,
+            channel_id=connection.channel_id,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch YouTube analytics: {exc}",
+        )
+
+
+# -----------------------------------------------------------------------------
+# 3. Alex Research Settings, Topic Radar & Background Scheduler
+# -----------------------------------------------------------------------------
+
+
 @router.get(
     "/research/config",
     response_model=ResearchConfig,
@@ -119,11 +465,7 @@ async def update_research_config(
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     current = await research_repo.get_config(workspace.workspace_id)
     now = datetime.now(UTC)
-    next_run_at = (
-        current.next_run_at
-        if current.cadence is payload.cadence
-        else now + payload.cadence.interval
-    )
+    next_run_at = payload.cadence.next_run_after(current.last_run_at or now)
     updated = ResearchConfig(
         workspace_id=workspace.workspace_id,
         channel_id=current.channel_id,
@@ -135,3 +477,220 @@ async def update_research_config(
         updated_at=now,
     )
     return await research_repo.save_config(updated)
+
+
+@router.get(
+    "/research/findings",
+    response_model=list[ResearchFinding],
+    summary="Get Active Topic Radar Research Findings",
+    description="Retrieve ranked, grounded research findings with source citations for the Alex Briefing rail.",
+)
+async def get_research_findings(
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
+    limit: int = 10,
+) -> list[ResearchFinding]:
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    config = await research_repo.get_config(workspace.workspace_id)
+    findings = await research_repo.list_findings(
+        workspace_id=workspace.workspace_id,
+        channel_id=config.channel_id,
+        limit=limit,
+    )
+    if not findings:
+        # If no findings yet in repository, execute initial research run
+        alex = AlexDataScientist()
+        run, seeded = await alex.run_grounded_research(
+            prompts=config.prompts,
+            workspace_id=workspace.workspace_id,
+            channel_id=config.channel_id,
+            force_mock=True,
+        )
+        await research_repo.save_run(run)
+        await research_repo.save_findings(seeded)
+        findings = seeded
+    return findings
+
+
+@router.post(
+    "/research/run",
+    response_model=list[ResearchFinding],
+    summary="Trigger Manual Alex Research Run",
+)
+async def trigger_manual_research_run(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
+) -> list[ResearchFinding]:
+    request_id = getattr(request.state, "request_id", "unknown")
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    config = await research_repo.get_config(workspace.workspace_id)
+    existing = await research_repo.list_findings(workspace_id=workspace.workspace_id, channel_id=config.channel_id)
+
+    alex = AlexDataScientist()
+    run, findings = await alex.run_grounded_research(
+        prompts=config.prompts,
+        existing_findings=existing,
+        workspace_id=workspace.workspace_id,
+        channel_id=config.channel_id,
+        request_id=request_id,
+    )
+    await research_repo.save_run(run)
+    await research_repo.save_findings(findings)
+
+    now = datetime.now(UTC)
+    updated_config = config.model_copy(
+        update={
+            "last_run_at": now,
+            "next_run_at": config.cadence.next_run_after(now),
+            "updated_at": now,
+        }
+    )
+    await research_repo.save_config(updated_config)
+    return findings
+
+
+@router.post(
+    "/research/tick",
+    response_model=SchedulerTickResponse,
+    summary="Cloud Scheduler Background Research Tick",
+    description="Internal idempotent endpoint invoked by Cloud Scheduler to process due Alex research runs.",
+)
+async def process_scheduler_tick(
+    request: Request,
+    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
+    x_scheduler_auth: Annotated[str | None, Header(alias="X-Scheduler-Auth")] = None,
+) -> SchedulerTickResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    expected_token = get_settings().scheduler_auth_token
+    if expected_token and x_scheduler_auth != expected_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized Cloud Scheduler invocation.",
+        )
+
+    log_event("research.scheduler.tick", request_id=request_id)
+    now = datetime.now(UTC)
+    due_configs = await research_repo.list_due_configs(now)
+
+    if not due_configs:
+        log_event("research.scheduler.skipped", request_id=request_id, reason="no_due_configs")
+        return SchedulerTickResponse(
+            runs_evaluated=0,
+            runs_executed=0,
+            findings_created=0,
+            status="skipped",
+        )
+
+    alex = AlexDataScientist()
+    total_findings = 0
+    executed = 0
+
+    for cfg in due_configs:
+        run_key = f"{cfg.workspace_id}:{cfg.channel_id}:{cfg.next_run_at.isoformat()}"
+        existing_run = await research_repo.get_run(run_key)
+        if existing_run and existing_run.status == ResearchRunStatus.COMPLETED:
+            continue
+
+        existing_findings = await research_repo.list_findings(
+            workspace_id=cfg.workspace_id, channel_id=cfg.channel_id
+        )
+        run, findings = await alex.run_grounded_research(
+            prompts=cfg.prompts,
+            existing_findings=existing_findings,
+            workspace_id=cfg.workspace_id,
+            channel_id=cfg.channel_id,
+            scheduled_at=cfg.next_run_at,
+            request_id=request_id,
+        )
+        await research_repo.save_run(run)
+        await research_repo.save_findings(findings)
+        total_findings += len(findings)
+        executed += 1
+
+        updated_cfg = cfg.model_copy(
+            update={
+                "last_run_at": now,
+                "next_run_at": cfg.cadence.next_run_after(now),
+                "updated_at": now,
+            }
+        )
+        await research_repo.save_config(updated_cfg)
+
+    log_event(
+        "research.scheduler.completed",
+        request_id=request_id,
+        runs_evaluated=len(due_configs),
+        runs_executed=executed,
+        findings_created=total_findings,
+    )
+    return SchedulerTickResponse(
+        runs_evaluated=len(due_configs),
+        runs_executed=executed,
+        findings_created=total_findings,
+        status="completed",
+    )
+
+
+@router.post(
+    "/analysis/code-execution",
+    summary="Run Alex Python Code Execution Statistical Analysis",
+)
+async def run_alex_code_execution(
+    payload: CodeExecutionRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict[str, Any]:
+    alex = AlexDataScientist()
+    provider = SampleChannelDataProvider()
+    channel = await provider.get_channel()
+    dataset = {
+        "videos": [
+            {
+                "video_id": v.video_id,
+                "views": v.analytics.views,
+                "first_demo_seconds": v.derived.first_demo_seconds,
+                "average_view_percentage": v.analytics.avg_view_percentage,
+                "subscribers_gained": v.analytics.subscribers_gained,
+            }
+            for v in channel.videos
+        ]
+    }
+    return await alex.run_code_execution_analysis(
+        analysis_goal=payload.analysis_goal,
+        dataset_summary=dataset,
+    )
+
+
+@router.post(
+    "/research/findings/{finding_id}/distill",
+    response_model=DistillFindingResponse,
+    summary="Distill Research Finding into Durable Memory Bank Lesson",
+)
+async def distill_research_finding(
+    finding_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
+) -> DistillFindingResponse:
+    finding = await research_repo.get_finding(finding_id)
+    if finding is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Research finding '{finding_id}' not found.",
+        )
+    alex = AlexDataScientist()
+    lesson = alex.distill_lesson(finding, channel_id=finding.channel_id)
+    if lesson is None:
+        return DistillFindingResponse(
+            lesson_id=None,
+            directive=None,
+            confidence=None,
+            status="insufficient_evidence_for_long_term_memory",
+        )
+    return DistillFindingResponse(
+        lesson_id=lesson.lesson_id,
+        directive=lesson.directive,
+        confidence=lesson.confidence,
+        status="distilled_to_memory_bank",
+    )

@@ -103,6 +103,29 @@ class EventType(StrEnum):
     SHORT_RENDER_COMPLETED = "short.render.completed"
     SHORT_RENDER_FAILED = "short.render.failed"
 
+
+    # Alex Data Scientist events
+    ALEX_ANALYSIS_STARTED = "alex.analysis.started"
+    ALEX_ANALYSIS_COMPLETED = "alex.analysis.completed"
+    ALEX_ANALYSIS_FAILED = "alex.analysis.failed"
+    ALEX_RESEARCH_STARTED = "alex.research.started"
+    ALEX_RESEARCH_COMPLETED = "alex.research.completed"
+    ALEX_RESEARCH_FAILED = "alex.research.failed"
+    ALEX_CODE_EXECUTION_COMPLETED = "alex.code_execution.completed"
+    ALEX_INSIGHT_CREATED = "alex.insight.created"
+    ALEX_EXPERIMENT_CREATED = "alex.experiment.created"
+    ALEX_EXPERIMENT_UPDATED = "alex.experiment.updated"
+
+    # YouTube Integration events
+    YOUTUBE_OAUTH_CONNECTED = "youtube.oauth.connected"
+    YOUTUBE_SYNC_STARTED = "youtube.sync.started"
+    YOUTUBE_SYNC_COMPLETED = "youtube.sync.completed"
+    YOUTUBE_SYNC_FAILED = "youtube.sync.failed"
+
+    # Research Scheduler events
+    RESEARCH_SCHEDULER_TICK = "research.scheduler.tick"
+    RESEARCH_SCHEDULER_SKIPPED = "research.scheduler.skipped"
+    RESEARCH_SCHEDULER_COMPLETED = "research.scheduler.completed"
 # Normalized set of all standard event names
 NORMALIZED_EVENT_TYPES: frozenset[str] = frozenset(e.value for e in EventType)
 

@@ -299,6 +299,44 @@ export interface paths {
       };
     };
   };
+  "/api/channels/youtube/auth-url": {
+    post: {
+      responses: {
+        200: components["schemas"]["YouTubeAuthUrlResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/channels/youtube/callback": {
+    post: {
+      responses: {
+        200: components["schemas"]["YouTubeConnectionPublicSummary"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/channels/youtube/connection": {
+    get: {
+      responses: {
+        200: components["schemas"]["YouTubeConnectionPublicSummary"];
+      };
+    };
+  };
+  "/api/channels/youtube/disconnect": {
+    post: {
+      responses: {
+        204: unknown;
+      };
+    };
+  };
+  "/api/channels/youtube/dashboard": {
+    get: {
+      responses: {
+        200: components["schemas"]["ChannelDashboard"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
   "/api/channels/research/config": {
     get: {
       responses: {
@@ -308,6 +346,45 @@ export interface paths {
     put: {
       responses: {
         200: components["schemas"]["ResearchConfig"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/channels/research/findings": {
+    get: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/channels/research/run": {
+    post: {
+      responses: {
+        200: unknown;
+      };
+    };
+  };
+  "/api/channels/research/tick": {
+    post: {
+      responses: {
+        200: components["schemas"]["SchedulerTickResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/channels/analysis/code-execution": {
+    post: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/channels/research/findings/{finding_id}/distill": {
+    post: {
+      responses: {
+        200: components["schemas"]["DistillFindingResponse"];
         422: components["schemas"]["HTTPValidationError"];
       };
     };
@@ -589,6 +666,9 @@ export interface components {
       error_code?: string | null;
       message?: string | null;
     };
+    CodeExecutionRequest: {
+      analysis_goal?: string;
+    };
     CoverageMarker: {
       /** Unique identifier for the coverage marker */
       marker_id: string;
@@ -746,6 +826,12 @@ export interface components {
       reason: string;
     };
     DirectorVerdict: "APPROVE" | "REJECT" | "MODIFY";
+    DistillFindingResponse: {
+      lesson_id: string | null;
+      directive: string | null;
+      confidence: number | null;
+      status: string;
+    };
     EDLDetailResponse: {
       /** Canonical EditDecisionList domain entity */
       edl: components["schemas"]["EditDecisionList"];
@@ -859,6 +945,7 @@ export interface components {
     EditorialRunStatus: "pending" | "analyzing" | "reviewing" | "completed" | "failed";
     EvidenceKind: "FACT" | "INFERENCE" | "RESEARCH" | "RECOMMENDATION";
     ExperimentStatus: "PROPOSED" | "ACTIVE" | "COMPLETED" | "INCONCLUSIVE";
+    FindingLifecycle: "NEW" | "UPDATED" | "SEEN" | "EXPIRED";
     HTTPValidationError: {
       detail?: components["schemas"]["ValidationError"][];
     };
@@ -1113,6 +1200,24 @@ export interface components {
       next_run_at: string;
       updated_at: string;
     };
+    ResearchFinding: {
+      finding_id: string;
+      run_id: string;
+      channel_id: string;
+      category: string;
+      title: string;
+      summary: string;
+      why_it_matters: string;
+      relevance_score: number;
+      freshness_score: number;
+      opportunity_score: number;
+      source_citations: components["schemas"]["SourceCitation"][];
+      topic_fingerprint: string;
+      discovered_at: string;
+      updated_at?: string | null;
+      expires_at?: string | null;
+      lifecycle?: components["schemas"]["FindingLifecycle"];
+    };
     ResearchPrompt: {
       prompt_id: string;
       text: string;
@@ -1133,6 +1238,12 @@ export interface components {
       status: string;
       /** Product-facing agent activity messages emitted during review and correction */
       activities?: components["schemas"]["AgentActivity"][];
+    };
+    SchedulerTickResponse: {
+      runs_evaluated: number;
+      runs_executed: number;
+      findings_created: number;
+      status: string;
     };
     SectionAction: "KEEP" | "TIGHTEN" | "REMOVE" | "COVERAGE";
     ShortCandidate: {
@@ -1182,6 +1293,13 @@ export interface components {
       end_ms: number;
       /** Silence interval duration in milliseconds */
       duration_ms: number;
+    };
+    SourceCitation: {
+      url: string;
+      title: string;
+      domain: string;
+      published_at?: string | null;
+      grounding_metadata?: Record<string, unknown>;
     };
     SourceMedia: {
       /** Unique upload identifier */
@@ -1246,7 +1364,7 @@ export interface components {
       video_count: number;
       median_views: number;
       median_retention: number;
-      median_ctr: number;
+      median_ctr: number | null;
     };
     TrafficSourceMetric: {
       /** Traffic source name (e.g. youtube_search, suggested_videos, browse_features) */
@@ -1360,7 +1478,9 @@ export interface components {
       video_id: string;
       title: string;
       views: number;
-      ctr_percentage: number;
+      ctr_percentage: number | null;
+      discovery_metric: string;
+      discovery_value: number;
       average_retention: number;
       subscribers_gained: number;
       content_pillar: string;
@@ -1433,6 +1553,29 @@ export interface components {
       created_at: string;
       /** Timestamp when the workspace was last updated (UTC) */
       updated_at: string;
+    };
+    YouTubeAuthUrlRequest: {
+      redirect_uri: string;
+      include_monetary?: boolean;
+    };
+    YouTubeAuthUrlResponse: {
+      auth_url: string;
+      state_token: string;
+      scopes: string[];
+    };
+    YouTubeCallbackRequest: {
+      code: string;
+      state: string;
+      redirect_uri: string;
+    };
+    YouTubeConnectionPublicSummary: {
+      connected: boolean;
+      channel_id?: string | null;
+      channel_title?: string | null;
+      avatar_url?: string | null;
+      subscriber_count?: number | null;
+      last_sync_at?: string | null;
+      has_monetary_access?: boolean;
     };
   };
 }

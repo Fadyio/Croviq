@@ -136,10 +136,11 @@ export const ChannelTrendChart: React.FC<{ data: TrendPoint[] }> = ({ data }) =>
 
 export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }) => {
   const [focused, setFocused] = useState<VideoPoint | null>(null);
+  const discoveryLabel = data[0]?.discovery_metric ?? "Thumbnail CTR";
   const bounds = useMemo(
     () => ({
-      minX: Math.min(...data.map((point) => point.ctr_percentage), 0),
-      maxX: Math.max(...data.map((point) => point.ctr_percentage), 1),
+      minX: Math.min(...data.map((point) => point.discovery_value ?? point.ctr_percentage ?? 0), 0),
+      maxX: Math.max(...data.map((point) => point.discovery_value ?? point.ctr_percentage ?? 0), 1),
       minY: Math.min(...data.map((point) => point.average_retention), 0),
       maxY: Math.max(...data.map((point) => point.average_retention), 1),
       maxViews: Math.max(...data.map((point) => point.views), 1),
@@ -171,7 +172,7 @@ export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }
           viewBox={`-34 -8 ${width + 45} ${height + 34}`}
           className="h-full w-full"
           role="img"
-          aria-label="Video click-through rate compared with average retention; bubble size represents views"
+          aria-label="Video discovery compared with average retention; bubble size represents views"
         >
           {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
             <React.Fragment key={fraction}>
@@ -194,12 +195,17 @@ export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }
             </React.Fragment>
           ))}
           {data.map((point) => {
+            const discoveryVal = point.discovery_value ?? point.ctr_percentage ?? 0;
             const radius = 2.5 + Math.sqrt(point.views / bounds.maxViews) * 7;
-            const label = `${point.title}: ${compactNumber.format(point.views)} views, ${point.ctr_percentage.toFixed(1)}% CTR, ${point.average_retention.toFixed(1)}% retention, +${point.subscribers_gained} subscribers`;
+            const metricText =
+              point.ctr_percentage != null
+                ? `${point.ctr_percentage.toFixed(1)}% CTR`
+                : `${point.discovery_metric || "Discovery"}: ${discoveryVal.toFixed(1)}`;
+            const label = `${point.title}: ${compactNumber.format(point.views)} views, ${metricText}, ${point.average_retention.toFixed(1)}% retention, +${point.subscribers_gained} subscribers`;
             return (
               <circle
                 key={point.video_id}
-                cx={xFor(point.ctr_percentage)}
+                cx={xFor(discoveryVal)}
                 cy={yFor(point.average_retention)}
                 r={radius}
                 fill="var(--color-primary)"
@@ -224,7 +230,7 @@ export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }
             fill="var(--color-text-muted)"
             fontSize="10"
           >
-            Thumbnail CTR
+            {discoveryLabel}
           </text>
           <text
             x={-height / 2}
@@ -242,8 +248,11 @@ export const VideoPerformanceChart: React.FC<{ data: VideoPoint[] }> = ({ data }
         <div className="pointer-events-none absolute right-4 top-14 z-10 max-w-64 rounded-md border border-border-strong bg-surface-2 p-3 text-[11px] shadow-xl">
           <p className="font-medium text-text-primary">{focused.title}</p>
           <p className="mt-1 text-text-secondary">
-            {compactNumber.format(focused.views)} views · {focused.ctr_percentage.toFixed(1)}% CTR ·{" "}
-            {focused.average_retention.toFixed(1)}% retention · +{focused.subscribers_gained}{" "}
+            {compactNumber.format(focused.views)} views ·{" "}
+            {focused.ctr_percentage != null
+              ? `${focused.ctr_percentage.toFixed(1)}% CTR`
+              : `${focused.discovery_metric || "Discovery"}: ${(focused.discovery_value ?? 0).toFixed(1)}`}{" "}
+            · {focused.average_retention.toFixed(1)}% retention · +{focused.subscribers_gained}{" "}
             subscribers
           </p>
         </div>

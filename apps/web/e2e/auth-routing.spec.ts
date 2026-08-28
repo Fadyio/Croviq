@@ -427,7 +427,7 @@ test.describe("Email/password authentication", () => {
     await page.reload();
     // User must remain authenticated on /app
     await expect(page).toHaveURL(/\/app$/);
-    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
     await expect(page.getByText(DEMO_EMAIL, { exact: true })).toBeVisible();
   });
 

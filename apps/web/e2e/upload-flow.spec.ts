@@ -289,6 +289,57 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
       body: JSON.stringify(researchConfig),
     });
   });
+  await page.route("**/api/channels/youtube/connection", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        connected: false,
+        channel_id: null,
+        channel_title: null,
+        avatar_url: null,
+        subscriber_count: null,
+        last_sync_at: null,
+        has_monetary_access: false,
+      }),
+    });
+  });
+
+  await page.route("**/api/channels/research/findings*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          finding_id: "fnd_gemini_37_01",
+          run_id: "run_test_01",
+          channel_id: "croviq_syn_ai_eng_01",
+          category: "Foundation Models",
+          title: "Gemini 3.7 Flash Hybrid Reasoning and Multimodal Agent Capabilities",
+          summary:
+            "Google released Gemini 3.7 Flash featuring dynamic thinking budgets and tool grounding.",
+          why_it_matters:
+            "Your tutorial videos on LLM agent architectures historically outperform baseline by 28%.",
+          relevance_score: 0.95,
+          freshness_score: 0.96,
+          opportunity_score: 0.95,
+          source_citations: [
+            {
+              url: "https://ai.google.dev/gemini-api/docs",
+              title: "Google AI Documentation",
+              domain: "ai.google.dev",
+              published_at: "2026-08-28T00:00:00Z",
+              grounding_metadata: {},
+            },
+          ],
+          topic_fingerprint: "fp_gemini_37",
+          discovered_at: "2026-08-28T00:00:00Z",
+          updated_at: "2026-08-28T00:00:00Z",
+          lifecycle: "NEW",
+        },
+      ]),
+    });
+  });
 
   await page.route("**/api/client-events", async (route) => {
     await route.fulfill({
@@ -442,7 +493,7 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByRole("heading", { name: "Video performance map" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Traffic sources" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Alex Briefing" })).toBeVisible();
-    await expect(page.getByText("No grounded research findings yet.")).toBeVisible();
+    await expect(page.getByText("Topic Radar")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Upload raw footage" })).toHaveCount(0);
     await expect(page.getByText("Owner User ID")).toHaveCount(0);
     await expect(page.getByText("Git SHA")).toHaveCount(0);
@@ -474,6 +525,51 @@ test.describe("Product Home and Creator Flow", () => {
     await page.getByRole("button", { name: "research", exact: true }).click();
     await expect(page.getByLabel("Schedule")).toHaveValue("EVERY_6_HOURS");
     await expect(page.getByRole("button", { name: /ai\.google\.dev/ })).toBeVisible();
+  });
+
+  test("allows creator to connect and switch to real YouTube channel", async ({ page }) => {
+    await mockFirebasePasswordSignIn(page);
+    await mockBackendApis(page, []);
+
+    await page.route("**/api/channels/youtube/auth-url", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          auth_url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=test",
+          state_token: "test_state_12345",
+          scopes: [
+            "https://www.googleapis.com/auth/youtube.readonly",
+            "https://www.googleapis.com/auth/yt-analytics.readonly",
+          ],
+        }),
+      });
+    });
+
+    await page.route("**/api/channels/youtube/callback", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          connected: true,
+          channel_id: "UC_alex_real_01",
+          channel_title: "Alex River Engineering",
+          avatar_url: "",
+          subscriber_count: 52300,
+          last_sync_at: "2026-08-28T00:00:00Z",
+          has_monetary_access: false,
+        }),
+      });
+    });
+
+    await login(page, false);
+
+    await page.getByRole("button", { name: "Select channel" }).click();
+    await page.getByRole("button", { name: "Connect YouTube Channel" }).click();
+    await expect(page.getByRole("heading", { name: "Connect YouTube Channel" })).toBeVisible();
+    await page.getByRole("button", { name: "Authorize Channel" }).click();
+
+    await expect(page.getByText("Connected YouTube")).toBeVisible();
   });
 
   test("automatically loads existing persisted productions and links to Editor", async ({
@@ -747,9 +843,9 @@ test.describe("Product Home and Creator Flow", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await mockFirebasePasswordSignIn(page);
     await mockBackendApis(page, []);
-    await login(page);
+    await login(page, false);
 
-    await expect(page.getByRole("main").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
     await page.screenshot({ path: "e2e/screenshots/studio-cockpit-390px.png", fullPage: true });
   });
 
