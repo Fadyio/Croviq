@@ -16,8 +16,10 @@ from croviq_domain.release_review import (
     ReleaseStatus,
     ReleaseVerdict,
     ThumbnailEvaluation,
+    build_release_fingerprint,
     get_creator_facing_release_status,
     get_issue_type_friendly_label,
+    verify_release_fingerprint,
 )
 
 
@@ -164,3 +166,135 @@ def test_release_review_fails_when_pass_has_blocking_issues():
             master_artifact_id="art_master_01",
             packaging_proposal_id="pkg_01",
         )
+def test_release_fingerprint_deterministic_and_verification():
+    fp1 = build_release_fingerprint(
+        production_id="prod_01",
+        edl_id="edl_01",
+        master_artifact_id="art_master_01",
+        master_hash="sha256_master_hash_abc",
+        packaging_proposal_id="pkg_01",
+        package_version=1,
+        release_review_id="rev_01",
+        short_artifact_id="art_short_01",
+        short_hash="sha256_short_hash_def",
+    )
+    fp2 = build_release_fingerprint(
+        production_id="prod_01",
+        edl_id="edl_01",
+        master_artifact_id="art_master_01",
+        master_hash="sha256_master_hash_abc",
+        packaging_proposal_id="pkg_01",
+        package_version=1,
+        release_review_id="rev_01",
+        short_artifact_id="art_short_01",
+        short_hash="sha256_short_hash_def",
+    )
+    assert fp1 == fp2
+    assert len(fp1) == 64  # Valid SHA256 hex string
+
+    is_valid = verify_release_fingerprint(
+        expected_fingerprint=fp1,
+        production_id="prod_01",
+        edl_id="edl_01",
+        master_artifact_id="art_master_01",
+        master_hash="sha256_master_hash_abc",
+        packaging_proposal_id="pkg_01",
+        package_version=1,
+        release_review_id="rev_01",
+        short_artifact_id="art_short_01",
+        short_hash="sha256_short_hash_def",
+    )
+    assert is_valid is True
+
+
+def test_release_fingerprint_detects_tampering_or_mismatch():
+    base_fp = build_release_fingerprint(
+        production_id="prod_01",
+        edl_id="edl_01",
+        master_artifact_id="art_master_01",
+        master_hash="sha256_master_hash_abc",
+        packaging_proposal_id="pkg_01",
+        package_version=1,
+        release_review_id="rev_01",
+    )
+
+    # 1. Tampered EDL
+    assert verify_release_fingerprint(
+        expected_fingerprint=base_fp,
+        production_id="prod_01",
+        edl_id="edl_02_new",
+        master_artifact_id="art_master_01",
+        master_hash="sha256_master_hash_abc",
+        packaging_proposal_id="pkg_01",
+        package_version=1,
+        release_review_id="rev_01",
+    ) is False
+
+    # 2. Tampered Master artifact
+    assert verify_release_fingerprint(
+        expected_fingerprint=base_fp,
+        production_id="prod_01",
+        edl_id="edl_01",
+        master_artifact_id="art_master_02",
+        master_hash="sha256_master_hash_abc",
+        packaging_proposal_id="pkg_01",
+        package_version=1,
+        release_review_id="rev_01",
+    ) is False
+
+    # 3. Tampered master content hash
+    assert verify_release_fingerprint(
+        expected_fingerprint=base_fp,
+        production_id="prod_01",
+        edl_id="edl_01",
+        master_artifact_id="art_master_01",
+        master_hash="sha256_master_hash_DIFFERENT",
+        packaging_proposal_id="pkg_01",
+        package_version=1,
+        release_review_id="rev_01",
+    ) is False
+
+    # 4. Newer packaging version
+    assert verify_release_fingerprint(
+        expected_fingerprint=base_fp,
+        production_id="prod_01",
+        edl_id="edl_01",
+        master_artifact_id="art_master_01",
+        master_hash="sha256_master_hash_abc",
+        packaging_proposal_id="pkg_01",
+        package_version=2,
+        release_review_id="rev_01",
+    ) is False
+
+
+def test_release_review_stores_lineage_and_fingerprint():
+    now = datetime.now(timezone.utc)
+    fp = build_release_fingerprint(
+        production_id="prod_01",
+        edl_id="edl_01",
+        master_artifact_id="art_master_01",
+        master_hash="hash_m1",
+        packaging_proposal_id="pkg_01",
+        package_version=1,
+        release_review_id="rev_01",
+    )
+    review = ReleaseReview(
+        review_id="rev_01",
+        production_id="prod_01",
+        agent="iris",
+        model="gemini-3.7-flash",
+        verdict=ReleaseVerdict.PASS,
+        summary="Quality passed perfectly.",
+        issues=[],
+        approved_for_release=True,
+        confidence=0.98,
+        created_at=now,
+        edl_id="edl_01",
+        master_artifact_id="art_master_01",
+        master_hash="hash_m1",
+        packaging_proposal_id="pkg_01",
+        package_version=1,
+        release_fingerprint=fp,
+    )
+    assert review.release_fingerprint == fp
+    assert review.compute_fingerprint() == fp

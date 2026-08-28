@@ -134,10 +134,11 @@ class FirestorePublishJobRepository(PublishJobRepository):
         doc_ref.set(job.model_dump(mode="json"))
 
         log_firestore_event(
-            "youtube_publish_job_saved",
-            production_id=job.production_id,
-            publish_job_id=job.publish_job_id,
-            status=job.status.value if hasattr(job.status, "value") else str(job.status),
+            event_type="firestore.write",
+            collection="youtube_publish_jobs",
+            operation="set",
+            document_id=job.publish_job_id,
+            status=200,
         )
         return job
 

@@ -624,6 +624,7 @@ class ReleaseReviewDetailResponse(BaseModel):
     has_short: bool = Field(default=False, description="Whether vertical Short video artifact exists")
     has_packaging: bool = Field(default=False, description="Whether Nina packaging proposal exists")
     generated_at: datetime | None = Field(default=None, description="UTC timestamp of review generation")
+    release_fingerprint: str | None = Field(default=None, description="SHA-256 cryptographic release fingerprint locking immutable pipeline inputs")
 
 
 class AutoCorrectQARequest(BaseModel):
@@ -671,6 +672,7 @@ class PublishPreparationResponse(BaseModel):
     short_description: str | None = Field(default=None, description="Short description candidate")
     release_ready: bool = Field(default=False, description="Whether Iris has approved the release (verdict PASS)")
 
+    release_fingerprint: str | None = Field(default=None, description="SHA-256 release fingerprint locking release inputs")
 
 class PublishRequest(BaseModel):
     """Creator-confirmed request payload to trigger YouTube publication."""

@@ -214,6 +214,22 @@ class YouTubePublishJob(BaseModel):
         default=None,
         description="Actual privacy status confirmed by YouTube response",
     )
+    master_hash: str | None = Field(
+        default=None,
+        description="SHA-256 hash of published Master media",
+    )
+    master_duration_ms: int | None = Field(
+        default=None,
+        description="Duration in milliseconds of published Master media",
+    )
+    master_size_bytes: int | None = Field(
+        default=None,
+        description="File size in bytes of published Master media",
+    )
+    release_fingerprint: str | None = Field(
+        default=None,
+        description="Verified release fingerprint at publish time",
+    )
     youtube_video_id: str | None = Field(
         default=None,
         description="Remote YouTube video ID returned after videos.insert",

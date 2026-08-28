@@ -106,6 +106,10 @@ class RenderArtifact(BaseModel):
         ge=0,
         description="Exact file size in bytes verified after render",
     )
+    sha256: str | None = Field(
+        default=None,
+        description="SHA-256 hash of the rendered media file verified after render",
+    )
     duration_ms: int | None = Field(
         default=None,
         ge=0,

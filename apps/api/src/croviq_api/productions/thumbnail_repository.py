@@ -132,10 +132,11 @@ class FirestoreThumbnailRepository(ThumbnailRepository):
         doc_ref.set(artifact.model_dump(mode="json"))
 
         log_firestore_event(
-            "thumbnail_artifact_saved",
-            production_id=artifact.production_id,
-            artifact_id=artifact.artifact_id,
-            size_bytes=artifact.size_bytes,
+            event_type="firestore.write",
+            collection=f"productions/{artifact.production_id}/thumbnail_artifacts",
+            operation="set",
+            document_id=artifact.artifact_id,
+            status=200,
         )
         return artifact
 

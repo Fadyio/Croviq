@@ -7,15 +7,16 @@ from croviq_domain.channel import (
     ContentPillar,
     DerivedChannelFeatures,
     DerivedVideoFeatures,
-    DeviceMetric,
-    GeographyMetric,
-    RetentionPoint,
-    SampleChannelFixture,
-    TitleStyle,
-    TrafficSourceMetric,
-    VideoFormat,
-    VideoPrivateAnalytics,
     VideoPublicMetadata,
+)
+from croviq_domain.edl import (
+    CoverageMarker,
+    CoverageType,
+    CutInstruction,
+    CutSafetyStatus,
+    EditDecisionList,
+    derive_keep_segments,
+    map_source_time_to_edited,
 )
 from croviq_domain.channel_provider import (
     ChannelDataProvider,
@@ -127,8 +128,10 @@ from croviq_domain.release_review import (
     ReleaseStatus,
     ReleaseVerdict,
     ThumbnailEvaluation,
+    build_release_fingerprint,
     get_creator_facing_release_status,
     get_issue_type_friendly_label,
+    verify_release_fingerprint,
 )
 from croviq_domain.publish import (
     PublishJobStatus,
@@ -149,6 +152,7 @@ __all__ = [
     "CoverageType",
     "CutInstruction",
     "derive_keep_segments",
+    "map_source_time_to_edited",
     "DirectorVerdict",
     "EditorDecision",
     "EditorDecisionType",
@@ -238,6 +242,8 @@ __all__ = [
     "ReleaseReview",
     "ReleaseStatus",
     "ReleaseVerdict",
+    "build_release_fingerprint",
+    "verify_release_fingerprint",
     "ThumbnailEvaluation",
     "get_creator_facing_release_status",
     "get_issue_type_friendly_label",

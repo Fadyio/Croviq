@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import hashlib
 import logging
 from pathlib import Path
 import tempfile
@@ -41,6 +42,10 @@ from croviq_api.media.storage import MediaStorage
 from croviq_api.productions.broll_repository import (
     BRollRepository,
     get_broll_repository,
+)
+from croviq_api.productions.edl_repository import (
+    EDLRepository,
+    get_edl_repository,
 )
 from croviq_api.productions.packaging_repository import (
     PackagingRepository,
@@ -84,7 +89,11 @@ from croviq_domain.publish import (
     build_publish_idempotency_key,
     build_thumbnail_artifact_gcs_path,
 )
-from croviq_domain.release_review import ReleaseVerdict
+from croviq_domain.release_review import (
+    ReleaseVerdict,
+    build_release_fingerprint,
+    verify_release_fingerprint,
+)
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
 from croviq_domain.user import User
 from croviq_media.thumbnail import (
@@ -105,6 +114,7 @@ class YouTubePublishService:
         production_repo: ProductionRepository,
         workspace_repo: WorkspaceRepository,
         youtube_repo: YouTubeConnectionRepository,
+        edl_repo: EDLRepository,
         release_review_repo: ReleaseReviewRepository,
         packaging_repo: PackagingRepository,
         render_repo: RenderRepository,
@@ -119,6 +129,7 @@ class YouTubePublishService:
         self.production_repo = production_repo
         self.workspace_repo = workspace_repo
         self.youtube_repo = youtube_repo
+        self.edl_repo = edl_repo
         self.release_review_repo = release_review_repo
         self.packaging_repo = packaging_repo
         self.render_repo = render_repo
@@ -131,7 +142,6 @@ class YouTubePublishService:
         self.thumbnail_extractor = thumbnail_extractor or (
             FFmpegThumbnailExtractor() if get_settings().is_production else FakeThumbnailExtractor()
         )
-
     async def get_publish_preparation(
         self,
         production_id: str,
@@ -159,17 +169,82 @@ class YouTubePublishService:
         )
         can_publish = (not is_sample) and (connection is not None)
 
+        # Load active EDL & verified Master/Short artifacts for this production
+        edl = await self.edl_repo.get_latest_edl(production_id)
+        master_artifact: RenderArtifact | None = None
+        short_artifact: RenderArtifact | None = None
+        if edl:
+            master_artifact = await self.render_repo.get_render_artifact_by_type(
+                production_id, edl.edl_id, ArtifactType.MASTER
+            )
+            if not master_artifact:
+                master_artifact = await self.render_repo.get_render_artifact_by_type(
+                    production_id, edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+                )
+            short_artifact = await self.render_repo.get_render_artifact_by_type(
+                production_id, edl.edl_id, ArtifactType.SHORT
+            )
+        else:
+            renders = await self.render_repo.list_render_artifacts(production_id)
+            master_artifact = next((r for r in renders if r.artifact_type in (ArtifactType.MASTER, ArtifactType.STUDIO_VOICE_MASTER) and r.status == ArtifactStatus.completed), None)
+            if master_artifact:
+                edl = await self.edl_repo.get_edl(production_id, master_artifact.edl_id)
+                short_artifact = await self.render_repo.get_render_artifact_by_type(
+                    production_id, master_artifact.edl_id, ArtifactType.SHORT
+                )
         # Release Review & Gate Check
         release_review = await self.release_review_repo.get_latest_release_review(production_id)
-        release_ready = bool(
-            release_review
-            and release_review.verdict == ReleaseVerdict.PASS
-            and release_review.approved_for_release
-        )
 
         # Packaging
         proposal = await self.packaging_repo.get_latest_packaging_proposal(production_id)
         overrides = await self.packaging_repo.get_package_overrides(production_id)
+
+        # Fingerprint calculation & lineage verification
+        package_ver = proposal.version if (proposal and hasattr(proposal, "version")) else 1
+        effective_edl_id = edl.edl_id if edl else (master_artifact.edl_id if master_artifact else "unknown_edl")
+        calculated_fp = (
+            build_release_fingerprint(
+                production_id=production_id,
+                edl_id=effective_edl_id,
+                master_artifact_id=master_artifact.artifact_id,
+                master_hash=master_artifact.sha256 or "unhashed",
+                packaging_proposal_id=proposal.proposal_id,
+                package_version=package_ver,
+                release_review_id=release_review.review_id if release_review else None,
+                short_artifact_id=short_artifact.artifact_id if short_artifact else None,
+                short_hash=short_artifact.sha256 if short_artifact else None,
+            )
+            if (master_artifact and proposal)
+            else None
+        )
+
+        has_master = bool(master_artifact and master_artifact.status == ArtifactStatus.completed)
+        has_short = bool(short_artifact and short_artifact.status == ArtifactStatus.completed)
+        has_packaging = bool(proposal is not None)
+
+        release_ready = False
+        if release_review and release_review.verdict == ReleaseVerdict.PASS and release_review.approved_for_release:
+            matching_master = bool(master_artifact and release_review.master_artifact_id == master_artifact.artifact_id)
+            matching_pkg = bool(proposal and release_review.packaging_proposal_id == proposal.proposal_id)
+            package_ver_valid = bool(proposal and release_review.package_version >= package_ver)
+            matching_short = bool(
+                (not has_short and not release_review.short_artifact_id)
+                or (has_short and short_artifact and release_review.short_artifact_id == short_artifact.artifact_id)
+            )
+            fingerprint_valid = bool(
+                release_review.release_fingerprint is None or release_review.release_fingerprint == calculated_fp
+            )
+            release_ready = bool(
+                has_master
+                and has_packaging
+                and matching_master
+                and matching_pkg
+                and package_ver_valid
+                and matching_short
+                and fingerprint_valid
+            )
+            if has_short and release_review.checklist and not release_review.checklist.short:
+                release_ready = False
 
         suggested_title = ""
         suggested_description = ""
@@ -195,27 +270,16 @@ class YouTubePublishService:
                 for i, c in enumerate(proposal.thumbnail_concepts)
             ]
 
-        # Master Media Artifact
-        renders = await self.render_repo.list_render_artifacts(production_id)
-        master_artifact = next((r for r in renders if r.artifact_type in (ArtifactType.MASTER, ArtifactType.STUDIO_VOICE_MASTER) and r.status == ArtifactStatus.completed), None)
         master_duration_ms = master_artifact.duration_ms if master_artifact else None
         master_title = suggested_title or "Master Video"
 
-        # Short Artifact
-        short_artifact = next((r for r in renders if r.artifact_type == ArtifactType.SHORT and r.status == ArtifactStatus.completed), None)
-        has_short = bool(short_artifact is not None)
         short_title = proposal.short_package.title if (proposal and proposal.short_package) else "Short"
         short_description = proposal.short_package.description if (proposal and proposal.short_package) else ""
 
-        # Synthetic Media Detection
-        studio_voice_res = await self.studio_voice_repo.get_by_production_id(production_id)
-        broll_items = await self.broll_repo.list_by_production_id(production_id)
+        # Synthetic Media Detection strictly derived from Master artifact type
         contains_synthetic_media_suggested = bool(
-            studio_voice_res is not None
-            or len(broll_items) > 0
-            or (master_artifact and master_artifact.artifact_type == ArtifactType.STUDIO_VOICE_MASTER)
+            master_artifact and master_artifact.artifact_type == ArtifactType.STUDIO_VOICE_MASTER
         )
-
         return {
             "production_id": production_id,
             "channel_title": channel_title,
@@ -276,13 +340,50 @@ class YouTubePublishService:
         release_review = await self.release_review_repo.get_latest_release_review(production_id)
         if not release_review or release_review.verdict != ReleaseVerdict.PASS or not release_review.approved_for_release:
             raise ValueError("Release Gate check failed: Iris approval (PASS) is strictly required before publishing.")
-        # 4. Master Render Artifact Validation
-        renders = await self.render_repo.list_render_artifacts(production_id)
-        master_artifact = next((r for r in renders if r.artifact_type in (ArtifactType.MASTER, ArtifactType.STUDIO_VOICE_MASTER) and r.status == ArtifactStatus.completed), None)
+
+        # 4. Active EDL and Master Render Artifact Validation (Strict Lineage)
+        edl = await self.edl_repo.get_latest_edl(production_id)
+        master_artifact: RenderArtifact | None = None
+        short_art: RenderArtifact | None = None
+        if edl:
+            master_artifact = await self.render_repo.get_render_artifact_by_type(
+                production_id, edl.edl_id, ArtifactType.MASTER
+            )
+            if not master_artifact:
+                master_artifact = await self.render_repo.get_render_artifact_by_type(
+                    production_id, edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+                )
+            short_art = await self.render_repo.get_render_artifact_by_type(
+                production_id, edl.edl_id, ArtifactType.SHORT
+            )
+        else:
+            renders = await self.render_repo.list_render_artifacts(production_id)
+            master_artifact = next((r for r in renders if r.artifact_type in (ArtifactType.MASTER, ArtifactType.STUDIO_VOICE_MASTER) and r.status == ArtifactStatus.completed), None)
+            if master_artifact:
+                edl = await self.edl_repo.get_edl(production_id, master_artifact.edl_id)
+                short_art = await self.render_repo.get_render_artifact_by_type(
+                    production_id, master_artifact.edl_id, ArtifactType.SHORT
+                )
+
         if not master_artifact or master_artifact.status != ArtifactStatus.completed:
             raise ValueError("Approved Master render artifact not found or rendering incomplete.")
 
-        # 5. Packaging Metadata
+        if master_artifact.production_id != production_id:
+            raise ValueError(f"Master artifact '{master_artifact.artifact_id}' belongs to a different production.")
+        if edl and master_artifact.edl_id != edl.edl_id:
+            raise ValueError(f"Master artifact '{master_artifact.artifact_id}' belongs to EDL '{master_artifact.edl_id}', but active release EDL is '{edl.edl_id}'.")
+
+        if release_review.master_artifact_id != master_artifact.artifact_id:
+            raise ValueError(
+                f"Release review '{release_review.review_id}' was conducted on Master '{release_review.master_artifact_id}', "
+                f"which does not match active Master '{master_artifact.artifact_id}'."
+            )
+
+        if edl and release_review.edl_id and release_review.edl_id != edl.edl_id:
+            raise ValueError(
+                f"Release review '{release_review.review_id}' was conducted on EDL '{release_review.edl_id}', "
+                f"which does not match active EDL '{edl.edl_id}'."
+            )
         proposal = await self.packaging_repo.get_latest_packaging_proposal(production_id)
         overrides = await self.packaging_repo.get_package_overrides(production_id)
         if not proposal:
@@ -303,15 +404,51 @@ class YouTubePublishService:
         )
         validate_youtube_metadata(meta_to_validate)
 
-        # 6. Idempotency Check (Requirement 21)
+        # 6. Release Fingerprint & Idempotency Check (Requirements 8, 19, 21)
+        short_art = None
+        if upload_short:
+            short_art = await self.render_repo.get_render_artifact_by_type(
+                production_id, edl.edl_id, ArtifactType.SHORT
+            )
+            if not short_art or short_art.status != ArtifactStatus.completed:
+                raise ValueError(f"Approved Short render artifact for active EDL '{edl.edl_id}' not found.")
+
         package_ver = proposal.version if hasattr(proposal, "version") else 1
+        if proposal.version > release_review.package_version:
+            raise ValueError(
+                f"Packaging proposal (v{proposal.version}) is newer than Iris review (v{release_review.package_version}). "
+                "A fresh Iris review is required before publishing."
+            )
+
+        if release_review.packaging_proposal_id != proposal.proposal_id:
+            raise ValueError(
+                f"Release review packaging proposal '{release_review.packaging_proposal_id}' does not match active proposal '{proposal.proposal_id}'."
+            )
+
+        effective_edl_id = edl.edl_id if edl else (master_artifact.edl_id if master_artifact else "unknown_edl")
+        calculated_fp = build_release_fingerprint(
+            production_id=production_id,
+            edl_id=effective_edl_id,
+            master_artifact_id=master_artifact.artifact_id,
+            master_hash=master_artifact.sha256 or "unhashed",
+            packaging_proposal_id=proposal.proposal_id,
+            package_version=package_ver,
+            release_review_id=release_review.review_id,
+            short_artifact_id=short_art.artifact_id if short_art else None,
+            short_hash=short_art.sha256 if short_art else None,
+        )
+        if release_review.release_fingerprint and release_review.release_fingerprint != calculated_fp:
+            raise ValueError(
+                "Release gate check failed: release fingerprint mismatch against active pipeline artifacts. "
+                "A new Iris QA review is required."
+            )
+
         idempotency_key = build_publish_idempotency_key(
             production_id=production_id,
             release_review_id=release_review.review_id,
             master_artifact_id=master_artifact.artifact_id,
             package_version=package_ver,
         )
-
         existing_job = await self.publish_job_repo.get_by_idempotency_key(idempotency_key)
         if existing_job:
             if existing_job.status in (
@@ -354,6 +491,10 @@ class YouTubePublishService:
             is_synthetic_media=contains_synthetic_media,
             short_requested=upload_short,
             short_artifact_id=short_art.artifact_id if short_art else None,
+            master_hash=master_artifact.sha256,
+            master_duration_ms=master_artifact.duration_ms,
+            master_size_bytes=master_artifact.size_bytes,
+            release_fingerprint=calculated_fp,
             idempotency_key=idempotency_key,
             created_at=now,
             updated_at=now,
@@ -470,9 +611,16 @@ class YouTubePublishService:
             )
 
             file_size = local_master_path.stat().st_size
-            job = job.mark_uploading(total_bytes=file_size)
-            await self.publish_job_repo.save(job)
+            local_sha = hashlib.sha256(local_master_path.read_bytes()).hexdigest()
+            if master_art.sha256 and local_sha != master_art.sha256:
+                logger.error("Master artifact sha256 mismatch before upload: expected %s, got %s", master_art.sha256, local_sha)
+                await self.publish_job_repo.save(job.mark_failed("INTEGRITY_ERROR", f"Master video SHA-256 integrity check failed (expected {master_art.sha256}, got {local_sha})."))
+                return
 
+            job = job.mark_uploading(total_bytes=file_size)
+            if not job.master_hash:
+                job = job.model_copy(update={"master_hash": local_sha, "master_size_bytes": file_size, "master_duration_ms": master_art.duration_ms})
+            await self.publish_job_repo.save(job)
             # 2. Extract Thumbnail Frame if requested or available from Nina's proposal
             thumbnail_artifact: ThumbnailArtifact | None = None
             if thumbnail_frame_ms is not None or thumbnail_frame_ms == 0:

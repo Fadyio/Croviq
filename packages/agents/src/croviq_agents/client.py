@@ -346,11 +346,17 @@ def reconcile_packaging_proposal(
         )
 
     reconciled_chapters: list[PackagingChapter] = []
-    if proposal.chapters:
-        for ch in proposal.chapters:
-            start = max(0, ch.start_ms)
-            end = max(start, ch.end_ms)
-            formatted = ch.formatted_time or format_ms_as_timestamp(start)
+    if chapters:
+        for idx, ch in enumerate(chapters):
+            start = ch.source_start_ms
+            end = ch.source_end_ms
+            if master_duration_ms and (end > master_duration_ms or start > master_duration_ms):
+                # Scale or snap to master duration
+                start = min(max(0, start), master_duration_ms)
+                end = min(max(start, end), master_duration_ms)
+            if idx == 0:
+                start = 0
+            formatted = "0:00" if start == 0 else format_ms_as_timestamp(start)
             reconciled_chapters.append(
                 PackagingChapter(
                     title=ch.title.strip(),
@@ -360,14 +366,22 @@ def reconcile_packaging_proposal(
                     summary=ch.summary,
                 )
             )
-    elif chapters:
-        for ch in chapters:
+    elif proposal.chapters:
+        for idx, ch in enumerate(proposal.chapters):
+            start = max(0, ch.start_ms)
+            end = max(start, ch.end_ms)
+            if master_duration_ms:
+                start = min(start, master_duration_ms)
+                end = min(max(start, end), master_duration_ms)
+            if idx == 0:
+                start = 0
+            formatted = "0:00" if start == 0 else format_ms_as_timestamp(start)
             reconciled_chapters.append(
                 PackagingChapter(
                     title=ch.title.strip(),
-                    start_ms=ch.source_start_ms,
-                    end_ms=ch.source_end_ms,
-                    formatted_time=format_ms_as_timestamp(ch.source_start_ms),
+                    start_ms=start,
+                    end_ms=end,
+                    formatted_time=formatted,
                     summary=ch.summary,
                 )
             )
@@ -380,7 +394,6 @@ def reconcile_packaging_proposal(
             formatted_time="0:00",
             summary=reconciled_chapters[0].summary,
         )
-
     reconciled_thumbnails: list[ThumbnailConcept] = []
     for idx, th in enumerate(proposal.thumbnail_concepts):
         frame_ms = max(0, th.supporting_frame_ms)
@@ -2122,35 +2135,42 @@ class FakeGenAIClient(GenAIClient):
                         confidence=0.86,
                     ),
                 ]
+                master_dur = master_duration_ms or 109304
+                is_edited = master_dur < 113800
+                ch2_start = 23700 if is_edited else 26160
+                ch2_time = "0:23" if is_edited else "0:26"
+                ch3_start = 71000 if is_edited else 75000
+                ch3_time = "1:11" if is_edited else "1:15"
+
                 desc = (
                     "A complete teardown and hardware walkthrough of the Fairphone 6 Plus.\n\n"
                     "In this video, we disassemble the modular chassis, inspect the upgraded motherboard and memory, "
                     "and demonstrate how to swap individual components using standard tools.\n\n"
                     "0:00 Introduction & Overview\n"
-                    "0:26 Chassis & Screws Disassembly\n"
-                    "1:15 Modular Component Replacement\n\n"
+                    f"{ch2_time} Chassis & Screws Disassembly\n"
+                    f"{ch3_time} Modular Component Replacement\n\n"
                     "Subscribe for more in-depth hardware engineering walkthroughs and technical tutorials."
                 )
                 pkg_chapters = [
                     PackagingChapter(
                         title="Introduction & Overview",
                         start_ms=0,
-                        end_ms=26160,
+                        end_ms=ch2_start,
                         formatted_time="0:00",
                         summary="Overview of Fairphone 6 Plus features and upgraded specs",
                     ),
                     PackagingChapter(
                         title="Chassis & Screws Disassembly",
-                        start_ms=26160,
-                        end_ms=75000,
-                        formatted_time="0:26",
+                        start_ms=ch2_start,
+                        end_ms=ch3_start,
+                        formatted_time=ch2_time,
                         summary="Removing screws and sliding off protective casing",
                     ),
                     PackagingChapter(
                         title="Modular Component Replacement",
-                        start_ms=75000,
-                        end_ms=113824,
-                        formatted_time="1:15",
+                        start_ms=ch3_start,
+                        end_ms=master_dur,
+                        formatted_time=ch3_time,
                         summary="Hands-on demonstration of modular parts and reassembly",
                     ),
                 ]

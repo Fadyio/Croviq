@@ -249,6 +249,11 @@ class PackagingProposal(BaseModel):
         max_length=64,
         description="Associated Production entity identifier",
     )
+    version: int = Field(
+        default=1,
+        ge=1,
+        description="Version number of packaging proposal for release locking",
+    )
     agent: str = Field(
         default="nina",
         description="Agent identifier ('nina')",

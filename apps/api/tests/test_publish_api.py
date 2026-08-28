@@ -25,6 +25,11 @@ from croviq_api.productions.dependencies import (
     set_publish_service,
     set_thumbnail_repository,
 )
+from croviq_api.productions.edl_repository import (
+    InMemoryEDLRepository,
+    get_edl_repository,
+)
+from croviq_domain.edl import EditDecisionList
 from croviq_api.productions.packaging_repository import (
     InMemoryPackagingRepository,
     get_packaging_repository,
@@ -332,6 +337,7 @@ def test_setup(
     ws_repo = InMemoryWorkspaceRepository()
     yt_repo = InMemoryYouTubeConnectionRepository()
     pkg_repo = InMemoryPackagingRepository()
+    edl_repo = InMemoryEDLRepository()
     render_repo = InMemoryRenderRepository()
     release_repo = InMemoryReleaseReviewRepository()
     thumb_repo = InMemoryThumbnailRepository()
@@ -341,6 +347,15 @@ def test_setup(
 
     # Seed data
     import asyncio
+    now = datetime.now(timezone.utc)
+    edl_real = EditDecisionList(
+        edl_id="edl_real",
+        production_id=real_production.production_id,
+        source_duration_ms=60000,
+        cuts=[],
+        created_at=now,
+    )
+    asyncio.run(edl_repo.save_edl(edl_real))
     asyncio.run(ws_repo.create_workspace(workspace_a))
     asyncio.run(prod_repo.create_production(sample_production))
     asyncio.run(prod_repo.create_production(real_production))
@@ -349,7 +364,6 @@ def test_setup(
     asyncio.run(pkg_repo.save_packaging_proposal(sample_packaging))
     asyncio.run(pkg_repo.save_packaging_proposal(real_packaging))
     asyncio.run(release_repo.save_release_review(passed_review))
-
     # Setup fake storage files
     storage.simulate_uploaded_object(
         bucket=real_master_artifact.gcs_bucket,
@@ -365,12 +379,12 @@ def test_setup(
     app.dependency_overrides[get_workspace_repository] = lambda: ws_repo
     app.dependency_overrides[get_youtube_connection_repository] = lambda: yt_repo
     app.dependency_overrides[get_packaging_repository] = lambda: pkg_repo
+    app.dependency_overrides[get_edl_repository] = lambda: edl_repo
     app.dependency_overrides[get_render_repository] = lambda: render_repo
     app.dependency_overrides[get_release_review_repository] = lambda: release_repo
     app.dependency_overrides[get_thumbnail_repository] = lambda: thumb_repo
     app.dependency_overrides[get_publish_job_repository] = lambda: job_repo
     app.dependency_overrides[get_media_storage] = lambda: storage
-
     set_youtube_publish_client(fake_yt_client)
 
     client = TestClient(app)
@@ -382,6 +396,7 @@ def test_setup(
         "ws_repo": ws_repo,
         "yt_repo": yt_repo,
         "pkg_repo": pkg_repo,
+        "edl_repo": edl_repo,
         "render_repo": render_repo,
         "release_repo": release_repo,
         "thumb_repo": thumb_repo,
@@ -392,8 +407,9 @@ def test_setup(
         "workspace_a": workspace_a,
         "real_prod": real_production,
         "sample_prod": sample_production,
+        "real_packaging": real_packaging,
+        "sample_packaging": sample_packaging,
     }
-
 
 def test_publish_prep_sample_channel(test_setup: dict) -> None:
     client: TestClient = test_setup["client"]
@@ -702,3 +718,169 @@ def test_publish_idor_security_rejection(test_setup: dict) -> None:
     # Status
     status_resp = intruder_client.get(f"/api/productions/{real_prod.production_id}/publish")
     assert status_resp.status_code == 403
+def test_publish_rejects_master_from_different_edl(test_setup: dict) -> None:
+    client: TestClient = test_setup["client"]
+    real_prod: Production = test_setup["real_prod"]
+    workspace_a = test_setup["workspace_a"]
+    yt_repo = test_setup["yt_repo"]
+    render_repo = test_setup["render_repo"]
+
+    now = datetime.now(timezone.utc)
+    conn = YouTubeConnection(
+        workspace_id=workspace_a.workspace_id,
+        user_id=test_setup["user_a"].user_id,
+        channel_id="UC_connected_creator",
+        channel_title="Real Creator Channel",
+        avatar_url="",
+        subscriber_count=50000,
+        access_token="valid_access_token",
+        refresh_token="valid_refresh_token",
+        scopes=[SCOPE_YOUTUBE_READONLY, SCOPE_YOUTUBE_UPLOAD],
+        connected_at=now,
+        last_sync_at=now,
+    )
+    import asyncio
+    asyncio.run(yt_repo.save_connection(conn))
+
+    # Overwrite master with a different EDL
+    mismatched_master = RenderArtifact(
+        artifact_id="art_wrong_edl_master",
+        production_id=real_prod.production_id,
+        edl_id="edl_old_zero_cut_wrong",
+        artifact_type=ArtifactType.MASTER,
+        status=ArtifactStatus.completed,
+        gcs_bucket="croviq-media-raw",
+        gcs_object="workspaces/ws_test_01/productions/prod_real_01/renders/edl_old_zero_cut_wrong/master.mp4",
+        duration_ms=113824,
+        created_at=now,
+    )
+    asyncio.run(render_repo.save_render_artifact(mismatched_master))
+
+    # Update release review to point to mismatched master
+    release_repo = test_setup["release_repo"]
+    review = ReleaseReview(
+        review_id="rev_mismatched",
+        production_id=real_prod.production_id,
+        verdict=ReleaseVerdict.PASS,
+        summary="Review on wrong master.",
+        issues=[],
+        approved_for_release=True,
+        master_artifact_id="art_wrong_edl_master",
+        packaging_proposal_id="pkg_real_01",
+        edl_id="edl_old_zero_cut_wrong",
+        created_at=now,
+    )
+    asyncio.run(release_repo.save_release_review(review))
+
+    resp = client.post(
+        f"/api/productions/{real_prod.production_id}/publish",
+        json={"requested_privacy": "private"},
+    )
+    assert resp.status_code == 400
+    assert "belongs to EDL" in resp.json()["detail"] or "does not match active Master" in resp.json()["detail"]
+
+
+def test_publish_rejects_stale_iris_review_when_proposal_version_is_newer(test_setup: dict) -> None:
+    client: TestClient = test_setup["client"]
+    real_prod: Production = test_setup["real_prod"]
+    workspace_a = test_setup["workspace_a"]
+    yt_repo = test_setup["yt_repo"]
+    pkg_repo = test_setup["pkg_repo"]
+    release_repo = test_setup["release_repo"]
+
+    now = datetime.now(timezone.utc)
+    conn = YouTubeConnection(
+        workspace_id=workspace_a.workspace_id,
+        user_id=test_setup["user_a"].user_id,
+        channel_id="UC_connected_creator",
+        channel_title="Real Creator Channel",
+        avatar_url="",
+        subscriber_count=50000,
+        access_token="valid_access_token",
+        refresh_token="valid_refresh_token",
+        scopes=[SCOPE_YOUTUBE_READONLY, SCOPE_YOUTUBE_UPLOAD],
+        connected_at=now,
+        last_sync_at=now,
+    )
+    import asyncio
+    asyncio.run(yt_repo.save_connection(conn))
+
+    # Iris review was on version 1
+    review = ReleaseReview(
+        review_id="rev_v1",
+        production_id=real_prod.production_id,
+        verdict=ReleaseVerdict.PASS,
+        summary="Iris passed v1",
+        issues=[],
+        approved_for_release=True,
+        master_artifact_id="art_master_real",
+        packaging_proposal_id="pkg_real_01",
+        package_version=1,
+        created_at=now,
+    )
+    asyncio.run(release_repo.save_release_review(review))
+
+    # Proposal was updated to version 2
+    real_pkg: PackagingProposal = test_setup["real_packaging"]
+    prop_v2 = real_pkg.model_copy(
+        update={
+            "version": 2,
+            "primary_title": "Updated Title V2",
+            "description": "Updated description V2",
+        }
+    )
+    asyncio.run(pkg_repo.save_packaging_proposal(prop_v2))
+    resp = client.post(
+        f"/api/productions/{real_prod.production_id}/publish",
+        json={"requested_privacy": "private"},
+    )
+    assert resp.status_code == 400
+    assert "newer than Iris review" in resp.json()["detail"]
+
+
+def test_publish_rejects_release_fingerprint_mismatch(test_setup: dict) -> None:
+    client: TestClient = test_setup["client"]
+    real_prod: Production = test_setup["real_prod"]
+    workspace_a = test_setup["workspace_a"]
+    yt_repo = test_setup["yt_repo"]
+    release_repo = test_setup["release_repo"]
+
+    now = datetime.now(timezone.utc)
+    conn = YouTubeConnection(
+        workspace_id=workspace_a.workspace_id,
+        user_id=test_setup["user_a"].user_id,
+        channel_id="UC_connected_creator",
+        channel_title="Real Creator Channel",
+        avatar_url="",
+        subscriber_count=50000,
+        access_token="valid_access_token",
+        refresh_token="valid_refresh_token",
+        scopes=[SCOPE_YOUTUBE_READONLY, SCOPE_YOUTUBE_UPLOAD],
+        connected_at=now,
+        last_sync_at=now,
+    )
+    import asyncio
+    asyncio.run(yt_repo.save_connection(conn))
+
+    # Review has a fingerprint locked to a different hash
+    review = ReleaseReview(
+        review_id="rev_fp_test",
+        production_id=real_prod.production_id,
+        verdict=ReleaseVerdict.PASS,
+        summary="Iris passed with locked fingerprint",
+        issues=[],
+        approved_for_release=True,
+        master_artifact_id="art_master_real",
+        packaging_proposal_id="pkg_real_01",
+        package_version=1,
+        release_fingerprint="0000000000000000000000000000000000000000000000000000000000000000",
+        created_at=now,
+    )
+    asyncio.run(release_repo.save_release_review(review))
+
+    resp = client.post(
+        f"/api/productions/{real_prod.production_id}/publish",
+        json={"requested_privacy": "private"},
+    )
+    assert resp.status_code == 400
+    assert "release fingerprint mismatch" in resp.json()["detail"]

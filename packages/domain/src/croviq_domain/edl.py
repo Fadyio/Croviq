@@ -301,3 +301,31 @@ def derive_keep_segments(edl: EditDecisionList) -> list[tuple[int, int]]:
     if current_pos < edl.source_duration_ms:
         segments.append((current_pos, edl.source_duration_ms))
     return segments if segments else [(0, edl.source_duration_ms)]
+
+
+def map_source_time_to_edited(
+    source_ms: int,
+    edl_or_keep_segments: EditDecisionList | list[tuple[int, int]],
+) -> int:
+    """Map a timestamp on the source video timeline into the edited master video timeline.
+
+    Subtracts cut durations preceding source_ms, pinning time inside cuts to the start
+    of the cut / adjacent keep boundary.
+    """
+    if source_ms <= 0:
+        return 0
+
+    if isinstance(edl_or_keep_segments, EditDecisionList):
+        keep_segments = derive_keep_segments(edl_or_keep_segments)
+    else:
+        keep_segments = edl_or_keep_segments
+
+    accumulated_ms = 0
+    for seg_start, seg_end in keep_segments:
+        if source_ms < seg_start:
+            return accumulated_ms
+        if seg_start <= source_ms <= seg_end:
+            return accumulated_ms + (source_ms - seg_start)
+        accumulated_ms += (seg_end - seg_start)
+
+    return accumulated_ms

@@ -103,7 +103,9 @@ from croviq_domain.release_review import (
     ReleaseStatus,
     ReleaseVerdict,
     ThumbnailEvaluation,
+    build_release_fingerprint,
     get_creator_facing_release_status,
+    verify_release_fingerprint,
 )
 from croviq_api.productions.packaging_repository import (
     PackagingRepository,
@@ -2140,22 +2142,37 @@ async def generate_packaging(
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
 
     # 1. Prerequisite: Master video artifact must exist and be completed
-    renders = await render_repo.list_render_artifacts(prod.production_id)
-    master_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
-    if not master_artifact:
+    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
+    master_artifact = None
+    short_artifact = None
+    if latest_edl:
+        master_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
+        )
+        if not master_artifact:
+            master_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+            )
+        short_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
+        )
+    else:
+        renders = await render_repo.list_render_artifacts(prod.production_id)
+        master_artifact = next(
+            (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+            None,
+        )
+        if master_artifact and master_artifact.edl_id:
+            latest_edl = await edl_repo.get_edl(prod.production_id, master_artifact.edl_id)
+            short_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, master_artifact.edl_id, ArtifactType.SHORT
+            )
+
+    if not master_artifact or master_artifact.status != ArtifactStatus.completed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Master video must be rendered and completed before generating packaging.",
         )
-
-    short_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
-
     # 2. Retrieve Nina agent prompt configuration
     nina_prompt_config = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.NINA)
 
@@ -2262,19 +2279,24 @@ async def get_packaging_details(
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> PackagingDetailResponse:
     prod = await _get_owned_production(production_id, current_user, production_repo)
-
-    renders = await render_repo.list_render_artifacts(prod.production_id)
-    master_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
-    short_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
+    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
+    master_artifact = None
+    short_artifact = None
+    if latest_edl:
+        master_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
+        )
+        if not master_artifact:
+            master_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+            )
+        short_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
+        )
 
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     overrides = await packaging_repo.get_package_overrides(prod.production_id)
@@ -2302,10 +2324,10 @@ async def update_packaging_overrides(
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> PackagingDetailResponse:
     prod = await _get_owned_production(production_id, current_user, production_repo)
-
     existing_overrides = await packaging_repo.get_package_overrides(prod.production_id)
     now = datetime.now(timezone.utc)
 
@@ -2329,15 +2351,20 @@ async def update_packaging_overrides(
     )
     await packaging_repo.save_package_overrides(prod.production_id, updated_overrides)
 
-    renders = await render_repo.list_render_artifacts(prod.production_id)
-    master_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
-    short_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
+    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
+    master_artifact = None
+    short_artifact = None
+    if latest_edl:
+        master_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
+        )
+        if not master_artifact:
+            master_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+            )
+        short_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
+        )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
 
     return await _build_packaging_detail_response(
@@ -2407,6 +2434,20 @@ async def _build_release_review_response(
         playback_url=short_url,
     ) if short_artifact else None
 
+    calculated_fingerprint = None
+    if master_artifact and proposal:
+        calculated_fingerprint = build_release_fingerprint(
+            production_id=production_id,
+            edl_id=master_artifact.edl_id,
+            master_artifact_id=master_artifact.artifact_id,
+            master_hash=master_artifact.sha256 or "unhashed",
+            packaging_proposal_id=proposal.proposal_id,
+            package_version=proposal.version if hasattr(proposal, "version") else 1,
+            release_review_id=review.review_id if review else None,
+            short_artifact_id=short_artifact.artifact_id if short_artifact else None,
+            short_hash=short_artifact.sha256 if short_artifact else None,
+        )
+
     has_master = bool(master_artifact and (master_artifact.status == ArtifactStatus.completed or (hasattr(master_artifact.status, "value") and master_artifact.status.value == ArtifactStatus.completed.value)))
     has_short = bool(short_artifact and (short_artifact.status == ArtifactStatus.completed or (hasattr(short_artifact.status, "value") and short_artifact.status.value == ArtifactStatus.completed.value)))
     has_packaging = bool(proposal is not None)
@@ -2423,7 +2464,28 @@ async def _build_release_review_response(
     else:
         is_pass = review.verdict == ReleaseVerdict.PASS
         approved = review.approved_for_release
-        release_ready = bool(has_master and has_packaging and is_pass and approved)
+        matching_master = bool(master_artifact and review.master_artifact_id == master_artifact.artifact_id)
+        matching_pkg = bool(proposal and review.packaging_proposal_id == proposal.proposal_id)
+        package_ver_valid = bool(proposal and review.package_version >= (proposal.version if hasattr(proposal, "version") else 1))
+        matching_short = bool(
+            (not has_short and not review.short_artifact_id)
+            or (has_short and short_artifact and review.short_artifact_id == short_artifact.artifact_id)
+        )
+        fingerprint_valid = bool(
+            review.release_fingerprint is None or review.release_fingerprint == calculated_fingerprint
+        )
+
+        release_ready = bool(
+            has_master
+            and has_packaging
+            and is_pass
+            and approved
+            and matching_master
+            and matching_pkg
+            and package_ver_valid
+            and matching_short
+            and fingerprint_valid
+        )
         if has_short and review.checklist and not review.checklist.short:
             release_ready = False
 
@@ -2449,9 +2511,9 @@ async def _build_release_review_response(
         has_master=has_master,
         has_short=has_short,
         has_packaging=has_packaging,
+        release_fingerprint=review.release_fingerprint if review else calculated_fingerprint,
         generated_at=review.created_at if review else None,
     )
-
 
 @router.post(
     "/productions/{production_id}/release-review",
@@ -2466,6 +2528,7 @@ async def generate_release_review(
     current_user: Annotated[User, Depends(get_current_user)] = None,
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)] = None,
     transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)] = None,
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)] = None,
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)] = None,
     render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)] = None,
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)] = None,
@@ -2481,22 +2544,37 @@ async def generate_release_review(
 
     prod = await _get_owned_production(production_id, current_user, production_repo)
 
-    renders = await render_repo.list_render_artifacts(prod.production_id)
-    master_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
-    if not master_artifact:
+    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
+    master_artifact = None
+    short_artifact = None
+    if latest_edl:
+        master_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
+        )
+        if not master_artifact:
+            master_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+            )
+        short_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
+        )
+    else:
+        renders = await render_repo.list_render_artifacts(prod.production_id)
+        master_artifact = next(
+            (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+            None,
+        )
+        if master_artifact and master_artifact.edl_id:
+            latest_edl = await edl_repo.get_edl(prod.production_id, master_artifact.edl_id)
+            short_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, master_artifact.edl_id, ArtifactType.SHORT
+            )
+
+    if not master_artifact or master_artifact.status != ArtifactStatus.completed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Master video must be rendered and completed before executing Iris QA review.",
         )
-
-    short_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
-
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     if not proposal:
         raise HTTPException(
@@ -2587,9 +2665,30 @@ async def generate_release_review(
         request_id=request_id,
     )
 
-    # Persist review
+    # Calculate release fingerprint and bind immutable inputs
+    package_ver = proposal.version if hasattr(proposal, "version") else 1
+    effective_edl_id = latest_edl.edl_id if latest_edl else master_artifact.edl_id
+    fp = build_release_fingerprint(
+        production_id=prod.production_id,
+        edl_id=effective_edl_id,
+        master_artifact_id=master_artifact.artifact_id,
+        master_hash=master_artifact.sha256 or "unhashed",
+        packaging_proposal_id=proposal.proposal_id,
+        package_version=package_ver,
+        release_review_id=review.review_id,
+        short_artifact_id=short_artifact.artifact_id if short_artifact else None,
+        short_hash=short_artifact.sha256 if short_artifact else None,
+    )
+    review = review.model_copy(
+        update={
+            "edl_id": effective_edl_id,
+            "master_hash": master_artifact.sha256,
+            "short_hash": short_artifact.sha256 if short_artifact else None,
+            "package_version": package_ver,
+            "release_fingerprint": fp,
+        }
+    )
     await release_review_repo.save_release_review(review)
-
     return await _build_release_review_response(
         production_id=prod.production_id,
         review=review,
@@ -2610,6 +2709,7 @@ async def get_release_review_details(
     production_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
     release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)],
@@ -2617,15 +2717,30 @@ async def get_release_review_details(
 ) -> ReleaseReviewDetailResponse:
     prod = await _get_owned_production(production_id, current_user, production_repo)
 
-    renders = await render_repo.list_render_artifacts(prod.production_id)
-    master_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
-    short_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
+    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
+    master_artifact = None
+    short_artifact = None
+    if latest_edl:
+        master_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
+        )
+        if not master_artifact:
+            master_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+            )
+        short_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
+        )
+    else:
+        renders = await render_repo.list_render_artifacts(prod.production_id)
+        master_artifact = next(
+            (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+            None,
+        )
+        if master_artifact and master_artifact.edl_id:
+            short_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, master_artifact.edl_id, ArtifactType.SHORT
+            )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     review = await release_review_repo.get_latest_release_review(prod.production_id)
 
@@ -2655,6 +2770,7 @@ async def auto_correct_qa(
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)] = None,
     render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)] = None,
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)] = None,
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)] = None,
     release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)] = None,
     agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)] = None,
     memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)] = None,
@@ -2664,22 +2780,37 @@ async def auto_correct_qa(
 ) -> AutoCorrectQAResponse:
     request_id = getattr(request.state, "request_id", "unknown")
     prod = await _get_owned_production(production_id, current_user, production_repo)
+    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
+    master_artifact = None
+    short_artifact = None
+    if latest_edl:
+        master_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
+        )
+        if not master_artifact:
+            master_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+            )
+        short_artifact = await render_repo.get_render_artifact_by_type(
+            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
+        )
+    else:
+        renders = await render_repo.list_render_artifacts(prod.production_id)
+        master_artifact = next(
+            (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+            None,
+        )
+        if master_artifact and master_artifact.edl_id:
+            latest_edl = await edl_repo.get_edl(prod.production_id, master_artifact.edl_id)
+            short_artifact = await render_repo.get_render_artifact_by_type(
+                prod.production_id, master_artifact.edl_id, ArtifactType.SHORT
+            )
 
-    renders = await render_repo.list_render_artifacts(prod.production_id)
-    master_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
-    if not master_artifact:
+    if not master_artifact or master_artifact.status != ArtifactStatus.completed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Master video must exist to execute QA auto-correction.",
         )
-
-    short_artifact = next(
-        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
-        None,
-    )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     if not proposal:
         raise HTTPException(
@@ -2738,6 +2869,28 @@ async def auto_correct_qa(
         proposal=corrected_proposal,
         request_id=request_id,
     )
+    package_ver = corrected_proposal.version if hasattr(corrected_proposal, "version") else 1
+    effective_edl_id = latest_edl.edl_id if latest_edl else master_artifact.edl_id
+    fp = build_release_fingerprint(
+        production_id=prod.production_id,
+        edl_id=effective_edl_id,
+        master_artifact_id=master_artifact.artifact_id,
+        master_hash=master_artifact.sha256 or "unhashed",
+        packaging_proposal_id=corrected_proposal.proposal_id,
+        package_version=package_ver,
+        release_review_id=new_review.review_id,
+        short_artifact_id=short_artifact.artifact_id if short_artifact else None,
+        short_hash=short_artifact.sha256 if short_artifact else None,
+    )
+    new_review = new_review.model_copy(
+        update={
+            "edl_id": effective_edl_id,
+            "master_hash": master_artifact.sha256,
+            "short_hash": short_artifact.sha256 if short_artifact else None,
+            "package_version": package_ver,
+            "release_fingerprint": fp,
+        }
+    )
     await release_review_repo.save_release_review(new_review)
 
     release_ready = (
@@ -2745,7 +2898,6 @@ async def auto_correct_qa(
         and new_review.approved_for_release
         and (not short_artifact or (new_review.checklist and new_review.checklist.short))
     )
-
     return AutoCorrectQAResponse(
         production_id=prod.production_id,
         revised_proposal=corrected_proposal,

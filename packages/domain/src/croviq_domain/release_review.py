@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from enum import StrEnum
+import hashlib
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -262,11 +263,17 @@ class ReleaseReview(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp of evaluation generation",
     )
-
+    edl_id: str | None = Field(default=None, description="Evaluated EditDecisionList ID")
     master_artifact_id: str | None = Field(default=None, description="Evaluated Master RenderArtifact ID")
+    master_hash: str | None = Field(default=None, description="SHA-256 hash of evaluated Master RenderArtifact")
     short_artifact_id: str | None = Field(default=None, description="Evaluated Short RenderArtifact ID")
+    short_hash: str | None = Field(default=None, description="SHA-256 hash of evaluated Short RenderArtifact")
     packaging_proposal_id: str | None = Field(default=None, description="Evaluated PackagingProposal ID")
-
+    package_version: int = Field(default=1, ge=1, description="Evaluated PackagingProposal version number")
+    release_fingerprint: str | None = Field(
+        default=None,
+        description="SHA-256 cryptographic release fingerprint binding immutable pipeline inputs",
+    )
     checklist: ReleaseChecklist = Field(
         default_factory=ReleaseChecklist,
         description="Compact component checklist summary",
@@ -304,3 +311,64 @@ class ReleaseReview(BaseModel):
             if self.approved_for_release:
                 raise ValueError("Verdict MANUAL_REVIEW cannot have approved_for_release=True.")
         return self
+
+    def compute_fingerprint(self) -> str:
+        """Compute and return canonical release fingerprint for this review instance."""
+        return build_release_fingerprint(
+            production_id=self.production_id,
+            edl_id=self.edl_id or "unknown_edl",
+            master_artifact_id=self.master_artifact_id or "unknown_master",
+            master_hash=self.master_hash or "unknown_master_hash",
+            packaging_proposal_id=self.packaging_proposal_id or "unknown_pkg",
+            package_version=self.package_version,
+            release_review_id=self.review_id,
+            short_artifact_id=self.short_artifact_id,
+            short_hash=self.short_hash,
+        )
+
+
+def build_release_fingerprint(
+    production_id: str,
+    edl_id: str,
+    master_artifact_id: str,
+    master_hash: str,
+    packaging_proposal_id: str,
+    package_version: int = 1,
+    release_review_id: str | None = None,
+    short_artifact_id: str | None = None,
+    short_hash: str | None = None,
+) -> str:
+    """Build canonical SHA-256 release fingerprint binding immutable release inputs."""
+    payload = (
+        f"{production_id}:{edl_id}:{master_artifact_id}:{master_hash}:"
+        f"{short_artifact_id or 'none'}:{short_hash or 'none'}:"
+        f"{packaging_proposal_id}:{package_version}:{release_review_id or 'pending'}"
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def verify_release_fingerprint(
+    expected_fingerprint: str,
+    production_id: str,
+    edl_id: str,
+    master_artifact_id: str,
+    master_hash: str,
+    packaging_proposal_id: str,
+    package_version: int = 1,
+    release_review_id: str | None = None,
+    short_artifact_id: str | None = None,
+    short_hash: str | None = None,
+) -> bool:
+    """Verify that current production state matches the locked release fingerprint."""
+    computed = build_release_fingerprint(
+        production_id=production_id,
+        edl_id=edl_id,
+        master_artifact_id=master_artifact_id,
+        master_hash=master_hash,
+        packaging_proposal_id=packaging_proposal_id,
+        package_version=package_version,
+        release_review_id=release_review_id,
+        short_artifact_id=short_artifact_id,
+        short_hash=short_hash,
+    )
+    return computed == expected_fingerprint

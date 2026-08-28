@@ -262,7 +262,8 @@ class GoogleMediaStorage(MediaStorage):
         client = self._get_client()
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(object_name)
-        blob.upload_from_filename(str(source_path), content_type=content_type)
+        blob.chunk_size = 2 * 1024 * 1024
+        blob.upload_from_filename(str(source_path), content_type=content_type, timeout=300)
         blob.reload()
         return ObjectMetadata(
             bucket=bucket_name,

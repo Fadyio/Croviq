@@ -11,8 +11,8 @@ from croviq_domain.edl import (
     CutSafetyStatus,
     EditDecisionList,
     derive_keep_segments,
+    map_source_time_to_edited,
 )
-
 
 def test_coverage_marker_valid():
     marker = CoverageMarker(
@@ -359,3 +359,88 @@ def test_derive_keep_segments_skips_rejected_unsafe():
     segments = derive_keep_segments(edl)
     # The unsafe cut is ignored, so segment from 6000 to 25000 is kept uninterrupted
     assert segments == [(0, 5000), (6000, 25000)]
+def test_map_source_time_to_edited_zero_cuts():
+    now = datetime.now(timezone.utc)
+    edl = EditDecisionList(
+        edl_id="edl_zero",
+        production_id="prod_01",
+        source_duration_ms=113824,
+        cuts=[],
+        created_at=now,
+    )
+    assert map_source_time_to_edited(0, edl) == 0
+    assert map_source_time_to_edited(17460, edl) == 17460
+    assert map_source_time_to_edited(60260, edl) == 60260
+    assert map_source_time_to_edited(113824, edl) == 113824
+
+
+def test_map_source_time_to_edited_two_cuts():
+    now = datetime.now(timezone.utc)
+    edl = EditDecisionList(
+        edl_id="edl_2cuts",
+        production_id="prod_01",
+        source_duration_ms=113824,
+        cuts=[
+            CutInstruction(
+                cut_id="c1",
+                decision_id="d1",
+                decision_type=EditorDecisionType.TRIM_PAUSE,
+                transcript_start_word=27,
+                transcript_end_word=28,
+                requested_start_ms=12540,
+                requested_end_ms=15000,
+                safe_start_ms=12540,
+                safe_end_ms=15000,
+                removed_duration_ms=2460,
+                left_anchor="out.",
+                right_anchor="Now",
+                safety_status=CutSafetyStatus.SAFE,
+                safety_reason="Clean pause",
+                confidence=0.95,
+            ),
+            CutInstruction(
+                cut_id="c2",
+                decision_id="d2",
+                decision_type=EditorDecisionType.REMOVE_FALSE_START,
+                transcript_start_word=121,
+                transcript_end_word=125,
+                requested_start_ms=42340,
+                requested_end_ms=44400,
+                safe_start_ms=42340,
+                safe_end_ms=44400,
+                removed_duration_ms=2060,
+                left_anchor="fingers.",
+                right_anchor="And",
+                safety_status=CutSafetyStatus.SAFE,
+                safety_reason="Restart cleanly excised",
+                confidence=0.95,
+            ),
+        ],
+        created_at=now,
+    )
+
+    # 1. Start of video
+    assert map_source_time_to_edited(0, edl) == 0
+
+    # 2. Before cut 1
+    assert map_source_time_to_edited(10000, edl) == 10000
+
+    # 3. Inside cut 1 (snaps to cut start boundary)
+    assert map_source_time_to_edited(13500, edl) == 12540
+
+    # 4. Between cut 1 and cut 2
+    # 17460ms - 2460ms cut 1 = 15000ms
+    assert map_source_time_to_edited(17460, edl) == 15000
+
+    # 5. After cut 2
+    # 60260ms - 4520ms total cuts = 55740ms
+    assert map_source_time_to_edited(60260, edl) == 55740
+
+    # 75520ms - 4520ms = 71000ms
+    assert map_source_time_to_edited(75520, edl) == 71000
+
+    # 97340ms - 4520ms = 92820ms
+    assert map_source_time_to_edited(97340, edl) == 92820
+
+    # Source end: 113824ms - 4520ms = 109304ms
+    assert map_source_time_to_edited(113824, edl) == 109304
