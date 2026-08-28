@@ -30,7 +30,7 @@ import {
 import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
 import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
-import ninaAvatar from "../assets/agents/nina.png";
+import ninaAvatar from "../assets/agents/Nina.png";
 import type { components } from "../api/generated";
 
 type PackagingDetailResponse = components["schemas"]["PackagingDetailResponse"];

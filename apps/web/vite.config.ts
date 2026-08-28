@@ -14,7 +14,7 @@ export default defineConfig(({ command, mode }) => {
     ] as const;
     const isCi = process.env.CI === "true";
     const missing = requiredEnvVars.filter((key) => {
-      const val = process.env[key] || env[key] || (isCi ? "ci-mock-value" : undefined);
+      const val = isCi ? process.env[key] : process.env[key] || env[key];
       return !val || val.trim() === "" || val.startsWith("your-");
     });
     if (missing.length > 0) {

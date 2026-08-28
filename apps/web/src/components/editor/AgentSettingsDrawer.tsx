@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import leoAvatar from "../../assets/agents/leo.webp";
 import mayaAvatar from "../../assets/agents/maya.webp";
-import ninaAvatar from "../../assets/agents/nina.png";
+import ninaAvatar from "../../assets/agents/Nina.png";
 import type { components } from "../../api/generated";
 import { useAuth } from "../../auth/AuthContext";
 

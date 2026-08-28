@@ -56,7 +56,7 @@ jobs:
 
       - name: Build
         env:
-          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || 'ci-mock-api-key' }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || 'AIzaSyTestKeyForFrontendBuildValidation00' }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN || 'croviq-506602.firebaseapp.com' }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID || 'croviq-506602' }}
         run: pnpm -r build
