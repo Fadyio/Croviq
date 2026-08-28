@@ -56,6 +56,24 @@ def normalize_topic_fingerprint(title: str, domain: str = "") -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
+def derive_topic_cluster(title: str, category: str = "") -> str:
+    """Classify a finding into a high-level content pillar/topic cluster for diversity limits."""
+    lower = f"{title} {category}".lower()
+    if any(k in lower for k in ["gemini", "gemma", "vertex", "claude", "gpt", "foundation model", "deepseek"]):
+        return "foundation-models"
+    if any(k in lower for k in ["agent", "langgraph", "crewai", "autogen", "tool-use", "tooling", "orchestration"]):
+        return "agent-workflows"
+    if any(k in lower for k in ["video", "multimodal", "audio", "webcodecs", "media", "vision"]):
+        return "multimodal-systems"
+    if any(k in lower for k in ["eval", "benchmark", "observability", "opentelemetry", "metrics", "tracing"]):
+        return "evaluation-observability"
+    if any(k in lower for k in ["fastapi", "react", "vite", "developer", "sdk", "python"]):
+        return "developer-tooling"
+    if any(k in lower for k in ["cloud", "docker", "kubernetes", "infra", "deploy", "serverless"]):
+        return "cloud-infrastructure"
+    return re.sub(r"[^a-z0-9]+", "-", category.lower()).strip("-") or "general-ai"
+
+
 def extract_domain(url: str) -> str:
     """Extract clean domain name from URL."""
     try:
@@ -65,6 +83,76 @@ def extract_domain(url: str) -> str:
     except Exception:
         return "web"
 
+
+def apply_research_diversity_and_dedup(
+    candidates: list[ResearchFinding],
+    existing_by_fp: dict[str, ResearchFinding],
+    max_per_cluster: int = 2,
+    max_total: int = 6,
+) -> list[ResearchFinding]:
+    """Apply deterministic deduplication, grounding validation, and topic cluster diversity constraints."""
+    seen_fps: set[str] = set()
+    seen_urls: set[str] = set()
+    cluster_counts: dict[str, int] = {}
+    deduped: list[ResearchFinding] = []
+
+    # Sort candidates by opportunity score and freshness score
+    sorted_candidates = sorted(
+        candidates,
+        key=lambda x: (x.opportunity_score, x.freshness_score),
+        reverse=True,
+    )
+
+    existing_by_url = {
+        f.source_citations[0].url: f
+        for f in existing_by_fp.values()
+        if f.source_citations
+    }
+
+    for finding in sorted_candidates:
+        if not finding.source_citations or not finding.source_citations[0].url.startswith("http"):
+            continue
+
+        primary_url = finding.source_citations[0].url
+        cluster = finding.topic_cluster or derive_topic_cluster(finding.title, finding.category)
+
+        # Deduplicate within this batch
+        if primary_url in seen_urls or finding.topic_fingerprint in seen_fps:
+            continue
+
+        # Topic cluster diversity limit
+        if cluster_counts.get(cluster, 0) >= max_per_cluster:
+            continue
+
+        # Check against existing history
+        existing = existing_by_fp.get(finding.topic_fingerprint) or existing_by_url.get(primary_url)
+        if existing:
+            updated_finding = finding.model_copy(
+                update={
+                    "finding_id": existing.finding_id,
+                    "discovered_at": existing.discovered_at,
+                    "updated_at": datetime.now(UTC),
+                    "lifecycle": FindingLifecycle.UPDATED,
+                    "topic_cluster": cluster,
+                }
+            )
+            deduped.append(updated_finding)
+        else:
+            final_finding = finding.model_copy(
+                update={
+                    "topic_cluster": cluster,
+                }
+            )
+            deduped.append(final_finding)
+
+        seen_fps.add(finding.topic_fingerprint)
+        seen_urls.add(primary_url)
+        cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
+
+        if len(deduped) >= max_total:
+            break
+
+    return deduped
 
 class AlexDataScientist:
     """Production Alex Data Scientist agent powered by Gemini 3.7 Flash."""
@@ -209,23 +297,32 @@ class AlexDataScientist:
             for p in enabled_prompts
         )
 
+        existing_titles = [f.title for f in existing_by_fp.values()][:10]
+        history_context = (
+            "Recent channel research findings (DO NOT repeat materially equivalent findings unless there is a major new event or capability):\n"
+            + "\n".join(f"- {t}" for t in existing_titles)
+            if existing_titles
+            else "No recent findings in history."
+        )
+
         user_content = (
             f"Channel Niche & Content Pillars: {', '.join(pillars)}\n\n"
             f"Research Prompts to investigate using Google Search grounding:\n{prompt_texts}\n\n"
-            "Search for recent announcements, releases, documentation, or tutorials from the last 14 days.\n"
-            "Identify 2-4 high-value topic opportunities.\n"
+            f"{history_context}\n\n"
+            "Search across diverse AI engineering areas (e.g. Model Releases, Agent Engineering, Developer Tooling, Cloud Infrastructure, Multimodal Systems, Evaluation & Observability).\n"
+            "Identify 2-4 high-value topic opportunities from distinct categories.\n"
             "For each finding, provide:\n"
             "1. title (clear and informative)\n"
-            "2. category (e.g. Models & Capabilities, Developer Tooling, Architecture Patterns)\n"
-            "3. summary (concise technical breakdown)\n"
-            "4. why_it_matters (why this aligns with the channel's historical performance or audience)\n"
-            "5. relevance_score (0.0 - 1.0)\n"
-            "6. freshness_score (0.0 - 1.0)\n"
-            "7. opportunity_score (0.0 - 1.0)\n"
-            "8. primary_url and primary_title (source grounding)\n\n"
+            "2. category (e.g. Foundation Models, Agent Workflows, Multimodal Systems, Developer Tooling, Evaluation & Observability)\n"
+            "3. topic_cluster (e.g. foundation-models, agent-workflows, multimodal-systems, developer-tooling, evaluation-observability)\n"
+            "4. summary (concise technical breakdown)\n"
+            "5. why_it_matters (why this aligns with the channel's historical performance or audience)\n"
+            "6. relevance_score (0.0 - 1.0)\n"
+            "7. freshness_score (0.0 - 1.0)\n"
+            "8. opportunity_score (0.0 - 1.0)\n"
+            "9. primary_url and primary_title (source grounding)\n\n"
             "Format your output as a valid JSON array of objects with the above keys."
         )
-
         config = types.GenerateContentConfig(
             system_instruction=ALEX_SYSTEM_INSTRUCTION,
             tools=[types.Tool(google_search=types.GoogleSearch())],
@@ -275,11 +372,13 @@ class AlexDataScientist:
         findings: list[ResearchFinding] = []
         now = datetime.now(UTC)
 
+        candidates: list[ResearchFinding] = []
         for idx, item in enumerate(parsed_items):
             title = str(item.get("title", f"Topic Opportunity {idx+1}"))
             summary = str(item.get("summary", ""))
             why_it_matters = str(item.get("why_it_matters", ""))
             category = str(item.get("category", "Emerging Technology"))
+            cluster = str(item.get("topic_cluster", "")) or derive_topic_cluster(title, category)
             rel = float(item.get("relevance_score", 0.85))
             fresh = float(item.get("freshness_score", 0.90))
             opp = float(item.get("opportunity_score", 0.88))
@@ -299,55 +398,30 @@ class AlexDataScientist:
                 )
 
             if not finding_citations:
-                finding_citations.append(
-                    SourceCitation(
-                        url="https://ai.google.dev/gemini-api/docs",
-                        title="Google AI Documentation",
-                        domain="ai.google.dev",
-                        published_at=now,
-                    )
-                )
+                continue
 
             fp = normalize_topic_fingerprint(title, finding_citations[0].domain)
-            existing = existing_by_fp.get(fp)
+            candidate = ResearchFinding(
+                finding_id=f"fnd_{fp[:12]}_{idx}",
+                run_id=run_id,
+                channel_id=channel_id,
+                category=category,
+                title=title,
+                summary=summary,
+                why_it_matters=why_it_matters,
+                relevance_score=rel,
+                freshness_score=fresh,
+                opportunity_score=opp,
+                source_citations=finding_citations,
+                topic_fingerprint=fp,
+                topic_cluster=cluster,
+                discovered_at=now,
+                updated_at=now,
+                lifecycle=FindingLifecycle.NEW,
+            )
+            candidates.append(candidate)
 
-            if existing:
-                finding = ResearchFinding(
-                    finding_id=existing.finding_id,
-                    run_id=run_id,
-                    channel_id=channel_id,
-                    category=category,
-                    title=title,
-                    summary=summary,
-                    why_it_matters=why_it_matters,
-                    relevance_score=rel,
-                    freshness_score=fresh,
-                    opportunity_score=opp,
-                    source_citations=finding_citations,
-                    topic_fingerprint=fp,
-                    discovered_at=existing.discovered_at,
-                    updated_at=now,
-                    lifecycle=FindingLifecycle.UPDATED,
-                )
-            else:
-                finding = ResearchFinding(
-                    finding_id=f"fnd_{fp[:12]}_{idx}",
-                    run_id=run_id,
-                    channel_id=channel_id,
-                    category=category,
-                    title=title,
-                    summary=summary,
-                    why_it_matters=why_it_matters,
-                    relevance_score=rel,
-                    freshness_score=fresh,
-                    opportunity_score=opp,
-                    source_citations=finding_citations,
-                    topic_fingerprint=fp,
-                    discovered_at=now,
-                    updated_at=now,
-                    lifecycle=FindingLifecycle.NEW,
-                )
-            findings.append(finding)
+        findings = apply_research_diversity_and_dedup(candidates, existing_by_fp)
 
         input_toks = 0
         output_toks = 0
@@ -370,11 +444,11 @@ class AlexDataScientist:
             f"site:{p.preferred_sources[0]} {p.text}" if p.preferred_sources else f"AI engineering {p.text}"
             for p in enabled_prompts
         ]
-
         candidate_items = [
             {
                 "title": "Gemini 3.7 Flash Hybrid Reasoning and Multimodal Agent Capabilities",
                 "category": "Foundation Models",
+                "topic_cluster": "foundation-models",
                 "summary": "Google released Gemini 3.7 Flash featuring dynamic thinking budgets, native multimodal reasoning, and Python code execution tool grounding for real-time applications.",
                 "why_it_matters": "Your tutorial videos on LLM agent architectures and Gemini tooling historically outperform channel baseline retention by 28%.",
                 "relevance_score": 0.94,
@@ -399,7 +473,8 @@ class AlexDataScientist:
             },
             {
                 "title": "Production Agent Evaluation Frameworks for Multi-Turn Tooling",
-                "category": "Developer Tooling",
+                "category": "Agent Workflows",
+                "topic_cluster": "agent-workflows",
                 "summary": "Emerging benchmarks for multi-agent tool execution evaluate deterministic schema adherence, latency budgets, and cut-safety in continuous media processing.",
                 "why_it_matters": "Engineering audiences on your channel show 43% higher subscriber conversion on architectural deep-dives with reproducible benchmarks.",
                 "relevance_score": 0.89,
@@ -415,50 +490,70 @@ class AlexDataScientist:
                     ),
                 ],
             },
+            {
+                "title": "WebCodecs Real-Time Streaming Video Pipeline for AI Media Workflows",
+                "category": "Multimodal Systems",
+                "topic_cluster": "multimodal-systems",
+                "summary": "Hardware-accelerated browser video frame decoding with WebCodecs enables real-time LLM video frame sampling and zero-latency timeline previews.",
+                "why_it_matters": "Video creator workflows combining high-speed browser rendering with AI models drive high engagement and retention on deep-dive tutorials.",
+                "relevance_score": 0.88,
+                "freshness_score": 0.92,
+                "opportunity_score": 0.90,
+                "citations": [
+                    SourceCitation(
+                        url="https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API",
+                        title="WebCodecs API Standards — MDN Web Docs",
+                        domain="developer.mozilla.org",
+                        published_at=now,
+                        grounding_metadata={"source": "standards_docs"},
+                    ),
+                ],
+            },
+            {
+                "title": "OpenTelemetry Distributed Tracing Standards for Multi-Agent Loops",
+                "category": "Evaluation & Observability",
+                "topic_cluster": "evaluation-observability",
+                "summary": "Standardized OpenTelemetry semantic conventions for GenAI systems track tool invocation spans, token budgets, and step latency across distributed agents.",
+                "why_it_matters": "Production engineering teams look for structured telemetry patterns; architectural videos covering observability benchmarks attract senior viewers.",
+                "relevance_score": 0.86,
+                "freshness_score": 0.90,
+                "opportunity_score": 0.87,
+                "citations": [
+                    SourceCitation(
+                        url="https://opentelemetry.io/docs/specs/semconv/gen-ai/",
+                        title="Semantic Conventions for Generative AI Systems — OpenTelemetry",
+                        domain="opentelemetry.io",
+                        published_at=now,
+                        grounding_metadata={"source": "standards_docs"},
+                    ),
+                ],
+            },
         ]
 
-        findings: list[ResearchFinding] = []
+        candidates: list[ResearchFinding] = []
         for idx, item in enumerate(candidate_items):
             fp = normalize_topic_fingerprint(item["title"], item["citations"][0].domain)
-            existing = existing_by_fp.get(fp)
+            candidate = ResearchFinding(
+                finding_id=f"fnd_{fp[:12]}_{idx}",
+                run_id=run_id,
+                channel_id=channel_id,
+                category=item["category"],
+                title=item["title"],
+                summary=item["summary"],
+                why_it_matters=item["why_it_matters"],
+                relevance_score=item["relevance_score"],
+                freshness_score=item["freshness_score"],
+                opportunity_score=item["opportunity_score"],
+                source_citations=item["citations"],
+                topic_fingerprint=fp,
+                topic_cluster=item["topic_cluster"],
+                discovered_at=now,
+                updated_at=now,
+                lifecycle=FindingLifecycle.NEW,
+            )
+            candidates.append(candidate)
 
-            if existing:
-                finding = ResearchFinding(
-                    finding_id=existing.finding_id,
-                    run_id=run_id,
-                    channel_id=channel_id,
-                    category=item["category"],
-                    title=item["title"],
-                    summary=item["summary"],
-                    why_it_matters=item["why_it_matters"],
-                    relevance_score=item["relevance_score"],
-                    freshness_score=item["freshness_score"],
-                    opportunity_score=item["opportunity_score"],
-                    source_citations=item["citations"],
-                    topic_fingerprint=fp,
-                    discovered_at=existing.discovered_at,
-                    updated_at=now,
-                    lifecycle=FindingLifecycle.UPDATED,
-                )
-            else:
-                finding = ResearchFinding(
-                    finding_id=f"fnd_{fp[:12]}_{idx}",
-                    run_id=run_id,
-                    channel_id=channel_id,
-                    category=item["category"],
-                    title=item["title"],
-                    summary=item["summary"],
-                    why_it_matters=item["why_it_matters"],
-                    relevance_score=item["relevance_score"],
-                    freshness_score=item["freshness_score"],
-                    opportunity_score=item["opportunity_score"],
-                    source_citations=item["citations"],
-                    topic_fingerprint=fp,
-                    discovered_at=now,
-                    updated_at=now,
-                    lifecycle=FindingLifecycle.NEW,
-                )
-            findings.append(finding)
+        findings = apply_research_diversity_and_dedup(candidates, existing_by_fp)
 
         return findings, search_queries
 

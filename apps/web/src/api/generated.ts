@@ -1271,6 +1271,9 @@ export interface components {
       opportunity_score: number;
       source_citations: components["schemas"]["SourceCitation"][];
       topic_fingerprint: string;
+      topic_cluster?: string | null;
+      primary_entity?: string | null;
+      novelty_score?: number | null;
       discovered_at: string;
       updated_at?: string | null;
       expires_at?: string | null;

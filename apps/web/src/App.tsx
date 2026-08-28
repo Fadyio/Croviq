@@ -14,12 +14,15 @@ const parseProductionEditorRoute = (pathname: string): string | null => {
 
 const normalizePath = (pathname: string): string => {
   if (pathname === "" || pathname === "/") return "/";
-  if (pathname.startsWith("/app")) return "/app";
+  if (pathname === "/app" || pathname === "/app/") return "/app";
+  if (pathname.startsWith("/app/performance")) return "/app/performance";
+  if (pathname.startsWith("/app/experiments")) return "/app/experiments";
   if (pathname.startsWith("/login")) return "/login";
   if (pathname.startsWith("/projects/new")) return "/projects/new";
   if (parseProductionEditorRoute(pathname)) return pathname;
   return pathname;
 };
+
 const AppRoutes: React.FC = () => {
   const { user, isLoading } = useAuth();
   const [currentPath, setCurrentPath] = useState<string>(() =>
@@ -30,7 +33,7 @@ const AppRoutes: React.FC = () => {
     if (window.location.pathname !== to) {
       window.history.pushState(null, "", to);
     }
-    setCurrentPath(to);
+    setCurrentPath(normalizePath(to));
   }, []);
 
   // Listen to browser navigation (back/forward)
@@ -68,10 +71,18 @@ const AppRoutes: React.FC = () => {
     );
   }
 
-  if (currentPath === "/app") {
+  if (
+    currentPath === "/app" ||
+    currentPath === "/app/performance" ||
+    currentPath === "/app/experiments"
+  ) {
     return (
       <AuthGuard onRedirectToLogin={() => navigate("/login")}>
-        <AppPage onNavigateNewProject={() => navigate("/projects/new")} />
+        <AppPage
+          currentRoute={currentPath as "/app" | "/app/performance" | "/app/experiments"}
+          onNavigateRoute={(route) => navigate(route)}
+          onNavigateNewProject={() => navigate("/projects/new")}
+        />
       </AuthGuard>
     );
   }

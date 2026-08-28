@@ -1,0 +1,285 @@
+import React, { useMemo, useState } from "react";
+import type { EChartsOption } from "echarts";
+import type { components } from "../../api/generated";
+import { EChartsWrapper, GRAPHITE_THEME } from "../charts/EChartsWrapper";
+
+type TrendPoint = components["schemas"]["DashboardTrendPoint"];
+type TrendMetric = "views" | "watch_time_hours" | "net_subscribers";
+
+interface ChannelTrendChartProps {
+  data: TrendPoint[];
+  title?: string;
+  compact?: boolean;
+}
+
+const compactNumber = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+const standardNumber = new Intl.NumberFormat("en", {
+  maximumFractionDigits: 1,
+});
+
+const formatAxisValue = (metric: TrendMetric, value: number): string => {
+  if (metric === "views") return compactNumber.format(value);
+  if (metric === "watch_time_hours") return `${compactNumber.format(value)}h`;
+  if (metric === "net_subscribers") return `${value >= 0 ? "+" : ""}${compactNumber.format(value)}`;
+  return compactNumber.format(value);
+};
+
+const formatTooltipValue = (metric: TrendMetric, value: number): string => {
+  if (metric === "views") return `${standardNumber.format(value)} views`;
+  if (metric === "watch_time_hours") return `${standardNumber.format(value)} hours`;
+  if (metric === "net_subscribers")
+    return `${value >= 0 ? "+" : ""}${standardNumber.format(value)} subscribers`;
+  return String(value);
+};
+
+export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
+  data,
+  title = "Channel Performance",
+  compact = false,
+}) => {
+  const [metric, setMetric] = useState<TrendMetric>("views");
+
+  const dates = useMemo(
+    () =>
+      data.map((p) => {
+        try {
+          return new Intl.DateTimeFormat("en", {
+            month: "short",
+            day: "numeric",
+            timeZone: "UTC",
+          }).format(new Date(`${p.date}T00:00:00Z`));
+        } catch {
+          return p.date;
+        }
+      }),
+    [data],
+  );
+
+  const currentValues = useMemo(() => data.map((point) => point[metric] ?? null), [data, metric]);
+
+  const previousValues = useMemo(
+    () =>
+      data.map(
+        (point) => (point[`previous_${metric}` as keyof TrendPoint] as number | undefined) ?? null,
+      ),
+    [data, metric],
+  );
+
+  const chartOption = useMemo<EChartsOption>(() => {
+    return {
+      backgroundColor: GRAPHITE_THEME.background,
+      animation: false,
+      grid: {
+        top: compact ? 20 : 30,
+        right: 16,
+        bottom: 30,
+        left: 54,
+        containLabel: false,
+      },
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: GRAPHITE_THEME.tooltipBg,
+        borderColor: GRAPHITE_THEME.borderStrong,
+        borderWidth: 1,
+        padding: [10, 14],
+        textStyle: {
+          color: GRAPHITE_THEME.textPrimary,
+          fontFamily: GRAPHITE_THEME.fontFamily,
+          fontSize: 12,
+        },
+        axisPointer: {
+          type: "line",
+          lineStyle: {
+            color: GRAPHITE_THEME.borderStrong,
+            width: 1,
+            type: "dashed",
+          },
+        },
+        formatter: (params: unknown) => {
+          const items = params as Array<{
+            seriesName: string;
+            value: number | null;
+            dataIndex: number;
+          }>;
+          if (!items || !items.length) return "";
+          const idx = items[0].dataIndex;
+          const dateStr = dates[idx] || "";
+          const curr = currentValues[idx];
+          const prev = previousValues[idx];
+
+          let deltaHtml = "";
+          if (curr !== null && prev !== null && prev > 0) {
+            const delta = ((curr - prev) / prev) * 100;
+            const isPos = delta >= 0;
+            deltaHtml = `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid ${GRAPHITE_THEME.borderSubtle}; font-weight: 600; font-size: 11px; color: ${isPos ? GRAPHITE_THEME.success : GRAPHITE_THEME.danger};">${isPos ? "+" : ""}${delta.toFixed(1)}% vs previous period</div>`;
+          }
+
+          return `
+            <div style="font-weight: 600; margin-bottom: 6px; color: ${GRAPHITE_THEME.textPrimary}; font-size: 12px;">${dateStr}</div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 3px; font-size: 11px;">
+              <span style="color: ${GRAPHITE_THEME.textSecondary}; display: flex; align-items: center; gap: 6px;">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: ${GRAPHITE_THEME.primary}; display: inline-block;"></span>
+                Current
+              </span>
+              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 600; color: ${GRAPHITE_THEME.textPrimary};">${curr !== null ? formatTooltipValue(metric, curr) : "—"}</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 11px;">
+              <span style="color: ${GRAPHITE_THEME.textMuted}; display: flex; align-items: center; gap: 6px;">
+                <span style="width: 8px; height: 2px; background: ${GRAPHITE_THEME.textMuted}; display: inline-block;"></span>
+                Previous
+              </span>
+              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 500; color: ${GRAPHITE_THEME.textSecondary};">${prev !== null ? formatTooltipValue(metric, prev) : "—"}</span>
+            </div>
+            ${deltaHtml}
+          `;
+        },
+      },
+      xAxis: {
+        type: "category",
+        data: dates,
+        boundaryGap: false,
+        axisLine: {
+          lineStyle: {
+            color: GRAPHITE_THEME.borderSubtle,
+          },
+        },
+        axisTick: { show: false },
+        axisLabel: {
+          color: GRAPHITE_THEME.textMuted,
+          fontSize: 10,
+          fontFamily: GRAPHITE_THEME.fontFamily,
+          interval: "auto",
+        },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: GRAPHITE_THEME.textMuted,
+          fontSize: 10,
+          fontFamily: GRAPHITE_THEME.monoFontFamily,
+          formatter: (val: number) => formatAxisValue(metric, val),
+        },
+        splitLine: {
+          lineStyle: {
+            color: GRAPHITE_THEME.borderSubtle,
+            type: "dashed",
+            opacity: 0.7,
+          },
+        },
+      },
+      series: [
+        {
+          name: "Previous period",
+          type: "line",
+          data: previousValues,
+          showSymbol: false,
+          lineStyle: {
+            color: GRAPHITE_THEME.textMuted,
+            width: 1.5,
+            type: "dashed",
+          },
+          z: 1,
+        },
+        {
+          name: "Current",
+          type: "line",
+          data: currentValues,
+          showSymbol: false,
+          lineStyle: {
+            color: GRAPHITE_THEME.primary,
+            width: 2.2,
+          },
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: "rgba(37, 99, 235, 0.22)" },
+                { offset: 1, color: "rgba(37, 99, 235, 0.00)" },
+              ],
+            },
+          },
+          z: 2,
+        },
+      ],
+    };
+  }, [dates, currentValues, previousValues, metric, compact]);
+
+  return (
+    <section
+      className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm space-y-4"
+      aria-labelledby="trend-title"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 id="trend-title" className="text-sm font-semibold tracking-tight text-text-primary">
+            {title}
+          </h2>
+          <p className="mt-0.5 text-xs text-text-muted">
+            {metric === "views"
+              ? "Daily views compared to previous period baseline"
+              : metric === "watch_time_hours"
+                ? "Total watch time hours compared to previous period"
+                : "Net subscriber gains compared to previous period"}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-3 text-[11px] text-text-muted">
+            <span className="inline-flex items-center gap-1.5 font-medium text-text-secondary">
+              <span className="h-2 w-2 rounded-full bg-primary" />
+              Current
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-medium text-text-muted">
+              <span className="h-0.5 w-3 border-t border-dashed border-text-muted" />
+              Previous period
+            </span>
+          </div>
+
+          <div
+            className="inline-flex rounded-lg border border-border-subtle bg-surface-2 p-0.5"
+            role="tablist"
+            aria-label="Trend metric"
+          >
+            {(
+              [
+                { id: "views", label: "Views" },
+                { id: "watch_time_hours", label: "Watch time" },
+                { id: "net_subscribers", label: "Subscribers" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                role="tab"
+                aria-selected={metric === opt.id}
+                onClick={() => setMetric(opt.id)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                  metric === opt.id
+                    ? "bg-surface-1 text-text-primary shadow-sm"
+                    : "text-text-muted hover:text-text-secondary"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="h-64 sm:h-72 w-full">
+        <EChartsWrapper option={chartOption} ariaLabel={`${title} chart showing ${metric}`} />
+      </div>
+    </section>
+  );
+};

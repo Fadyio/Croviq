@@ -6019,6 +6019,41 @@
             "minLength": 1,
             "title": "Topic Fingerprint"
           },
+          "topic_cluster": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Cluster"
+          },
+          "primary_entity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Entity"
+          },
+          "novelty_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Novelty Score"
+          },
           "discovered_at": {
             "type": "string",
             "format": "date-time",

@@ -209,6 +209,9 @@ class ResearchFinding(BaseModel):
     opportunity_score: float = Field(..., ge=0, le=1)
     source_citations: list[SourceCitation] = Field(..., min_length=1)
     topic_fingerprint: str = Field(..., min_length=1)
+    topic_cluster: str | None = None
+    primary_entity: str | None = None
+    novelty_score: float | None = Field(default=None, ge=0, le=1)
     discovered_at: datetime
     updated_at: datetime | None = None
     expires_at: datetime | None = None

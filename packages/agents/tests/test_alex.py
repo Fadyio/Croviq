@@ -142,3 +142,64 @@ def test_alex_distills_lesson_for_high_opportunity_finding() -> None:
     assert lesson.target_agent == TargetAgent.DIRECTOR
     assert "Dynamic Thinking Budgets" in lesson.directive
     assert lesson.confidence == 0.95
+
+
+@pytest.mark.asyncio
+async def test_alex_research_diversity_limits_topic_clusters() -> None:
+    alex = AlexDataScientist()
+    prompt = ResearchPrompt(
+        prompt_id="ai-all",
+        text="Find emerging topics in AI engineering",
+        enabled=True,
+    )
+    run, findings = await alex.run_grounded_research(
+        prompts=[prompt],
+        force_mock=True,
+    )
+    assert len(findings) >= 3
+    # Check that findings span multiple categories and no single cluster dominates (> 2)
+    clusters: dict[str, int] = {}
+    for f in findings:
+        c = f.topic_cluster or f.category
+        clusters[c] = clusters.get(c, 0) + 1
+    for c, count in clusters.items():
+        assert count <= 2, f"Cluster '{c}' had {count} items, exceeding diversity limit of 2"
+
+
+@pytest.mark.asyncio
+async def test_alex_research_exact_url_deduplication() -> None:
+    alex = AlexDataScientist()
+    prompt = ResearchPrompt(prompt_id="p1", text="Search", enabled=True)
+    now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    existing_finding = ResearchFinding(
+        finding_id="fnd_url_test",
+        run_id="old_run",
+        channel_id="croviq_syn_ai_eng_01",
+        category="Foundation Models",
+        title="Gemini 3.7 Flash Hybrid Reasoning and Multimodal Agent Capabilities",
+        summary="Existing summary",
+        why_it_matters="Existing why it matters",
+        relevance_score=0.9,
+        freshness_score=0.9,
+        opportunity_score=0.9,
+        source_citations=[
+            SourceCitation(
+                url="https://ai.google.dev/gemini-api/docs/models/gemini",
+                title="Google AI",
+                domain="ai.google.dev",
+            )
+        ],
+        topic_fingerprint="fp_url_test",
+        discovered_at=now,
+        lifecycle=FindingLifecycle.NEW,
+    )
+    run, findings = await alex.run_grounded_research(
+        prompts=[prompt],
+        existing_findings=[existing_finding],
+        force_mock=True,
+    )
+    # The finding matching this exact URL/fingerprint should update the existing finding, not create a duplicate
+    matching = [f for f in findings if f.finding_id == "fnd_url_test"]
+    assert len(matching) == 1
+    assert matching[0].discovered_at == now
+    assert matching[0].lifecycle == FindingLifecycle.UPDATED

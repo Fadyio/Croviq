@@ -18,11 +18,54 @@ from croviq_domain.channel_intelligence import (
 SAMPLE_CHANNEL_ID = "croviq_syn_ai_eng_01"
 DEFAULT_RESEARCH_PROMPT = ResearchPrompt(
     prompt_id="emerging-topics",
-    text="Find emerging AI engineering topics relevant to this channel",
+    text="Find emerging AI engineering topics, model release capabilities, and developer architectures",
     enabled=True,
     use_broad_web_search=True,
     preferred_sources=["ai.google.dev", "cloud.google.com"],
 )
+DEFAULT_RESEARCH_PROMPTS = [
+    DEFAULT_RESEARCH_PROMPT,
+    ResearchPrompt(
+        prompt_id="agent-workflows",
+        text="Investigate production agent architectures, multi-turn tool evaluation, and orchestration patterns",
+        enabled=True,
+        use_broad_web_search=True,
+        preferred_sources=["cloud.google.com", "github.com"],
+    ),
+    ResearchPrompt(
+        prompt_id="multimodal-media",
+        text="Explore real-time multimodal video processing, WebCodecs, and low-latency streaming AI tooling",
+        enabled=True,
+        use_broad_web_search=True,
+        preferred_sources=["developer.mozilla.org", "ai.google.dev"],
+    ),
+]
+
+
+def filter_findings_diversity(
+    findings: list[ResearchFinding], max_per_cluster: int = 2, limit: int = 10
+) -> list[ResearchFinding]:
+    """Filter findings to ensure diversity across topic clusters."""
+    cluster_counts: dict[str, int] = {}
+    diverse: list[ResearchFinding] = []
+    sorted_findings = sorted(
+        findings, key=lambda x: (x.opportunity_score, x.discovered_at), reverse=True
+    )
+    remaining: list[ResearchFinding] = []
+    for f in sorted_findings:
+        cluster = f.topic_cluster or "general-ai"
+        if cluster_counts.get(cluster, 0) < max_per_cluster:
+            diverse.append(f)
+            cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
+        else:
+            remaining.append(f)
+        if len(diverse) >= limit:
+            break
+    if len(diverse) < limit:
+        diverse.extend(remaining[: limit - len(diverse)])
+    return diverse[:limit]
+
+
 def default_research_config(workspace_id: str) -> ResearchConfig:
     now = datetime.now(UTC)
     return ResearchConfig(
@@ -30,12 +73,11 @@ def default_research_config(workspace_id: str) -> ResearchConfig:
         channel_id=SAMPLE_CHANNEL_ID,
         enabled=True,
         cadence=ResearchCadence.EVERY_DAY,
-        prompts=[DEFAULT_RESEARCH_PROMPT],
+        prompts=DEFAULT_RESEARCH_PROMPTS,
         last_run_at=None,
         next_run_at=now,
         updated_at=now,
     )
-
 
 class ResearchRepository(ABC):
     @abstractmethod
@@ -131,8 +173,7 @@ class InMemoryResearchRepository(ResearchRepository):
             if (channel_id is None or f.channel_id == channel_id)
             and f.lifecycle != FindingLifecycle.EXPIRED
         ]
-        results.sort(key=lambda x: (x.opportunity_score, x.discovered_at), reverse=True)
-        return results[:limit]
+        return filter_findings_diversity(results, max_per_cluster=2, limit=limit)
 
     async def get_finding(self, finding_id: str) -> ResearchFinding | None:
         return self._findings.get(finding_id)
@@ -243,8 +284,7 @@ class FirestoreResearchRepository(ResearchRepository):
                     results.append(f)
             except Exception:
                 pass
-        results.sort(key=lambda x: x.opportunity_score, reverse=True)
-        return results[:limit]
+        return filter_findings_diversity(results, max_per_cluster=2, limit=limit)
 
     async def get_finding(self, finding_id: str) -> ResearchFinding | None:
         doc = self._findings_collection().document(finding_id).get()

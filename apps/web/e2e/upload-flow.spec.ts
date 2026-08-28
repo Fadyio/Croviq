@@ -525,12 +525,10 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByText("51,317 subscribers · 100 videos")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Here's what changed" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Channel Performance" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Video performance map" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Traffic sources" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
     await expect(page.getByText("Worth watching")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Channel Experiment" })).toBeVisible();
-
+    await expect(page.getByText("Since your last upload")).toBeVisible();
+    await expect(page.getByText("Active Hypothesis & Experiment")).toBeVisible();
     // DOM Regression Guards (Negative Assertions)
     await expect(page.getByText("Alex Briefing")).toHaveCount(0);
     await expect(page.getByText("Evidence-backed channel intelligence")).toHaveCount(0);
@@ -684,21 +682,16 @@ test.describe("Product Home and Creator Flow", () => {
 
     // Verify New Project Shell
     await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
-    await expect(page.getByText("New Project", { exact: true })).toBeVisible();
+    await expect(page.getByRole("banner").getByText("New Project")).toBeVisible();
     await expect(page.getByText("Croviq Sample Channel")).toBeVisible();
 
-    // Verify focused upload card
-    await expect(page.getByRole("heading", { name: "Upload raw footage" })).toBeVisible();
-    await expect(
-      page.getByText(
-        "Drop a video to start a new production. Croviq will analyze, edit, review, and render it automatically.",
-      ),
-    ).toBeVisible();
+    // Verify focused upload card & recent projects
+    await expect(page.getByRole("heading", { name: "New Project" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recent projects" })).toBeVisible();
+    await expect(page.getByText("Start from raw footage")).toBeVisible();
 
-    // Regressions: Recent Productions table and floating pill MUST be absent
-    await expect(page.getByText("Recent Productions")).toHaveCount(0);
-    await expect(page.getByText("No recent productions found")).toHaveCount(0);
-
+    // Regressions: old giant floating pill MUST be absent
+    await expect(page.getByText("Recent Productions", { exact: true })).toHaveCount(0);
     expect(consoleErrors).toEqual([]);
   });
 
@@ -814,24 +807,16 @@ test.describe("Product Home and Creator Flow", () => {
 
     // 1. Header is continuous with /app
     await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
-    await expect(page.getByText("New Project", { exact: true })).toBeVisible();
+    await expect(page.getByRole("banner").getByText("New Project")).toBeVisible();
     await expect(page.getByText("Croviq Sample Channel")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
 
-    // 2. Focused Upload Card
-    await expect(page.getByRole("heading", { name: "Upload raw footage" })).toBeVisible();
-    await expect(
-      page.getByText(
-        "Drop a video to start a new production. Croviq will analyze, edit, review, and render it automatically.",
-      ),
-    ).toBeVisible();
-    await expect(page.getByText("MP4 · MOV · WebM · MKV (up to 1 GB)")).toBeVisible();
+    // 2. Focused Upload Card & Recent Projects
+    await expect(page.getByRole("heading", { name: "New Project" })).toBeVisible();
+    await expect(page.getByText("Start from raw footage")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recent projects" })).toBeVisible();
 
-    // 3. Regressions: Recent Productions table and floating pill MUST be absent
-    await expect(page.getByText("Recent Productions")).toHaveCount(0);
-    await expect(page.getByText("No recent productions found")).toHaveCount(0);
-
-    // Capture New Project Screenshot
+    // 3. Regressions: old floating pill MUST be absent
+    await expect(page.getByText("Recent Productions", { exact: true })).toHaveCount(0);
     await page.screenshot({ path: "e2e/screenshots/new-project-1440x900.png" });
   });
 });
