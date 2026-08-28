@@ -688,7 +688,7 @@ test.describe("Product Home and Creator Flow", () => {
     // Verify focused upload card & recent projects
     await expect(page.getByRole("heading", { name: "New Project" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Recent projects" })).toBeVisible();
-    await expect(page.getByText("Start from raw footage")).toBeVisible();
+    await expect(page.getByText("Start with raw footage").first()).toBeVisible();
 
     // Regressions: old giant floating pill MUST be absent
     await expect(page.getByText("Recent Productions", { exact: true })).toHaveCount(0);
@@ -812,7 +812,7 @@ test.describe("Product Home and Creator Flow", () => {
 
     // 2. Focused Upload Card & Recent Projects
     await expect(page.getByRole("heading", { name: "New Project" })).toBeVisible();
-    await expect(page.getByText("Start from raw footage")).toBeVisible();
+    await expect(page.getByText("Start with raw footage").first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Recent projects" })).toBeVisible();
 
     // 3. Regressions: old floating pill MUST be absent
