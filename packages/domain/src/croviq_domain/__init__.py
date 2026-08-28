@@ -130,6 +130,14 @@ from croviq_domain.release_review import (
     get_creator_facing_release_status,
     get_issue_type_friendly_label,
 )
+from croviq_domain.publish import (
+    PublishJobStatus,
+    ThumbnailArtifact,
+    ThumbnailUploadStatus,
+    YouTubePublishJob,
+    build_publish_idempotency_key,
+    build_thumbnail_artifact_gcs_path,
+)
 
 __all__ = [
     "AgentActivity",
@@ -233,5 +241,11 @@ __all__ = [
     "ThumbnailEvaluation",
     "get_creator_facing_release_status",
     "get_issue_type_friendly_label",
+    "PublishJobStatus",
+    "ThumbnailArtifact",
+    "ThumbnailUploadStatus",
+    "YouTubePublishJob",
+    "build_publish_idempotency_key",
+    "build_thumbnail_artifact_gcs_path",
 ]
 __version__ = "0.1.0"

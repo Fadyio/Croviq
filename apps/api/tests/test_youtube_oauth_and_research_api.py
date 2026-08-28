@@ -95,6 +95,72 @@ def test_generate_youtube_auth_url(client: TestClient) -> None:
     assert len(data["scopes"]) == 2
     assert "https://www.googleapis.com/auth/youtube.readonly" in data["scopes"]
 
+def test_generate_youtube_auth_url_with_upload_scope(client: TestClient) -> None:
+    response = client.post(
+        "/api/channels/youtube/auth-url",
+        json={"redirect_uri": "http://localhost:5173/app", "include_upload": True},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert "https://www.googleapis.com/auth/youtube.upload" in data["scopes"]
+    assert "https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload" in data["auth_url"] or "youtube.upload" in data["auth_url"]
+
+def test_incremental_youtube_oauth_and_refresh_token_preservation(client: TestClient, repos: tuple) -> None:
+    import asyncio
+    _, _, yt_repo = repos
+
+    # 1. Initial connect with read-only scopes
+    auth_resp1 = client.post(
+        "/api/channels/youtube/auth-url",
+        json={"redirect_uri": "http://localhost:5173/app"},
+    )
+    state_token1 = auth_resp1.json()["state_token"]
+
+    callback_resp1 = client.post(
+        "/api/channels/youtube/callback",
+        json={
+            "code": "mock-auth-code-1",
+            "state": state_token1,
+            "redirect_uri": "http://localhost:5173/app",
+        },
+    )
+    assert callback_resp1.status_code == 200
+    summary1 = callback_resp1.json()
+    assert summary1["connected"] is True
+    assert summary1["has_upload_access"] is False
+
+    conn1 = asyncio.run(yt_repo.get_connection("ws_usr_creator_01"))
+    assert conn1 is not None
+    assert conn1.refresh_token == "yt_refresh_mock-auth-code-1"
+
+    # 2. Incremental authorization with upload scope
+    auth_resp2 = client.post(
+        "/api/channels/youtube/auth-url",
+        json={"redirect_uri": "http://localhost:5173/app", "include_upload": True},
+    )
+    state_token2 = auth_resp2.json()["state_token"]
+
+    callback_resp2 = client.post(
+        "/api/channels/youtube/callback",
+        json={
+            "code": "mock-auth-code-2",
+            "state": state_token2,
+            "redirect_uri": "http://localhost:5173/app",
+        },
+    )
+    assert callback_resp2.status_code == 200
+    summary2 = callback_resp2.json()
+    assert summary2["connected"] is True
+    assert summary2["has_upload_access"] is True
+
+    # Verify scopes merged and refresh token preserved
+    conn2 = asyncio.run(yt_repo.get_connection("ws_usr_creator_01"))
+    assert conn2 is not None
+    assert "https://www.googleapis.com/auth/youtube.upload" in conn2.scopes
+    assert "https://www.googleapis.com/auth/youtube.readonly" in conn2.scopes
+    # Refresh token preserved
+    assert conn2.refresh_token is not None
+    assert "yt_refresh_" in conn2.refresh_token
 
 def test_handle_youtube_callback_stores_connection(client: TestClient, repos: tuple) -> None:
     # 1. Generate auth URL to produce valid CSRF state

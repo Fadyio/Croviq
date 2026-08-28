@@ -31,6 +31,14 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 5173,
       host: true,
+      watch: {
+        ignored: [
+          "**/e2e/**",
+          "**/test-results/**",
+          "**/playwright-report/**",
+          "**/screenshots/**",
+        ],
+      },
       proxy: {
         "/api": {
           target: apiTarget,

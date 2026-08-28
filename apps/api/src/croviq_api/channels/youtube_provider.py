@@ -27,6 +27,12 @@ from croviq_domain.channel_provider import ChannelDataProvider
 
 YOUTUBE_DATA_BASE = "https://www.googleapis.com/youtube/v3"
 YOUTUBE_ANALYTICS_REPORTS = "https://youtubeanalytics.googleapis.com/v2/reports"
+YOUTUBE_OAUTH_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+YOUTUBE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
+SCOPE_YOUTUBE_READONLY = "https://www.googleapis.com/auth/youtube.readonly"
+SCOPE_ANALYTICS_READONLY = "https://www.googleapis.com/auth/yt-analytics.readonly"
+SCOPE_MONETARY_READONLY = "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
+SCOPE_YOUTUBE_UPLOAD = "https://www.googleapis.com/auth/youtube.upload"
 _DURATION_PATTERN = re.compile(
     r"^P(?:(?P<days>\d+)D)?(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?)?$"
 )

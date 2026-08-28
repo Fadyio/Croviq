@@ -90,7 +90,8 @@ class YouTubeConnectionPublicSummary(BaseModel):
     subscriber_count: int | None = None
     last_sync_at: datetime | None = None
     has_monetary_access: bool = False
-
+    has_upload_access: bool = False
+    scopes: list[str] = Field(default_factory=list)
 
 class YouTubeOAuthState(BaseModel):
     """State payload for CSRF protection during OAuth 2.0 authorization code flow."""
@@ -102,6 +103,7 @@ class YouTubeOAuthState(BaseModel):
     user_id: str = Field(..., min_length=1)
     redirect_uri: str = Field(..., min_length=1)
     include_monetary: bool = False
+    include_upload: bool = False
     created_at: datetime
 
     @field_validator("created_at")
@@ -134,6 +136,7 @@ class YouTubeConnectionRepository(ABC):
         user_id: str,
         redirect_uri: str,
         include_monetary: bool = False,
+        include_upload: bool = False,
     ) -> str:
         pass
 
@@ -242,6 +245,7 @@ class InMemoryYouTubeConnectionRepository(YouTubeConnectionRepository):
         user_id: str,
         redirect_uri: str,
         include_monetary: bool = False,
+        include_upload: bool = False,
     ) -> str:
         token = secrets.token_urlsafe(32)
         self._states[token] = YouTubeOAuthState(
@@ -250,6 +254,7 @@ class InMemoryYouTubeConnectionRepository(YouTubeConnectionRepository):
             user_id=user_id,
             redirect_uri=redirect_uri,
             include_monetary=include_monetary,
+            include_upload=include_upload,
             created_at=datetime.now(UTC),
         )
         return token
@@ -332,6 +337,7 @@ class FirestoreYouTubeConnectionRepository(YouTubeConnectionRepository):
         user_id: str,
         redirect_uri: str,
         include_monetary: bool = False,
+        include_upload: bool = False,
     ) -> str:
         token = secrets.token_urlsafe(32)
         state = YouTubeOAuthState(
@@ -340,6 +346,7 @@ class FirestoreYouTubeConnectionRepository(YouTubeConnectionRepository):
             user_id=user_id,
             redirect_uri=redirect_uri,
             include_monetary=include_monetary,
+            include_upload=include_upload,
             created_at=datetime.now(UTC),
         )
         self._states_collection().document(token).set(state.model_dump(mode="json"))

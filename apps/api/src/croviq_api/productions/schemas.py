@@ -1,7 +1,7 @@
 """API schemas for Production and Media Upload operations."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from croviq_domain.editorial import (
     AgentActivity,
@@ -35,6 +35,12 @@ from croviq_domain.release_review import (
     ReleaseStatus,
     ReleaseVerdict,
     ThumbnailEvaluation,
+)
+from croviq_domain.publish import (
+    PublishJobStatus,
+    ThumbnailArtifact,
+    ThumbnailUploadStatus,
+    YouTubePublishJob,
 )
 class CreateUploadRequest(BaseModel):
     """Request payload to initiate a direct GCS media upload."""
@@ -638,3 +644,90 @@ class AutoCorrectQAResponse(BaseModel):
     new_review: ReleaseReview = Field(..., description="Fresh Iris QA review after correction")
     release_ready: bool = Field(default=False, description="Whether output is now ready to publish")
     message: str = Field(..., description="Summary of applied corrections")
+
+
+class PublishPreparationResponse(BaseModel):
+    """Pre-publish parameters, channel verification, and suggested metadata for confirmation drawer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    production_id: str = Field(..., description="Production identifier")
+    channel_title: str = Field(..., description="Connected YouTube channel title or 'Croviq Sample Channel'")
+    channel_avatar_url: str = Field(default="", description="Channel avatar icon URL")
+    is_sample_channel: bool = Field(default=False, description="True if using synthetic sample channel that cannot publish")
+    can_publish: bool = Field(default=False, description="True if a real YouTube channel is connected")
+    has_upload_access: bool = Field(default=False, description="True if youtube.upload OAuth scope is granted")
+    master_duration_ms: int | None = Field(default=None, description="Master video duration in milliseconds")
+    master_title: str = Field(..., description="Master video title")
+    suggested_title: str = Field(..., description="Active Nina title candidate or creator override")
+    suggested_description: str = Field(..., description="Active description with embedded chapters")
+    suggested_chapters: list[PackagingChapter] = Field(default_factory=list, description="Verified YouTube chapters")
+    suggested_tags: list[str] = Field(default_factory=list, description="Keywords for YouTube tags")
+    suggested_category_id: str = Field(default="28", description="Default category ID (28 = Science & Technology)")
+    suggested_synthetic_media: bool = Field(default=False, description="Suggested synthetic media disclosure based on Studio Voice/BRoll")
+    verified_thumbnail_frames: list[dict[str, Any]] = Field(default_factory=list, description="Nina verified thumbnail frame candidates")
+    has_short: bool = Field(default=False, description="Whether an approved vertical Short artifact exists")
+    short_title: str | None = Field(default=None, description="Short title candidate")
+    short_description: str | None = Field(default=None, description="Short description candidate")
+    release_ready: bool = Field(default=False, description="Whether Iris has approved the release (verdict PASS)")
+
+
+class PublishRequest(BaseModel):
+    """Creator-confirmed request payload to trigger YouTube publication."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    requested_privacy: Literal["private", "unlisted", "public"] = Field(
+        default="private",
+        description="Target privacy status (default private)",
+    )
+    made_for_kids: bool = Field(
+        default=False,
+        description="Creator-confirmed declaration: is content made for kids? (COPPA)",
+    )
+    contains_synthetic_media: bool = Field(
+        default=False,
+        description="Creator-confirmed declaration: does content contain altered or synthetic media?",
+    )
+    selected_title: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Optional custom title override (validated <= 100 characters)",
+    )
+    selected_description: str | None = Field(
+        default=None,
+        max_length=5000,
+        description="Optional custom description override (validated <= 5000 bytes)",
+    )
+    selected_tags: list[str] | None = Field(
+        default=None,
+        description="Optional tags list override",
+    )
+    category_id: str = Field(
+        default="28",
+        description="YouTube category ID (default 28)",
+    )
+    thumbnail_frame_ms: int | None = Field(
+        default=None,
+        ge=0,
+        description="Selected timeline millisecond offset for extracting thumbnail still image",
+    )
+    upload_short: bool = Field(
+        default=False,
+        description="Whether to also upload the approved vertical Short as a separate video",
+    )
+
+
+class PublishJobDetailResponse(BaseModel):
+    """Active publish job state, remote video IDs, upload progress, and audit restrictions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job: YouTubePublishJob | None = Field(default=None, description="Current or latest YouTube publish job")
+    can_publish: bool = Field(default=False, description="True if real YouTube channel is connected")
+    has_upload_access: bool = Field(default=False, description="True if youtube.upload OAuth scope is granted")
+    status_message: str = Field(default="", description="Creator-facing status or restriction message")
+    is_sample_channel: bool = Field(default=False, description="True if synthetic sample channel is active")

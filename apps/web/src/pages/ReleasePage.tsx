@@ -36,12 +36,18 @@ import {
   VolumeX,
   Wand2,
   XCircle,
+  UploadCloud,
+  Lock,
 } from "lucide-react";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
 import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
 import ninaAvatar from "../assets/agents/Nina.png";
 import irisAvatar from "../assets/agents/Iris.png";
+import {
+  PublishConfirmationModal,
+  YouTubeIcon,
+} from "../components/release/PublishConfirmationModal";
 import type { components } from "../api/generated";
 
 type PackagingDetailResponse = components["schemas"]["PackagingDetailResponse"];
@@ -55,6 +61,9 @@ type ReleaseChecklist = components["schemas"]["ReleaseChecklist"];
 type ClaimVerification = components["schemas"]["ClaimVerification"];
 type ThumbnailEvaluation = components["schemas"]["ThumbnailEvaluation"];
 type AutoCorrectQAResponse = components["schemas"]["AutoCorrectQAResponse"];
+type PublishPreparationResponse = components["schemas"]["PublishPreparationResponse"];
+type PublishJobDetailResponse = components["schemas"]["PublishJobDetailResponse"];
+type YouTubePublishJob = components["schemas"]["YouTubePublishJob"];
 
 interface ReleasePageProps {
   productionId: string;
@@ -204,6 +213,13 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
 
   // Agent Settings Drawers state
   const [drawerAgent, setDrawerAgent] = useState<"nina" | "iris" | null>(null);
+  // YouTube Publishing State
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState<boolean>(false);
+  const [prepData, setPrepData] = useState<PublishPreparationResponse | null>(null);
+  const [isLoadingPrep, setIsLoadingPrep] = useState<boolean>(false);
+  const [publishJobData, setPublishJobData] = useState<PublishJobDetailResponse | null>(null);
+  const [isPublishing, setIsPublishing] = useState<boolean>(false);
+  const [publishSuccessMsg, setPublishSuccessMsg] = useState<string | null>(null);
 
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -258,15 +274,134 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       console.error("Error loading QA review:", err);
     }
   }, [getAuthHeaders, productionId]);
+  // Load current YouTube publishing job status
+  const loadPublishStatus = useCallback(async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/productions/${productionId}/publish`, { headers });
+      if (res.ok) {
+        const data: PublishJobDetailResponse = await res.json();
+        setPublishJobData(data);
+      }
+    } catch (err: unknown) {
+      console.error("Error loading publish status:", err);
+    }
+  }, [getAuthHeaders, productionId]);
+
+  // Load publish preparation metadata
+  const loadPublishPrep = useCallback(async () => {
+    setIsLoadingPrep(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/productions/${productionId}/publish/prep`, { headers });
+      if (res.ok) {
+        const data: PublishPreparationResponse = await res.json();
+        setPrepData(data);
+      }
+    } catch (err: unknown) {
+      console.error("Error loading publish prep metadata:", err);
+    } finally {
+      setIsLoadingPrep(false);
+    }
+  }, [getAuthHeaders, productionId]);
 
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
-      await Promise.all([loadPackaging(), loadQA()]);
+      await Promise.all([loadPackaging(), loadQA(), loadPublishStatus()]);
       setIsLoading(false);
     };
     init();
-  }, [loadPackaging, loadQA]);
+  }, [loadPackaging, loadQA, loadPublishStatus]);
+
+  // Polling active publish job
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    const isJobActive =
+      publishJobData?.job?.status === "pending" ||
+      publishJobData?.job?.status === "uploading" ||
+      publishJobData?.job?.status === "processing";
+
+    if (isJobActive) {
+      interval = setInterval(() => {
+        loadPublishStatus();
+      }, 2000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [publishJobData?.job?.status, loadPublishStatus]);
+
+  const handleOpenPublishModal = () => {
+    setIsPublishModalOpen(true);
+    loadPublishPrep();
+  };
+
+  const handleGrantUploadAccess = async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const currentUrl = window.location.href;
+      const res = await fetch("/api/channels/youtube/auth-url", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          redirect_uri: currentUrl,
+          include_upload: true,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        window.location.href = data.auth_url;
+      } else {
+        setErrorMessage("Failed to generate YouTube authorization URL.");
+      }
+    } catch (err: unknown) {
+      console.error("Error initiating YouTube incremental OAuth:", err);
+      setErrorMessage("Error initiating YouTube authorization.");
+    }
+  };
+
+  const handleConnectYouTube = () => {
+    handleGrantUploadAccess();
+  };
+
+  const handleConfirmPublish = async (params: {
+    requested_privacy: "private" | "unlisted" | "public";
+    made_for_kids: boolean;
+    contains_synthetic_media: boolean;
+    selected_title: string;
+    selected_description: string;
+    selected_tags: string[];
+    category_id: string;
+    thumbnail_frame_ms?: number;
+    upload_short: boolean;
+  }) => {
+    setIsPublishing(true);
+    setErrorMessage(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/productions/${productionId}/publish`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(params),
+      });
+      if (res.ok) {
+        const data: PublishJobDetailResponse = await res.json();
+        setPublishJobData(data);
+        setIsPublishModalOpen(false);
+        setPublishSuccessMsg("Publishing initiated successfully.");
+        setTimeout(() => setPublishSuccessMsg(null), 4000);
+      } else {
+        const errData = await res.json().catch(() => ({ detail: "Publish request failed" }));
+        setErrorMessage(errData.detail || "Failed to publish to YouTube");
+      }
+    } catch (err: unknown) {
+      console.error("Error submitting publish job:", err);
+      setErrorMessage(err instanceof Error ? err.message : "Error submitting publish job");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
 
   // Run or re-run Iris QA Review
   const handleRunQA = async (forceRegenerate: boolean = false) => {
@@ -1284,9 +1419,11 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
           {/* Release Gate Summary / Ready to Publish Card */}
           <div
             className={`rounded-xl p-5 border space-y-4 shadow-sm transition-all ${
-              isReleaseReady
+              publishJobData?.job?.status === "completed"
                 ? "bg-emerald-500/10 border-emerald-500/30"
-                : "bg-surface-1 border-border-subtle"
+                : isReleaseReady
+                  ? "bg-emerald-500/10 border-emerald-500/30"
+                  : "bg-surface-1 border-border-subtle"
             }`}
             data-testid="release-gate-card"
           >
@@ -1296,45 +1433,188 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
               </span>
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  isReleaseReady
+                  publishJobData?.job?.status === "completed"
                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                    : "bg-surface-2 text-text-secondary border border-border-subtle"
+                    : isReleaseReady
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                      : "bg-surface-2 text-text-secondary border border-border-subtle"
                 }`}
+                data-testid="release-gate-badge"
               >
-                {isReleaseReady ? "Gate Passed" : "Gate Locked"}
+                {publishJobData?.job?.status === "completed"
+                  ? publishJobData.job.actual_privacy === "private"
+                    ? "Uploaded Privately"
+                    : publishJobData.job.actual_privacy === "unlisted"
+                      ? "Published Unlisted"
+                      : "Published"
+                  : isReleaseReady
+                    ? "Gate Passed"
+                    : "Gate Locked"}
               </span>
             </div>
 
             <div>
               <h3 className="text-base font-bold text-text-primary">
-                {isReleaseReady ? "Ready to Publish" : "Release Gate Review"}
+                {publishJobData?.job?.status === "completed"
+                  ? publishJobData.job.actual_privacy === "private"
+                    ? "Uploaded Privately"
+                    : publishJobData.job.actual_privacy === "unlisted"
+                      ? "Published Unlisted"
+                      : "Published"
+                  : isReleaseReady
+                    ? "Ready to Publish"
+                    : "Release Gate Review"}
               </h3>
               <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                {isReleaseReady
-                  ? "All media continuity, loudness, caption alignment, and packaging claims are verified."
-                  : "Iris must approve all quality and factual criteria before publishing."}
+                {publishJobData?.job?.status === "completed"
+                  ? "Video is live on YouTube. Creator approval and verification complete."
+                  : isReleaseReady
+                    ? "All media continuity, loudness, caption alignment, and packaging claims are verified."
+                    : "Iris must approve all quality and factual criteria before publishing."}
               </p>
             </div>
 
-            {/* Publishing Readiness Action */}
-            <div className="pt-2 border-t border-border-subtle space-y-2">
-              <button
-                type="button"
-                disabled={!isReleaseReady}
-                className={`w-full py-2.5 px-4 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs ${
-                  isReleaseReady
-                    ? "bg-emerald-500 hover:bg-emerald-600 text-white cursor-default"
-                    : "bg-surface-3 text-text-muted cursor-not-allowed opacity-60"
-                }`}
-                data-testid="btn-ready-to-publish"
+            {/* In-Progress Uploading / Processing Display */}
+            {publishJobData?.job &&
+              (publishJobData.job.status === "uploading" ||
+                publishJobData.job.status === "processing" ||
+                publishJobData.job.status === "pending") && (
+                <div
+                  className="p-3.5 rounded-lg bg-surface-2 border border-primary/30 space-y-2.5"
+                  data-testid="section-upload-progress"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-text-primary flex items-center gap-1.5">
+                      <Loader2 className="size-3.5 text-primary animate-spin" />
+                      {publishJobData.job.status === "uploading"
+                        ? `Uploading to YouTube ${publishJobData.job.progress_percent?.toFixed(0) || 0}%`
+                        : publishJobData.job.status === "processing"
+                          ? "YouTube is processing the video…"
+                          : "Preparing YouTube upload…"}
+                    </span>
+                    <span className="text-[11px] font-mono text-primary font-semibold">
+                      {publishJobData.job.progress_percent?.toFixed(0) || 0}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-surface-3 h-2 rounded-full overflow-hidden border border-border-subtle">
+                    <div
+                      className="bg-primary h-full transition-all duration-300 rounded-full"
+                      style={{ width: `${Math.max(5, publishJobData.job.progress_percent || 0)}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-text-muted">
+                    <span>Resumable media stream</span>
+                    {Boolean(publishJobData.job.total_bytes) && (
+                      <span>
+                        {((publishJobData.job.bytes_uploaded || 0) / (1024 * 1024)).toFixed(1)} MB /{" "}
+                        {((publishJobData.job.total_bytes || 0) / (1024 * 1024)).toFixed(1)} MB
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+            {/* Completed Success Box with YouTube Link */}
+            {publishJobData?.job?.status === "completed" && (
+              <div
+                className="space-y-3 pt-2 border-t border-border-subtle"
+                data-testid="section-publish-completed"
               >
-                <CheckCircle2 className="size-4" />
-                <span>{isReleaseReady ? "Ready to Publish ✓" : "Fix Required to Release"}</span>
-              </button>
-              <p className="text-[10px] text-center text-text-muted">
-                YouTube direct publishing will be activated in the next release milestone.
-              </p>
-            </div>
+                <div className="p-3.5 rounded-lg bg-surface-2 border border-emerald-500/30 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-text-primary flex items-center gap-1.5">
+                      <CheckCircle2 className="size-4 text-emerald-400" />
+                      <span>
+                        {publishJobData.job.actual_privacy === "private"
+                          ? "Uploaded privately"
+                          : "Published"}
+                      </span>
+                    </span>
+                    <span
+                      className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary border border-border-subtle"
+                      data-testid="text-youtube-video-id"
+                    >
+                      ID: {publishJobData.job.youtube_video_id}
+                    </span>
+                  </div>
+
+                  {/* Thumbnail Status */}
+                  <div className="text-[11px] text-text-secondary flex items-center gap-2">
+                    {publishJobData.job.thumbnail_status === "completed" ? (
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <Check className="size-3" />
+                        Thumbnail uploaded
+                      </span>
+                    ) : publishJobData.job.thumbnail_status === "failed" ? (
+                      <span className="text-amber-400 flex items-center gap-1">
+                        <AlertTriangle className="size-3" />
+                        Thumbnail needs attention
+                      </span>
+                    ) : null}
+                    {publishJobData.job.short_youtube_video_id && (
+                      <span className="text-text-muted">
+                        • Short ID: {publishJobData.job.short_youtube_video_id}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Open on YouTube Button */}
+                  {publishJobData.job.youtube_url && (
+                    <a
+                      href={publishJobData.job.youtube_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2 px-3 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors shadow-xs"
+                      data-testid="btn-open-on-youtube"
+                    >
+                      <YouTubeIcon className="size-4" />
+                      <span>Open on YouTube</span>
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  )}
+                </div>
+
+                {/* Audit restriction banner if applicable */}
+                {publishJobData.job.audit_restriction_detected && (
+                  <div
+                    className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 flex items-start gap-2 leading-relaxed"
+                    data-testid="banner-audit-restriction"
+                  >
+                    <Info className="size-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>
+                      Uploaded successfully, but YouTube restricted this API project to private
+                      uploads. YouTube API compliance verification is required before public
+                      publishing.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Publishing Action Button */}
+            {publishJobData?.job?.status !== "completed" &&
+              publishJobData?.job?.status !== "uploading" &&
+              publishJobData?.job?.status !== "processing" && (
+                <div className="pt-2 border-t border-border-subtle space-y-2">
+                  <button
+                    type="button"
+                    disabled={!isReleaseReady}
+                    onClick={handleOpenPublishModal}
+                    className={`w-full py-2.5 px-4 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs ${
+                      isReleaseReady
+                        ? "bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+                        : "bg-surface-3 text-text-muted cursor-not-allowed opacity-60"
+                    }`}
+                    data-testid="btn-publish-to-youtube"
+                  >
+                    <YouTubeIcon className="size-4" />
+                    <span>{isReleaseReady ? "Publish to YouTube" : "Fix Required to Release"}</span>
+                  </button>
+                  <p className="text-[10px] text-center text-text-muted">
+                    Requires creator approval before external YouTube upload.
+                  </p>
+                </div>
+              )}
           </div>
 
           {/* Iris (QA Agent) Card */}
@@ -1511,6 +1791,18 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
         isOpen={drawerAgent !== null}
         agentId={drawerAgent || "iris"}
         onClose={() => setDrawerAgent(null)}
+      />
+
+      {/* Publish Confirmation Modal */}
+      <PublishConfirmationModal
+        isOpen={isPublishModalOpen}
+        onClose={() => setIsPublishModalOpen(false)}
+        prepData={prepData}
+        isLoadingPrep={isLoadingPrep}
+        onConfirmPublish={handleConfirmPublish}
+        isPublishing={isPublishing}
+        onGrantUploadAccess={handleGrantUploadAccess}
+        onConnectYouTube={handleConnectYouTube}
       />
     </div>
   );

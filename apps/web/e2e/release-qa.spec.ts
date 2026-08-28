@@ -536,7 +536,9 @@ test.describe("Iris QA Agent & Release Gate Workflow", () => {
 
     // Verify Release Gate card shows locked status
     await expect(page.getByTestId("release-gate-card")).toContainText("Gate Locked");
-    await expect(page.getByTestId("btn-ready-to-publish")).toBeDisabled();
+    await expect(
+      page.locator('[data-testid="btn-publish-to-youtube"], [data-testid="btn-ready-to-publish"]'),
+    ).toBeDisabled();
   });
 
   test("executes 1-cycle auto-correction with Nina and transitions to Ready to publish", async ({
@@ -558,7 +560,9 @@ test.describe("Iris QA Agent & Release Gate Workflow", () => {
     // Wait for auto-correction completion and state update
     await expect(page.getByTestId("release-status-badge")).toContainText("Ready to publish");
     await expect(page.getByTestId("release-gate-card")).toContainText("Gate Passed");
-    await expect(page.getByTestId("btn-ready-to-publish")).toContainText("Ready to Publish ✓");
+    await expect(
+      page.locator('[data-testid="btn-publish-to-youtube"], [data-testid="btn-ready-to-publish"]'),
+    ).toContainText("Publish to YouTube");
 
     // Verify all checklist items now show checkmarks
     await expect(page.getByTestId("checklist-item-packaging")).toContainText("✓");

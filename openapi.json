@@ -1961,6 +1961,198 @@
         }
       }
     },
+    "/api/productions/{production_id}/publish/prep": {
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get YouTube Publishing Preparation Data",
+        "description": "Retrieve channel connection info, suggested title/description/chapters, and synthetic media suggestions before publishing.",
+        "operationId": "get_publish_preparation_api_productions__production_id__publish_prep_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishPreparationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/publish": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Initiate Creator-Approved YouTube Publication",
+        "description": "Trigger creator-approved, idempotent publishing of Master video to YouTube with release gate validation.",
+        "operationId": "publish_to_youtube_api_productions__production_id__publish_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishJobDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get Production YouTube Publish Status",
+        "description": "Poll current or latest YouTube publish job status, upload progress, and remote video metadata.",
+        "operationId": "get_publish_status_api_productions__production_id__publish_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishJobDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/publish/cancel": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Cancel Pending YouTube Publish Job",
+        "description": "Cancel a queued or pending publish job before bytes start uploading.",
+        "operationId": "cancel_publish_job_api_productions__production_id__publish_cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishJobDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/channels/sample/dashboard": {
       "get": {
         "tags": ["Channel Intelligence"],
@@ -6394,6 +6586,305 @@
         "enum": ["pending", "uploading", "uploaded", "deleting", "failed"],
         "title": "ProductionStatus"
       },
+      "PublishJobDetailResponse": {
+        "properties": {
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/YouTubePublishJob"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current or latest YouTube publish job"
+          },
+          "can_publish": {
+            "type": "boolean",
+            "title": "Can Publish",
+            "description": "True if real YouTube channel is connected",
+            "default": false
+          },
+          "has_upload_access": {
+            "type": "boolean",
+            "title": "Has Upload Access",
+            "description": "True if youtube.upload OAuth scope is granted",
+            "default": false
+          },
+          "status_message": {
+            "type": "string",
+            "title": "Status Message",
+            "description": "Creator-facing status or restriction message",
+            "default": ""
+          },
+          "is_sample_channel": {
+            "type": "boolean",
+            "title": "Is Sample Channel",
+            "description": "True if synthetic sample channel is active",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PublishJobDetailResponse",
+        "description": "Active publish job state, remote video IDs, upload progress, and audit restrictions."
+      },
+      "PublishJobStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "auth_required",
+          "uploading",
+          "processing",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "PublishJobStatus",
+        "description": "Lifecycle status of an external YouTube publishing job."
+      },
+      "PublishPreparationResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Production identifier"
+          },
+          "channel_title": {
+            "type": "string",
+            "title": "Channel Title",
+            "description": "Connected YouTube channel title or 'Croviq Sample Channel'"
+          },
+          "channel_avatar_url": {
+            "type": "string",
+            "title": "Channel Avatar Url",
+            "description": "Channel avatar icon URL",
+            "default": ""
+          },
+          "is_sample_channel": {
+            "type": "boolean",
+            "title": "Is Sample Channel",
+            "description": "True if using synthetic sample channel that cannot publish",
+            "default": false
+          },
+          "can_publish": {
+            "type": "boolean",
+            "title": "Can Publish",
+            "description": "True if a real YouTube channel is connected",
+            "default": false
+          },
+          "has_upload_access": {
+            "type": "boolean",
+            "title": "Has Upload Access",
+            "description": "True if youtube.upload OAuth scope is granted",
+            "default": false
+          },
+          "master_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Master Duration Ms",
+            "description": "Master video duration in milliseconds"
+          },
+          "master_title": {
+            "type": "string",
+            "title": "Master Title",
+            "description": "Master video title"
+          },
+          "suggested_title": {
+            "type": "string",
+            "title": "Suggested Title",
+            "description": "Active Nina title candidate or creator override"
+          },
+          "suggested_description": {
+            "type": "string",
+            "title": "Suggested Description",
+            "description": "Active description with embedded chapters"
+          },
+          "suggested_chapters": {
+            "items": {
+              "$ref": "#/components/schemas/PackagingChapter"
+            },
+            "type": "array",
+            "title": "Suggested Chapters",
+            "description": "Verified YouTube chapters"
+          },
+          "suggested_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggested Tags",
+            "description": "Keywords for YouTube tags"
+          },
+          "suggested_category_id": {
+            "type": "string",
+            "title": "Suggested Category Id",
+            "description": "Default category ID (28 = Science & Technology)",
+            "default": "28"
+          },
+          "suggested_synthetic_media": {
+            "type": "boolean",
+            "title": "Suggested Synthetic Media",
+            "description": "Suggested synthetic media disclosure based on Studio Voice/BRoll",
+            "default": false
+          },
+          "verified_thumbnail_frames": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Verified Thumbnail Frames",
+            "description": "Nina verified thumbnail frame candidates"
+          },
+          "has_short": {
+            "type": "boolean",
+            "title": "Has Short",
+            "description": "Whether an approved vertical Short artifact exists",
+            "default": false
+          },
+          "short_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Title",
+            "description": "Short title candidate"
+          },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description",
+            "description": "Short description candidate"
+          },
+          "release_ready": {
+            "type": "boolean",
+            "title": "Release Ready",
+            "description": "Whether Iris has approved the release (verdict PASS)",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "production_id",
+          "channel_title",
+          "master_title",
+          "suggested_title",
+          "suggested_description"
+        ],
+        "title": "PublishPreparationResponse",
+        "description": "Pre-publish parameters, channel verification, and suggested metadata for confirmation drawer."
+      },
+      "PublishRequest": {
+        "properties": {
+          "requested_privacy": {
+            "type": "string",
+            "enum": ["private", "unlisted", "public"],
+            "title": "Requested Privacy",
+            "description": "Target privacy status (default private)",
+            "default": "private"
+          },
+          "made_for_kids": {
+            "type": "boolean",
+            "title": "Made For Kids",
+            "description": "Creator-confirmed declaration: is content made for kids? (COPPA)",
+            "default": false
+          },
+          "contains_synthetic_media": {
+            "type": "boolean",
+            "title": "Contains Synthetic Media",
+            "description": "Creator-confirmed declaration: does content contain altered or synthetic media?",
+            "default": false
+          },
+          "selected_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Title",
+            "description": "Optional custom title override (validated <= 100 characters)"
+          },
+          "selected_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Description",
+            "description": "Optional custom description override (validated <= 5000 bytes)"
+          },
+          "selected_tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Tags",
+            "description": "Optional tags list override"
+          },
+          "category_id": {
+            "type": "string",
+            "title": "Category Id",
+            "description": "YouTube category ID (default 28)",
+            "default": "28"
+          },
+          "thumbnail_frame_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Frame Ms",
+            "description": "Selected timeline millisecond offset for extracting thumbnail still image"
+          },
+          "upload_short": {
+            "type": "boolean",
+            "title": "Upload Short",
+            "description": "Whether to also upload the approved vertical Short as a separate video",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PublishRequest",
+        "description": "Creator-confirmed request payload to trigger YouTube publication."
+      },
       "ReleaseChecklist": {
         "properties": {
           "master_video": {
@@ -8282,6 +8773,12 @@
         "title": "ThumbnailEvaluation",
         "description": "Evaluation of a specific Nina ThumbnailConcept."
       },
+      "ThumbnailUploadStatus": {
+        "type": "string",
+        "enum": ["pending", "uploading", "completed", "failed", "skipped"],
+        "title": "ThumbnailUploadStatus",
+        "description": "Lifecycle status of custom thumbnail upload to YouTube."
+      },
       "TitleAngle": {
         "type": "string",
         "enum": [
@@ -9367,6 +9864,11 @@
             "type": "boolean",
             "title": "Include Monetary",
             "default": false
+          },
+          "include_upload": {
+            "type": "boolean",
+            "title": "Include Upload",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -9486,6 +9988,18 @@
             "type": "boolean",
             "title": "Has Monetary Access",
             "default": false
+          },
+          "has_upload_access": {
+            "type": "boolean",
+            "title": "Has Upload Access",
+            "default": false
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
           }
         },
         "additionalProperties": false,
@@ -9493,6 +10007,350 @@
         "required": ["connected"],
         "title": "YouTubeConnectionPublicSummary",
         "description": "Public non-sensitive connection information returned to creator client."
+      },
+      "YouTubePublishJob": {
+        "properties": {
+          "publish_job_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Publish Job Id",
+            "description": "Unique identifier for publish job (e.g. pub_...)"
+          },
+          "production_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated production ID"
+          },
+          "workspace_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Workspace Id",
+            "description": "Workspace tenant ID"
+          },
+          "user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "User Id",
+            "description": "Initiating user ID"
+          },
+          "connection_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Connection Id",
+            "description": "Connected channel integration identifier"
+          },
+          "channel_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Channel Id",
+            "description": "Target YouTube channel ID"
+          },
+          "release_review_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Release Review Id",
+            "description": "Approved Iris ReleaseReview ID"
+          },
+          "package_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Package Version",
+            "description": "Frozen package version number",
+            "default": 1
+          },
+          "artifact_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Artifact Id",
+            "description": "Master RenderArtifact ID uploaded to YouTube"
+          },
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type",
+            "description": "Artifact type (MASTER)",
+            "default": "MASTER"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PublishJobStatus",
+            "description": "Current lifecycle status",
+            "default": "pending"
+          },
+          "requested_privacy": {
+            "type": "string",
+            "title": "Requested Privacy",
+            "description": "Creator requested privacy (private, unlisted, public)",
+            "default": "private"
+          },
+          "actual_privacy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Privacy",
+            "description": "Actual privacy status confirmed by YouTube response"
+          },
+          "youtube_video_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Youtube Video Id",
+            "description": "Remote YouTube video ID returned after videos.insert"
+          },
+          "youtube_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Youtube Url",
+            "description": "Canonical watch URL (https://youtu.be/{video_id})"
+          },
+          "thumbnail_status": {
+            "$ref": "#/components/schemas/ThumbnailUploadStatus",
+            "description": "Thumbnail upload status",
+            "default": "pending"
+          },
+          "thumbnail_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Artifact Id",
+            "description": "ThumbnailArtifact ID uploaded to thumbnails.set"
+          },
+          "bytes_uploaded": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Bytes Uploaded",
+            "description": "Actual bytes uploaded so far",
+            "default": 0
+          },
+          "total_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Bytes",
+            "description": "Total media payload size in bytes",
+            "default": 0
+          },
+          "progress_percent": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress Percent",
+            "description": "Calculated upload progress percentage (0.0 - 100.0)",
+            "default": 0.0
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code",
+            "description": "Standardized error code if failed"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message",
+            "description": "Creator-facing error explanation if failed"
+          },
+          "is_synthetic_media": {
+            "type": "boolean",
+            "title": "Is Synthetic Media",
+            "description": "Creator-confirmed synthetic media disclosure (status.containsSyntheticMedia)",
+            "default": false
+          },
+          "made_for_kids": {
+            "type": "boolean",
+            "title": "Made For Kids",
+            "description": "Creator-confirmed COPPA declaration (status.selfDeclaredMadeForKids)",
+            "default": false
+          },
+          "category_id": {
+            "type": "string",
+            "title": "Category Id",
+            "description": "YouTube category ID (default 28 for Science & Technology)",
+            "default": "28"
+          },
+          "selected_title": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Selected Title",
+            "description": "Final title for videos.insert (validated <= 100 characters)"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Description",
+            "description": "Final description with embedded chapters (validated <= 5000 bytes)"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags for videos.insert"
+          },
+          "audit_restriction_detected": {
+            "type": "boolean",
+            "title": "Audit Restriction Detected",
+            "description": "True if YouTube restricted upload to private due to unverified API project audit status",
+            "default": false
+          },
+          "short_requested": {
+            "type": "boolean",
+            "title": "Short Requested",
+            "description": "True if separate Short upload was also selected",
+            "default": false
+          },
+          "short_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Artifact Id",
+            "description": "Short RenderArtifact ID if short upload requested"
+          },
+          "short_publish_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Publish Job Id",
+            "description": "Child publish job ID for Short upload"
+          },
+          "short_youtube_video_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Youtube Video Id",
+            "description": "Remote YouTube video ID of uploaded Short"
+          },
+          "short_youtube_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Youtube Url",
+            "description": "Canonical watch URL for Short"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "description": "Deterministic idempotency key preventing duplicate uploads"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "UTC timestamp when remote upload started"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "UTC timestamp when publication succeeded or failed"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Last state update timestamp"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "publish_job_id",
+          "production_id",
+          "workspace_id",
+          "user_id",
+          "connection_id",
+          "channel_id",
+          "release_review_id",
+          "artifact_id",
+          "selected_title",
+          "description",
+          "idempotency_key"
+        ],
+        "title": "YouTubePublishJob",
+        "description": "Canonical domain model for tracking YouTube publishing execution and lifecycle."
       }
     },
     "securitySchemes": {

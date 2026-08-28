@@ -48,6 +48,13 @@ from croviq_media.qa import (
     DeterministicMediaQAService,
     MediaQAResult,
 )
+from croviq_media.thumbnail import (
+    FakeThumbnailExtractor,
+    FFmpegThumbnailExtractor,
+    ThumbnailExtractionError,
+    ThumbnailExtractionResult,
+    ThumbnailExtractor,
+)
 __all__ = [
     "AudioExtractionError",
     "AudioExtractor",
@@ -84,5 +91,10 @@ __all__ = [
     "ChapterQAResult",
     "DeterministicMediaQAService",
     "MediaQAResult",
+    "ThumbnailExtractionError",
+    "ThumbnailExtractionResult",
+    "ThumbnailExtractor",
+    "FFmpegThumbnailExtractor",
+    "FakeThumbnailExtractor",
 ]
 __version__ = "0.1.0"

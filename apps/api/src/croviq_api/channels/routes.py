@@ -54,7 +54,7 @@ YOUTUBE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 SCOPE_YOUTUBE_READONLY = "https://www.googleapis.com/auth/youtube.readonly"
 SCOPE_ANALYTICS_READONLY = "https://www.googleapis.com/auth/yt-analytics.readonly"
 SCOPE_MONETARY_READONLY = "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
-
+SCOPE_YOUTUBE_UPLOAD = "https://www.googleapis.com/auth/youtube.upload"
 
 class UpdateResearchConfigRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -69,7 +69,7 @@ class YouTubeAuthUrlRequest(BaseModel):
 
     redirect_uri: str = Field(..., min_length=1)
     include_monetary: bool = False
-
+    include_upload: bool = False
 
 class YouTubeAuthUrlResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -195,12 +195,14 @@ async def generate_youtube_auth_url(
         user_id=current_user.user_id,
         redirect_uri=payload.redirect_uri,
         include_monetary=payload.include_monetary,
+        include_upload=payload.include_upload,
     )
 
     scopes = [SCOPE_YOUTUBE_READONLY, SCOPE_ANALYTICS_READONLY]
     if payload.include_monetary:
         scopes.append(SCOPE_MONETARY_READONLY)
-
+    if payload.include_upload:
+        scopes.append(SCOPE_YOUTUBE_UPLOAD)
     client_id = get_settings().google_oauth_client_id or "dummy-client-id"
     params = {
         "client_id": client_id,
@@ -245,13 +247,20 @@ async def handle_youtube_callback(
 
     client_id = get_settings().google_oauth_client_id
     client_secret = get_settings().google_oauth_client_secret
-
+    existing_conn = await youtube_repo.get_connection(workspace.workspace_id)
     access_token = f"yt_access_{payload.code}"
-    refresh_token = f"yt_refresh_{payload.code}"
+    refresh_token = (
+        existing_conn.refresh_token
+        if existing_conn and existing_conn.refresh_token
+        else f"yt_refresh_{payload.code}"
+    )
     scopes = [SCOPE_YOUTUBE_READONLY, SCOPE_ANALYTICS_READONLY]
     if state.include_monetary:
         scopes.append(SCOPE_MONETARY_READONLY)
-
+    if state.include_upload:
+        scopes.append(SCOPE_YOUTUBE_UPLOAD)
+    if existing_conn and existing_conn.scopes:
+        scopes = list(dict.fromkeys(existing_conn.scopes + scopes))
     if client_id and client_secret and not payload.code.startswith("mock-"):
         try:
             async with httpx.AsyncClient(timeout=20) as http_client:
@@ -268,12 +277,13 @@ async def handle_youtube_callback(
                 if token_resp.status_code == 200:
                     token_data = token_resp.json()
                     access_token = token_data.get("access_token", access_token)
-                    refresh_token = token_data.get("refresh_token", refresh_token)
+                    if "refresh_token" in token_data and token_data["refresh_token"]:
+                        refresh_token = token_data["refresh_token"]
                     if "scope" in token_data:
-                        scopes = token_data["scope"].split()
+                        granted_scopes = token_data["scope"].split()
+                        scopes = list(dict.fromkeys(scopes + granted_scopes))
         except Exception as exc:
             logger.warning("Token exchange fallback used: %s", exc)
-
     # Initialize YouTube provider to query channel metadata
     provider = YouTubeChannelDataProvider(access_token=access_token)
     try:
@@ -324,8 +334,9 @@ async def handle_youtube_callback(
         subscriber_count=sub_count,
         last_sync_at=now,
         has_monetary_access=SCOPE_MONETARY_READONLY in scopes,
+        has_upload_access=SCOPE_YOUTUBE_UPLOAD in scopes,
+        scopes=scopes,
     )
-
 
 @router.get(
     "/youtube/connection",
@@ -349,8 +360,9 @@ async def get_youtube_connection_status(
         subscriber_count=connection.subscriber_count,
         last_sync_at=connection.last_sync_at,
         has_monetary_access=SCOPE_MONETARY_READONLY in connection.scopes,
+        has_upload_access=SCOPE_YOUTUBE_UPLOAD in connection.scopes,
+        scopes=connection.scopes,
     )
-
 
 @router.post(
     "/youtube/disconnect",

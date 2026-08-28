@@ -50,6 +50,38 @@ from croviq_api.productions.transcript_repository import (
     TranscriptRepository,
     get_transcript_repository,
 )
+from croviq_api.productions.thumbnail_repository import (
+    ThumbnailRepository,
+    get_thumbnail_repository,
+    set_thumbnail_repository,
+)
+from croviq_api.productions.publish_job_repository import (
+    PublishJobRepository,
+    get_publish_job_repository,
+    set_publish_job_repository,
+)
+from croviq_api.channels.youtube_repository import (
+    YouTubeConnectionRepository,
+    get_youtube_connection_repository,
+)
+from croviq_api.workspaces.repository import (
+    WorkspaceRepository,
+    get_workspace_repository,
+)
+from croviq_api.productions.studio_voice_repository import (
+    StudioVoiceRepository,
+    get_studio_voice_repository,
+)
+from croviq_api.productions.broll_repository import (
+    BRollRepository,
+    get_broll_repository,
+)
+from croviq_api.channels.youtube_publisher import (
+    YouTubePublishClient,
+    get_youtube_publish_client,
+    set_youtube_publish_client,
+)
+from croviq_api.productions.publish_service import YouTubePublishService
 
 _custom_render_service: RenderService | None = None
 _default_render_service: RenderService | None = None
@@ -157,3 +189,42 @@ def set_render_service(service: RenderService | None) -> None:
     """Override RenderService instance for test isolation."""
     global _custom_render_service
     _custom_render_service = service
+
+
+_custom_publish_service: YouTubePublishService | None = None
+
+
+def get_publish_service(
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+    release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)],
+    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
+    broll_repo: Annotated[BRollRepository, Depends(get_broll_repository)],
+    thumbnail_repo: Annotated[ThumbnailRepository, Depends(get_thumbnail_repository)],
+    publish_job_repo: Annotated[PublishJobRepository, Depends(get_publish_job_repository)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> YouTubePublishService:
+    global _custom_publish_service
+    if _custom_publish_service is not None:
+        return _custom_publish_service
+    return YouTubePublishService(
+        production_repo=production_repo,
+        workspace_repo=workspace_repo,
+        youtube_repo=youtube_repo,
+        release_review_repo=release_review_repo,
+        packaging_repo=packaging_repo,
+        render_repo=render_repo,
+        studio_voice_repo=studio_voice_repo,
+        broll_repo=broll_repo,
+        thumbnail_repo=thumbnail_repo,
+        publish_job_repo=publish_job_repo,
+        media_storage=media_storage,
+    )
+
+
+def set_publish_service(service: YouTubePublishService | None) -> None:
+    global _custom_publish_service
+    _custom_publish_service = service

@@ -487,6 +487,18 @@ async function main() {
   console.log("Capturing live new project screenshot (1280)...");
   await page.screenshot({ path: path.join(outDir, "live-new-project-1280.png"), fullPage: false });
 
+  // 6. Live Release Gate (1600)
+  console.log("Navigating to live /productions/prod_0b7657f515ae/release...");
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/productions/prod_0b7657f515ae/release");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await page.waitForSelector("[data-testid='release-workspace']", { timeout: 15000 });
+  await page.waitForTimeout(2000);
+  console.log("Capturing live release QA screenshot...");
+  await page.screenshot({ path: path.join(outDir, "live-release-qa-1600.png"), fullPage: false });
+
   console.log("Live Console Errors:", consoleLogs);
   console.log("Live Failed Requests:", failedRequests);
 

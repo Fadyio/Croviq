@@ -335,6 +335,36 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/publish/prep": {
+    get: {
+      responses: {
+        200: components["schemas"]["PublishPreparationResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/publish": {
+    post: {
+      responses: {
+        200: components["schemas"]["PublishJobDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+    get: {
+      responses: {
+        200: components["schemas"]["PublishJobDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/publish/cancel": {
+    post: {
+      responses: {
+        200: components["schemas"]["PublishJobDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
   "/api/channels/sample/dashboard": {
     get: {
       responses: {
@@ -1316,6 +1346,86 @@ export interface components {
       short_playback_url?: string | null;
     };
     ProductionStatus: "pending" | "uploading" | "uploaded" | "deleting" | "failed";
+    PublishJobDetailResponse: {
+      /** Current or latest YouTube publish job */
+      job?: components["schemas"]["YouTubePublishJob"] | null;
+      /** True if real YouTube channel is connected */
+      can_publish?: boolean;
+      /** True if youtube.upload OAuth scope is granted */
+      has_upload_access?: boolean;
+      /** Creator-facing status or restriction message */
+      status_message?: string;
+      /** True if synthetic sample channel is active */
+      is_sample_channel?: boolean;
+    };
+    PublishJobStatus:
+      | "pending"
+      | "auth_required"
+      | "uploading"
+      | "processing"
+      | "completed"
+      | "failed"
+      | "cancelled";
+    PublishPreparationResponse: {
+      /** Production identifier */
+      production_id: string;
+      /** Connected YouTube channel title or 'Croviq Sample Channel' */
+      channel_title: string;
+      /** Channel avatar icon URL */
+      channel_avatar_url?: string;
+      /** True if using synthetic sample channel that cannot publish */
+      is_sample_channel?: boolean;
+      /** True if a real YouTube channel is connected */
+      can_publish?: boolean;
+      /** True if youtube.upload OAuth scope is granted */
+      has_upload_access?: boolean;
+      /** Master video duration in milliseconds */
+      master_duration_ms?: number | null;
+      /** Master video title */
+      master_title: string;
+      /** Active Nina title candidate or creator override */
+      suggested_title: string;
+      /** Active description with embedded chapters */
+      suggested_description: string;
+      /** Verified YouTube chapters */
+      suggested_chapters?: components["schemas"]["PackagingChapter"][];
+      /** Keywords for YouTube tags */
+      suggested_tags?: string[];
+      /** Default category ID (28 = Science & Technology) */
+      suggested_category_id?: string;
+      /** Suggested synthetic media disclosure based on Studio Voice/BRoll */
+      suggested_synthetic_media?: boolean;
+      /** Nina verified thumbnail frame candidates */
+      verified_thumbnail_frames?: Record<string, unknown>[];
+      /** Whether an approved vertical Short artifact exists */
+      has_short?: boolean;
+      /** Short title candidate */
+      short_title?: string | null;
+      /** Short description candidate */
+      short_description?: string | null;
+      /** Whether Iris has approved the release (verdict PASS) */
+      release_ready?: boolean;
+    };
+    PublishRequest: {
+      /** Target privacy status (default private) */
+      requested_privacy?: "private" | "unlisted" | "public";
+      /** Creator-confirmed declaration: is content made for kids? (COPPA) */
+      made_for_kids?: boolean;
+      /** Creator-confirmed declaration: does content contain altered or synthetic media? */
+      contains_synthetic_media?: boolean;
+      /** Optional custom title override (validated <= 100 characters) */
+      selected_title?: string | null;
+      /** Optional custom description override (validated <= 5000 bytes) */
+      selected_description?: string | null;
+      /** Optional tags list override */
+      selected_tags?: string[] | null;
+      /** YouTube category ID (default 28) */
+      category_id?: string;
+      /** Selected timeline millisecond offset for extracting thumbnail still image */
+      thumbnail_frame_ms?: number | null;
+      /** Whether to also upload the approved vertical Short as a separate video */
+      upload_short?: boolean;
+    };
     ReleaseChecklist: {
       /** Master video continuity and encoding status */
       master_video?: boolean;
@@ -1774,6 +1884,7 @@ export interface components {
       /** Concise visual QA assessment */
       reason: string;
     };
+    ThumbnailUploadStatus: "pending" | "uploading" | "completed" | "failed" | "skipped";
     TitleAngle:
       | "DIRECT_VALUE"
       | "CURIOSITY"
@@ -2035,6 +2146,7 @@ export interface components {
     YouTubeAuthUrlRequest: {
       redirect_uri: string;
       include_monetary?: boolean;
+      include_upload?: boolean;
     };
     YouTubeAuthUrlResponse: {
       auth_url: string;
@@ -2054,6 +2166,88 @@ export interface components {
       subscriber_count?: number | null;
       last_sync_at?: string | null;
       has_monetary_access?: boolean;
+      has_upload_access?: boolean;
+      scopes?: string[];
+    };
+    YouTubePublishJob: {
+      /** Unique identifier for publish job (e.g. pub_...) */
+      publish_job_id: string;
+      /** Associated production ID */
+      production_id: string;
+      /** Workspace tenant ID */
+      workspace_id: string;
+      /** Initiating user ID */
+      user_id: string;
+      /** Connected channel integration identifier */
+      connection_id: string;
+      /** Target YouTube channel ID */
+      channel_id: string;
+      /** Approved Iris ReleaseReview ID */
+      release_review_id: string;
+      /** Frozen package version number */
+      package_version?: number;
+      /** Master RenderArtifact ID uploaded to YouTube */
+      artifact_id: string;
+      /** Artifact type (MASTER) */
+      artifact_type?: string;
+      /** Current lifecycle status */
+      status?: components["schemas"]["PublishJobStatus"];
+      /** Creator requested privacy (private, unlisted, public) */
+      requested_privacy?: string;
+      /** Actual privacy status confirmed by YouTube response */
+      actual_privacy?: string | null;
+      /** Remote YouTube video ID returned after videos.insert */
+      youtube_video_id?: string | null;
+      /** Canonical watch URL (https://youtu.be/{video_id}) */
+      youtube_url?: string | null;
+      /** Thumbnail upload status */
+      thumbnail_status?: components["schemas"]["ThumbnailUploadStatus"];
+      /** ThumbnailArtifact ID uploaded to thumbnails.set */
+      thumbnail_artifact_id?: string | null;
+      /** Actual bytes uploaded so far */
+      bytes_uploaded?: number;
+      /** Total media payload size in bytes */
+      total_bytes?: number;
+      /** Calculated upload progress percentage (0.0 - 100.0) */
+      progress_percent?: number;
+      /** Standardized error code if failed */
+      error_code?: string | null;
+      /** Creator-facing error explanation if failed */
+      error_message?: string | null;
+      /** Creator-confirmed synthetic media disclosure (status.containsSyntheticMedia) */
+      is_synthetic_media?: boolean;
+      /** Creator-confirmed COPPA declaration (status.selfDeclaredMadeForKids) */
+      made_for_kids?: boolean;
+      /** YouTube category ID (default 28 for Science & Technology) */
+      category_id?: string;
+      /** Final title for videos.insert (validated <= 100 characters) */
+      selected_title: string;
+      /** Final description with embedded chapters (validated <= 5000 bytes) */
+      description: string;
+      /** Tags for videos.insert */
+      tags?: string[];
+      /** True if YouTube restricted upload to private due to unverified API project audit status */
+      audit_restriction_detected?: boolean;
+      /** True if separate Short upload was also selected */
+      short_requested?: boolean;
+      /** Short RenderArtifact ID if short upload requested */
+      short_artifact_id?: string | null;
+      /** Child publish job ID for Short upload */
+      short_publish_job_id?: string | null;
+      /** Remote YouTube video ID of uploaded Short */
+      short_youtube_video_id?: string | null;
+      /** Canonical watch URL for Short */
+      short_youtube_url?: string | null;
+      /** Deterministic idempotency key preventing duplicate uploads */
+      idempotency_key: string;
+      /** UTC timestamp when remote upload started */
+      started_at?: string | null;
+      /** UTC timestamp when publication succeeded or failed */
+      completed_at?: string | null;
+      /** Creation timestamp */
+      created_at?: string;
+      /** Last state update timestamp */
+      updated_at?: string;
     };
   };
 }

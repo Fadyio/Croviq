@@ -83,6 +83,9 @@ from croviq_api.productions.schemas import (
     ReleaseReviewDetailResponse,
     AutoCorrectQARequest,
     AutoCorrectQAResponse,
+    PublishPreparationResponse,
+    PublishRequest,
+    PublishJobDetailResponse,
 )
 from croviq_api.productions.release_review_repository import (
     ReleaseReviewRepository,
@@ -123,6 +126,23 @@ from croviq_domain.packaging import (
     TitleAngle,
     TitleCandidate,
 )
+from croviq_domain.publish import (
+    PublishJobStatus,
+    ThumbnailArtifact,
+    ThumbnailUploadStatus,
+    YouTubePublishJob,
+)
+from croviq_api.productions.dependencies import (
+    get_publish_service,
+    get_publish_job_repository,
+)
+from croviq_api.productions.publish_service import YouTubePublishService
+from croviq_api.productions.publish_job_repository import PublishJobRepository
+from croviq_api.channels.youtube_repository import (
+    YouTubeConnectionRepository,
+    get_youtube_connection_repository,
+)
+from croviq_api.channels.youtube_provider import SCOPE_YOUTUBE_UPLOAD
 from croviq_domain.channel_provider import SampleChannelDataProvider
 from croviq_domain.memory import ChannelProfileBuilder
 from croviq_api.productions.studio_voice_repository import (
@@ -2732,4 +2752,196 @@ async def auto_correct_qa(
         new_review=new_review,
         release_ready=release_ready,
         message="Nina revised packaging based on QA findings and Iris re-evaluated.",
+    )
+
+
+# -----------------------------------------------------------------------------
+# 12. YouTube Publishing Endpoints (Milestone: YouTube Publishing)
+# -----------------------------------------------------------------------------
+
+
+@router.get(
+    "/productions/{production_id}/publish/prep",
+    response_model=PublishPreparationResponse,
+    summary="Get YouTube Publishing Preparation Data",
+    description="Retrieve channel connection info, suggested title/description/chapters, and synthetic media suggestions before publishing.",
+)
+async def get_publish_preparation(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    publish_service: Annotated[YouTubePublishService, Depends(get_publish_service)],
+) -> PublishPreparationResponse:
+    try:
+        data = await publish_service.get_publish_preparation(production_id, current_user)
+        return PublishPreparationResponse(**data)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@router.post(
+    "/productions/{production_id}/publish",
+    response_model=PublishJobDetailResponse,
+    summary="Initiate Creator-Approved YouTube Publication",
+    description="Trigger creator-approved, idempotent publishing of Master video to YouTube with release gate validation.",
+)
+async def publish_to_youtube(
+    production_id: str,
+    payload: PublishRequest,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    publish_service: Annotated[YouTubePublishService, Depends(get_publish_service)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+) -> PublishJobDetailResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    try:
+        job = await publish_service.initiate_publish_job(
+            production_id=production_id,
+            current_user=current_user,
+            requested_privacy=payload.requested_privacy,
+            made_for_kids=payload.made_for_kids,
+            contains_synthetic_media=payload.contains_synthetic_media,
+            selected_title=payload.selected_title,
+            selected_description=payload.selected_description,
+            selected_tags=payload.selected_tags,
+            category_id=payload.category_id,
+            thumbnail_frame_ms=payload.thumbnail_frame_ms,
+            upload_short=payload.upload_short,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    prod = await production_repo.get_production(production_id)
+    workspace = await workspace_repo.get_workspace_by_id(prod.workspace_id) if prod else None
+    conn = await youtube_repo.get_connection(workspace.workspace_id) if workspace else None
+    is_sample = bool(prod and (prod.channel_id.startswith("sample_") or prod.channel_id == "sample_tech_channel"))
+    has_upload = bool(conn and SCOPE_YOUTUBE_UPLOAD in conn.scopes)
+
+    status_msg = "Publishing initiated."
+    if job.audit_restriction_detected:
+        status_msg = (
+            "Uploaded successfully, but YouTube restricted this API project to private uploads. "
+            "YouTube API compliance verification is required before public publishing."
+        )
+    elif job.status == PublishJobStatus.COMPLETED:
+        if job.actual_privacy == "private":
+            status_msg = "Uploaded privately"
+        elif job.actual_privacy == "unlisted":
+            status_msg = "Published unlisted"
+        else:
+            status_msg = "Published"
+    elif job.status == PublishJobStatus.AUTH_REQUIRED:
+        status_msg = "YouTube upload access required. Please grant publishing permission."
+
+    return PublishJobDetailResponse(
+        job=job,
+        can_publish=not is_sample and conn is not None,
+        has_upload_access=has_upload,
+        status_message=status_msg,
+        is_sample_channel=is_sample,
+    )
+
+
+@router.get(
+    "/productions/{production_id}/publish",
+    response_model=PublishJobDetailResponse,
+    summary="Get Production YouTube Publish Status",
+    description="Poll current or latest YouTube publish job status, upload progress, and remote video metadata.",
+)
+async def get_publish_status(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+    publish_job_repo: Annotated[PublishJobRepository, Depends(get_publish_job_repository)],
+) -> PublishJobDetailResponse:
+    prod = await production_repo.get_production(production_id)
+    if not prod:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Production not found.")
+    if prod.owner_user_id != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+    workspace = await workspace_repo.get_workspace_by_id(prod.workspace_id) if prod else None
+    conn = await youtube_repo.get_connection(workspace.workspace_id) if workspace else None
+    is_sample = bool(prod.channel_id.startswith("sample_") or prod.channel_id == "sample_tech_channel")
+    has_upload = bool(conn and SCOPE_YOUTUBE_UPLOAD in conn.scopes)
+
+    latest_job = await publish_job_repo.get_latest_by_production_id(production_id)
+
+    status_msg = ""
+    if latest_job:
+        if latest_job.audit_restriction_detected:
+            status_msg = (
+                "Uploaded successfully, but YouTube restricted this API project to private uploads. "
+                "YouTube API compliance verification is required before public publishing."
+            )
+        elif latest_job.status == PublishJobStatus.COMPLETED:
+            if latest_job.actual_privacy == "private":
+                status_msg = "Uploaded privately"
+            elif latest_job.actual_privacy == "unlisted":
+                status_msg = "Published unlisted"
+            else:
+                status_msg = "Published"
+        elif latest_job.status == PublishJobStatus.UPLOADING:
+            status_msg = f"Uploading to YouTube {latest_job.progress_percent:.0f}%"
+        elif latest_job.status == PublishJobStatus.PROCESSING:
+            status_msg = "YouTube is processing the video"
+        elif latest_job.status == PublishJobStatus.AUTH_REQUIRED:
+            status_msg = "YouTube upload access required. Please grant publishing permission."
+        elif latest_job.status == PublishJobStatus.FAILED:
+            status_msg = latest_job.error_message or "Publication failed"
+
+    return PublishJobDetailResponse(
+        job=latest_job,
+        can_publish=not is_sample and conn is not None,
+        has_upload_access=has_upload,
+        status_message=status_msg,
+        is_sample_channel=is_sample,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/publish/cancel",
+    response_model=PublishJobDetailResponse,
+    summary="Cancel Pending YouTube Publish Job",
+    description="Cancel a queued or pending publish job before bytes start uploading.",
+)
+async def cancel_publish_job(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    publish_service: Annotated[YouTubePublishService, Depends(get_publish_service)],
+    publish_job_repo: Annotated[PublishJobRepository, Depends(get_publish_job_repository)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+) -> PublishJobDetailResponse:
+    latest_job = await publish_job_repo.get_latest_by_production_id(production_id)
+    if not latest_job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No publish job found to cancel.")
+
+    try:
+        cancelled_job = await publish_service.cancel_publish_job(latest_job.publish_job_id, current_user)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    prod = await production_repo.get_production(production_id)
+    workspace = await workspace_repo.get_workspace_by_id(prod.workspace_id) if prod else None
+    conn = await youtube_repo.get_connection(workspace.workspace_id) if workspace else None
+    is_sample = bool(prod and (prod.channel_id.startswith("sample_") or prod.channel_id == "sample_tech_channel"))
+    has_upload = bool(conn and SCOPE_YOUTUBE_UPLOAD in conn.scopes)
+
+    return PublishJobDetailResponse(
+        job=cancelled_job,
+        can_publish=not is_sample and conn is not None,
+        has_upload_access=has_upload,
+        status_message="Publication cancelled.",
+        is_sample_channel=is_sample,
     )
