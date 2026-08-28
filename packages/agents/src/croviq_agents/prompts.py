@@ -1,9 +1,11 @@
 """Prompt templates for Leo (Video Editor) and Maya (Director) reasoning agents."""
 
 from typing import Any, Sequence
-from croviq_domain.editorial import DirectorReview, EditorDecision, EditorProposal
+from croviq_domain.channel_intelligence import ResearchFinding
+from croviq_domain.editorial import ChapterMarker, DirectorReview, EditorDecision, EditorProposal, ShortCandidate
 from croviq_domain.edl import EditDecisionList
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile
+from croviq_domain.packaging import format_ms_as_timestamp
 from croviq_domain.render_review import RenderReview, RenderReviewIssue
 from croviq_domain.transcript import Transcript
 
@@ -41,9 +43,13 @@ def format_channel_memory_summary(
     if not profile:
         return "Channel Memory: No historical profile available. Apply standard technical creator baseline."
 
+    topics = list(profile.primary_topics or [])
+    for p in (profile.content_pillars or []):
+        if p not in topics:
+            topics.append(p)
     parts: list[str] = [
         f"Channel: {profile.channel_name}",
-        f"Topics / Pillars: {', '.join(profile.content_pillars or profile.primary_topics or ['Tech Tutorials'])}",
+        f"Topics / Pillars: {', '.join(topics) if topics else 'Tech Tutorials'}",
         f"Audience: {', '.join(profile.audience_characteristics or ['Developers', 'Engineers'])}",
     ]
     if profile.recurring_retention_patterns:
@@ -474,3 +480,128 @@ ORIGINAL SPOKEN TEXT:
 
 AVAILABLE TIME BUDGET: {available_duration_s:.2f} seconds
 REWRITTEN SPOKEN TEXT:"""
+
+
+DEFAULT_NINA_PROMPT = (
+    "You are Nina, Croviq's Packaging Agent for YouTube creators.\n"
+    "Your role is to turn the approved Master video into a high-converting, publish-ready YouTube package.\n\n"
+    "Packaging Principles:\n"
+    "1. Multimodal Video Grounding: Inspect both what the video says (transcript) and what it visually demonstrates (screen, hardware, code, action).\n"
+    "2. Channel-Aware Positioning: Utilize Alex channel intelligence, historical retention/CTR baselines, and Memory Bank lessons. Do not fabricate metrics.\n"
+    "3. Packaging Rigor: Generate distinct, high-impact title candidates representing genuinely different strategic angles (DIRECT_VALUE, CURIOSITY, PROBLEM_SOLUTION, etc.).\n"
+    "4. Publish-Ready Description: Accurately describe the video, preserve technical terminology, include polished chapters, and avoid AI fluff.\n"
+    "5. Canonical Chapters: Anchor chapter timestamps to verified Master timeline boundaries starting at 0:00.\n"
+    "6. Visual Thumbnail Concepts: Identify 3 distinct visual moments from actual video frames with exact millisecond timestamps, subject, composition, and emotional hook.\n"
+    "7. Short Packaging: Provide separate, punchy vertical Short packaging when a Short exists.\n"
+    "8. Packaging Truth: Distinguish FACT from RECOMMENDATION. Frame future CTR expectations as hypotheses grounded in channel evidence."
+)
+
+
+def format_research_findings_for_packaging(findings: Sequence[ResearchFinding] | None) -> str:
+    """Format relevant research findings into packaging context."""
+    if not findings:
+        return "Research Findings: None available."
+    lines = ["Relevant Research Findings & Topic Opportunities:"]
+    for f in findings[:5]:
+        lines.append(f"- {f.title}: {f.why_it_matters} (Relevance: {f.relevance_score:.2f}, Freshness: {f.freshness_score:.2f})")
+    return "\n".join(lines)
+
+
+def format_chapters_for_packaging(chapters: Sequence[ChapterMarker] | None) -> str:
+    """Format Leo's semantic chapters into baseline chapter list."""
+    if not chapters:
+        return "Persisted Chapter Markers: None defined."
+    lines = ["Leo's Canonical Semantic Chapters:"]
+    for idx, c in enumerate(chapters):
+        start_str = format_ms_as_timestamp(c.source_start_ms)
+        end_str = format_ms_as_timestamp(c.source_end_ms)
+        lines.append(f"- [{start_str} - {end_str}] {c.title} ({c.summary})")
+    return "\n".join(lines)
+
+
+def build_packaging_prompt(
+    transcript: Transcript,
+    channel_profile: ChannelMemoryProfile | None,
+    lessons: list[ChannelLesson] | None,
+    production_id: str,
+    chapters: Sequence[ChapterMarker] | None = None,
+    research_findings: Sequence[ResearchFinding] | None = None,
+    short_candidate: ShortCandidate | None = None,
+    has_short_artifact: bool = False,
+    custom_prompt: str | None = None,
+) -> str:
+    """Construct the structured packaging prompt for Nina (Packaging Agent)."""
+    memory_context = format_channel_memory_summary(channel_profile, lessons)
+    formatted_transcript = format_transcript_for_prompt(transcript, max_words=300)
+    research_context = format_research_findings_for_packaging(research_findings)
+    chapters_context = format_chapters_for_packaging(chapters)
+
+    short_context = ""
+    if short_candidate or has_short_artifact:
+        hook = short_candidate.hook_title if short_candidate else "Vertical Short"
+        reason = short_candidate.concise_reason if short_candidate else "Selected social excerpt"
+        short_context = f"\nVERTICAL SHORT ARTIFACT CONTEXT:\n- Hook: {hook}\n- Rationale: {reason}\n- Generate dedicated Short packaging (title, hook, description, hashtags).\n"
+
+    system_role = custom_prompt if (custom_prompt and custom_prompt.strip()) else DEFAULT_NINA_PROMPT
+
+    return f"""{system_role}
+
+MANDATORY PRINCIPLE: MULTIMODAL VIDEO UNDERSTANDING
+You are inspecting the approved Master video directly alongside the canonical transcript.
+You must ground your packaging in what the video VISUALLY demonstrates and what is SPOKEN.
+
+PACKAGING MISSION:
+1. TITLE GENERATION:
+   - Generate approximately 5 distinct title candidates representing genuinely different strategic packaging angles.
+   - Allowed angles: DIRECT_VALUE, CURIOSITY, PROBLEM_SOLUTION, CONTRARIAN, HOW_TO, COMPARISON, NEWS_RELEVANT.
+   - Do not produce trivial word substitutions; each candidate should represent a distinct angle.
+   - Select one recommended primary title and explain why it works for this channel.
+
+2. PUBLISH-READY DESCRIPTION:
+   - Write a clear, engaging YouTube description matching the creator's voice.
+   - Accurately describe the video content and preserve technical terminology.
+   - Include timestamps and chapter titles.
+   - Avoid empty AI marketing buzzwords.
+
+3. CHAPTERS:
+   - Reuse Leo's persisted chapter time boundaries as canonical timecodes (starting at 0:00).
+   - Rewrite chapter titles for maximum publishing quality and readability.
+   - Ensure all timestamps correspond to the final Master video.
+
+4. THUMBNAIL CONCEPTS:
+   - Identify 3 distinct visual moments from actual video frames.
+   - For each concept, provide:
+     * concept_id (e.g. "th_01")
+     * headline (short overlay text, 2-4 words)
+     * visual_subject (what is clearly visible in the frame)
+     * composition (framing, crop, rule of thirds, contrast)
+     * emotion (viewer emotion/intrigue)
+     * supporting_frame_ms (exact millisecond location in the Master video)
+     * reason (why this thumbnail concept drives CTR for this audience)
+     * confidence (0.0 - 1.0)
+     * frame_verified (true)
+
+5. SHORT PACKAGE:
+   - Provide dedicated title, description, hook framing, and hashtags for vertical Short if applicable.
+
+6. PACKAGING RATIONALE & CHANNEL EVIDENCE:
+   - Provide a safe, product-facing summary of why this packaging was chosen.
+   - In `channel_evidence`, reference real historical trends (e.g. practical demonstration vs generic specs).
+   - If no specific historical signal exists, state: "No strong historical packaging signal; recommendation is based primarily on video content."
+   - Never fabricate YouTube metrics or assert future performance as absolute fact.
+
+PRODUCTION IDENTITY:
+Production ID: {production_id}
+
+CHANNEL INTELLIGENCE (MEMORY BANK & ALEX DATA):
+{memory_context}
+
+{research_context}
+
+{chapters_context}
+{short_context}
+TRANSCRIPT EXCERPT & CONTEXT:
+{formatted_transcript}
+
+Output a strictly compliant PackagingProposal matching the requested schema.
+"""

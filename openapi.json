@@ -210,7 +210,7 @@
       "put": {
         "tags": ["Workspaces"],
         "summary": "Update Agent Working Prompt",
-        "description": "Update the complete editorial working prompt for Leo or Maya. Bumps version and timestamps.",
+        "description": "Update the complete editorial working prompt for Leo, Maya, Alex, or Nina. Bumps version and timestamps.",
         "operationId": "update_agent_prompt_api_workspace_agent_settings_prompts__agent_id__put",
         "security": [
           {
@@ -266,7 +266,7 @@
       "post": {
         "tags": ["Workspaces"],
         "summary": "Reset Agent Working Prompt",
-        "description": "Reset Leo or Maya working prompt back to the system default editorial prompt.",
+        "description": "Reset Leo, Maya, Alex, or Nina working prompt back to the system default prompt.",
         "operationId": "reset_agent_prompt_api_workspace_agent_settings_prompts__agent_id__reset_post",
         "security": [
           {
@@ -1628,6 +1628,169 @@
         }
       }
     },
+    "/api/productions/{production_id}/package": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Generate Packaging Proposal",
+        "description": "Invoke Nina (Packaging Agent) to generate title candidates, descriptions, chapters, thumbnail concepts, and Short packaging for an approved Master video.",
+        "operationId": "generate_packaging_api_productions__production_id__package_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/GeneratePackagingRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackagingDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/packaging": {
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get Production Packaging Details",
+        "description": "Retrieve the latest packaging proposal, creator overrides, and publishing state for a production.",
+        "operationId": "get_packaging_details_api_productions__production_id__packaging_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackagingDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Update Creator Package Overrides",
+        "description": "Update creator overrides for title selection, custom title, description, chapter titles, Short title/description, or thumbnail concept selection.",
+        "operationId": "update_packaging_overrides_api_productions__production_id__packaging_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePackagingOverridesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackagingDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/channels/sample/dashboard": {
       "get": {
         "tags": ["Channel Intelligence"],
@@ -2223,7 +2386,7 @@
       },
       "AgentId": {
         "type": "string",
-        "enum": ["leo", "maya", "alex"],
+        "enum": ["leo", "maya", "alex", "nina"],
         "title": "AgentId",
         "description": "Supported Croviq agents."
       },
@@ -2262,7 +2425,7 @@
         "properties": {
           "agent_id": {
             "$ref": "#/components/schemas/AgentId",
-            "description": "Target agent identifier (alex, leo, or maya)"
+            "description": "Target agent identifier (alex, leo, maya, or nina)"
           },
           "prompt_text": {
             "type": "string",
@@ -2307,6 +2470,9 @@
           "alex_prompt": {
             "$ref": "#/components/schemas/AgentPromptConfig"
           },
+          "nina_prompt": {
+            "$ref": "#/components/schemas/AgentPromptConfig"
+          },
           "voice_settings": {
             "$ref": "#/components/schemas/VoiceSettingsConfig"
           },
@@ -2320,7 +2486,14 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["leo_prompt", "maya_prompt", "alex_prompt", "voice_settings", "voices"],
+        "required": [
+          "leo_prompt",
+          "maya_prompt",
+          "alex_prompt",
+          "nina_prompt",
+          "voice_settings",
+          "voices"
+        ],
         "title": "AgentSettingsResponse",
         "description": "Complete Agent Settings state returned to client."
       },
@@ -3716,6 +3889,111 @@
         "title": "CreateUploadResponse",
         "description": "Response returned upon successfully registering an upload and generating a signed PUT URL."
       },
+      "CreatorPackageOverrides": {
+        "properties": {
+          "selected_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Title",
+            "description": "Currently selected title (from candidates or custom)"
+          },
+          "custom_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Title",
+            "description": "Creator-edited custom title"
+          },
+          "custom_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Description",
+            "description": "Creator-edited custom description"
+          },
+          "custom_chapters": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PackagingChapter"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Chapters",
+            "description": "Creator-edited chapter titles"
+          },
+          "custom_short_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Short Title",
+            "description": "Creator-edited Short title"
+          },
+          "custom_short_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Short Description",
+            "description": "Creator-edited Short description"
+          },
+          "selected_thumbnail_concept_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Thumbnail Concept Id",
+            "description": "ID of creator-selected thumbnail concept"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp of last creator edit (UTC)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CreatorPackageOverrides",
+        "description": "Creator-defined overrides to Nina's packaging proposal."
+      },
       "CutInstruction": {
         "properties": {
           "cut_id": {
@@ -4884,6 +5162,20 @@
         "enum": ["NEW", "UPDATED", "SEEN", "EXPIRED"],
         "title": "FindingLifecycle"
       },
+      "GeneratePackagingRequest": {
+        "properties": {
+          "force_regenerate": {
+            "type": "boolean",
+            "title": "Force Regenerate",
+            "description": "Whether to bypass cached proposal and generate a fresh packaging proposal",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GeneratePackagingRequest",
+        "description": "Request payload to generate packaging proposal for a production."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5265,6 +5557,365 @@
         "enum": ["pending", "accepted", "rejected", "failed"],
         "title": "NarrationSegmentStatus",
         "description": "Status of a narration segment synthesis."
+      },
+      "PackagingChapter": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "description": "Polish chapter title"
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Start time in milliseconds on the Master timeline"
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Ms",
+            "description": "End time in milliseconds on the Master timeline"
+          },
+          "formatted_time": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Formatted Time",
+            "description": "Standard YouTube timecode string (e.g. 0:00, 1:23)"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "Optional brief description of the chapter content"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["title", "start_ms", "end_ms", "formatted_time"],
+        "title": "PackagingChapter",
+        "description": "Publish-ready chapter timestamp for YouTube description."
+      },
+      "PackagingDetailResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Unique production identifier"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackagingProposal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Latest Nina packaging proposal"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreatorPackageOverrides"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Creator-defined package overrides"
+          },
+          "effective_title": {
+            "type": "string",
+            "title": "Effective Title",
+            "description": "Active title to publish (overridden or primary recommendation)"
+          },
+          "effective_description": {
+            "type": "string",
+            "title": "Effective Description",
+            "description": "Active description to publish"
+          },
+          "effective_chapters": {
+            "items": {
+              "$ref": "#/components/schemas/PackagingChapter"
+            },
+            "type": "array",
+            "title": "Effective Chapters",
+            "description": "Active canonical video chapters"
+          },
+          "effective_short_package": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShortPackage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Active vertical Short packaging"
+          },
+          "effective_thumbnail_concept_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Thumbnail Concept Id",
+            "description": "Active selected thumbnail concept ID"
+          },
+          "master_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenderArtifactResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Master video artifact details"
+          },
+          "short_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenderArtifactResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short video artifact details"
+          },
+          "master_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Master Url",
+            "description": "Signed playback URL for master video"
+          },
+          "short_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Url",
+            "description": "Signed playback URL for short video"
+          },
+          "has_master": {
+            "type": "boolean",
+            "title": "Has Master",
+            "description": "Whether an approved master video artifact exists",
+            "default": false
+          },
+          "has_short": {
+            "type": "boolean",
+            "title": "Has Short",
+            "description": "Whether a vertical Short video artifact exists",
+            "default": false
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Packaging readiness status ('completed' or 'needs_master')",
+            "default": "completed"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At",
+            "description": "UTC timestamp of last proposal generation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id", "effective_title", "effective_description"],
+        "title": "PackagingDetailResponse",
+        "description": "Publish-ready packaging details including Nina proposal, creator overrides, and media references."
+      },
+      "PackagingProposal": {
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Proposal Id",
+            "description": "Unique packaging proposal identifier (e.g. pkg_...)"
+          },
+          "production_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated Production entity identifier"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent",
+            "description": "Agent identifier ('nina')",
+            "default": "nina"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model",
+            "description": "Model identifier used for packaging generation",
+            "default": "gemini-3.7-flash"
+          },
+          "primary_title": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Primary Title",
+            "description": "Recommended primary title"
+          },
+          "title_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/TitleCandidate"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Title Candidates",
+            "description": "List of distinct title candidates across strategic angles"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Description",
+            "description": "Publish-ready YouTube description text with chapters"
+          },
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/PackagingChapter"
+            },
+            "type": "array",
+            "title": "Chapters",
+            "description": "List of canonical video chapters"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Keywords",
+            "description": "Tags and keywords for search / discovery"
+          },
+          "thumbnail_concepts": {
+            "items": {
+              "$ref": "#/components/schemas/ThumbnailConcept"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Thumbnail Concepts",
+            "description": "Top thumbnail concepts with supporting frame references"
+          },
+          "short_package": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShortPackage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Vertical Short packaging if Short exists"
+          },
+          "packaging_summary": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Packaging Summary",
+            "description": "Concise product-facing packaging rationale"
+          },
+          "channel_evidence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Evidence",
+            "description": "Product-facing channel evidence supporting primary recommendation"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Overall confidence in packaging proposal"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Creation timestamp in UTC"
+          },
+          "master_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Master Artifact Id",
+            "description": "Referenced Master RenderArtifact identifier"
+          },
+          "prompt_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Prompt Version",
+            "description": "Nina prompt version used for this generation",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "production_id",
+          "primary_title",
+          "title_candidates",
+          "description",
+          "thumbnail_concepts",
+          "packaging_summary",
+          "confidence"
+        ],
+        "title": "PackagingProposal",
+        "description": "Canonical packaging proposal emitted by Nina (Packaging Agent)."
       },
       "Production": {
         "properties": {
@@ -6312,6 +6963,44 @@
         "title": "ShortCandidate",
         "description": "Identified 20-60s candidate segment suitable for vertical Short extraction."
       },
+      "ShortPackage": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Title",
+            "description": "Vertical Short title"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Description",
+            "description": "Short description / caption"
+          },
+          "hook": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Hook",
+            "description": "Opening spoken / visual hook framing"
+          },
+          "hashtags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hashtags",
+            "description": "Useful hashtags (e.g. #shorts, #tech)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["title", "description", "hook"],
+        "title": "ShortPackage",
+        "description": "Packaging metadata for vertical Short."
+      },
       "ShortVisualPlan": {
         "properties": {
           "regions": {
@@ -6724,6 +7413,145 @@
         "enum": ["director", "editor", "packaging", "qa"],
         "title": "TargetAgent"
       },
+      "ThumbnailConcept": {
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Concept Id",
+            "description": "Unique concept identifier"
+          },
+          "headline": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Headline",
+            "description": "Optional short thumbnail overlay headline / text (2-4 words)"
+          },
+          "visual_subject": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Visual Subject",
+            "description": "Description of the primary visual subject in the frame"
+          },
+          "composition": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Composition",
+            "description": "Composition, framing, crop, and visual contrast direction"
+          },
+          "emotion": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Emotion",
+            "description": "Intended viewer emotion or intrigue (e.g. Curiosity, Disbelief)"
+          },
+          "supporting_frame_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Supporting Frame Ms",
+            "description": "Exact millisecond timestamp in the Master video where this frame exists"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "description": "Rationale for why this visual frame attracts the target audience"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence score for this thumbnail concept (0.0 - 1.0)"
+          },
+          "frame_verified": {
+            "type": "boolean",
+            "title": "Frame Verified",
+            "description": "Whether the supporting frame was verified against the Master video",
+            "default": true
+          },
+          "frame_artifact_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Artifact Uri",
+            "description": "Optional storage URI of extracted frame image"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "concept_id",
+          "headline",
+          "visual_subject",
+          "composition",
+          "emotion",
+          "supporting_frame_ms",
+          "reason",
+          "confidence"
+        ],
+        "title": "ThumbnailConcept",
+        "description": "Structured thumbnail concept referencing a verified visual frame in Master."
+      },
+      "TitleAngle": {
+        "type": "string",
+        "enum": [
+          "DIRECT_VALUE",
+          "CURIOSITY",
+          "PROBLEM_SOLUTION",
+          "CONTRARIAN",
+          "HOW_TO",
+          "COMPARISON",
+          "NEWS_RELEVANT"
+        ],
+        "title": "TitleAngle",
+        "description": "Packaging angles and positioning strategies for YouTube title candidates."
+      },
+      "TitleCandidate": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Text",
+            "description": "YouTube title text"
+          },
+          "angle": {
+            "$ref": "#/components/schemas/TitleAngle",
+            "description": "Strategic packaging angle (DIRECT_VALUE, CURIOSITY, etc.)"
+          },
+          "why_it_works": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Why It Works",
+            "description": "Clear rationale for why this packaging angle fits channel audience"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence score for this candidate (0.0 - 1.0)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["text", "angle", "why_it_works", "confidence"],
+        "title": "TitleCandidate",
+        "description": "Distinct title candidate representing a specific packaging strategy."
+      },
       "TopicClusterPerformance": {
         "properties": {
           "topic_cluster": {
@@ -7031,6 +7859,101 @@
         "required": ["index", "text", "start_ms", "end_ms"],
         "title": "TranscriptWord",
         "description": "Canonical representation of a single spoken word with millisecond time alignment."
+      },
+      "UpdatePackagingOverridesRequest": {
+        "properties": {
+          "selected_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Title",
+            "description": "Creator selected title"
+          },
+          "custom_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Title",
+            "description": "Creator custom title override"
+          },
+          "custom_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Description",
+            "description": "Creator custom description override"
+          },
+          "custom_chapters": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PackagingChapter"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Chapters",
+            "description": "Creator custom chapters override"
+          },
+          "custom_short_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Short Title",
+            "description": "Creator custom Short title override"
+          },
+          "custom_short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Short Description",
+            "description": "Creator custom Short description override"
+          },
+          "selected_thumbnail_concept_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Thumbnail Concept Id",
+            "description": "Selected thumbnail concept ID"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UpdatePackagingOverridesRequest",
+        "description": "Request payload to update creator-selected packaging overrides."
       },
       "UpdatePromptRequest": {
         "properties": {

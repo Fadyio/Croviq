@@ -57,9 +57,9 @@ class AgentSettingsResponse(BaseModel):
     """Complete Agent Settings state returned to client."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
     leo_prompt: AgentPromptConfig
     maya_prompt: AgentPromptConfig
     alex_prompt: AgentPromptConfig
+    nina_prompt: AgentPromptConfig
     voice_settings: VoiceSettingsConfig
     voices: list[VoiceCatalogItem]

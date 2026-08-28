@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import leoAvatar from "../../assets/agents/leo.webp";
 import mayaAvatar from "../../assets/agents/maya.webp";
+import ninaAvatar from "../../assets/agents/nina.png";
 import type { components } from "../../api/generated";
 import { useAuth } from "../../auth/AuthContext";
 
@@ -25,7 +26,7 @@ type NarrationMode = "original" | "enhanced_original" | "studio_voice" | "my_voi
 
 interface AgentSettingsDrawerProps {
   isOpen: boolean;
-  agentId: "leo" | "maya";
+  agentId: "leo" | "maya" | "nina";
   onClose: () => void;
 }
 
@@ -68,10 +69,11 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   const [audioError, setAudioError] = useState<string | null>(null);
 
   const isLeo = agentId === "leo";
-  const agentName = isLeo ? "Leo" : "Maya";
-  const agentRole = isLeo ? "Video Editor" : "Director";
-  const avatarSrc = isLeo ? leoAvatar : mayaAvatar;
-
+  const isMaya = agentId === "maya";
+  const isNina = agentId === "nina";
+  const agentName = isLeo ? "Leo" : isMaya ? "Maya" : "Nina";
+  const agentRole = isLeo ? "Video Editor" : isMaya ? "Director" : "Packaging Agent";
+  const avatarSrc = isLeo ? leoAvatar : isMaya ? mayaAvatar : ninaAvatar;
   // If Maya is selected and tab is voice, reset to prompt tab
   useEffect(() => {
     if (!isLeo && activeTab === "voice") {
@@ -90,7 +92,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
         const res = await fetch("/api/workspace/agent-settings", { headers });
         if (res.ok) {
           const data = await res.json();
-          const p = isLeo ? data.leo_prompt : data.maya_prompt;
+          const p = isLeo ? data.leo_prompt : isMaya ? data.maya_prompt : data.nina_prompt;
           if (p) {
             setPromptText(p.prompt_text || "");
             setPromptVersion(p.version ?? 1);
@@ -117,7 +119,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     };
 
     loadSettings();
-  }, [isOpen, isLeo]);
+  }, [isOpen, agentId]);
 
   const handleSavePrompt = async () => {
     setIsSaving(true);

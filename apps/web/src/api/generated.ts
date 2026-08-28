@@ -291,6 +291,28 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/package": {
+    post: {
+      responses: {
+        200: components["schemas"]["PackagingDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/packaging": {
+    get: {
+      responses: {
+        200: components["schemas"]["PackagingDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+    patch: {
+      responses: {
+        200: components["schemas"]["PackagingDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
   "/api/channels/sample/dashboard": {
     get: {
       responses: {
@@ -412,7 +434,7 @@ export interface components {
       /** Timestamp when the activity occurred */
       created_at?: string;
     };
-    AgentId: "leo" | "maya" | "alex";
+    AgentId: "leo" | "maya" | "alex" | "nina";
     AgentMemorySummaryResponse: {
       channel_title: string;
       style_guide: string;
@@ -420,7 +442,7 @@ export interface components {
       lessons?: components["schemas"]["MemoryItemResponse"][];
     };
     AgentPromptConfig: {
-      /** Target agent identifier (alex, leo, or maya) */
+      /** Target agent identifier (alex, leo, maya, or nina) */
       agent_id: components["schemas"]["AgentId"];
       /** Complete agent working prompt text */
       prompt_text: string;
@@ -435,6 +457,7 @@ export interface components {
       leo_prompt: components["schemas"]["AgentPromptConfig"];
       maya_prompt: components["schemas"]["AgentPromptConfig"];
       alex_prompt: components["schemas"]["AgentPromptConfig"];
+      nina_prompt: components["schemas"]["AgentPromptConfig"];
       voice_settings: components["schemas"]["VoiceSettingsConfig"];
       voices: components["schemas"]["VoiceCatalogItem"][];
     };
@@ -718,6 +741,24 @@ export interface components {
       required_headers?: Record<string, unknown>;
       /** Timestamp when the pre-signed upload URL expires (UTC) */
       expires_at: string;
+    };
+    CreatorPackageOverrides: {
+      /** Currently selected title (from candidates or custom) */
+      selected_title?: string | null;
+      /** Creator-edited custom title */
+      custom_title?: string | null;
+      /** Creator-edited custom description */
+      custom_description?: string | null;
+      /** Creator-edited chapter titles */
+      custom_chapters?: components["schemas"]["PackagingChapter"][] | null;
+      /** Creator-edited Short title */
+      custom_short_title?: string | null;
+      /** Creator-edited Short description */
+      custom_short_description?: string | null;
+      /** ID of creator-selected thumbnail concept */
+      selected_thumbnail_concept_id?: string | null;
+      /** Timestamp of last creator edit (UTC) */
+      updated_at?: string;
     };
     CutInstruction: {
       /** Unique identifier for the cut instruction */
@@ -1004,6 +1045,10 @@ export interface components {
     EvidenceKind: "FACT" | "INFERENCE" | "RESEARCH" | "RECOMMENDATION";
     ExperimentStatus: "PROPOSED" | "ACTIVE" | "COMPLETED" | "INCONCLUSIVE";
     FindingLifecycle: "NEW" | "UPDATED" | "SEEN" | "EXPIRED";
+    GeneratePackagingRequest: {
+      /** Whether to bypass cached proposal and generate a fresh packaging proposal */
+      force_regenerate?: boolean;
+    };
     HTTPValidationError: {
       detail?: components["schemas"]["ValidationError"][];
     };
@@ -1092,6 +1137,88 @@ export interface components {
       tempo_adjustment?: number;
     };
     NarrationSegmentStatus: "pending" | "accepted" | "rejected" | "failed";
+    PackagingChapter: {
+      /** Polish chapter title */
+      title: string;
+      /** Start time in milliseconds on the Master timeline */
+      start_ms: number;
+      /** End time in milliseconds on the Master timeline */
+      end_ms: number;
+      /** Standard YouTube timecode string (e.g. 0:00, 1:23) */
+      formatted_time: string;
+      /** Optional brief description of the chapter content */
+      summary?: string | null;
+    };
+    PackagingDetailResponse: {
+      /** Unique production identifier */
+      production_id: string;
+      /** Latest Nina packaging proposal */
+      proposal?: components["schemas"]["PackagingProposal"] | null;
+      /** Creator-defined package overrides */
+      overrides?: components["schemas"]["CreatorPackageOverrides"] | null;
+      /** Active title to publish (overridden or primary recommendation) */
+      effective_title: string;
+      /** Active description to publish */
+      effective_description: string;
+      /** Active canonical video chapters */
+      effective_chapters?: components["schemas"]["PackagingChapter"][];
+      /** Active vertical Short packaging */
+      effective_short_package?: components["schemas"]["ShortPackage"] | null;
+      /** Active selected thumbnail concept ID */
+      effective_thumbnail_concept_id?: string | null;
+      /** Master video artifact details */
+      master_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
+      /** Short video artifact details */
+      short_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
+      /** Signed playback URL for master video */
+      master_url?: string | null;
+      /** Signed playback URL for short video */
+      short_url?: string | null;
+      /** Whether an approved master video artifact exists */
+      has_master?: boolean;
+      /** Whether a vertical Short video artifact exists */
+      has_short?: boolean;
+      /** Packaging readiness status ('completed' or 'needs_master') */
+      status?: string;
+      /** UTC timestamp of last proposal generation */
+      generated_at?: string | null;
+    };
+    PackagingProposal: {
+      /** Unique packaging proposal identifier (e.g. pkg_...) */
+      proposal_id: string;
+      /** Associated Production entity identifier */
+      production_id: string;
+      /** Agent identifier ('nina') */
+      agent?: string;
+      /** Model identifier used for packaging generation */
+      model?: string;
+      /** Recommended primary title */
+      primary_title: string;
+      /** List of distinct title candidates across strategic angles */
+      title_candidates: components["schemas"]["TitleCandidate"][];
+      /** Publish-ready YouTube description text with chapters */
+      description: string;
+      /** List of canonical video chapters */
+      chapters?: components["schemas"]["PackagingChapter"][];
+      /** Tags and keywords for search / discovery */
+      keywords?: string[];
+      /** Top thumbnail concepts with supporting frame references */
+      thumbnail_concepts: components["schemas"]["ThumbnailConcept"][];
+      /** Vertical Short packaging if Short exists */
+      short_package?: components["schemas"]["ShortPackage"] | null;
+      /** Concise product-facing packaging rationale */
+      packaging_summary: string;
+      /** Product-facing channel evidence supporting primary recommendation */
+      channel_evidence?: string | null;
+      /** Overall confidence in packaging proposal */
+      confidence: number;
+      /** Creation timestamp in UTC */
+      created_at?: string;
+      /** Referenced Master RenderArtifact identifier */
+      master_artifact_id?: string | null;
+      /** Nina prompt version used for this generation */
+      prompt_version?: number;
+    };
     Production: {
       /** Unique production identifier */
       production_id: string;
@@ -1327,6 +1454,16 @@ export interface components {
       /** Optional visual focus regions for 9:16 reframe */
       visual_plan?: components["schemas"]["ShortVisualPlan"] | null;
     };
+    ShortPackage: {
+      /** Vertical Short title */
+      title: string;
+      /** Short description / caption */
+      description: string;
+      /** Opening spoken / visual hook framing */
+      hook: string;
+      /** Useful hashtags (e.g. #shorts, #tech) */
+      hashtags?: string[];
+    };
     ShortVisualPlan: {
       /** List of chronological visual focus regions for the Short */
       regions?: components["schemas"]["ShortVisualRegion"][];
@@ -1422,6 +1559,46 @@ export interface components {
       updated_at: string;
     };
     TargetAgent: "director" | "editor" | "packaging" | "qa";
+    ThumbnailConcept: {
+      /** Unique concept identifier */
+      concept_id: string;
+      /** Optional short thumbnail overlay headline / text (2-4 words) */
+      headline: string;
+      /** Description of the primary visual subject in the frame */
+      visual_subject: string;
+      /** Composition, framing, crop, and visual contrast direction */
+      composition: string;
+      /** Intended viewer emotion or intrigue (e.g. Curiosity, Disbelief) */
+      emotion: string;
+      /** Exact millisecond timestamp in the Master video where this frame exists */
+      supporting_frame_ms: number;
+      /** Rationale for why this visual frame attracts the target audience */
+      reason: string;
+      /** Confidence score for this thumbnail concept (0.0 - 1.0) */
+      confidence: number;
+      /** Whether the supporting frame was verified against the Master video */
+      frame_verified?: boolean;
+      /** Optional storage URI of extracted frame image */
+      frame_artifact_uri?: string | null;
+    };
+    TitleAngle:
+      | "DIRECT_VALUE"
+      | "CURIOSITY"
+      | "PROBLEM_SOLUTION"
+      | "CONTRARIAN"
+      | "HOW_TO"
+      | "COMPARISON"
+      | "NEWS_RELEVANT";
+    TitleCandidate: {
+      /** YouTube title text */
+      text: string;
+      /** Strategic packaging angle (DIRECT_VALUE, CURIOSITY, etc.) */
+      angle: components["schemas"]["TitleAngle"];
+      /** Clear rationale for why this packaging angle fits channel audience */
+      why_it_works: string;
+      /** Confidence score for this candidate (0.0 - 1.0) */
+      confidence: number;
+    };
     TopicClusterPerformance: {
       topic_cluster: string;
       video_count: number;
@@ -1500,6 +1677,22 @@ export interface components {
       confidence?: number | null;
       /** Optional speaker identifier or diarization tag */
       speaker_id?: string | null;
+    };
+    UpdatePackagingOverridesRequest: {
+      /** Creator selected title */
+      selected_title?: string | null;
+      /** Creator custom title override */
+      custom_title?: string | null;
+      /** Creator custom description override */
+      custom_description?: string | null;
+      /** Creator custom chapters override */
+      custom_chapters?: components["schemas"]["PackagingChapter"][] | null;
+      /** Creator custom Short title override */
+      custom_short_title?: string | null;
+      /** Creator custom Short description override */
+      custom_short_description?: string | null;
+      /** Selected thumbnail concept ID */
+      selected_thumbnail_concept_id?: string | null;
     };
     UpdatePromptRequest: {
       /** Updated editorial working prompt */

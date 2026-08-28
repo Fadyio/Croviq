@@ -76,7 +76,33 @@ from croviq_api.productions.schemas import (
     RenderReviewDetailResponse,
     StudioVoiceGenerationResponse,
     BRollListResponse,
+    GeneratePackagingRequest,
+    PackagingDetailResponse,
+    UpdatePackagingOverridesRequest,
 )
+from croviq_api.productions.packaging_repository import (
+    PackagingRepository,
+    get_packaging_repository,
+)
+from croviq_api.channels.research_repository import (
+    ResearchRepository,
+    get_research_repository,
+)
+from croviq_api.memory.dependencies import get_memory_store
+from croviq_api.memory.store import ChannelMemoryStore
+from croviq_agents.nina import NinaPackagingAgent
+from croviq_domain.agent_config import AgentId
+from croviq_domain.packaging import (
+    CreatorPackageOverrides,
+    PackagingChapter,
+    PackagingProposal,
+    ShortPackage,
+    ThumbnailConcept,
+    TitleAngle,
+    TitleCandidate,
+)
+from croviq_domain.channel_provider import SampleChannelDataProvider
+from croviq_domain.memory import ChannelProfileBuilder
 from croviq_api.productions.studio_voice_repository import (
     StudioVoiceRepository,
     get_studio_voice_repository,
@@ -557,6 +583,7 @@ async def delete_production(
     render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)],
     studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
     broll_repo: Annotated[BRollRepository, Depends(get_broll_repository)],
+    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> DeleteProductionResponse:
     request_id = getattr(request.state, "request_id", "unknown")
@@ -644,6 +671,11 @@ async def delete_production(
     except Exception as exc:
         logger.warning("Error deleting broll for %s: %s", production_id, exc)
 
+
+    try:
+        await packaging_repo.delete_by_production_id(production_id)
+    except Exception as exc:
+        logger.warning("Error deleting packaging records for %s: %s", production_id, exc)
     # 4. Delete root production record
     await production_repo.delete_production(production_id)
 
@@ -1908,4 +1940,363 @@ async def list_production_broll(
     return BRollListResponse(
         production_id=prod.production_id,
         artifacts=artifacts,
+    )
+
+
+async def _build_packaging_detail_response(
+    production_id: str,
+    proposal: PackagingProposal | None,
+    overrides: CreatorPackageOverrides | None,
+    master_artifact: RenderArtifact | None,
+    short_artifact: RenderArtifact | None,
+    media_storage: MediaStorage,
+) -> PackagingDetailResponse:
+    settings = get_settings()
+    master_url: str | None = None
+    if master_artifact and master_artifact.status == ArtifactStatus.completed:
+        try:
+            target = await media_storage.generate_signed_read_target(
+                bucket=master_artifact.gcs_bucket,
+                object_name=master_artifact.gcs_object,
+                expiry_seconds=settings.signed_url_expiry_seconds,
+            )
+            master_url = target.read_url
+        except Exception as exc:
+            logger.warning("Could not generate signed master url for packaging: %s", exc)
+
+    short_url: str | None = None
+    if short_artifact and short_artifact.status == ArtifactStatus.completed:
+        try:
+            target = await media_storage.generate_signed_read_target(
+                bucket=short_artifact.gcs_bucket,
+                object_name=short_artifact.gcs_object,
+                expiry_seconds=settings.signed_url_expiry_seconds,
+            )
+            short_url = target.read_url
+        except Exception as exc:
+            logger.warning("Could not generate signed short url for packaging: %s", exc)
+
+    master_resp = RenderArtifactResponse(
+        artifact_id=master_artifact.artifact_id,
+        production_id=master_artifact.production_id,
+        edl_id=master_artifact.edl_id,
+        artifact_type=master_artifact.artifact_type.value if hasattr(master_artifact.artifact_type, "value") else str(master_artifact.artifact_type),
+        status=master_artifact.status.value if hasattr(master_artifact.status, "value") else str(master_artifact.status),
+        duration_ms=master_artifact.duration_ms,
+        created_at=master_artifact.created_at,
+        completed_at=master_artifact.completed_at,
+        playback_url=master_url,
+    ) if master_artifact else None
+
+    short_resp = RenderArtifactResponse(
+        artifact_id=short_artifact.artifact_id,
+        production_id=short_artifact.production_id,
+        edl_id=short_artifact.edl_id,
+        artifact_type=short_artifact.artifact_type.value if hasattr(short_artifact.artifact_type, "value") else str(short_artifact.artifact_type),
+        status=short_artifact.status.value if hasattr(short_artifact.status, "value") else str(short_artifact.status),
+        duration_ms=short_artifact.duration_ms,
+        created_at=short_artifact.created_at,
+        completed_at=short_artifact.completed_at,
+        playback_url=short_url,
+    ) if short_artifact else None
+
+    effective_title = ""
+    if overrides and overrides.custom_title:
+        effective_title = overrides.custom_title
+    elif overrides and overrides.selected_title:
+        effective_title = overrides.selected_title
+    elif proposal and proposal.primary_title:
+        effective_title = proposal.primary_title
+
+    effective_description = ""
+    if overrides and overrides.custom_description:
+        effective_description = overrides.custom_description
+    elif proposal and proposal.description:
+        effective_description = proposal.description
+
+    effective_chapters: list[PackagingChapter] = []
+    if overrides and overrides.custom_chapters is not None:
+        effective_chapters = overrides.custom_chapters
+    elif proposal and proposal.chapters:
+        effective_chapters = proposal.chapters
+
+    effective_short: ShortPackage | None = None
+    if proposal and proposal.short_package:
+        stitle = overrides.custom_short_title if (overrides and overrides.custom_short_title) else proposal.short_package.title
+        sdesc = overrides.custom_short_description if (overrides and overrides.custom_short_description) else proposal.short_package.description
+        effective_short = ShortPackage(
+            title=stitle,
+            description=sdesc,
+            hook=proposal.short_package.hook,
+            hashtags=proposal.short_package.hashtags,
+        )
+
+    effective_thumb_id = None
+    if overrides and overrides.selected_thumbnail_concept_id:
+        effective_thumb_id = overrides.selected_thumbnail_concept_id
+    elif proposal and proposal.thumbnail_concepts:
+        effective_thumb_id = proposal.thumbnail_concepts[0].concept_id
+
+    has_master_bool = bool(master_artifact and master_artifact.status == ArtifactStatus.completed)
+    has_short_bool = bool(short_artifact and short_artifact.status == ArtifactStatus.completed)
+    status_str = "completed" if proposal else ("needs_master" if not has_master_bool else "ready")
+
+    return PackagingDetailResponse(
+        production_id=production_id,
+        proposal=proposal,
+        overrides=overrides,
+        effective_title=effective_title,
+        effective_description=effective_description,
+        effective_chapters=effective_chapters,
+        effective_short_package=effective_short,
+        effective_thumbnail_concept_id=effective_thumb_id,
+        master_artifact=master_resp,
+        short_artifact=short_resp,
+        master_url=master_url,
+        short_url=short_url,
+        has_master=has_master_bool,
+        has_short=has_short_bool,
+        status=status_str,
+        generated_at=proposal.created_at if proposal else None,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/package",
+    response_model=PackagingDetailResponse,
+    summary="Generate Packaging Proposal",
+    description="Invoke Nina (Packaging Agent) to generate title candidates, descriptions, chapters, thumbnail concepts, and Short packaging for an approved Master video.",
+)
+async def generate_packaging(
+    production_id: str,
+    request: Request,
+    payload: GeneratePackagingRequest | None = None,
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)] = None,
+    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)] = None,
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)] = None,
+    editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)] = None,
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)] = None,
+    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)] = None,
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)] = None,
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)] = None,
+    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)] = None,
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)] = None,
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)] = None,
+    genai_client: Annotated[GenAIClient, Depends(get_genai_client)] = None,
+) -> PackagingDetailResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    force_regenerate = payload.force_regenerate if payload else False
+
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+
+    # 1. Prerequisite: Master video artifact must exist and be completed
+    renders = await render_repo.list_render_artifacts(prod.production_id)
+    master_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+    if not master_artifact:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Master video must be rendered and completed before generating packaging.",
+        )
+
+    short_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+
+    # 2. Retrieve Nina agent prompt configuration
+    nina_prompt_config = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.NINA)
+
+    # 3. Idempotency check: Return cached proposal if already generated with same Master & prompt version
+    overrides = await packaging_repo.get_package_overrides(prod.production_id)
+    if not force_regenerate:
+        latest_proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
+        if (
+            latest_proposal
+            and latest_proposal.master_artifact_id == master_artifact.artifact_id
+            and latest_proposal.prompt_version == nina_prompt_config.version
+        ):
+            return await _build_packaging_detail_response(
+                production_id=prod.production_id,
+                proposal=latest_proposal,
+                overrides=overrides,
+                master_artifact=master_artifact,
+                short_artifact=short_artifact,
+                media_storage=media_storage,
+            )
+
+    # 4. Gather transcript, chapters, editorial decisions, research, and memory
+    transcript = await transcript_repo.get_transcript_by_production_id(prod.production_id)
+    if not transcript:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Transcript not found for production {production_id}.",
+        )
+
+    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
+    latest_run = await editorial_repo.get_latest_editorial_run(prod.production_id)
+    chapters = []
+    short_candidate = None
+    if latest_run and latest_run.editor_proposal_id:
+        editor_prop = await editorial_repo.get_editor_proposal(prod.production_id, latest_run.editor_proposal_id)
+        if editor_prop:
+            short_candidate = editor_prop.short_candidate
+            if editor_prop.chapters:
+                chapters = editor_prop.chapters
+    # Channel memory profile & lessons
+    channel_profile = None
+    lessons = []
+    try:
+        channel_profile = await memory_store.get_profile(prod.channel_id)
+        if not channel_profile:
+            sample_provider = SampleChannelDataProvider()
+            c_data = await sample_provider.get_channel(prod.channel_id)
+            if c_data:
+                channel_profile, lessons = ChannelProfileBuilder.build(c_data)
+                await memory_store.save_profile(channel_profile)
+                if lessons:
+                    await memory_store.save_lessons(prod.channel_id, lessons)
+        else:
+            lessons = await memory_store.get_lessons(prod.channel_id)
+    except Exception as exc:
+        logger.warning("Could not retrieve memory profile for %s: %s", prod.channel_id, exc)
+
+    # Research findings
+    research_findings = []
+    try:
+        research_findings = await research_repo.list_findings(workspace_id=workspace.workspace_id, channel_id=prod.channel_id, limit=5)
+    except Exception as exc:
+        logger.warning("Could not retrieve research findings for %s: %s", prod.channel_id, exc)
+
+    # 5. Invoke Nina Packaging Agent
+    agent = NinaPackagingAgent(genai_client=genai_client)
+    proposal, usage = await agent.package_production(
+        production_id=prod.production_id,
+        master_artifact=master_artifact,
+        transcript=transcript,
+        channel_profile=channel_profile,
+        lessons=lessons,
+        chapters=chapters,
+        research_findings=research_findings,
+        short_candidate=short_candidate,
+        has_short_artifact=bool(short_artifact),
+        custom_prompt=nina_prompt_config.prompt_text if nina_prompt_config.is_custom else None,
+        prompt_version=nina_prompt_config.version,
+        request_id=request_id,
+    )
+
+    # 6. Persist proposal
+    await packaging_repo.save_packaging_proposal(proposal)
+
+    return await _build_packaging_detail_response(
+        production_id=prod.production_id,
+        proposal=proposal,
+        overrides=overrides,
+        master_artifact=master_artifact,
+        short_artifact=short_artifact,
+        media_storage=media_storage,
+    )
+
+
+@router.get(
+    "/productions/{production_id}/packaging",
+    response_model=PackagingDetailResponse,
+    summary="Get Production Packaging Details",
+    description="Retrieve the latest packaging proposal, creator overrides, and publishing state for a production.",
+)
+async def get_packaging_details(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> PackagingDetailResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+
+    renders = await render_repo.list_render_artifacts(prod.production_id)
+    master_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+    short_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+
+    proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
+    overrides = await packaging_repo.get_package_overrides(prod.production_id)
+
+    return await _build_packaging_detail_response(
+        production_id=prod.production_id,
+        proposal=proposal,
+        overrides=overrides,
+        master_artifact=master_artifact,
+        short_artifact=short_artifact,
+        media_storage=media_storage,
+    )
+
+
+@router.patch(
+    "/productions/{production_id}/packaging",
+    response_model=PackagingDetailResponse,
+    summary="Update Creator Package Overrides",
+    description="Update creator overrides for title selection, custom title, description, chapter titles, Short title/description, or thumbnail concept selection.",
+)
+async def update_packaging_overrides(
+    production_id: str,
+    payload: UpdatePackagingOverridesRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> PackagingDetailResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+
+    existing_overrides = await packaging_repo.get_package_overrides(prod.production_id)
+    now = datetime.now(timezone.utc)
+
+    selected_title = payload.selected_title if payload.selected_title is not None else (existing_overrides.selected_title if existing_overrides else None)
+    custom_title = payload.custom_title if payload.custom_title is not None else (existing_overrides.custom_title if existing_overrides else None)
+    custom_description = payload.custom_description if payload.custom_description is not None else (existing_overrides.custom_description if existing_overrides else None)
+    custom_chapters = payload.custom_chapters if payload.custom_chapters is not None else (existing_overrides.custom_chapters if existing_overrides else None)
+    custom_short_title = payload.custom_short_title if payload.custom_short_title is not None else (existing_overrides.custom_short_title if existing_overrides else None)
+    custom_short_description = payload.custom_short_description if payload.custom_short_description is not None else (existing_overrides.custom_short_description if existing_overrides else None)
+    selected_thumb_id = payload.selected_thumbnail_concept_id if payload.selected_thumbnail_concept_id is not None else (existing_overrides.selected_thumbnail_concept_id if existing_overrides else None)
+
+    updated_overrides = CreatorPackageOverrides(
+        selected_title=selected_title,
+        custom_title=custom_title,
+        custom_description=custom_description,
+        custom_chapters=custom_chapters,
+        custom_short_title=custom_short_title,
+        custom_short_description=custom_short_description,
+        selected_thumbnail_concept_id=selected_thumb_id,
+        updated_at=now,
+    )
+    await packaging_repo.save_package_overrides(prod.production_id, updated_overrides)
+
+    renders = await render_repo.list_render_artifacts(prod.production_id)
+    master_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+    short_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+    proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
+
+    return await _build_packaging_detail_response(
+        production_id=prod.production_id,
+        proposal=proposal,
+        overrides=updated_overrides,
+        master_artifact=master_artifact,
+        short_artifact=short_artifact,
+        media_storage=media_storage,
     )

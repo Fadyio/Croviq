@@ -20,6 +20,11 @@ from croviq_api.productions.render_review_repository import (
     get_render_review_repository,
     set_render_review_repository,
 )
+from croviq_api.productions.packaging_repository import (
+    PackagingRepository,
+    get_packaging_repository,
+    set_packaging_repository,
+)
 from croviq_api.memory.dependencies import get_memory_store
 from croviq_api.memory.store import ChannelMemoryStore
 from croviq_api.productions.editorial_repository import (

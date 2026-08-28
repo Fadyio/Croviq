@@ -68,9 +68,14 @@ const readOptionalJson = async <T,>(response: Response, label: string): Promise<
 interface EditorPageProps {
   productionId: string;
   onNavigateHome?: () => void;
+  onNavigateRelease?: () => void;
 }
 
-export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigateHome }) => {
+export const EditorPage: React.FC<EditorPageProps> = ({
+  productionId,
+  onNavigateHome,
+  onNavigateRelease,
+}) => {
   const { user, firebaseUser, logout } = useAuth();
 
   const [production, setProduction] = useState<Production | null>(null);
@@ -653,7 +658,27 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             hasStudioVoice={Boolean(studioVoicePreviewUrl)}
             hasShort={Boolean(shortArtifact?.playback_url)}
           />
-
+          {Boolean(
+            masterArtifact?.playback_url ||
+            masterUrl ||
+            (renderReview?.approved_for_master && masterArtifact?.status === "completed"),
+          ) && (
+            <button
+              type="button"
+              onClick={
+                onNavigateRelease ||
+                (() => {
+                  window.location.href = `/productions/${productionId}/release`;
+                })
+              }
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-md transition-colors shadow-sm"
+              title="Open Release & Packaging Workspace"
+              data-testid="btn-package-release"
+            >
+              <Sparkles className="size-3.5" />
+              <span>Package / Release</span>
+            </button>
+          )}
           <button
             onClick={logout}
             className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-transparent hover:border-border-subtle"

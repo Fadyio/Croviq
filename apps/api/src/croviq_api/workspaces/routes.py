@@ -103,6 +103,7 @@ async def get_agent_settings(
     leo_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.LEO)
     maya_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.MAYA)
     alex_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.ALEX)
+    nina_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.NINA)
     voice_settings = await agent_config_repo.get_voice_settings(workspace.workspace_id)
     voices = VoiceCatalog.list_voices()
 
@@ -110,6 +111,7 @@ async def get_agent_settings(
         leo_prompt=leo_prompt,
         maya_prompt=maya_prompt,
         alex_prompt=alex_prompt,
+        nina_prompt=nina_prompt,
         voice_settings=voice_settings,
         voices=voices,
     )
@@ -119,7 +121,12 @@ async def get_agent_settings(
     "/workspace/agent-settings/prompts/{agent_id}",
     response_model=AgentPromptConfig,
     summary="Update Agent Working Prompt",
-    description="Update the complete editorial working prompt for Leo or Maya. Bumps version and timestamps.",
+    description="Update the complete editorial working prompt for Leo, Maya, Alex, or Nina. Bumps version and timestamps.",
+)
+@router.put(
+    "/workspace/agent-settings/prompt/{agent_id}",
+    response_model=AgentPromptConfig,
+    include_in_schema=False,
 )
 async def update_agent_prompt(
     agent_id: str,
@@ -129,10 +136,10 @@ async def update_agent_prompt(
     agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
 ) -> AgentPromptConfig:
     aid = str(agent_id).lower()
-    if aid not in ("alex", "leo", "maya"):
+    if aid not in ("alex", "leo", "maya", "nina"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid agent_id '{agent_id}'. Must be 'alex', 'leo', or 'maya'.",
+            detail=f"Invalid agent_id '{agent_id}'. Must be 'alex', 'leo', 'maya', or 'nina'.",
         )
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     return await agent_config_repo.save_agent_prompt(
@@ -146,7 +153,12 @@ async def update_agent_prompt(
     "/workspace/agent-settings/prompts/{agent_id}/reset",
     response_model=AgentPromptConfig,
     summary="Reset Agent Working Prompt",
-    description="Reset Leo or Maya working prompt back to the system default editorial prompt.",
+    description="Reset Leo, Maya, Alex, or Nina working prompt back to the system default prompt.",
+)
+@router.post(
+    "/workspace/agent-settings/prompt/{agent_id}/reset",
+    response_model=AgentPromptConfig,
+    include_in_schema=False,
 )
 async def reset_agent_prompt(
     agent_id: str,
@@ -155,10 +167,10 @@ async def reset_agent_prompt(
     agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
 ) -> AgentPromptConfig:
     aid = str(agent_id).lower()
-    if aid not in ("alex", "leo", "maya"):
+    if aid not in ("alex", "leo", "maya", "nina"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid agent_id '{agent_id}'. Must be 'alex', 'leo', or 'maya'.",
+            detail=f"Invalid agent_id '{agent_id}'. Must be 'alex', 'leo', 'maya', or 'nina'.",
         )
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     return await agent_config_repo.reset_agent_prompt(

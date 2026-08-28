@@ -13,6 +13,13 @@ from croviq_domain.editorial import (
 from croviq_domain.edl import EditDecisionList
 
 from croviq_domain.production import Production
+from croviq_domain.packaging import (
+    CreatorPackageOverrides,
+    PackagingChapter,
+    PackagingProposal,
+    ShortPackage,
+    ThumbnailConcept,
+)
 from croviq_domain.transcript import Transcript
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
 from croviq_domain.render_review import EditorSelfReview, RenderReview
@@ -520,3 +527,51 @@ class DeleteProductionResponse(BaseModel):
     production_id: str = Field(..., description="Unique production identifier")
     deleted_storage_objects_count: int = Field(default=0, description="Count of GCS media storage objects deleted")
     deleted_at: datetime = Field(..., description="UTC timestamp of the deletion")
+
+
+class GeneratePackagingRequest(BaseModel):
+    """Request payload to generate packaging proposal for a production."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    force_regenerate: bool = Field(
+        default=False,
+        description="Whether to bypass cached proposal and generate a fresh packaging proposal",
+    )
+
+
+class UpdatePackagingOverridesRequest(BaseModel):
+    """Request payload to update creator-selected packaging overrides."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    selected_title: str | None = Field(default=None, description="Creator selected title")
+    custom_title: str | None = Field(default=None, description="Creator custom title override")
+    custom_description: str | None = Field(default=None, description="Creator custom description override")
+    custom_chapters: list[PackagingChapter] | None = Field(default=None, description="Creator custom chapters override")
+    custom_short_title: str | None = Field(default=None, description="Creator custom Short title override")
+    custom_short_description: str | None = Field(default=None, description="Creator custom Short description override")
+    selected_thumbnail_concept_id: str | None = Field(default=None, description="Selected thumbnail concept ID")
+
+
+class PackagingDetailResponse(BaseModel):
+    """Publish-ready packaging details including Nina proposal, creator overrides, and media references."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    production_id: str = Field(..., description="Unique production identifier")
+    proposal: PackagingProposal | None = Field(default=None, description="Latest Nina packaging proposal")
+    overrides: CreatorPackageOverrides | None = Field(default=None, description="Creator-defined package overrides")
+    effective_title: str = Field(..., description="Active title to publish (overridden or primary recommendation)")
+    effective_description: str = Field(..., description="Active description to publish")
+    effective_chapters: list[PackagingChapter] = Field(default_factory=list, description="Active canonical video chapters")
+    effective_short_package: ShortPackage | None = Field(default=None, description="Active vertical Short packaging")
+    effective_thumbnail_concept_id: str | None = Field(default=None, description="Active selected thumbnail concept ID")
+    master_artifact: RenderArtifactResponse | None = Field(default=None, description="Master video artifact details")
+    short_artifact: RenderArtifactResponse | None = Field(default=None, description="Short video artifact details")
+    master_url: str | None = Field(default=None, description="Signed playback URL for master video")
+    short_url: str | None = Field(default=None, description="Signed playback URL for short video")
+    has_master: bool = Field(default=False, description="Whether an approved master video artifact exists")
+    has_short: bool = Field(default=False, description="Whether a vertical Short video artifact exists")
+    status: str = Field(default="completed", description="Packaging readiness status ('completed' or 'needs_master')")
+    generated_at: datetime | None = Field(default=None, description="UTC timestamp of last proposal generation")

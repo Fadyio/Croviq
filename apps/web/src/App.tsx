@@ -5,13 +5,18 @@ import { LoginPage } from "./pages/LoginPage";
 import { AppPage } from "./pages/AppPage";
 import { NewProjectPage } from "./pages/NewProjectPage";
 import { EditorPage } from "./pages/EditorPage";
+import { ReleasePage } from "./pages/ReleasePage";
 import { LoadingScreen } from "./components/LoadingScreen";
+
+const parseProductionReleaseRoute = (pathname: string): string | null => {
+  const match = pathname.match(/^\/productions\/([^/]+)\/release\/?$/);
+  return match ? match[1] : null;
+};
 
 const parseProductionEditorRoute = (pathname: string): string | null => {
   const match = pathname.match(/^\/productions\/([^/]+)(?:\/editor)?\/?$/);
   return match ? match[1] : null;
 };
-
 const normalizePath = (pathname: string): string => {
   if (pathname === "" || pathname === "/") return "/";
   if (pathname === "/app" || pathname === "/app/") return "/app";
@@ -19,6 +24,7 @@ const normalizePath = (pathname: string): string => {
   if (pathname.startsWith("/app/experiments")) return "/app/experiments";
   if (pathname.startsWith("/login")) return "/login";
   if (pathname.startsWith("/projects/new")) return "/projects/new";
+  if (parseProductionReleaseRoute(pathname)) return pathname;
   if (parseProductionEditorRoute(pathname)) return pathname;
   return pathname;
 };
@@ -62,11 +68,28 @@ const AppRoutes: React.FC = () => {
     return <LoadingScreen />;
   }
 
+  const releaseProductionId = parseProductionReleaseRoute(currentPath);
+  if (releaseProductionId) {
+    return (
+      <AuthGuard onRedirectToLogin={() => navigate("/login")}>
+        <ReleasePage
+          productionId={releaseProductionId}
+          onNavigateHome={() => navigate("/app")}
+          onNavigateEditor={() => navigate(`/productions/${releaseProductionId}`)}
+        />
+      </AuthGuard>
+    );
+  }
+
   const productionId = parseProductionEditorRoute(currentPath);
   if (productionId) {
     return (
       <AuthGuard onRedirectToLogin={() => navigate("/login")}>
-        <EditorPage productionId={productionId} onNavigateHome={() => navigate("/app")} />
+        <EditorPage
+          productionId={productionId}
+          onNavigateHome={() => navigate("/app")}
+          onNavigateRelease={() => navigate(`/productions/${productionId}/release`)}
+        />
       </AuthGuard>
     );
   }

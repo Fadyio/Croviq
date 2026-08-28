@@ -127,6 +127,12 @@ class EventType(StrEnum):
     RESEARCH_SCHEDULER_TICK = "research.scheduler.tick"
     RESEARCH_SCHEDULER_SKIPPED = "research.scheduler.skipped"
     RESEARCH_SCHEDULER_COMPLETED = "research.scheduler.completed"
+
+    # Nina Packaging events (Issue #32)
+    PACKAGING_STARTED = "packaging.started"
+    PACKAGING_COMPLETED = "packaging.completed"
+    PACKAGING_FAILED = "packaging.failed"
+    PACKAGING_REGENERATED = "packaging.regenerated"
 # Normalized set of all standard event names
 NORMALIZED_EVENT_TYPES: frozenset[str] = frozenset(e.value for e in EventType)
 

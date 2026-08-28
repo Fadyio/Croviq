@@ -25,6 +25,15 @@ from croviq_domain.render_review import (
     RenderReviewSeverity,
     RenderReviewVerdict,
 )
+from croviq_domain.packaging import (
+    CreatorPackageOverrides,
+    PackagingChapter,
+    PackagingProposal,
+    ShortPackage,
+    ThumbnailConcept,
+    TitleAngle,
+    TitleCandidate,
+)
 
 __all__ = [
     "AgentActivity",
@@ -48,4 +57,11 @@ __all__ = [
     "RenderReviewIssueType",
     "RenderReviewSeverity",
     "RenderReviewVerdict",
+    "CreatorPackageOverrides",
+    "PackagingChapter",
+    "PackagingProposal",
+    "ShortPackage",
+    "ThumbnailConcept",
+    "TitleAngle",
+    "TitleCandidate",
 ]

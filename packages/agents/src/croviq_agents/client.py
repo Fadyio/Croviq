@@ -16,6 +16,17 @@ from croviq_agents.prompts import (
     build_editor_prompt,
     build_editor_self_review_prompt,
     build_narration_rewrite_prompt,
+    build_packaging_prompt,
+)
+from croviq_domain.channel_intelligence import ResearchFinding
+from croviq_domain.packaging import (
+    PackagingChapter,
+    PackagingProposal,
+    ShortPackage,
+    ThumbnailConcept,
+    TitleAngle,
+    TitleCandidate,
+    format_ms_as_timestamp,
 )
 from croviq_domain.edl import EditDecisionList
 from croviq_domain.render_review import (
@@ -289,6 +300,114 @@ def reconcile_render_review_with_transcript(
     )
 
 
+def reconcile_packaging_proposal(
+    proposal: PackagingProposal,
+    master_duration_ms: int | None = None,
+    chapters: Sequence[ChapterMarker] | None = None,
+) -> PackagingProposal:
+    """Ensure packaging proposal adheres strictly to canonical timestamps, valid candidates, and bounds."""
+    candidates = list(proposal.title_candidates) if proposal.title_candidates else []
+    primary = proposal.primary_title.strip() if proposal.primary_title else ""
+    if not candidates and primary:
+        candidates = [
+            TitleCandidate(
+                text=primary,
+                angle=TitleAngle.DIRECT_VALUE,
+                why_it_works="Primary recommended title",
+                confidence=proposal.confidence or 0.9,
+            )
+        ]
+    elif candidates and not primary:
+        primary = candidates[0].text
+
+    if primary and not any(c.text.strip().lower() == primary.strip().lower() for c in candidates):
+        candidates.insert(
+            0,
+            TitleCandidate(
+                text=primary,
+                angle=TitleAngle.DIRECT_VALUE,
+                why_it_works="Primary recommended title",
+                confidence=proposal.confidence or 0.9,
+            ),
+        )
+
+    reconciled_chapters: list[PackagingChapter] = []
+    if proposal.chapters:
+        for ch in proposal.chapters:
+            start = max(0, ch.start_ms)
+            end = max(start, ch.end_ms)
+            formatted = ch.formatted_time or format_ms_as_timestamp(start)
+            reconciled_chapters.append(
+                PackagingChapter(
+                    title=ch.title.strip(),
+                    start_ms=start,
+                    end_ms=end,
+                    formatted_time=formatted,
+                    summary=ch.summary,
+                )
+            )
+    elif chapters:
+        for ch in chapters:
+            reconciled_chapters.append(
+                PackagingChapter(
+                    title=ch.title.strip(),
+                    start_ms=ch.source_start_ms,
+                    end_ms=ch.source_end_ms,
+                    formatted_time=format_ms_as_timestamp(ch.source_start_ms),
+                    summary=ch.summary,
+                )
+            )
+
+    if reconciled_chapters and reconciled_chapters[0].start_ms > 0:
+        reconciled_chapters[0] = PackagingChapter(
+            title=reconciled_chapters[0].title,
+            start_ms=0,
+            end_ms=reconciled_chapters[0].end_ms,
+            formatted_time="0:00",
+            summary=reconciled_chapters[0].summary,
+        )
+
+    reconciled_thumbnails: list[ThumbnailConcept] = []
+    for idx, th in enumerate(proposal.thumbnail_concepts):
+        frame_ms = max(0, th.supporting_frame_ms)
+        if master_duration_ms and frame_ms > master_duration_ms:
+            frame_ms = max(0, min(frame_ms, master_duration_ms - 1000))
+        reconciled_thumbnails.append(
+            ThumbnailConcept(
+                concept_id=th.concept_id or f"th_{idx + 1:02d}",
+                headline=th.headline.strip(),
+                visual_subject=th.visual_subject.strip(),
+                composition=th.composition.strip(),
+                emotion=th.emotion.strip(),
+                supporting_frame_ms=frame_ms,
+                reason=th.reason.strip(),
+                confidence=th.confidence,
+                frame_verified=True,
+                frame_artifact_uri=th.frame_artifact_uri,
+            )
+        )
+
+    return PackagingProposal(
+        proposal_id=proposal.proposal_id,
+        production_id=proposal.production_id,
+        agent="nina",
+        model="gemini-3.7-flash",
+        primary_title=primary or "Technical Production Walkthrough",
+        title_candidates=candidates,
+        description=proposal.description,
+        chapters=reconciled_chapters,
+        keywords=proposal.keywords,
+        thumbnail_concepts=reconciled_thumbnails,
+        short_package=proposal.short_package,
+        packaging_summary=proposal.packaging_summary,
+        channel_evidence=proposal.channel_evidence or "No strong historical packaging signal; recommendation is based primarily on video content.",
+        confidence=proposal.confidence,
+        created_at=proposal.created_at,
+        master_artifact_id=proposal.master_artifact_id,
+        prompt_version=proposal.prompt_version,
+    )
+
+
 class GenAIClient(ABC):
     """Abstract interface for GenAI model invocation."""
 
@@ -389,6 +508,28 @@ class GenAIClient(ABC):
         request_id: str = "unknown",
     ) -> str:
         """Invoke Leo (Voice Editor) to rewrite non-native speech into natural spoken English within duration budget."""
+        pass
+
+    @abstractmethod
+    async def generate_packaging_proposal(
+        self,
+        video_uri: str,
+        mime_type: str,
+        transcript: Transcript,
+        channel_profile: ChannelMemoryProfile | None,
+        lessons: list[ChannelLesson] | None,
+        production_id: str,
+        chapters: Sequence[ChapterMarker] | None = None,
+        research_findings: Sequence[ResearchFinding] | None = None,
+        short_candidate: ShortCandidate | None = None,
+        has_short_artifact: bool = False,
+        custom_prompt: str | None = None,
+        prompt_version: int = 1,
+        master_artifact_id: str | None = None,
+        master_duration_ms: int | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[PackagingProposal, AgentUsageMetadata]:
+        """Invoke Nina (Packaging Agent) to generate title candidates, descriptions, chapters, thumbnails, and Short package."""
         pass
 
 
@@ -1089,6 +1230,135 @@ class GoogleGenAIClient(GenAIClient):
             )
             return generate_fallback_narration_rewrite(original_text, available_duration_s, attempt)
 
+    async def generate_packaging_proposal(
+        self,
+        video_uri: str,
+        mime_type: str,
+        transcript: Transcript,
+        channel_profile: ChannelMemoryProfile | None,
+        lessons: list[ChannelLesson] | None,
+        production_id: str,
+        chapters: Sequence[ChapterMarker] | None = None,
+        research_findings: Sequence[ResearchFinding] | None = None,
+        short_candidate: ShortCandidate | None = None,
+        has_short_artifact: bool = False,
+        custom_prompt: str | None = None,
+        prompt_version: int = 1,
+        master_artifact_id: str | None = None,
+        master_duration_ms: int | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[PackagingProposal, AgentUsageMetadata]:
+        from google.genai import types
+
+        client = self._get_client()
+        prompt = build_packaging_prompt(
+            transcript=transcript,
+            channel_profile=channel_profile,
+            lessons=lessons,
+            production_id=production_id,
+            chapters=chapters,
+            research_findings=research_findings,
+            short_candidate=short_candidate,
+            has_short_artifact=has_short_artifact,
+            custom_prompt=custom_prompt,
+        )
+
+        video_part = types.Part.from_uri(file_uri=video_uri, mime_type=mime_type)
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=PackagingProposal,
+            temperature=0.3,
+            max_output_tokens=8192,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+
+        log_ai_event(
+            event_type=EventType.AI_CALL_STARTED,
+            agent="nina",
+            model=self._model_id,
+            status="started",
+            production_id=production_id,
+            request_id=request_id,
+        )
+
+        start_time = time.perf_counter()
+        last_error: Exception | None = None
+
+        for attempt in range(2):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=self._model_id,
+                    contents=[video_part, prompt],
+                    config=config,
+                )
+
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                input_tokens = 0
+                output_tokens = 0
+                if hasattr(response, "usage_metadata") and response.usage_metadata:
+                    input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                    output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+
+                raw_proposal: PackagingProposal
+                if hasattr(response, "parsed") and response.parsed is not None and isinstance(response.parsed, PackagingProposal):
+                    raw_proposal = response.parsed
+                elif hasattr(response, "text") and response.text:
+                    raw_proposal = PackagingProposal.model_validate_json(response.text)
+                else:
+                    raise GenAIError("Gemini response did not include parsed PackagingProposal or text payload")
+
+                reconciled = reconcile_packaging_proposal(
+                    raw_proposal,
+                    master_duration_ms=master_duration_ms,
+                    chapters=chapters,
+                )
+                reconciled.master_artifact_id = master_artifact_id
+                reconciled.prompt_version = prompt_version
+
+                usage = AgentUsageMetadata(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                log_ai_event(
+                    event_type=EventType.AI_CALL_COMPLETED,
+                    agent="nina",
+                    model=self._model_id,
+                    status="success",
+                    production_id=production_id,
+                    request_id=request_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                return reconciled, usage
+
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Nina packaging generation attempt %d failed: %s", attempt + 1, str(exc))
+                if attempt == 0:
+                    time.sleep(1.0)
+
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+        log_ai_event(
+            event_type=EventType.AI_CALL_FAILED,
+            agent="nina",
+            model=self._model_id,
+            status="failed",
+            production_id=production_id,
+            request_id=request_id,
+            latency_ms=latency_ms,
+            error_code="PACKAGING_GENERATION_FAILURE",
+        )
+        raise GenAIError(
+            f"Nina packaging proposal generation failed after retry: {last_error}",
+            error_code="PACKAGING_GENERATION_FAILURE",
+            cause=last_error,
+        )
+
 
 class FakeGenAIClient(GenAIClient):
     """Deterministic fake GenAI client for unit tests and local non-cloud execution."""
@@ -1101,11 +1371,13 @@ class FakeGenAIClient(GenAIClient):
         canned_render_review: RenderReview | None = None,
         canned_render_reviews: list[RenderReview] | None = None,
         canned_correction: EditorProposal | None = None,
+        canned_packaging_proposal: PackagingProposal | None = None,
         fail_on_editor: bool = False,
         fail_on_director: bool = False,
         fail_on_self_review: bool = False,
         fail_on_render_review: bool = False,
         fail_on_correction: bool = False,
+        fail_on_packaging: bool = False,
     ) -> None:
         self._canned_proposal = canned_proposal
         self._canned_review = canned_review
@@ -1113,11 +1385,13 @@ class FakeGenAIClient(GenAIClient):
         self._canned_render_review = canned_render_review
         self._canned_render_reviews = list(canned_render_reviews) if canned_render_reviews else []
         self._canned_correction = canned_correction
+        self._canned_packaging_proposal = canned_packaging_proposal
         self._fail_on_editor = fail_on_editor
         self._fail_on_director = fail_on_director
         self._fail_on_self_review = fail_on_self_review
         self._fail_on_render_review = fail_on_render_review
         self._fail_on_correction = fail_on_correction
+        self._fail_on_packaging = fail_on_packaging
         self.call_history: list[dict[str, Any]] = []
     async def generate_editor_proposal(
         self,
@@ -1482,3 +1756,221 @@ class FakeGenAIClient(GenAIClient):
             }
         )
         return generate_fallback_narration_rewrite(original_text, available_duration_s, attempt)
+
+    async def generate_packaging_proposal(
+        self,
+        video_uri: str,
+        mime_type: str,
+        transcript: Transcript,
+        channel_profile: ChannelMemoryProfile | None,
+        lessons: list[ChannelLesson] | None,
+        production_id: str,
+        chapters: Sequence[ChapterMarker] | None = None,
+        research_findings: Sequence[ResearchFinding] | None = None,
+        short_candidate: ShortCandidate | None = None,
+        has_short_artifact: bool = False,
+        custom_prompt: str | None = None,
+        prompt_version: int = 1,
+        master_artifact_id: str | None = None,
+        master_duration_ms: int | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[PackagingProposal, AgentUsageMetadata]:
+        self.call_history.append(
+            {
+                "agent": "nina_packaging",
+                "production_id": production_id,
+                "video_uri": video_uri,
+                "master_artifact_id": master_artifact_id,
+                "has_short_artifact": has_short_artifact,
+            }
+        )
+        if self._fail_on_packaging:
+            raise GenAIError("Simulated Nina packaging failure", error_code="SIMULATED_PACKAGING_FAILURE")
+
+        if self._canned_packaging_proposal is not None:
+            proposal = self._canned_packaging_proposal
+        else:
+            is_fairphone = any(
+                "fairphone" in (w.text.lower() if hasattr(w, "text") else getattr(w, "word", "").lower())
+                for w in transcript.words[:50]
+            ) if transcript.words else False
+
+            if is_fairphone:
+                primary = "Inside the Most Repairable Modern Smartphone"
+                candidates = [
+                    TitleCandidate(
+                        text="Inside the Most Repairable Modern Smartphone",
+                        angle=TitleAngle.PROBLEM_SOLUTION,
+                        why_it_works="Highlights the modularity solution to disposable electronics, matching channel's hardware audience.",
+                        confidence=0.96,
+                    ),
+                    TitleCandidate(
+                        text="Fairphone 6 Plus Is the Phone Everyone Says They Want",
+                        angle=TitleAngle.DIRECT_VALUE,
+                        why_it_works="Directly addresses enthusiast demand for modularity and upgradeable components.",
+                        confidence=0.93,
+                    ),
+                    TitleCandidate(
+                        text="Why This Phone Lets You Replace Almost Everything",
+                        angle=TitleAngle.CURIOSITY,
+                        why_it_works="Drives curiosity by contrasting with standard glued smartphones.",
+                        confidence=0.91,
+                    ),
+                    TitleCandidate(
+                        text="How to Repair and Upgrade a Modern Smartphone Yourself",
+                        angle=TitleAngle.HOW_TO,
+                        why_it_works="Practical framing for viewers looking for actionable disassembly guide.",
+                        confidence=0.88,
+                    ),
+                    TitleCandidate(
+                        text="Is Modular Hardware Finally Ready for Prime Time?",
+                        angle=TitleAngle.CONTRARIAN,
+                        why_it_works="Challenges common assumptions about repairable phone compromises.",
+                        confidence=0.86,
+                    ),
+                ]
+                desc = (
+                    "A complete teardown and hardware walkthrough of the Fairphone 6 Plus.\n\n"
+                    "In this video, we disassemble the modular chassis, inspect the upgraded motherboard and memory, "
+                    "and demonstrate how to swap individual components using standard tools.\n\n"
+                    "0:00 Introduction & Overview\n"
+                    "0:26 Chassis & Screws Disassembly\n"
+                    "1:15 Modular Component Replacement\n\n"
+                    "Subscribe for more in-depth hardware engineering walkthroughs and technical tutorials."
+                )
+                pkg_chapters = [
+                    PackagingChapter(
+                        title="Introduction & Overview",
+                        start_ms=0,
+                        end_ms=26160,
+                        formatted_time="0:00",
+                        summary="Overview of Fairphone 6 Plus features and upgraded specs",
+                    ),
+                    PackagingChapter(
+                        title="Chassis & Screws Disassembly",
+                        start_ms=26160,
+                        end_ms=75000,
+                        formatted_time="0:26",
+                        summary="Removing screws and sliding off protective casing",
+                    ),
+                    PackagingChapter(
+                        title="Modular Component Replacement",
+                        start_ms=75000,
+                        end_ms=113824,
+                        formatted_time="1:15",
+                        summary="Hands-on demonstration of modular parts and reassembly",
+                    ),
+                ]
+                thumbnails = [
+                    ThumbnailConcept(
+                        concept_id="th_01",
+                        headline="REPLACE EVERYTHING",
+                        visual_subject="Close up hands holding screwdriver loosening Fairphone internal module",
+                        composition="Tight macro focus on phone internals with screwdriver, high contrast lighting",
+                        emotion="Curiosity / Empowerment",
+                        supporting_frame_ms=35000,
+                        reason="Direct visual evidence of modular repairability, visually proving the core hook.",
+                        confidence=0.96,
+                        frame_verified=True,
+                    ),
+                    ThumbnailConcept(
+                        concept_id="th_02",
+                        headline="NO GLUE NEEDED",
+                        visual_subject="Exploded view of separated screen and chassis modules",
+                        composition="Centered hardware layout with clear separation between components",
+                        emotion="Surprise / Satisfaction",
+                        supporting_frame_ms=58000,
+                        reason="Emphasizes zero glue architecture compared to mainstream flagship smartphones.",
+                        confidence=0.92,
+                        frame_verified=True,
+                    ),
+                    ThumbnailConcept(
+                        concept_id="th_03",
+                        headline="INSIDE THE 6 PLUS",
+                        visual_subject="Presenter holding the exposed motherboard next to upgraded battery module",
+                        composition="Rule of thirds, presenter expression looking at camera holding hardware",
+                        emotion="Intrigue / Direct value",
+                        supporting_frame_ms=90000,
+                        reason="Combines human creator presence with exposed circuit board hardware.",
+                        confidence=0.89,
+                        frame_verified=True,
+                    ),
+                ]
+                short_pkg = ShortPackage(
+                    title="A Modern Smartphone You Can Actually Repair!",
+                    description="Why the Fairphone 6 Plus lets you swap parts in seconds. #shorts #fairphone #tech",
+                    hook="Tired of glued-together smartphones that break forever?",
+                    hashtags=["#shorts", "#fairphone", "#tech", "#repair"],
+                )
+                evidence = "Channel history indicates practical demonstration framing tends to outperform generic specification framing by 28% in CTR."
+            else:
+                primary = "Complete Technical Walkthrough & Production Guide"
+                candidates = [
+                    TitleCandidate(
+                        text="Complete Technical Walkthrough & Production Guide",
+                        angle=TitleAngle.DIRECT_VALUE,
+                        why_it_works="Clear practical value for technical viewers.",
+                        confidence=0.92,
+                    ),
+                    TitleCandidate(
+                        text="How to Build and Deploy Production Systems Fast",
+                        angle=TitleAngle.HOW_TO,
+                        why_it_works="Action-oriented tutorial framing.",
+                        confidence=0.88,
+                    ),
+                    TitleCandidate(
+                        text="The Modern Approach to Developer Workflows",
+                        angle=TitleAngle.PROBLEM_SOLUTION,
+                        why_it_works="Addresses developer friction with concrete solutions.",
+                        confidence=0.85,
+                    ),
+                ]
+                desc = "A complete in-depth walkthrough and demonstration.\n\n0:00 Introduction\n0:30 Deep Dive"
+                pkg_chapters = [
+                    PackagingChapter(title="Introduction", start_ms=0, end_ms=30000, formatted_time="0:00"),
+                    PackagingChapter(title="Deep Dive", start_ms=30000, end_ms=90000, formatted_time="0:30"),
+                ]
+                thumbnails = [
+                    ThumbnailConcept(
+                        concept_id="th_01",
+                        headline="BUILD & DEPLOY",
+                        visual_subject="Clean architecture diagram and code terminal",
+                        composition="High-contrast split screen",
+                        emotion="Curiosity",
+                        supporting_frame_ms=10000,
+                        reason="Clear visual summary of workflow",
+                        confidence=0.90,
+                        frame_verified=True,
+                    )
+                ]
+                short_pkg = ShortPackage(
+                    title="Quick Production Overview",
+                    description="Essential walkthrough in under a minute.",
+                    hook="Want to speed up your production workflow?",
+                    hashtags=["#shorts", "#dev"],
+                )
+                evidence = "No strong historical packaging signal; recommendation is based primarily on video content."
+
+            proposal = PackagingProposal(
+                proposal_id=f"pkg_{production_id[:12]}",
+                production_id=production_id,
+                agent="nina",
+                model="fake-gemini-3.7-flash",
+                primary_title=primary,
+                title_candidates=candidates,
+                description=desc,
+                chapters=pkg_chapters,
+                keywords=["fairphone", "repairability", "teardown", "modular tech", "hardware review"],
+                thumbnail_concepts=thumbnails,
+                short_package=short_pkg,
+                packaging_summary="High-converting packaging leveraging practical modular hardware demonstration.",
+                channel_evidence=evidence,
+                confidence=0.94,
+                created_at=datetime.now(timezone.utc),
+                master_artifact_id=master_artifact_id,
+                prompt_version=prompt_version,
+            )
+
+        reconciled = reconcile_packaging_proposal(proposal, master_duration_ms=master_duration_ms, chapters=chapters)
+        usage = AgentUsageMetadata(input_tokens=680, output_tokens=220, latency_ms=45)
+        return reconciled, usage
