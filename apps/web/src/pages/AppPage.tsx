@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import type { components } from "../api/generated";
-import alexAvatar from "../assets/agents/Alex.png";
+import alexAvatar from "../assets/agents/alex.webp";
 import { useAuth } from "../auth/AuthContext";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { AlexSettingsDrawer } from "../components/dashboard/AlexSettingsDrawer";

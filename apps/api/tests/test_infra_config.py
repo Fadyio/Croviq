@@ -80,6 +80,8 @@ def test_api_cloud_run_has_required_production_env_vars() -> None:
     assert env_vars["VERTEXAI_LOCATION"] == "global"
     assert env_vars["SPEECH_SERVICE_PROVIDER"] == "google"
     assert env_vars["GEMINI_TRANSCRIPTION_MODEL"] == "gemini-3.5-transcribe-preview"
+    assert "CLOUD_RUN_SERVICE_URL" in env_vars, "CLOUD_RUN_SERVICE_URL missing from Cloud Run API service in infra/main.tf"
+    assert env_vars["CLOUD_RUN_SERVICE_URL"] == "var.cloud_run_service_url"
 def test_deployer_has_serviceusage_consumer_role() -> None:
     """Assert presence of roles/serviceusage.serviceUsageConsumer IAM role for deployment service account."""
     content = get_infra_main_content()
@@ -110,7 +112,7 @@ def test_groq_secret_manager_metadata_retained_without_cloud_run_injection() -> 
     content = get_infra_main_content()
 
     assert '"secretmanager.googleapis.com"' in content
-    assert '"speech.googleapis.com"' in content
+    assert '"speech.googleapis.com"' not in content
     assert 'resource "google_project_iam_member" "deployer_secretmanager_admin"' in content
     assert 'role    = "roles/secretmanager.admin"' in content
     assert 'member  = "serviceAccount:${google_service_account.github_deployer.email}"' in content
@@ -135,3 +137,67 @@ def test_groq_secret_manager_metadata_retained_without_cloud_run_injection() -> 
     )
     assert api_service is not None
     assert 'name = "GROQ_API_KEY"' not in api_service.group(1)
+
+
+def test_cloud_run_liveness_probe_configuration() -> None:
+    """Verify Cloud Run API service liveness probe has adequate timeout for heavy media execution."""
+    content = get_infra_main_content()
+    api_match = re.search(
+        r'resource\s+"google_cloud_run_v2_service"\s+"api"\s*{(.*?)\n}',
+        content,
+        re.DOTALL,
+    )
+    assert api_match is not None
+    api_block = api_match.group(1)
+
+    liveness_match = re.search(
+        r'liveness_probe\s*{(?:[^{}]|{[^{}]*})*}',
+        api_block,
+        re.DOTALL,
+    )
+    assert liveness_match is not None, "liveness_probe block not found in google_cloud_run_v2_service.api"
+    liveness_block = liveness_match.group(0)
+
+    assert 'timeout_seconds   = 5' in liveness_block or 'timeout_seconds = 5' in liveness_block
+    assert 'period_seconds    = 15' in liveness_block or 'period_seconds = 15' in liveness_block
+    assert 'failure_threshold = 3' in liveness_block
+    assert 'path = "/api/health"' in liveness_block
+
+
+def test_firestore_composite_indexes_declared() -> None:
+    """Verify required Firestore composite indexes are declared in Terraform."""
+    content = get_infra_main_content()
+
+    # 1. channel_intelligence collection-group index for hourly scheduler tick
+    assert 'resource "google_firestore_index" "channel_intelligence_due_idx"' in content
+    assert 'collection  = "channel_intelligence"' in content
+    assert 'query_scope = "COLLECTION_GROUP"' in content
+    assert 'field_path = "enabled"' in content
+    assert 'field_path = "next_run_at"' in content
+
+    # 2. research_findings collection index for ranked channel findings
+    assert 'resource "google_firestore_index" "research_findings_channel_idx"' in content
+    assert 'collection  = "research_findings"' in content
+    assert 'query_scope = "COLLECTION"' in content
+    assert 'field_path = "channel_id"' in content
+    assert 'field_path = "opportunity_score"' in content
+
+
+def test_api_runtime_and_deployer_iam_roles_declared() -> None:
+    """Verify declarative IAM bindings for API runtime and GitHub deployer."""
+    content = get_infra_main_content()
+
+    # API runtime Vertex AI Foundation Model invocation role
+    assert 'resource "google_project_iam_member" "api_runtime_aiplatform_user"' in content
+    assert 'role    = "roles/aiplatform.user"' in content
+    assert 'member  = "serviceAccount:${google_service_account.api_runtime.email}"' in content
+
+    # GitHub deployer KMS, Scheduler, and Service Account administrative roles
+    assert 'resource "google_project_iam_member" "deployer_kms_admin"' in content
+    assert 'role    = "roles/cloudkms.admin"' in content
+
+    assert 'resource "google_project_iam_member" "deployer_scheduler_admin"' in content
+    assert 'role    = "roles/cloudscheduler.admin"' in content
+
+    assert 'resource "google_project_iam_member" "deployer_sa_admin"' in content
+    assert 'role    = "roles/iam.serviceAccountAdmin"' in content

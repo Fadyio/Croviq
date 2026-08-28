@@ -158,7 +158,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("SCHEDULER_SERVICE_ACCOUNT_EMAIL"),
     )
     cloud_run_service_url: str = Field(
-        default="https://croviq-api-uhz5nod4gq-uc.a.run.app",
+        default="",
         validation_alias=AliasChoices("CLOUD_RUN_SERVICE_URL", "API_SERVICE_URL"),
     )
     @property

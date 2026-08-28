@@ -111,6 +111,7 @@ class EventType(StrEnum):
     ALEX_RESEARCH_STARTED = "alex.research.started"
     ALEX_RESEARCH_COMPLETED = "alex.research.completed"
     ALEX_RESEARCH_FAILED = "alex.research.failed"
+    ALEX_CODE_EXECUTION_STARTED = "alex.code_execution.started"
     ALEX_CODE_EXECUTION_COMPLETED = "alex.code_execution.completed"
     ALEX_INSIGHT_CREATED = "alex.insight.created"
     ALEX_EXPERIMENT_CREATED = "alex.experiment.created"

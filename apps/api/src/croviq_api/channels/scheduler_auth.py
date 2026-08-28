@@ -37,7 +37,14 @@ async def verify_scheduler_identity(request: Request) -> str:
         if settings.gcp_project_id
         else "croviq-scheduler@croviq-506602.iam.gserviceaccount.com"
     )
-    expected_audience = settings.cloud_run_service_url or "https://croviq-api-uhz5nod4gq-uc.a.run.app"
+    expected_audience = settings.cloud_run_service_url
+    if not expected_audience:
+        if settings.is_production:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="CLOUD_RUN_SERVICE_URL is not configured in production environment.",
+            )
+        expected_audience = "http://localhost:8080"
 
     # Local test bypass only in non-production test environments when mock token is passed
     if not settings.is_production and (

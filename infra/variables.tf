@@ -129,3 +129,9 @@ variable "memory_bank_id" {
   description = "The identifier for the Google Agent Platform Memory Bank."
   default     = "croviq-channel-memory"
 }
+
+variable "cloud_run_service_url" {
+  type        = string
+  description = "Canonical Cloud Run API service URL for Cloud Scheduler audience verification."
+  default     = "https://croviq-api-uhz5nod4gq-uc.a.run.app"
+}

@@ -453,12 +453,12 @@
         <circle cx="30" cy="28" r="14" fill="#047857" />
         <text x="30" y="33" fill="#ffffff" font-size="14" text-anchor="middle">📝</text>
         <text x="56" y="26" fill="#f8fafc" font-size="13" font-weight="700">Transcription Service</text>
-        <text x="56" y="42" fill="#a7f3d0" font-size="11">Gemini 3.5 &amp; Groq Whisper</text>
+        <text x="56" y="42" fill="#a7f3d0" font-size="11">Gemini 3.5 Transcribe</text>
 
         <rect x="12" y="58" width="296" height="130" rx="6" fill="#0f172a" stroke="#064e3b" stroke-width="0.8" />
         <text x="20" y="78" fill="#e2e8f0" font-size="11" font-weight="600">• Word-Level Timestamp Anchors</text>
         <text x="20" y="96" fill="#e2e8f0" font-size="11" font-weight="600">• Gemini 3.5 Transcribe Preview</text>
-        <text x="20" y="114" fill="#e2e8f0" font-size="11" font-weight="600">• Groq Whisper Large v3 Fallback</text>
+        <text x="20" y="114" fill="#e2e8f0" font-size="11" font-weight="600">• Vertex AI ADC Runtime</text>
         <text x="20" y="132" fill="#e2e8f0" font-size="11" font-weight="600">• Accurate Punctuation &amp; Casing</text>
         <text x="20" y="154" fill="#34d399" font-size="10" font-weight="700">Schema: <tspan fill="#f8fafc">Transcript / Words Arrays</tspan></text>
         <text x="20" y="172" fill="#94a3b8" font-size="9">croviq_media.transcript</text>
@@ -566,16 +566,16 @@
         <circle cx="30" cy="28" r="14" fill="#b45309" />
         <text x="30" y="33" fill="#ffffff" font-size="14" text-anchor="middle">🔐</text>
         <text x="56" y="26" fill="#f8fafc" font-size="13" font-weight="700">Security &amp; Auth</text>
-        <text x="56" y="42" fill="#fde68a" font-size="11">Identity Platform &amp; Secrets</text>
+        <text x="56" y="42" fill="#fde68a" font-size="11">Identity Platform &amp; Cloud KMS</text>
 
         <rect x="12" y="58" width="286" height="144" rx="6" fill="#0f172a" stroke="#78350f" stroke-width="0.8" />
         <text x="18" y="78" fill="#e2e8f0" font-size="11" font-weight="600">• Identity Platform (Firebase Auth)</text>
         <text x="18" y="96" fill="#e2e8f0" font-size="11" font-weight="600">• Email / Password Authentication</text>
-        <text x="18" y="114" fill="#e2e8f0" font-size="11" font-weight="600">• Secret Manager (groq-api-key)</text>
-        <text x="18" y="132" fill="#e2e8f0" font-size="11" font-weight="600">• Runtime SA Secret Accessor</text>
+        <text x="18" y="114" fill="#e2e8f0" font-size="11" font-weight="600">• Tink Envelope Encryption (KMS)</text>
+        <text x="18" y="132" fill="#e2e8f0" font-size="11" font-weight="600">• YouTube OAuth Token AAD Seal</text>
         <text x="18" y="154" fill="#f59e0b" font-size="10" font-weight="700">Auth: <tspan fill="#f8fafc">Bearer JWT Tokens</tspan></text>
         <text x="18" y="170" fill="#94a3b8" font-size="9">croviq_api.auth</text>
-        <text x="18" y="186" fill="#64748b" font-size="9">roles/secretmanager.secretAccessor</text>
+        <text x="18" y="186" fill="#64748b" font-size="9">roles/cloudkms.cryptoKeyEncrypterDecrypter</text>
       </g>
     </g>
   </g>

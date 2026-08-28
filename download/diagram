@@ -4,9 +4,9 @@
 > **Cloud Provider**: Google Cloud Platform (`us-central1`)  
 > **Authoritative Ingress**: `https://app.croviq.app` (Single-Origin Load Balancer)  
 > **Visual Diagram Assets**:
-> - High-Resolution PNG: `download/diagram.png` / `download/dirgram.png`
-> - Vector SVG: `download/diagram.svg` / `download/dirgram.svg`
-> - Interactive Web Viewer: `download/diagram.html` / `download/dirgram.html`
+> - High-Resolution PNG: `download/diagram.png`
+> - Vector SVG: `download/diagram.svg`
+> - Interactive Web Viewer: `download/diagram.html`
 
 ---
 
@@ -70,7 +70,7 @@ flowchart TB
             GCS["📦 Google Cloud Storage<br/>Bucket: croviq-media-raw<br/>• Raw Source Uploads (V4 Signed URLs)<br/>• Extracted WAV Audio Tracks<br/>• Rendered Master & Short MP4s<br/>• Private Access Prevention Enforced"]
             Firestore["🗄️ Cloud Firestore (Native Mode)<br/>• Workspaces & User Accounts<br/>• Productions & SourceMedia Metadata<br/>• Transcripts & Editorial Runs<br/>• Assembled EDLs & Render Artifacts"]
             MemoryBank["🧠 Google Agent Platform Memory Bank<br/>ID: croviq-channel-memory<br/>• ChannelProfile & Editorial Style<br/>• ChannelLessons & Evidence Log<br/>• ChannelExperiments (Zero Vector DB)"]
-            Secrets["🔐 Identity Platform & Secret Manager<br/>• Firebase Auth (Email/Password)<br/>• Runtime SA Secret Accessor"]
+            Secrets["🔐 Identity Platform & Cloud KMS<br/>• Firebase Auth (Email/Password)<br/>• YouTube OAuth Envelope Encryption (Tink + KMS)"]
         end
 
         CloudLogging["📊 Google Cloud Logging<br/>Structured JSON Log Ingestion<br/>Unified Trace: request_id, job_id, user_id, model"]

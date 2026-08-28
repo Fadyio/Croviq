@@ -19,7 +19,6 @@ locals {
     "compute.googleapis.com",
     "certificatemanager.googleapis.com",
     "aiplatform.googleapis.com",
-    "speech.googleapis.com",
     "secretmanager.googleapis.com",
     "cloudscheduler.googleapis.com",
     "cloudkms.googleapis.com",
@@ -243,6 +242,27 @@ resource "google_project_iam_member" "deployer_secretmanager_admin" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
+# Allow deployment service account to administer Cloud KMS key rings and crypto keys for Terraform
+resource "google_project_iam_member" "deployer_kms_admin" {
+  project = var.project_id
+  role    = "roles/cloudkms.admin"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Allow deployment service account to administer Cloud Scheduler jobs for Terraform
+resource "google_project_iam_member" "deployer_scheduler_admin" {
+  project = var.project_id
+  role    = "roles/cloudscheduler.admin"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# Allow deployment service account to administer service accounts for Terraform
+resource "google_project_iam_member" "deployer_sa_admin" {
+  project = var.project_id
+  role    = "roles/iam.serviceAccountAdmin"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 # Groq key metadata only. The owner creates secret versions outside Terraform.
 resource "google_secret_manager_secret" "groq_api_key" {
   project   = var.project_id
@@ -457,6 +477,11 @@ resource "google_cloud_run_v2_service" "api" {
         value = "1073741824"
       }
 
+      env {
+        name  = "CLOUD_RUN_SERVICE_URL"
+        value = var.cloud_run_service_url
+      }
+
       startup_probe {
         http_get {
           path = "/api/health"
@@ -475,7 +500,7 @@ resource "google_cloud_run_v2_service" "api" {
         }
         period_seconds    = 15
         failure_threshold = 3
-        timeout_seconds   = 2
+        timeout_seconds   = 5
       }
     }
   }
@@ -570,6 +595,13 @@ resource "google_service_account_iam_member" "api_runtime_token_creator" {
   service_account_id = google_service_account.api_runtime.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
+# Allow API runtime service account to invoke Vertex AI Foundation Models (least privilege)
+resource "google_project_iam_member" "api_runtime_aiplatform_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.api_runtime.email}"
 }
 
 # -----------------------------------------------------------------------------
@@ -672,6 +704,60 @@ resource "google_firestore_database" "default" {
   deletion_policy         = "DELETE"
 
   depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 9b. Firestore Composite Indexes
+# -----------------------------------------------------------------------------
+
+# Collection Group index for Cloud Scheduler hourly research due tick
+resource "google_firestore_index" "channel_intelligence_due_idx" {
+  project     = var.project_id
+  database    = google_firestore_database.default.name
+  collection  = "channel_intelligence"
+  query_scope = "COLLECTION_GROUP"
+
+  fields {
+    field_path = "enabled"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "next_run_at"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "__name__"
+    order      = "ASCENDING"
+  }
+
+  depends_on = [google_firestore_database.default]
+}
+
+# Collection index for ranked research findings by channel
+resource "google_firestore_index" "research_findings_channel_idx" {
+  project     = var.project_id
+  database    = google_firestore_database.default.name
+  collection  = "research_findings"
+  query_scope = "COLLECTION"
+
+  fields {
+    field_path = "channel_id"
+    order      = "ASCENDING"
+  }
+
+  fields {
+    field_path = "opportunity_score"
+    order      = "DESCENDING"
+  }
+
+  fields {
+    field_path = "__name__"
+    order      = "DESCENDING"
+  }
+
+  depends_on = [google_firestore_database.default]
 }
 
 # -----------------------------------------------------------------------------

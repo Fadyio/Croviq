@@ -30,3 +30,12 @@ resource "google_storage_bucket_iam_member" "deployer_tfstate_user" {
   role   = "roles/storage.objectUser"
   member = "serviceAccount:croviq-github-deployer@${var.project_id}.iam.gserviceaccount.com"
 }
+
+# -----------------------------------------------------------------------------
+# Bootstrap Architecture Note:
+# The croviq-github-deployer service account identity is established at bootstrap
+# to enable WIF authentication and state bucket access. Administrative roles
+# required by Terraform to provision main stack resources (KMS, Scheduler, Cloud Run,
+# Firestore, Service Accounts, Identity Platform, Artifact Registry) are codified
+# in infra/main.tf for declarative management and least-privilege transparency.
+# -----------------------------------------------------------------------------

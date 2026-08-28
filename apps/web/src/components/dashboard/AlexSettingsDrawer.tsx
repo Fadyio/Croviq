@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, Check, ExternalLink, Plus, RotateCcw, Save, Search, X } from "lucide-react";
 import type { components } from "../../api/generated";
 import { useAuth } from "../../auth/AuthContext";
-import alexAvatar from "../../assets/agents/Alex.png";
+import alexAvatar from "../../assets/agents/alex.webp";
 
 type AgentSettings = components["schemas"]["AgentSettingsResponse"];
 type MemorySummary = components["schemas"]["AgentMemorySummaryResponse"];
