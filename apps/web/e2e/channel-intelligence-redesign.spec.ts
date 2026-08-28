@@ -453,12 +453,14 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     const perfTab = page.getByRole("button", { name: /Performance/i });
     await expect(perfTab).toHaveClass(/bg-surface-2/);
 
-    // Check Video Performance Quadrant section
-    await expect(page.getByRole("heading", { name: "Video Performance Quadrant" })).toBeVisible();
+    // Check Video Performance Ranked Chart section
+    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
 
     // Check Video Catalog Table section
     await expect(page.getByRole("heading", { name: "Video Catalog Performance" })).toBeVisible();
-    await expect(page.getByText("LangGraph Multi-Agent Architecture")).toBeVisible();
+    await expect(
+      page.getByRole("table").getByText("LangGraph Multi-Agent Architecture"),
+    ).toBeVisible();
 
     // Check Traffic Sources section
     await expect(page.getByRole("heading", { name: "Traffic Sources" })).toBeVisible();
@@ -497,7 +499,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     // Click Performance tab
     await page.getByRole("button", { name: /Performance/i }).click();
     await expect(page).toHaveURL(/\/app\/performance$/);
-    await expect(page.getByRole("heading", { name: "Video Performance Quadrant" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
 
     // Click Experiments tab
     await page.getByRole("button", { name: /Experiments/i }).click();
@@ -507,7 +509,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     // Browser Back to /app/performance
     await page.goBack();
     await expect(page).toHaveURL(/\/app\/performance$/);
-    await expect(page.getByRole("heading", { name: "Video Performance Quadrant" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
 
     // Browser Back to /app
     await page.goBack();
@@ -578,7 +580,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     // Verify Back navigation
     const backBtn = page.getByRole("button", { name: "Back to Channel Intelligence" }).first();
     await expect(backBtn).toBeVisible();
-    await expect(page.getByText("Start from raw footage")).toBeVisible();
+    await expect(page.getByText("Start with raw footage").first()).toBeVisible();
     await expect(page.getByText("Click to browse or drag and drop video")).toBeVisible();
 
     // Verify Recent Projects list

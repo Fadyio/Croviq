@@ -430,7 +430,7 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.waitForURL("**/app*");
 
     await page.goto("/app/performance");
-    await expect(page.getByRole("heading", { name: "Video Performance Quadrant" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
     await page.waitForTimeout(500);
 
     const isNoOverflow = await page.evaluate(() => {

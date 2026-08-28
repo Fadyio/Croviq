@@ -281,8 +281,7 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
             className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-2/60 px-3 py-1.5 text-xs text-text-secondary hover:border-border-strong hover:text-text-primary transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Back to Channel Intelligence</span>
-            <span className="sm:hidden">Back</span>
+            <span>Back to Channel Intelligence</span>
           </button>
 
           <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-xs text-text-secondary">
@@ -306,37 +305,38 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
         </div>
       </header>
 
-      {/* 2. Main Content Layout: Centered max-w-[1140px] structured grid */}
-      <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-[1180px] mx-auto w-full space-y-8">
-        {/* Breadcrumb & Section Title */}
+      {/* 2. Main Content Layout: Structured 65% / 35% grid matching Croviq shell */}
+      <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-[1400px] mx-auto w-full space-y-8">
+        {/* Header & Obvious Back Action */}
         <div className="flex items-center justify-between border-b border-border-subtle pb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-text-primary">
               New Project
             </h1>
-            <p className="mt-0.5 text-xs sm:text-sm text-text-secondary">
-              Upload raw footage to analyze, edit, and review with Croviq AI team
+            <p className="mt-1 text-xs sm:text-sm text-text-secondary">
+              Start with raw footage — Croviq will analyze, edit, review and render it
+              automatically.
             </p>
           </div>
 
           <button
             type="button"
             onClick={onNavigateHome}
-            className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+            className="text-xs font-semibold text-primary hover:underline flex items-center gap-1.5"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>Channel Overview</span>
+            <ArrowLeft className="h-4 w-4" />
+            <span>Channel Intelligence</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8 items-start">
-          {/* Left Column: Upload Dropzone Card */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,65%)_minmax(0,35%)] gap-8 items-start">
+          {/* Left Column: Upload Dropzone Card (65%) */}
           <div className="space-y-4">
             <div className="bg-surface-1 border border-border-subtle rounded-xl p-6 shadow-sm flex flex-col gap-5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-2">
                   <Upload className="h-4 w-4 text-primary" />
-                  Start from raw footage
+                  Start with raw footage
                 </span>
                 <span className="text-[11px] text-text-muted">Max 1 GB</span>
               </div>

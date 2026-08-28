@@ -45,18 +45,25 @@ DEFAULT_RESEARCH_PROMPTS = [
 def filter_findings_diversity(
     findings: list[ResearchFinding], max_per_cluster: int = 2, limit: int = 10
 ) -> list[ResearchFinding]:
-    """Filter findings to ensure diversity across topic clusters."""
+    """Filter findings to ensure diversity across topic clusters and primary entities."""
+    from croviq_agents.alex import derive_primary_entity, derive_topic_cluster
+
     cluster_counts: dict[str, int] = {}
+    seen_entities_top: set[str] = set()
     diverse: list[ResearchFinding] = []
     sorted_findings = sorted(
         findings, key=lambda x: (x.opportunity_score, x.discovered_at), reverse=True
     )
     remaining: list[ResearchFinding] = []
     for f in sorted_findings:
-        cluster = f.topic_cluster or "general-ai"
-        if cluster_counts.get(cluster, 0) < max_per_cluster:
+        cluster = f.topic_cluster or derive_topic_cluster(f.title, f.category)
+        entity = (f.primary_entity or derive_primary_entity(f.title, f.category)).strip().lower()
+        if cluster_counts.get(cluster, 0) < max_per_cluster and (
+            entity not in seen_entities_top or len(diverse) >= 3
+        ):
             diverse.append(f)
             cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
+            seen_entities_top.add(entity)
         else:
             remaining.append(f)
         if len(diverse) >= limit:
@@ -64,7 +71,6 @@ def filter_findings_diversity(
     if len(diverse) < limit:
         diverse.extend(remaining[: limit - len(diverse)])
     return diverse[:limit]
-
 
 def default_research_config(workspace_id: str) -> ResearchConfig:
     now = datetime.now(UTC)

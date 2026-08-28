@@ -203,3 +203,20 @@ async def test_alex_research_exact_url_deduplication() -> None:
     assert len(matching) == 1
     assert matching[0].discovered_at == now
     assert matching[0].lifecycle == FindingLifecycle.UPDATED
+
+
+@pytest.mark.asyncio
+async def test_alex_enforces_primary_entity_diversity_in_top_findings() -> None:
+    alex = AlexDataScientist()
+    prompt = ResearchPrompt(prompt_id="p1", text="Investigate all AI developments", enabled=True)
+    run, findings = await alex.run_grounded_research(
+        prompts=[prompt],
+        workspace_id="ws-test",
+        channel_id="croviq_syn_ai_eng_01",
+        force_mock=True,
+    )
+    assert len(findings) >= 3
+    top_3 = findings[:3]
+    entities = [f.primary_entity for f in top_3]
+    # Ensure top 3 findings have distinct primary entities (max 1 per entity)
+    assert len(set(entities)) == len(top_3), f"Top 3 findings must have distinct primary entities: {entities}"

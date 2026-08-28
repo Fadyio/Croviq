@@ -1,7 +1,7 @@
 import React from "react";
 import type { components } from "../../api/generated";
 import { ChannelTrendChart } from "./ChannelTrendChart";
-import { VideoPerformanceQuadrant } from "./VideoPerformanceQuadrant";
+import { VideoPerformanceRankedChart } from "./VideoPerformanceRankedChart";
 import { VideoPerformanceTable } from "./VideoPerformanceTable";
 import { TrafficSourceChart } from "./TrafficSourceChart";
 
@@ -32,8 +32,11 @@ export const PerformanceView: React.FC<PerformanceViewProps> = ({ dashboard, onS
       {/* 1. Dominant Channel Performance Chart */}
       <ChannelTrendChart data={dashboard.trend} title="Channel Performance Over Time" />
 
-      {/* 2. Video Performance Quadrant */}
-      <VideoPerformanceQuadrant data={dashboard.video_performance} onSelectVideo={onSelectVideo} />
+      {/* 2. Video Performance Ranked Bar Chart */}
+      <VideoPerformanceRankedChart
+        data={dashboard.video_performance}
+        onSelectVideo={onSelectVideo}
+      />
 
       {/* 3. Sortable Video Catalog Table */}
       <VideoPerformanceTable

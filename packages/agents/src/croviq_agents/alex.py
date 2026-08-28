@@ -73,6 +73,44 @@ def derive_topic_cluster(title: str, category: str = "") -> str:
         return "cloud-infrastructure"
     return re.sub(r"[^a-z0-9]+", "-", category.lower()).strip("-") or "general-ai"
 
+def derive_primary_entity(title: str, category: str = "") -> str:
+    """Extract and normalize the primary subject entity to enforce diversity and prevent duplicate coverage."""
+    lower = title.lower()
+    if "gemini 3.7" in lower or "gemini-3.7" in lower:
+        return "Gemini 3.7"
+    if "gemini" in lower:
+        return "Google Gemini"
+    if "gemma" in lower:
+        return "Google Gemma"
+    if "vertex" in lower:
+        return "Vertex AI"
+    if "claude" in lower:
+        return "Anthropic Claude"
+    if "deepseek" in lower:
+        return "DeepSeek"
+    if "opentelemetry" in lower or "otel" in lower:
+        return "OpenTelemetry"
+    if "webcodecs" in lower:
+        return "WebCodecs"
+    if "agent evaluation" in lower or "agent benchmark" in lower:
+        return "Agent Evaluation"
+    if "langgraph" in lower:
+        return "LangGraph"
+    if "crewai" in lower:
+        return "CrewAI"
+    if "autogen" in lower:
+        return "AutoGen"
+    if "fastapi" in lower:
+        return "FastAPI"
+    if "vite" in lower or "react" in lower:
+        return "Frontend Tooling"
+    parts = re.split(r"[:\-\—|]", title)
+    if parts:
+        cleaned = re.sub(r"[^A-Za-z0-9\s.]+", "", parts[0]).strip()
+        if cleaned and len(cleaned) <= 30:
+            return cleaned
+    return category.strip() or "AI System"
+
 
 def extract_domain(url: str) -> str:
     """Extract clean domain name from URL."""
@@ -90,11 +128,13 @@ def apply_research_diversity_and_dedup(
     max_per_cluster: int = 2,
     max_total: int = 6,
 ) -> list[ResearchFinding]:
-    """Apply deterministic deduplication, grounding validation, and topic cluster diversity constraints."""
+    """Apply deterministic deduplication, grounding validation, and primary_entity/topic cluster diversity constraints."""
     seen_fps: set[str] = set()
     seen_urls: set[str] = set()
+    seen_entities: set[str] = set()
     cluster_counts: dict[str, int] = {}
     deduped: list[ResearchFinding] = []
+    deferred_same_entity: list[ResearchFinding] = []
 
     # Sort candidates by opportunity score and freshness score
     sorted_candidates = sorted(
@@ -109,12 +149,15 @@ def apply_research_diversity_and_dedup(
         if f.source_citations
     }
 
+    # Pass 1: Strict diversity — at most 1 finding per primary_entity and max_per_cluster
     for finding in sorted_candidates:
         if not finding.source_citations or not finding.source_citations[0].url.startswith("http"):
             continue
 
         primary_url = finding.source_citations[0].url
         cluster = finding.topic_cluster or derive_topic_cluster(finding.title, finding.category)
+        entity = finding.primary_entity or derive_primary_entity(finding.title, finding.category)
+        entity_key = entity.strip().lower()
 
         # Deduplicate within this batch
         if primary_url in seen_urls or finding.topic_fingerprint in seen_fps:
@@ -122,6 +165,11 @@ def apply_research_diversity_and_dedup(
 
         # Topic cluster diversity limit
         if cluster_counts.get(cluster, 0) >= max_per_cluster:
+            continue
+
+        # Primary entity diversity limit: top findings must have unique primary_entity
+        if entity_key in seen_entities:
+            deferred_same_entity.append(finding)
             continue
 
         # Check against existing history
@@ -134,6 +182,7 @@ def apply_research_diversity_and_dedup(
                     "updated_at": datetime.now(UTC),
                     "lifecycle": FindingLifecycle.UPDATED,
                     "topic_cluster": cluster,
+                    "primary_entity": entity,
                 }
             )
             deduped.append(updated_finding)
@@ -141,16 +190,55 @@ def apply_research_diversity_and_dedup(
             final_finding = finding.model_copy(
                 update={
                     "topic_cluster": cluster,
+                    "primary_entity": entity,
                 }
             )
             deduped.append(final_finding)
 
         seen_fps.add(finding.topic_fingerprint)
         seen_urls.add(primary_url)
+        seen_entities.add(entity_key)
         cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
 
         if len(deduped) >= max_total:
             break
+
+    # If we have space, append non-conflicting deferred findings
+    if len(deduped) < max_total:
+        for finding in deferred_same_entity:
+            if len(deduped) >= max_total:
+                break
+            primary_url = finding.source_citations[0].url
+            if primary_url in seen_urls or finding.topic_fingerprint in seen_fps:
+                continue
+            cluster = finding.topic_cluster or derive_topic_cluster(finding.title, finding.category)
+            if cluster_counts.get(cluster, 0) >= max_per_cluster:
+                continue
+            entity = finding.primary_entity or derive_primary_entity(finding.title, finding.category)
+            existing = existing_by_fp.get(finding.topic_fingerprint) or existing_by_url.get(primary_url)
+            if existing:
+                updated_finding = finding.model_copy(
+                    update={
+                        "finding_id": existing.finding_id,
+                        "discovered_at": existing.discovered_at,
+                        "updated_at": datetime.now(UTC),
+                        "lifecycle": FindingLifecycle.UPDATED,
+                        "topic_cluster": cluster,
+                        "primary_entity": entity,
+                    }
+                )
+                deduped.append(updated_finding)
+            else:
+                final_finding = finding.model_copy(
+                    update={
+                        "topic_cluster": cluster,
+                        "primary_entity": entity,
+                    }
+                )
+                deduped.append(final_finding)
+            seen_fps.add(finding.topic_fingerprint)
+            seen_urls.add(primary_url)
+            cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
 
     return deduped
 
@@ -379,6 +467,7 @@ class AlexDataScientist:
             why_it_matters = str(item.get("why_it_matters", ""))
             category = str(item.get("category", "Emerging Technology"))
             cluster = str(item.get("topic_cluster", "")) or derive_topic_cluster(title, category)
+            primary_entity = str(item.get("primary_entity", "")) or derive_primary_entity(title, category)
             rel = float(item.get("relevance_score", 0.85))
             fresh = float(item.get("freshness_score", 0.90))
             opp = float(item.get("opportunity_score", 0.88))
@@ -415,6 +504,7 @@ class AlexDataScientist:
                 source_citations=finding_citations,
                 topic_fingerprint=fp,
                 topic_cluster=cluster,
+                primary_entity=primary_entity,
                 discovered_at=now,
                 updated_at=now,
                 lifecycle=FindingLifecycle.NEW,
@@ -449,6 +539,7 @@ class AlexDataScientist:
                 "title": "Gemini 3.7 Flash Hybrid Reasoning and Multimodal Agent Capabilities",
                 "category": "Foundation Models",
                 "topic_cluster": "foundation-models",
+                "primary_entity": "Gemini 3.7",
                 "summary": "Google released Gemini 3.7 Flash featuring dynamic thinking budgets, native multimodal reasoning, and Python code execution tool grounding for real-time applications.",
                 "why_it_matters": "Your tutorial videos on LLM agent architectures and Gemini tooling historically outperform channel baseline retention by 28%.",
                 "relevance_score": 0.94,
@@ -475,6 +566,7 @@ class AlexDataScientist:
                 "title": "Production Agent Evaluation Frameworks for Multi-Turn Tooling",
                 "category": "Agent Workflows",
                 "topic_cluster": "agent-workflows",
+                "primary_entity": "Agent Evaluation",
                 "summary": "Emerging benchmarks for multi-agent tool execution evaluate deterministic schema adherence, latency budgets, and cut-safety in continuous media processing.",
                 "why_it_matters": "Engineering audiences on your channel show 43% higher subscriber conversion on architectural deep-dives with reproducible benchmarks.",
                 "relevance_score": 0.89,
@@ -494,6 +586,7 @@ class AlexDataScientist:
                 "title": "WebCodecs Real-Time Streaming Video Pipeline for AI Media Workflows",
                 "category": "Multimodal Systems",
                 "topic_cluster": "multimodal-systems",
+                "primary_entity": "WebCodecs",
                 "summary": "Hardware-accelerated browser video frame decoding with WebCodecs enables real-time LLM video frame sampling and zero-latency timeline previews.",
                 "why_it_matters": "Video creator workflows combining high-speed browser rendering with AI models drive high engagement and retention on deep-dive tutorials.",
                 "relevance_score": 0.88,
@@ -513,6 +606,7 @@ class AlexDataScientist:
                 "title": "OpenTelemetry Distributed Tracing Standards for Multi-Agent Loops",
                 "category": "Evaluation & Observability",
                 "topic_cluster": "evaluation-observability",
+                "primary_entity": "OpenTelemetry",
                 "summary": "Standardized OpenTelemetry semantic conventions for GenAI systems track tool invocation spans, token budgets, and step latency across distributed agents.",
                 "why_it_matters": "Production engineering teams look for structured telemetry patterns; architectural videos covering observability benchmarks attract senior viewers.",
                 "relevance_score": 0.86,
@@ -547,6 +641,7 @@ class AlexDataScientist:
                 source_citations=item["citations"],
                 topic_fingerprint=fp,
                 topic_cluster=item["topic_cluster"],
+                primary_entity=item["primary_entity"],
                 discovered_at=now,
                 updated_at=now,
                 lifecycle=FindingLifecycle.NEW,

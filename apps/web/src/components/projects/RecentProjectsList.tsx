@@ -10,11 +10,10 @@ interface RecentProjectsListProps {
   onOpenProject: (productionId: string) => void;
 }
 
-const formatDuration = (seconds?: number | null): string => {
-  if (!seconds || seconds <= 0) return "—";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${String(secs).padStart(2, "0")}`;
+const formatBytes = (bytes?: number | null): string => {
+  if (!bytes || bytes <= 0) return "";
+  const mb = bytes / (1024 * 1024);
+  return `${mb.toFixed(1)} MB`;
 };
 
 const formatDate = (isoDate: string): string => {
@@ -22,7 +21,6 @@ const formatDate = (isoDate: string): string => {
     return new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
-      year: "numeric",
     }).format(new Date(isoDate));
   } catch {
     return isoDate;
@@ -89,17 +87,17 @@ export const RecentProjectsList: React.FC<RecentProjectsListProps> = ({
                     {prod.source_media?.original_filename ||
                       `Production ${prod.production_id.slice(-6)}`}
                   </span>
-                  <div className="mt-0.5 flex items-center gap-2 text-[10px] text-text-muted">
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-text-muted">
+                    {prod.source_media?.size_bytes ? (
+                      <>
+                        <span>{formatBytes(prod.source_media.size_bytes)}</span>
+                        <span>·</span>
+                      </>
+                    ) : null}
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {formatDate(prod.created_at)}
                     </span>
-                    {prod.source_media?.size_bytes ? (
-                      <>
-                        <span>·</span>
-                        <span>{(prod.source_media.size_bytes / (1024 * 1024)).toFixed(1)} MB</span>
-                      </>
-                    ) : null}
                   </div>
                 </div>
               </div>
@@ -117,7 +115,7 @@ export const RecentProjectsList: React.FC<RecentProjectsListProps> = ({
                   className="flex items-center gap-1 rounded-md bg-surface-3 px-2.5 py-1 text-xs font-semibold text-text-primary hover:bg-primary hover:text-white transition-colors"
                 >
                   <Play className="h-3 w-3 fill-current" />
-                  <span>Open</span>
+                  <span>Open &gt;</span>
                 </button>
               </div>
             </div>

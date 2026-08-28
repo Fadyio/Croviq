@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ExternalLink, Info, Radio, TrendingUp } from "lucide-react";
 import type { components } from "../../api/generated";
 import alexAvatar from "../../assets/agents/alex.webp";
@@ -37,9 +37,23 @@ export const AlexRail: React.FC<AlexRailProps> = ({
     setOpenSourcesMap((prev) => ({ ...prev, [findingId]: !prev[findingId] }));
   };
 
-  // Limit default cards to 3 as specified in Phase 18
-  const visibleFindings = findings.slice(0, 3);
-
+  // Strict Diversity Rule (Phase 18): Maximum ONE card per primary_entity in top 3
+  const visibleFindings = useMemo(() => {
+    const seenEntities = new Set<string>();
+    const diverse: ResearchFinding[] = [];
+    for (const f of findings) {
+      // Normalize entity identity (using primary_entity or leading subject phrase)
+      const rawEntity =
+        f.primary_entity || f.title.split(/[:\-\—|]/)[0]?.trim() || f.category || "AI Topic";
+      const entityKey = rawEntity.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (!seenEntities.has(entityKey)) {
+        seenEntities.add(entityKey);
+        diverse.push(f);
+      }
+      if (diverse.length >= 3) break;
+    }
+    return diverse;
+  }, [findings]);
   return (
     <aside className="w-full xl:w-[340px] 2xl:w-[360px] shrink-0 space-y-6 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
       <div className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm space-y-5">

@@ -395,7 +395,7 @@ export const AppPage: React.FC<AppPageProps> = ({
       </header>
 
       {/* 2. Desktop Layout: Full available width without dead right gap */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
+      <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
           {/* Main Intelligence Workspace */}
           <main className="min-w-0 space-y-6">
