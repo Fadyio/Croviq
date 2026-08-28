@@ -91,7 +91,7 @@ async def get_or_provision_default_workspace(
     "/workspace/agent-settings",
     response_model=AgentSettingsResponse,
     summary="Get Agent Settings",
-    description="Retrieve creator-configured prompts for Leo and Maya, narration voice settings, and official Google voice catalog.",
+    description="Retrieve creator-configured prompts for Alex, Leo, and Maya, narration voice settings, and official Google voice catalog.",
 )
 async def get_agent_settings(
     request: Request,
@@ -102,12 +102,14 @@ async def get_agent_settings(
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     leo_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.LEO)
     maya_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.MAYA)
+    alex_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.ALEX)
     voice_settings = await agent_config_repo.get_voice_settings(workspace.workspace_id)
     voices = VoiceCatalog.list_voices()
 
     return AgentSettingsResponse(
         leo_prompt=leo_prompt,
         maya_prompt=maya_prompt,
+        alex_prompt=alex_prompt,
         voice_settings=voice_settings,
         voices=voices,
     )
@@ -127,10 +129,10 @@ async def update_agent_prompt(
     agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
 ) -> AgentPromptConfig:
     aid = str(agent_id).lower()
-    if aid not in ("leo", "maya"):
+    if aid not in ("alex", "leo", "maya"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid agent_id '{agent_id}'. Must be 'leo' or 'maya'.",
+            detail=f"Invalid agent_id '{agent_id}'. Must be 'alex', 'leo', or 'maya'.",
         )
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     return await agent_config_repo.save_agent_prompt(
@@ -153,10 +155,10 @@ async def reset_agent_prompt(
     agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
 ) -> AgentPromptConfig:
     aid = str(agent_id).lower()
-    if aid not in ("leo", "maya"):
+    if aid not in ("alex", "leo", "maya"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid agent_id '{agent_id}'. Must be 'leo' or 'maya'.",
+            detail=f"Invalid agent_id '{agent_id}'. Must be 'alex', 'leo', or 'maya'.",
         )
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     return await agent_config_repo.reset_agent_prompt(

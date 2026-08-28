@@ -12,6 +12,7 @@ class AgentId(StrEnum):
 
     LEO = "leo"
     MAYA = "maya"
+    ALEX = "alex"
 
 
 class AgentPromptConfig(BaseModel):
@@ -23,8 +24,12 @@ class AgentPromptConfig(BaseModel):
         validate_assignment=True,
     )
 
-    agent_id: AgentId = Field(..., description="Target agent identifier (leo or maya)")
-    prompt_text: str = Field(..., min_length=1, description="Complete editorial working prompt text")
+    agent_id: AgentId = Field(
+        ..., description="Target agent identifier (alex, leo, or maya)"
+    )
+    prompt_text: str = Field(
+        ..., min_length=1, description="Complete agent working prompt text"
+    )
     version: int = Field(default=1, ge=1, description="Monotonically increasing version number")
     updated_at: datetime = Field(..., description="Timestamp when the prompt was last updated")
     is_custom: bool = Field(default=False, description="Whether this prompt differs from system default")

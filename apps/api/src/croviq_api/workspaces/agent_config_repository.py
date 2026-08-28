@@ -37,10 +37,33 @@ DEFAULT_MAYA_PROMPT = (
     "3. Decisiveness: Approve candidate edits that meet professional standards, or request one bounded revision pass."
 )
 
+DEFAULT_ALEX_PROMPT = (
+    "You are Alex, Croviq's Data Scientist for YouTube creators.\n"
+    "Observe canonical channel data, calculate defensible comparisons, test patterns, "
+    "and recommend bounded actions or experiments.\n\n"
+    "Analysis Principles:\n"
+    "1. Evidence Types: Label direct calculations as FACT, statistical interpretations "
+    "as INFERENCE, grounded external information as RESEARCH, and creator actions as "
+    "RECOMMENDATION.\n"
+    "2. Statistical Discipline: Report baselines, sample sizes, effect sizes, uncertainty, "
+    "and confounders where relevant. Never turn correlation into causation.\n"
+    "3. Data Truthfulness: Never mix sample and connected YouTube analytics. Never invent "
+    "unavailable metrics, citations, research, or numerical results.\n"
+    "4. Experimentation: Convert useful associations into falsifiable Channel Experiments "
+    "with a primary metric and expected direction.\n"
+    "5. Durable Learning: Promote only repeated, falsifiable evidence into Channel Memory."
+)
+
+
+def coerce_agent_id(agent_id: AgentId | str) -> AgentId:
+    return AgentId(str(agent_id).lower())
+
 
 def get_default_prompt_text(agent_id: AgentId | str) -> str:
-    aid = str(agent_id).lower()
-    if "maya" in aid:
+    aid = coerce_agent_id(agent_id)
+    if aid is AgentId.ALEX:
+        return DEFAULT_ALEX_PROMPT
+    if aid is AgentId.MAYA:
         return DEFAULT_MAYA_PROMPT
     return DEFAULT_LEO_PROMPT
 
@@ -84,7 +107,7 @@ class InMemoryAgentConfigRepository(AgentConfigRepository):
         key = (workspace_id, str(agent_id).lower())
         if key in self._prompts:
             return self._prompts[key]
-        aid = AgentId.MAYA if "maya" in str(agent_id).lower() else AgentId.LEO
+        aid = coerce_agent_id(agent_id)
         return AgentPromptConfig(
             agent_id=aid,
             prompt_text=get_default_prompt_text(aid),
@@ -97,7 +120,7 @@ class InMemoryAgentConfigRepository(AgentConfigRepository):
         self, workspace_id: str, agent_id: AgentId | str, prompt_text: str
     ) -> AgentPromptConfig:
         current = await self.get_agent_prompt(workspace_id, agent_id)
-        aid = AgentId.MAYA if "maya" in str(agent_id).lower() else AgentId.LEO
+        aid = coerce_agent_id(agent_id)
         new_version = current.version + 1 if current.is_custom else 1
         updated = AgentPromptConfig(
             agent_id=aid,
@@ -110,7 +133,7 @@ class InMemoryAgentConfigRepository(AgentConfigRepository):
         return updated
 
     async def reset_agent_prompt(self, workspace_id: str, agent_id: AgentId | str) -> AgentPromptConfig:
-        aid = AgentId.MAYA if "maya" in str(agent_id).lower() else AgentId.LEO
+        aid = coerce_agent_id(agent_id)
         default_cfg = AgentPromptConfig(
             agent_id=aid,
             prompt_text=get_default_prompt_text(aid),
@@ -157,8 +180,7 @@ class FirestoreAgentConfigRepository(AgentConfigRepository):
         return self._db
 
     async def get_agent_prompt(self, workspace_id: str, agent_id: AgentId | str) -> AgentPromptConfig:
-        aid_str = str(agent_id).lower()
-        aid = AgentId.MAYA if "maya" in aid_str else AgentId.LEO
+        aid = coerce_agent_id(agent_id)
         db = self._get_db()
         doc_ref = db.collection("workspaces").document(workspace_id).collection("agent_configs").document(f"prompt_{aid.value}")
         doc = doc_ref.get()
@@ -177,7 +199,7 @@ class FirestoreAgentConfigRepository(AgentConfigRepository):
         self, workspace_id: str, agent_id: AgentId | str, prompt_text: str
     ) -> AgentPromptConfig:
         current = await self.get_agent_prompt(workspace_id, agent_id)
-        aid = AgentId.MAYA if "maya" in str(agent_id).lower() else AgentId.LEO
+        aid = coerce_agent_id(agent_id)
         new_version = current.version + 1 if current.is_custom else 1
         updated = AgentPromptConfig(
             agent_id=aid,
@@ -192,7 +214,7 @@ class FirestoreAgentConfigRepository(AgentConfigRepository):
         return updated
 
     async def reset_agent_prompt(self, workspace_id: str, agent_id: AgentId | str) -> AgentPromptConfig:
-        aid = AgentId.MAYA if "maya" in str(agent_id).lower() else AgentId.LEO
+        aid = coerce_agent_id(agent_id)
         default_cfg = AgentPromptConfig(
             agent_id=aid,
             prompt_text=get_default_prompt_text(aid),

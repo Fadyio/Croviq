@@ -103,6 +103,7 @@ def test_get_and_update_agent_settings(api_test_context):
     data = resp.json()
     assert "leo_prompt" in data
     assert "maya_prompt" in data
+    assert data["alex_prompt"]["agent_id"] == "alex"
     assert "voice_settings" in data
     assert "voices" in data
     assert len(data["voices"]) >= 4
@@ -118,6 +119,14 @@ def test_get_and_update_agent_settings(api_test_context):
     assert leo_data["prompt_text"] == custom_prompt
     assert leo_data["is_custom"] is True
     assert leo_data["version"] >= 1
+
+    alex_prompt = "You are Alex. Separate facts, inferences, research, and recommendations."
+    alex_resp = client.put(
+        "/api/workspace/agent-settings/prompts/alex",
+        json={"prompt_text": alex_prompt},
+    )
+    assert alex_resp.status_code == 200
+    assert alex_resp.json()["prompt_text"] == alex_prompt
 
     # 3. Reset Leo prompt
     reset_resp = client.post("/api/workspace/agent-settings/prompts/leo/reset")
