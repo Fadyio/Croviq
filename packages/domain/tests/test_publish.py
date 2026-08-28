@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 import pytest
 
+from croviq_domain.agent_config import NarrationMode
+from croviq_domain.edl import EditDecisionList
 from croviq_domain.publish import (
     PublishJobStatus,
     ThumbnailArtifact,
@@ -10,7 +12,9 @@ from croviq_domain.publish import (
     YouTubePublishJob,
     build_publish_idempotency_key,
     build_thumbnail_artifact_gcs_path,
+    derive_synthetic_media_status,
 )
+from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
 
 
 def test_build_publish_idempotency_key() -> None:
@@ -135,3 +139,146 @@ def test_youtube_publish_job_state_transitions() -> None:
     assert completed_job.status == PublishJobStatus.COMPLETED
     assert completed_job.thumbnail_status == ThumbnailUploadStatus.COMPLETED
     assert completed_job.completed_at is not None
+
+
+def test_derive_synthetic_media_status_original_footage_and_voice() -> None:
+    now = datetime.now(timezone.utc)
+    master_art = RenderArtifact(
+        artifact_id="art_mast_01",
+        production_id="prod_01",
+        edl_id="edl_01",
+        artifact_type=ArtifactType.MASTER,
+        status=ArtifactStatus.completed,
+        gcs_bucket="test-bucket",
+        gcs_object="test.mp4",
+        size_bytes=1000,
+        duration_ms=10000,
+        width=1920,
+        height=1080,
+        frame_rate=30.0,
+        video_codec="h264",
+        audio_codec="aac",
+        sha256="abc",
+        created_at=now,
+    )
+    # Unaltered original footage + original voice -> False
+    assert derive_synthetic_media_status(master_artifact=master_art) is False
+    # Unaltered original footage + enhanced original voice -> False
+    assert (
+        derive_synthetic_media_status(
+            master_artifact=master_art,
+            narration_mode=NarrationMode.ENHANCED_ORIGINAL,
+        )
+        is False
+    )
+
+
+def test_derive_synthetic_media_status_studio_voice() -> None:
+    now = datetime.now(timezone.utc)
+    sv_master_art = RenderArtifact(
+        artifact_id="art_mast_sv_01",
+        production_id="prod_01",
+        edl_id="edl_01",
+        artifact_type=ArtifactType.STUDIO_VOICE_MASTER,
+        status=ArtifactStatus.completed,
+        gcs_bucket="test-bucket",
+        gcs_object="test_sv.mp4",
+        size_bytes=1000,
+        duration_ms=10000,
+        width=1920,
+        height=1080,
+        frame_rate=30.0,
+        video_codec="h264",
+        audio_codec="aac",
+        sha256="def",
+        created_at=now,
+    )
+    # Studio Voice Master artifact -> True
+    assert derive_synthetic_media_status(master_artifact=sv_master_art) is True
+    # Standard Master artifact but studio voice explicitly used in master render -> True
+    assert (
+        derive_synthetic_media_status(
+            master_artifact_type=ArtifactType.MASTER,
+            studio_voice_used=True,
+        )
+        is True
+    )
+
+
+def test_derive_synthetic_media_status_my_voice() -> None:
+    # My Voice replication used in master -> True
+    assert (
+        derive_synthetic_media_status(
+            master_artifact_type=ArtifactType.MASTER,
+            my_voice_used=True,
+        )
+        is True
+    )
+    assert (
+        derive_synthetic_media_status(
+            narration_mode=NarrationMode.MY_VOICE,
+        )
+        is True
+    )
+
+
+def test_derive_synthetic_media_status_generated_broll() -> None:
+    # Realistic generated Omni B-roll composited into master -> True
+    assert (
+        derive_synthetic_media_status(
+            master_artifact_type=ArtifactType.MASTER,
+            generated_broll_used=True,
+        )
+        is True
+    )
+    # Draft or uncomposited B-roll in repo does not trigger disclosure
+    assert (
+        derive_synthetic_media_status(
+            master_artifact_type=ArtifactType.MASTER,
+            generated_broll_used=False,
+        )
+        is False
+    )
+
+
+def test_derive_synthetic_media_status_from_release_object() -> None:
+    now = datetime.now(timezone.utc)
+    job_clean = YouTubePublishJob(
+        publish_job_id="pub_clean",
+        production_id="prod_01",
+        workspace_id="ws_01",
+        user_id="u_01",
+        connection_id="c_01",
+        channel_id="ch_01",
+        release_review_id="rev_01",
+        package_version=1,
+        artifact_id="art_mast_01",
+        artifact_type="MASTER",
+        status=PublishJobStatus.COMPLETED,
+        selected_title="Clean Title",
+        description="Clean Description",
+        is_synthetic_media=False,
+        idempotency_key="idemp_clean",
+        created_at=now,
+    )
+    assert derive_synthetic_media_status(release=job_clean) is False
+
+    job_synthetic = YouTubePublishJob(
+        publish_job_id="pub_syn",
+        production_id="prod_01",
+        workspace_id="ws_01",
+        user_id="u_01",
+        connection_id="c_01",
+        channel_id="ch_01",
+        release_review_id="rev_01",
+        package_version=1,
+        artifact_id="art_mast_sv_01",
+        artifact_type="STUDIO_VOICE_MASTER",
+        status=PublishJobStatus.COMPLETED,
+        selected_title="Synthetic Title",
+        description="Synthetic Description",
+        is_synthetic_media=True,
+        idempotency_key="idemp_syn",
+        created_at=now,
+    )
+    assert derive_synthetic_media_status(release=job_synthetic) is True

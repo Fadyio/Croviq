@@ -69,6 +69,68 @@ def build_thumbnail_artifact_gcs_path(
     return f"workspaces/{workspace_id}/productions/{production_id}/thumbnails/{artifact_id}.{normalized_ext}"
 
 
+
+def derive_synthetic_media_status(
+    release: Any = None,
+    *,
+    master_artifact: Any = None,
+    master_artifact_type: str | None = None,
+    narration_mode: str | None = None,
+    my_voice_used: bool = False,
+    studio_voice_used: bool = False,
+    generated_broll_used: bool = False,
+    edl: Any = None,
+) -> bool:
+    """Deterministically derive whether YouTube content contains synthetic or realistic altered media.
+
+    Ground truth is derived strictly from actual inputs present in the final rendered Master:
+    - Master rendered with Studio Voice (ArtifactType.STUDIO_VOICE_MASTER or studio_voice_used=True) -> True
+    - Master rendered with My Voice replication (my_voice_used=True or narration_mode='my_voice') -> True
+    - Master composited with realistic generated Omni B-roll (generated_broll_used=True) -> True
+    - Unaltered original footage + original or enhanced original voice only -> False
+
+    Strictly excludes:
+    - Current UI preview mode
+    - Merely available / unrendered artifacts in repository
+    - Workspace voice settings or StudioVoice records not used in final Master
+    - Stale draft states
+    """
+    # 1. Inspect explicit flags
+    if my_voice_used or studio_voice_used or generated_broll_used:
+        return True
+
+    # 2. Inspect narration mode
+    if narration_mode is not None:
+        norm_mode = str(narration_mode).lower().strip()
+        if norm_mode in ("studio_voice", "my_voice"):
+            return True
+
+    # 3. Inspect master artifact type
+    art_type = None
+    if master_artifact_type:
+        art_type = str(master_artifact_type).upper().strip()
+    elif master_artifact:
+        art_type = str(getattr(master_artifact, "artifact_type", "")).upper().strip()
+
+    if art_type in ("STUDIO_VOICE_MASTER", "MY_VOICE_MASTER"):
+        return True
+
+    # 4. Inspect release object if supplied
+    if release is not None:
+        rel_art_type = str(getattr(release, "artifact_type", "")).upper().strip()
+        if rel_art_type in ("STUDIO_VOICE_MASTER", "MY_VOICE_MASTER"):
+            return True
+        if hasattr(release, "is_synthetic_media") and release.is_synthetic_media is True:
+            return True
+        if isinstance(release, dict):
+            if str(release.get("artifact_type", "")).upper() in ("STUDIO_VOICE_MASTER", "MY_VOICE_MASTER"):
+                return True
+            if release.get("is_synthetic_media") is True:
+                return True
+
+    # Default to False for unaltered original footage and original/enhanced voice
+    return False
+
 class ThumbnailArtifact(BaseModel):
     """Canonical domain model representing an extracted still image thumbnail asset."""
 

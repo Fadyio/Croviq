@@ -88,6 +88,7 @@ from croviq_domain.publish import (
     YouTubePublishJob,
     build_publish_idempotency_key,
     build_thumbnail_artifact_gcs_path,
+    derive_synthetic_media_status,
 )
 from croviq_domain.release_review import (
     ReleaseVerdict,
@@ -276,15 +277,10 @@ class YouTubePublishService:
         short_title = proposal.short_package.title if (proposal and proposal.short_package) else "Short"
         short_description = proposal.short_package.description if (proposal and proposal.short_package) else ""
 
-        # Synthetic Media Detection strictly derived from Master artifact type or accepted generated Omni B-roll
-        broll_items = await self.broll_repo.list_by_production_id(production_id)
-        has_omni_broll = any(
-            getattr(b, "status", None) == "accepted" and not getattr(b, "is_draft", True)
-            for b in broll_items
-        )
-        contains_synthetic_media_suggested = bool(
-            (master_artifact and master_artifact.artifact_type == ArtifactType.STUDIO_VOICE_MASTER)
-            or has_omni_broll
+        # Synthetic Media Detection deterministically derived strictly from Master artifact lineage
+        contains_synthetic_media_suggested = derive_synthetic_media_status(
+            master_artifact=master_artifact,
+            edl=edl,
         )
         return {
             "production_id": production_id,

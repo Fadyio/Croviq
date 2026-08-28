@@ -140,6 +140,7 @@ from croviq_domain.publish import (
     YouTubePublishJob,
     build_publish_idempotency_key,
     build_thumbnail_artifact_gcs_path,
+    derive_synthetic_media_status,
 )
 
 __all__ = [
@@ -253,5 +254,7 @@ __all__ = [
     "YouTubePublishJob",
     "build_publish_idempotency_key",
     "build_thumbnail_artifact_gcs_path",
+    "derive_synthetic_media_status",
 ]
+
 __version__ = "0.1.0"
