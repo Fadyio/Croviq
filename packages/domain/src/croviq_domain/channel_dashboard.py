@@ -75,7 +75,9 @@ class VideoPerformancePoint(BaseModel):
     video_id: str
     title: str
     views: int
-    ctr_percentage: float
+    ctr_percentage: float | None
+    discovery_metric: str
+    discovery_value: float
     average_retention: float
     subscribers_gained: int
     content_pillar: str
@@ -88,7 +90,7 @@ class TopicClusterPerformance(BaseModel):
     video_count: int
     median_views: float
     median_retention: float
-    median_ctr: float
+    median_ctr: float | None
 
 
 class ChannelDashboard(BaseModel):
@@ -259,6 +261,20 @@ async def build_channel_dashboard(
             title=video.public.title,
             views=video.analytics.views,
             ctr_percentage=video.analytics.ctr_percentage,
+            discovery_metric=(
+                "thumbnail_ctr"
+                if video.analytics.ctr_percentage is not None
+                else "subscriber_conversion_per_1k_views"
+            ),
+            discovery_value=(
+                video.analytics.ctr_percentage
+                if video.analytics.ctr_percentage is not None
+                else (
+                    1000 * video.analytics.subscribers_gained / video.analytics.views
+                    if video.analytics.views
+                    else 0
+                )
+            ),
             average_retention=video.analytics.avg_view_percentage,
             subscribers_gained=video.analytics.subscribers_gained,
             content_pillar=str(video.derived.content_pillar),
@@ -269,8 +285,14 @@ async def build_channel_dashboard(
     grouped: dict[str, list] = defaultdict(list)
     for video in videos:
         grouped[video.derived.topic_cluster].append(video)
-    topic_clusters = sorted(
-        [
+    topic_clusters_unsorted: list[TopicClusterPerformance] = []
+    for name, cluster_videos in grouped.items():
+        ctr_values = [
+            video.analytics.ctr_percentage
+            for video in cluster_videos
+            if video.analytics.ctr_percentage is not None
+        ]
+        topic_clusters_unsorted.append(
             TopicClusterPerformance(
                 topic_cluster=name,
                 video_count=len(cluster_videos),
@@ -280,18 +302,24 @@ async def build_channel_dashboard(
                 median_retention=median(
                     video.analytics.avg_view_percentage for video in cluster_videos
                 ),
-                median_ctr=median(
-                    video.analytics.ctr_percentage for video in cluster_videos
-                ),
+                median_ctr=median(ctr_values) if ctr_values else None,
             )
-            for name, cluster_videos in grouped.items()
-        ],
+        )
+    topic_clusters = sorted(
+        topic_clusters_unsorted,
         key=lambda cluster: cluster.median_views,
         reverse=True,
     )
 
-    demo_times = [float(video.derived.first_demo_seconds) for video in videos]
-    retentions = [video.analytics.avg_view_percentage for video in videos]
+    analysis_videos = [
+        video for video in videos if video.derived.first_demo_seconds is not None
+    ]
+    demo_times = [
+        float(video.derived.first_demo_seconds) for video in analysis_videos
+    ]
+    retentions = [
+        video.analytics.avg_view_percentage for video in analysis_videos
+    ]
     correlation = _pearson(demo_times, retentions)
     direction = "lower" if correlation < 0 else "higher"
     relationship = "negative" if correlation < 0 else "positive"

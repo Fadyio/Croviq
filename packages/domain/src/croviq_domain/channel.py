@@ -120,16 +120,16 @@ class DerivedVideoFeatures(BaseModel):
     title_style: TitleStyle = Field(
         ..., description="Stylistic framing of the video title"
     )
-    first_demo_seconds: int = Field(
-        ...,
+    first_demo_seconds: int | None = Field(
+        default=None,
         ge=0,
-        description="Elapsed seconds until the first practical demonstration / code",
+        description="Elapsed seconds until the first practical demonstration, when measured",
     )
-    hook_length_seconds: int = Field(
-        ..., ge=0, description="Length of opening premise / hook in seconds"
+    hook_length_seconds: int | None = Field(
+        default=None, ge=0, description="Length of opening premise when measured"
     )
-    setup_time_seconds: int = Field(
-        ..., ge=0, description="Elapsed seconds spent on theoretical intro / setup"
+    setup_time_seconds: int | None = Field(
+        default=None, ge=0, description="Theoretical setup duration when measured"
     )
     topic_cluster: str = Field(
         ..., min_length=1, description="Topical grouping for clustering analysis"
@@ -197,11 +197,16 @@ class VideoPrivateAnalytics(BaseModel):
     likes: int = Field(..., ge=0, description="Total likes")
     comments: int = Field(..., ge=0, description="Total comments")
     shares: int = Field(..., ge=0, description="Total shares")
-    impressions: int = Field(
-        ..., ge=0, description="Thumbnail impressions served by YouTube"
+    impressions: int | None = Field(
+        default=None,
+        ge=0,
+        description="Thumbnail impressions when exposed by the authorized report",
     )
-    ctr_percentage: float = Field(
-        ..., ge=0.0, le=100.0, description="Thumbnail click-through rate percentage"
+    ctr_percentage: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=100.0,
+        description="Thumbnail click-through rate when exposed by the authorized report",
     )
     estimated_revenue_usd: float | None = Field(
         default=None, ge=0.0, description="Estimated monetization revenue in USD"
@@ -314,11 +319,16 @@ class ChannelPrivateAnalytics(BaseModel):
     avg_view_duration_seconds: float = Field(
         ..., ge=0.0, description="Channel-wide average view duration in seconds"
     )
-    avg_ctr_percentage: float = Field(
-        ..., ge=0.0, le=100.0, description="Channel-wide average CTR percentage"
+    avg_ctr_percentage: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=100.0,
+        description="Channel-wide average CTR when exposed by the authorized report",
     )
-    total_impressions: int = Field(
-        ..., ge=0, description="Lifetime thumbnail impressions"
+    total_impressions: int | None = Field(
+        default=None,
+        ge=0,
+        description="Lifetime thumbnail impressions when exposed by the authorized report",
     )
     top_traffic_sources: list[TrafficSourceMetric] = Field(
         ..., description="Aggregate channel traffic sources"
