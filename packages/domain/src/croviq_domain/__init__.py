@@ -36,14 +36,6 @@ from croviq_domain.editorial import (
     ShortCandidate,
     VideoSectionDecision,
 )
-from croviq_domain.edl import (
-    CoverageMarker,
-    CoverageType,
-    CutInstruction,
-    CutSafetyStatus,
-    EditDecisionList,
-    derive_keep_segments,
-)
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.memory import (
     ChannelLesson,

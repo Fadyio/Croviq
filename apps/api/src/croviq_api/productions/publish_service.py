@@ -7,7 +7,7 @@ resumable video upload, thumbnail extraction, and truthful audit reporting.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import logging
 from pathlib import Path
@@ -555,7 +555,7 @@ class YouTubePublishService:
                         update={
                             "access_token": new_access,
                             "refresh_token": new_refresh,
-                            "token_expiry": now + asyncio.timedelta(seconds=expires_in),
+                            "token_expiry": now + timedelta(seconds=expires_in),
                             "last_sync_at": now,
                         }
                     )
