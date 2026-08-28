@@ -2,6 +2,7 @@
 
 from croviq_domain.editorial import (
     AgentActivity,
+    ChapterMarker,
     DirectorDecision,
     DirectorReview,
     DirectorSectionDecision,
@@ -27,6 +28,7 @@ from croviq_domain.render_review import (
 
 __all__ = [
     "AgentActivity",
+    "ChapterMarker",
     "DirectorDecision",
     "DirectorReview",
     "DirectorSectionDecision",

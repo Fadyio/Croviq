@@ -5,12 +5,20 @@ import pytest
 
 from croviq_agents.voice import (
     StudioVoiceSynthesizer,
-    VoiceFitAttempt,
     VoiceCatalog,
+    VoiceFitAttempt,
+    VoiceReplicationService,
+    find_candidate_voice_sample_interval,
 )
-from croviq_domain.agent_config import VoiceSettingsConfig, NarrationMode
+from croviq_domain.agent_config import (
+    GOOGLE_VOICE_CONSENT_PHRASE_EN,
+    NarrationMode,
+    VoiceReplicationConfig,
+    VoiceReplicationStatus,
+    VoiceSettingsConfig,
+)
 from croviq_domain.narration import NarrationSegment, NarrationSegmentStatus
-
+from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
 
 def test_voice_catalog_contains_standard_google_voices():
     catalog = VoiceCatalog.list_voices()
@@ -115,3 +123,53 @@ async def test_tts_fit_loop_fails_gracefully_after_max_attempts():
     assert segment.attempts == 3
     # Hard timing rule: Never lengthen video!
     assert segment.available_duration_ms == 4000
+def test_voice_replication_capability_blocked_when_not_allowlisted():
+    service = VoiceReplicationService(allowlist_enabled=False)
+    config = service.check_replication_capability()
+    assert config.status == VoiceReplicationStatus.BLOCKED
+    assert config.blocked_reason == "Google allowlist access required"
+    assert "Request Gemini-TTS Voice Replication allowlist" in (config.suggested_action or "")
+
+
+def test_voice_replication_consent_verification():
+    service = VoiceReplicationService(allowlist_enabled=True)
+    assert service.verify_consent_phrase(GOOGLE_VOICE_CONSENT_PHRASE_EN) is True
+    assert service.verify_consent_phrase("I am the owner of this voice and have consented to synthetic model.") is True
+    assert service.verify_consent_phrase("Random speech without consent") is False
+
+
+def test_voice_replication_key_expiry_handling():
+    service = VoiceReplicationService(allowlist_enabled=True)
+    config, key_id = service.create_replicated_voice_key(b"sample_wav", b"consent_wav")
+    assert config.status == VoiceReplicationStatus.AVAILABLE
+    assert key_id is not None
+    assert config.key_expires_at is not None
+    assert service.is_key_expired(config) is False
+
+
+def test_find_candidate_voice_sample_interval():
+    words = [
+        TranscriptWord(index=i, text=f"word{i}", start_ms=i * 500, end_ms=(i * 500) + 400, confidence=0.99)
+        for i in range(40) # 0 to 20,000ms
+    ]
+    tr = Transcript(
+        transcript_id="tr_01",
+        production_id="prod_01",
+        language_code="en",
+        duration_ms=20000,
+        created_at=datetime.now(timezone.utc),
+        segments=[
+            TranscriptSegment(
+                segment_id="seg_01",
+                start_ms=0,
+                end_ms=20000,
+                text=" ".join(w.text for w in words),
+                word_start_index=0,
+                word_end_index=len(words) - 1,
+            )
+        ],
+        words=words,
+    )
+    start_ms, end_ms = find_candidate_voice_sample_interval(tr, min_duration_ms=10000, max_duration_ms=20000)
+    assert end_ms - start_ms >= 10000
+    assert end_ms - start_ms <= 20000

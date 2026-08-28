@@ -6,6 +6,7 @@ import {
   edlToTwickTimeline,
   formatTimecode,
   formatDuration,
+  formatCutLabel,
   type EditDecisionList,
   type CutInstruction,
 } from "./edl-adapter";
@@ -132,22 +133,32 @@ test.describe("EDL Adapter & Playback Logic", () => {
     expect(skipAt72s).toBeNull();
   });
 
-  test("edlToTwickTimeline builds 3 tracks and populates blocks truthfully", () => {
+  test("edlToTwickTimeline builds canonical tracks and populates blocks truthfully", () => {
     const twickData = edlToTwickTimeline(fairphoneEDL);
-    expect(twickData.tracks.length).toBe(3);
-    expect(twickData.tracks[0].getName()).toBe("SOURCE VIDEO");
-    expect(twickData.tracks[1].getName()).toBe("DIALOGUE EDITS");
-    expect(twickData.tracks[2].getName()).toBe("COVERAGE");
+    expect(twickData.tracks.length).toBe(8);
+    expect(twickData.tracks[0].getName()).toBe("Video");
+    expect(twickData.tracks[1].getName()).toBe("Audio");
+    expect(twickData.tracks[2].getName()).toBe("Edits");
+    expect(twickData.tracks[3].getName()).toBe("B-roll");
 
     expect(twickData.activeCutCount).toBe(0);
     expect(twickData.coverageMarkerCount).toBe(1);
 
     // Coverage block matches Fairphone fixture
-    const covBlock = twickData.blocks.find((b) => b.trackId === "coverage");
+    const covBlock = twickData.blocks.find(
+      (b) => b.trackId === "broll" || b.trackId === "coverage",
+    );
     expect(covBlock).toBeDefined();
     expect(covBlock?.startMs).toBe(26160);
     expect(covBlock?.endMs).toBe(42340);
     expect(covBlock?.type).toBe("coverage-broll");
+  });
+
+  test("formatCutLabel produces clean human-facing strings", () => {
+    expect(formatCutLabel("REMOVE_SILENCE", 2100)).toBe("Silence removed 2.1s");
+    expect(formatCutLabel("REMOVE_FALSE_START", 800)).toBe("False start removed 0.8s");
+    expect(formatCutLabel("TIGHTEN_PAUSE", 1200)).toBe("Tightened pause 1.2s");
+    expect(formatCutLabel("KEEP_FOR_CLARITY", 5000)).toBe("Walkthrough preserved");
   });
 
   test("time formatting helpers", () => {

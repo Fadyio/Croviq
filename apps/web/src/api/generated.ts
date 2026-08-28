@@ -658,6 +658,18 @@ export interface components {
       /** Timestamp when this memory profile was generated or updated (UTC). */
       updated_at?: string;
     };
+    ChapterMarker: {
+      /** Concise descriptive chapter title */
+      title: string;
+      /** Start time in milliseconds on the source video timeline */
+      source_start_ms: number;
+      /** End time in milliseconds on the source video timeline */
+      source_end_ms: number;
+      /** Summary of narrative and visual content covered in this chapter */
+      summary: string;
+      /** Confidence score for this chapter boundary */
+      confidence?: number;
+    };
     ClientErrorEvent: {
       firebase_uid?: string | null;
       git_sha?: string | null;
@@ -887,14 +899,22 @@ export interface components {
     };
     EditorDecisionType:
       | "KEEP"
+      | "REMOVE_SILENCE"
       | "REMOVE_FILLER"
       | "REMOVE_FALSE_START"
       | "REMOVE_REPETITION"
       | "TRIM_PAUSE"
+      | "TIGHTEN_PAUSE"
       | "TIGHTEN_EXPLANATION"
+      | "REMOVE_LOW_VALUE_SECTION"
       | "KEEP_FOR_CLARITY"
+      | "BROLL_COVER"
       | "BROLL_COVER_CANDIDATE"
-      | "SHORT_CANDIDATE";
+      | "SOURCE_COVER"
+      | "CHAPTER_MARKER"
+      | "SHORT_CANDIDATE"
+      | "NARRATION_REWRITE"
+      | "CAPTION_EMPHASIS";
     EditorProposal: {
       /** Associated Production entity identifier */
       production_id: string;
@@ -910,6 +930,8 @@ export interface components {
       short_candidate?: components["schemas"]["ShortCandidate"] | null;
       /** Full-timeline editorial section plan covering the whole production */
       section_plan?: components["schemas"]["VideoSectionDecision"][];
+      /** Multimodal semantic chapter markers across the video timeline */
+      chapters?: components["schemas"]["ChapterMarker"][];
       /** Overall confidence in the proposal */
       overall_confidence: number;
     };
@@ -1004,7 +1026,7 @@ export interface components {
       content: string;
       learned_from?: string | null;
     };
-    NarrationMode: "original" | "enhanced_original" | "studio_voice";
+    NarrationMode: "original" | "enhanced_original" | "studio_voice" | "my_voice";
     NarrationSegment: {
       /** Unique segment identifier */
       segment_id: string;
@@ -1451,6 +1473,8 @@ export interface components {
       narration_mode: components["schemas"]["NarrationMode"];
       selected_voice?: string;
       language?: string;
+      /** Optional My Voice replication configuration */
+      my_voice?: components["schemas"]["VoiceReplicationConfig"] | null;
     };
     User: {
       /** Unique user identifier (e.g. Firebase UID / Google sub) */
@@ -1501,6 +1525,12 @@ export interface components {
       reason: string;
       /** Model confidence score for this section decision */
       confidence: number;
+      /** Summary of screen content, slides, demonstration, or camera visual moments */
+      visual_summary?: string | null;
+      /** Summary of spoken dialogue or audio in this section */
+      speech_summary?: string | null;
+      /** Leo's editorial rationale and narrative purpose for this section */
+      editorial_intent?: string | null;
     };
     VoiceCatalogItem: {
       /** Voice identifier */
@@ -1514,6 +1544,25 @@ export interface components {
       /** Brief tone or style description */
       description?: string | null;
     };
+    VoiceReplicationConfig: {
+      /** Replication access and lifecycle status */
+      status?: components["schemas"]["VoiceReplicationStatus"];
+      /** Encrypted/persisted Vertex Voices API voice key (expires in 7 days) */
+      voice_key?: string | null;
+      /** Expiration datetime for the replicated voice key (7-day maximum TTL) */
+      key_expires_at?: string | null;
+      /** Whether creator consent audio has been verified with exact required phrase */
+      consent_recorded?: boolean;
+      /** Start offset in source video of clean 10-30s speech sample */
+      source_sample_start_ms?: number | null;
+      /** End offset in source video of clean 10-30s speech sample */
+      source_sample_end_ms?: number | null;
+      /** Reason why voice replication is blocked (e.g. Google allowlist access required) */
+      blocked_reason?: string | null;
+      /** Suggested resolution action when blocked */
+      suggested_action?: string | null;
+    };
+    VoiceReplicationStatus: "available" | "blocked" | "consent_required" | "expired";
     VoiceSampleRequest: {
       /** Voice identifier to sample */
       voice_id: string;
@@ -1536,6 +1585,8 @@ export interface components {
       language?: string;
       /** Timestamp when settings were updated */
       updated_at: string;
+      /** My Voice replication settings and consent status */
+      my_voice?: components["schemas"]["VoiceReplicationConfig"] | null;
     };
     Workspace: {
       /** Unique workspace identifier */

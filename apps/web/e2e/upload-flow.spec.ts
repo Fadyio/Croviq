@@ -661,7 +661,7 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByText("Connected YouTube")).toBeVisible();
   });
 
-  test("automatically loads existing persisted productions and links to Editor", async ({
+  test("verifies New Project route is focused on raw footage upload without Recent Productions clutter", async ({
     page,
   }) => {
     const consoleErrors: string[] = [];
@@ -670,130 +670,49 @@ test.describe("Product Home and Creator Flow", () => {
         const txt = msg.text();
         if (
           !txt.includes("401") &&
-          !txt.includes("404") &&
-          !txt.includes("500") &&
-          !txt.includes("Failed to load resource") &&
-          !txt.includes("net::ERR_")
+          !txt.includes("502") &&
+          !txt.includes("Failed to load resource")
         ) {
           consoleErrors.push(txt);
         }
       }
     });
-    const mockProduction = {
-      production_id: "prod_f0b41bfd429e",
-      workspace_id: "ws_demo",
-      channel_id: "croviq_syn_ai_eng_01",
-      owner_user_id: "demo_user_123",
-      status: "uploaded",
-      source_media: {
-        upload_id: "upl_0c191e28f1ee",
-        original_filename: "Fairphone 6+ Has Surprising Features! #shorts.mp4",
-        content_type: "video/mp4",
-        size_bytes: 3227778,
-        gcs_bucket: "croviq-506602-croviq-media-raw",
-        gcs_object:
-          "workspaces/ws_demo/productions/prod_f0b41bfd429e/source/upl_0c191e28f1ee/Fairphone.mp4",
-        status: "uploaded",
-        created_at: "2026-08-26T04:33:44.963857Z",
-        uploaded_at: "2026-08-26T04:33:44.963857Z",
-      },
-      created_at: "2026-08-26T04:33:44.963857Z",
-      updated_at: "2026-08-26T04:33:44.963857Z",
-    };
 
     await mockFirebasePasswordSignIn(page);
-    await mockBackendApis(page, [mockProduction]);
-    await login(page);
+    await mockBackendApis(page, []);
+    await login(page, true);
 
-    // Verify production appears automatically without clicking "Use Sample Channel"
-    const prodRow = page.getByTestId("production-row-prod_f0b41bfd429e");
-    await expect(prodRow).toBeVisible();
-    await expect(page.getByText("Fairphone 6+ Has Surprising Features! #shorts.mp4")).toBeVisible();
-    await expect(page.getByText("3.1 MB")).toBeVisible();
-    await expect(page.getByText("UPLOADED")).toHaveCount(0);
-    await expect(page.getByText("0 total")).toHaveCount(0);
-    // Verify Open Editor action is visible
-    const openEditorBtn = prodRow.getByRole("button", { name: "Open Editor" });
-    await expect(openEditorBtn).toBeVisible();
+    // Verify New Project Shell
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByText("New Project", { exact: true })).toBeVisible();
+    await expect(page.getByText("Croviq Sample Channel")).toBeVisible();
 
-    // Capture Home screenshot at 1440x900
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.screenshot({ path: "e2e/screenshots/home-1440x900.png" });
+    // Verify focused upload card
+    await expect(page.getByRole("heading", { name: "Upload raw footage" })).toBeVisible();
+    await expect(
+      page.getByText(
+        "Drop a video to start a new production. Croviq will analyze, edit, review, and render it automatically.",
+      ),
+    ).toBeVisible();
 
-    // Verify clicking Open Editor navigates to the Editor URL
-    await openEditorBtn.click();
-    await expect(page).toHaveURL(/\/productions\/prod_f0b41bfd429e\/editor/);
+    // Regressions: Recent Productions table and floating pill MUST be absent
+    await expect(page.getByText("Recent Productions")).toHaveCount(0);
+    await expect(page.getByText("No recent productions found")).toHaveCount(0);
+
     expect(consoleErrors).toEqual([]);
   });
-  test("supports deleting a production with confirmation dialog", async ({ page }) => {
-    const consoleErrors: string[] = [];
-    page.on("console", (msg) => {
-      if (msg.type() === "error") consoleErrors.push(msg.text());
-    });
 
-    const mockProduction = {
-      production_id: "prod_delete_test_01",
-      workspace_id: "ws_demo",
-      channel_id: "croviq_syn_ai_eng_01",
-      owner_user_id: "demo_user_123",
-      status: "uploaded",
-      source_media: {
-        upload_id: "upl_delete_01",
-        original_filename: "Test Video To Delete.mp4",
-        content_type: "video/mp4",
-        size_bytes: 5242880,
-        gcs_bucket: "croviq-506602-croviq-media-raw",
-        gcs_object: "workspaces/ws_demo/productions/prod_delete_test_01/source/video.mp4",
-        status: "uploaded",
-        created_at: "2026-08-26T04:33:44.963857Z",
-        uploaded_at: "2026-08-26T04:33:44.963857Z",
-      },
-      created_at: "2026-08-26T04:33:44.963857Z",
-      updated_at: "2026-08-26T04:33:44.963857Z",
-    };
-
-    await mockFirebasePasswordSignIn(page);
-    await mockBackendApis(page, [mockProduction]);
-    await login(page);
-
-    // Production row is visible initially
-    const prodRow = page.getByTestId("production-row-prod_delete_test_01");
-    await expect(prodRow).toBeVisible();
-    await expect(page.getByText("Test Video To Delete.mp4")).toBeVisible();
-
-    // Click delete action on the row
-    const deleteBtn = page.getByTestId("delete-production-prod_delete_test_01");
-    await expect(deleteBtn).toBeVisible();
-    await deleteBtn.click();
-
-    // Confirmation modal opens
-    const modalTitle = page.getByRole("heading", { name: "Delete production?" });
-    await expect(modalTitle).toBeVisible();
-    await expect(page.getByText(/Are you sure you want to delete/i)).toBeVisible();
-
-    // Clicking Cancel closes modal without deleting
-    await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(modalTitle).toHaveCount(0);
-    await expect(prodRow).toBeVisible();
-
-    // Click delete action again and confirm
-    await deleteBtn.click();
-    await expect(modalTitle).toBeVisible();
-    const confirmBtn = page.getByTestId("confirm-delete-button");
-    await expect(confirmBtn).toBeVisible();
-    await confirmBtn.click();
-
-    // Production row is removed from DOM and success toast appears
-    await expect(prodRow).toHaveCount(0);
-    await expect(page.getByText(/deleted successfully/i)).toBeVisible();
-    expect(consoleErrors).toEqual([]);
-  });
   test("executes end-to-end direct storage upload and records production", async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on("console", (msg) => {
       if (msg.type() === "error") {
         const txt = msg.text();
-        if (!txt.includes("401") && !txt.includes("404")) {
+        if (
+          !txt.includes("401") &&
+          !txt.includes("404") &&
+          !txt.includes("502") &&
+          !txt.includes("Failed to load resource")
+        ) {
           consoleErrors.push(txt);
         }
       }
@@ -802,8 +721,8 @@ test.describe("Product Home and Creator Flow", () => {
     await mockFirebasePasswordSignIn(page);
     await mockBackendApis(page, []);
 
-    // Mock upload negotiation endpoint
-    await page.route("**/api/uploads", async (route) => {
+    // Mock upload initiation endpoint
+    await page.route("**/api/productions/upload", async (route) => {
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -826,87 +745,21 @@ test.describe("Product Home and Creator Flow", () => {
       });
     });
 
-    // Mock upload completion endpoint
-    await page.route("**/api/uploads/upl_test_001/complete", async (route) => {
+    // Mock verify-upload endpoint
+    await page.route("**/api/productions/prod_test_001/verify-upload", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          production_id: "prod_test_001",
-          workspace_id: "ws_demo",
-          channel_id: "croviq_syn_ai_eng_01",
-          owner_user_id: "demo_user_123",
           status: "uploaded",
-          source_media: {
-            upload_id: "upl_test_001",
-            original_filename: "raw_tutorial.mp4",
-            content_type: "video/mp4",
-            size_bytes: 1048576,
-            gcs_bucket: "croviq-506602-croviq-media-raw",
-            status: "uploaded",
-            created_at: new Date().toISOString(),
-            uploaded_at: new Date().toISOString(),
-          },
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          production_id: "prod_test_001",
         }),
       });
     });
 
-    await page.route("**/api/productions/prod_test_001**", async (route) => {
-      const url = route.request().url();
-      if (
-        url.endsWith("/transcribe") ||
-        url.endsWith("/analyze") ||
-        url.endsWith("/edl") ||
-        url.endsWith("/renders/preview")
-      ) {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ status: "completed" }),
-        });
-        return;
-      }
-      if (
-        url.endsWith("/transcript") ||
-        url.endsWith("/editorial-run") ||
-        url.endsWith("/renders")
-      ) {
-        await route.fulfill({
-          status: 404,
-          contentType: "application/json",
-          body: JSON.stringify({ detail: "Not found" }),
-        });
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          production_id: "prod_test_001",
-          workspace_id: "ws_demo",
-          channel_id: "croviq_syn_ai_eng_01",
-          owner_user_id: "demo_user_123",
-          status: "uploaded",
-          source_media: {
-            upload_id: "upl_test_001",
-            original_filename: "raw_tutorial.mp4",
-            content_type: "video/mp4",
-            size_bytes: 1048576,
-            status: "uploaded",
-            created_at: new Date().toISOString(),
-            uploaded_at: new Date().toISOString(),
-          },
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }),
-      });
-    });
+    await login(page, true);
 
-    await login(page);
-
-    // Create a mock video file buffer and trigger upload
+    // Select a video file
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles({
       name: "raw_tutorial.mp4",
@@ -916,18 +769,16 @@ test.describe("Product Home and Creator Flow", () => {
 
     // File selected state
     await expect(page.getByText("raw_tutorial.mp4")).toBeVisible();
-    const uploadBtn = page.getByRole("button", { name: "Upload video" });
-    await expect(uploadBtn).toBeVisible();
+    const startBtn = page.getByRole("button", { name: "Start production" });
+    await expect(startBtn).toBeVisible();
 
     // Click upload
-    await uploadBtn.click();
+    await startBtn.click();
 
     // Upload completion takes the creator straight into the production Editor.
-    await expect(page).toHaveURL(/\/productions\/prod_test_001\/editor/);
-    await expect(page.getByText("Upload complete")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/productions\/prod_test_001\/editor/, { timeout: 6000 });
     expect(consoleErrors).toEqual([]);
   });
-
   test("renders responsive Product Home at mobile viewport (390px)", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await mockFirebasePasswordSignIn(page);
@@ -937,13 +788,12 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
     await page.screenshot({ path: "e2e/screenshots/studio-cockpit-390px.png", fullPage: true });
   });
-
   test("rejects invalid media format with clear error", async ({ page }) => {
     await mockFirebasePasswordSignIn(page);
     await mockBackendApis(page, []);
     await login(page);
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator("input[type='file']");
     await fileInput.setInputFiles({
       name: "document.pdf",
       mimeType: "application/pdf",
@@ -951,44 +801,37 @@ test.describe("Product Home and Creator Flow", () => {
     });
 
     await expect(
-      page.getByText("Please select a valid video file (.mp4, .mov, or .webm)"),
+      page.getByText("Please select a valid video file (.mp4, .mov, .webm, or .mkv)"),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Upload video" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Start production" })).toHaveCount(0);
   });
 
-  test("allows vertical page scrolling when content exceeds viewport", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 600 });
-    const sampleProductions = Array.from({ length: 8 }, (_, i) => ({
-      production_id: `prod_${i + 1}`,
-      workspace_id: "ws_demo",
-      channel_id: "croviq_syn_ai_eng_01",
-      owner_user_id: "demo_user_123",
-      status: "uploaded",
-      source_media: {
-        upload_id: `upl_${i + 1}`,
-        original_filename: `Project ${i + 1}.mp4`,
-        content_type: "video/mp4",
-        size_bytes: 10485760,
-        gcs_bucket: "croviq-506602-croviq-media-raw",
-        gcs_object: `workspaces/ws_demo/productions/prod_${i + 1}/source/upl_${i + 1}/project.mp4`,
-      },
-      created_at: "2026-08-26T00:00:00Z",
-    }));
+  test("verifies New Project shares app shell and removes Recent Productions", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await mockFirebasePasswordSignIn(page);
-    await mockBackendApis(page, sampleProductions);
+    await mockBackendApis(page, []);
     await login(page);
 
-    await expect(page.getByText("Project 1.mp4")).toBeVisible();
-    const initialScrollY = await page.evaluate(
-      () => window.scrollY || document.documentElement.scrollTop,
-    );
-    expect(initialScrollY).toBe(0);
+    // 1. Header is continuous with /app
+    await expect(page.getByRole("banner").getByRole("img", { name: "Croviq" })).toBeVisible();
+    await expect(page.getByText("New Project", { exact: true })).toBeVisible();
+    await expect(page.getByText("Croviq Sample Channel")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
 
-    // Scroll down
-    await page.evaluate(() => window.scrollTo(0, 400));
-    const scrolledY = await page.evaluate(
-      () => window.scrollY || document.documentElement.scrollTop,
-    );
-    expect(scrolledY).toBeGreaterThan(0);
+    // 2. Focused Upload Card
+    await expect(page.getByRole("heading", { name: "Upload raw footage" })).toBeVisible();
+    await expect(
+      page.getByText(
+        "Drop a video to start a new production. Croviq will analyze, edit, review, and render it automatically.",
+      ),
+    ).toBeVisible();
+    await expect(page.getByText("MP4 · MOV · WebM · MKV (up to 1 GB)")).toBeVisible();
+
+    // 3. Regressions: Recent Productions table and floating pill MUST be absent
+    await expect(page.getByText("Recent Productions")).toHaveCount(0);
+    await expect(page.getByText("No recent productions found")).toHaveCount(0);
+
+    // Capture New Project Screenshot
+    await page.screenshot({ path: "e2e/screenshots/new-project-1440x900.png" });
   });
 });

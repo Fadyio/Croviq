@@ -46,7 +46,71 @@ class NarrationMode(StrEnum):
     ORIGINAL = "original"
     ENHANCED_ORIGINAL = "enhanced_original"
     STUDIO_VOICE = "studio_voice"
+    MY_VOICE = "my_voice"
 
+
+class VoiceReplicationStatus(StrEnum):
+    """Capability / operational state for Gemini 3.1 Flash TTS My Voice replication."""
+
+    AVAILABLE = "available"
+    BLOCKED = "blocked"
+    CONSENT_REQUIRED = "consent_required"
+    EXPIRED = "expired"
+
+
+GOOGLE_VOICE_CONSENT_PHRASE_EN: str = (
+    "I am the owner of this voice and have consented to the creation of a synthetic model of my voice through the use of Google Cloud."
+)
+
+
+class VoiceReplicationConfig(BaseModel):
+    """My Voice configuration for creator voice replication."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    status: VoiceReplicationStatus = Field(
+        default=VoiceReplicationStatus.CONSENT_REQUIRED,
+        description="Replication access and lifecycle status",
+    )
+    voice_key: str | None = Field(
+        default=None,
+        description="Encrypted/persisted Vertex Voices API voice key (expires in 7 days)",
+    )
+    key_expires_at: datetime | None = Field(
+        default=None,
+        description="Expiration datetime for the replicated voice key (7-day maximum TTL)",
+    )
+    consent_recorded: bool = Field(
+        default=False,
+        description="Whether creator consent audio has been verified with exact required phrase",
+    )
+    source_sample_start_ms: int | None = Field(
+        default=None,
+        description="Start offset in source video of clean 10-30s speech sample",
+    )
+    source_sample_end_ms: int | None = Field(
+        default=None,
+        description="End offset in source video of clean 10-30s speech sample",
+    )
+    blocked_reason: str | None = Field(
+        default=None,
+        description="Reason why voice replication is blocked (e.g. Google allowlist access required)",
+    )
+    suggested_action: str | None = Field(
+        default=None,
+        description="Suggested resolution action when blocked",
+    )
+
+    @field_validator("key_expires_at")
+    @classmethod
+    def check_tz(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return None
+        return validate_timezone_aware(v)
 
 class VoiceCatalogItem(BaseModel):
     """Studio Voice catalog entry."""
@@ -88,6 +152,10 @@ class VoiceSettingsConfig(BaseModel):
         description="Language code for synthesis",
     )
     updated_at: datetime = Field(..., description="Timestamp when settings were updated")
+    my_voice: VoiceReplicationConfig | None = Field(
+        default=None,
+        description="My Voice replication settings and consent status",
+    )
 
     @field_validator("updated_at")
     @classmethod

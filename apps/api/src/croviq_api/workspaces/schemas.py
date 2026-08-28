@@ -7,6 +7,7 @@ from croviq_domain.agent_config import (
     AgentPromptConfig,
     NarrationMode,
     VoiceCatalogItem,
+    VoiceReplicationConfig,
     VoiceSampleRequest,
     VoiceSampleResponse,
     VoiceSettingsConfig,
@@ -29,7 +30,7 @@ class UpdateVoiceSettingsRequest(BaseModel):
     narration_mode: NarrationMode = Field(..., description="Selected narration mode")
     selected_voice: str = Field(default="Puck", min_length=1)
     language: str = Field(default="en-US", min_length=2)
-
+    my_voice: VoiceReplicationConfig | None = Field(default=None, description="Optional My Voice replication configuration")
 
 class MemoryItemResponse(BaseModel):
     """Single read-only memory entry displayed in creator Agent Settings."""

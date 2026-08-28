@@ -256,6 +256,7 @@ async def update_voice_settings_endpoint(
         narration_mode=payload.narration_mode,
         selected_voice=payload.selected_voice,
         language=payload.language,
+        my_voice=payload.my_voice,
         updated_at=datetime.now(timezone.utc),
     )
     return await agent_config_repo.save_voice_settings(workspace.workspace_id, config)

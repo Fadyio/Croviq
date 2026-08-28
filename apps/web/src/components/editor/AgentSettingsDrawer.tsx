@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from "react";
 import {
   X,
-  Sparkles,
   RotateCcw,
   Save,
   Volume2,
   Play,
-  Pause,
   Brain,
-  FileText,
   Check,
   Loader2,
+  AlertCircle,
+  Mic,
+  ShieldCheck,
 } from "lucide-react";
 import leoAvatar from "../../assets/agents/leo.webp";
 import mayaAvatar from "../../assets/agents/maya.webp";
@@ -21,7 +21,7 @@ type AgentPromptConfig = components["schemas"]["AgentPromptConfig"];
 type VoiceSettingsConfig = components["schemas"]["VoiceSettingsConfig"];
 type VoiceCatalogItem = components["schemas"]["VoiceCatalogItem"];
 type AgentMemorySummaryResponse = components["schemas"]["AgentMemorySummaryResponse"];
-type NarrationMode = "original" | "enhanced_original" | "studio_voice";
+type NarrationMode = "original" | "enhanced_original" | "studio_voice" | "my_voice";
 
 interface AgentSettingsDrawerProps {
   isOpen: boolean;
@@ -31,6 +31,9 @@ interface AgentSettingsDrawerProps {
 
 const DEFAULT_SAMPLE_TEXT =
   "Welcome to Croviq. I'll make your video clear, concise, and easy to follow.";
+
+const GOOGLE_CONSENT_PHRASE =
+  "I am the owner of this voice and have consented to the creation of a synthetic model of my voice through the use of Google Cloud.";
 
 export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   isOpen,
@@ -47,6 +50,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     }
     return headers;
   };
+
   const [activeTab, setActiveTab] = useState<"prompt" | "memory" | "voice">("prompt");
   const [promptText, setPromptText] = useState<string>("");
   const [promptVersion, setPromptVersion] = useState<number>(1);
@@ -82,17 +86,16 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     const loadSettings = async () => {
       setIsLoading(true);
       try {
-        // 1. Load settings (prompts, voice config, voice catalog)
         const headers = await getAuthHeaders();
         const res = await fetch("/api/workspace/agent-settings", { headers });
         if (res.ok) {
           const data = await res.json();
           const p = isLeo ? data.leo_prompt : data.maya_prompt;
           if (p) {
-            setPromptText(p.prompt_text);
-            setPromptVersion(p.version);
-            setPromptUpdatedAt(p.updated_at);
-            setIsCustomPrompt(p.is_custom);
+            setPromptText(p.prompt_text || "");
+            setPromptVersion(p.version ?? 1);
+            setPromptUpdatedAt(p.updated_at || "");
+            setIsCustomPrompt(Boolean(p.is_custom));
           }
           if (data.voice_settings) {
             setVoiceSettings(data.voice_settings);
@@ -101,8 +104,6 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
             setVoices(data.voices);
           }
         }
-
-        // 2. Load memory
         const memRes = await fetch("/api/workspace/agent-settings/memory", { headers });
         if (memRes.ok) {
           const memData = await memRes.json();
@@ -123,21 +124,21 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     setSaveSuccess(false);
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`/api/workspace/agent-settings/prompts/${agentId}`, {
+      const res = await fetch(`/api/workspace/agent-settings/prompt/${agentId}`, {
         method: "PUT",
         headers,
         body: JSON.stringify({ prompt_text: promptText }),
       });
       if (res.ok) {
-        const updated = await res.json();
-        setPromptVersion(updated.version);
+        const updated: AgentPromptConfig = await res.json();
+        setPromptVersion(updated.version ?? 1);
         setPromptUpdatedAt(updated.updated_at);
-        setIsCustomPrompt(true);
+        setIsCustomPrompt(Boolean(updated.is_custom));
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 2500);
       }
     } catch (err) {
-      console.error("Failed to save prompt:", err);
+      console.error("Failed to save agent prompt:", err);
     } finally {
       setIsSaving(false);
     }
@@ -147,21 +148,19 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     setIsSaving(true);
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`/api/workspace/agent-settings/prompts/${agentId}/reset`, {
+      const res = await fetch(`/api/workspace/agent-settings/prompt/${agentId}/reset`, {
         method: "POST",
         headers,
       });
       if (res.ok) {
-        const resetData = await res.json();
-        setPromptText(resetData.prompt_text);
-        setPromptVersion(resetData.version);
-        setPromptUpdatedAt(resetData.updated_at);
-        setIsCustomPrompt(false);
-        setSaveSuccess(true);
+        const updated: AgentPromptConfig = await res.json();
+        setPromptVersion(updated.version ?? 1);
+        setPromptUpdatedAt(updated.updated_at);
+        setIsCustomPrompt(Boolean(updated.is_custom));
         setTimeout(() => setSaveSuccess(false), 2500);
       }
     } catch (err) {
-      console.error("Failed to reset prompt:", err);
+      console.error("Failed to reset agent prompt:", err);
     } finally {
       setIsSaving(false);
     }
@@ -169,19 +168,25 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
 
   const handleUpdateVoiceMode = async (mode: NarrationMode) => {
     if (!voiceSettings) return;
-    const updated = { ...voiceSettings, narration_mode: mode };
-    setVoiceSettings(updated);
+    setVoiceSettings((prev) => (prev ? { ...prev, narration_mode: mode } : null));
     try {
       const headers = await getAuthHeaders();
-      await fetch("/api/workspace/agent-settings/voice", {
+      const updated = {
+        narration_mode: mode,
+        selected_voice: voiceSettings.selected_voice,
+        language: voiceSettings.language,
+      };
+      const res = await fetch("/api/workspace/agent-settings/voice", {
         method: "PUT",
         headers,
-        body: JSON.stringify({
-          narration_mode: mode,
-          selected_voice: voiceSettings.selected_voice,
-          language: voiceSettings.language,
-        }),
+        body: JSON.stringify(updated),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.narration_mode) {
+          setVoiceSettings(data);
+        }
+      }
     } catch (err) {
       console.error("Failed to update voice mode:", err);
     }
@@ -189,26 +194,32 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
 
   const handleSelectVoice = async (voiceId: string) => {
     if (!voiceSettings) return;
-    const updated = { ...voiceSettings, selected_voice: voiceId };
-    setVoiceSettings(updated);
+    setVoiceSettings((prev) => (prev ? { ...prev, selected_voice: voiceId } : null));
     try {
       const headers = await getAuthHeaders();
-      await fetch("/api/workspace/agent-settings/voice", {
+      const updated = {
+        narration_mode: voiceSettings.narration_mode,
+        selected_voice: voiceId,
+        language: voiceSettings.language,
+      };
+      const res = await fetch("/api/workspace/agent-settings/voice", {
         method: "PUT",
         headers,
-        body: JSON.stringify({
-          narration_mode: voiceSettings.narration_mode,
-          selected_voice: voiceId,
-          language: voiceSettings.language,
-        }),
+        body: JSON.stringify(updated),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.selected_voice) {
+          setVoiceSettings(data);
+        }
+      }
     } catch (err) {
-      console.error("Failed to select voice:", err);
+      console.error("Failed to update selected voice:", err);
     }
   };
 
   const handlePlayVoiceSample = async () => {
-    if (!voiceSettings) return;
+    if (!voiceSettings?.selected_voice) return;
     setIsPlayingAudio(true);
     setAudioError(null);
     try {
@@ -223,20 +234,19 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
       });
       if (res.ok) {
         const sampleData = await res.json();
-        // Play synthetic base64 audio
         const audio = new Audio(`data:audio/wav;base64,${sampleData.audio_base64}`);
         audio.onended = () => setIsPlayingAudio(false);
         audio.onerror = () => {
           setIsPlayingAudio(false);
-          setAudioError("Audio playback error");
+          setAudioError("Unable to play synthetic preview audio.");
         };
         await audio.play();
       } else {
-        setIsPlayingAudio(false);
+        throw new Error("Voice sample generation failed");
       }
     } catch (err) {
+      setAudioError("Unable to preview voice sample.");
       setIsPlayingAudio(false);
-      setAudioError("Unable to play voice sample");
     }
   };
 
@@ -244,46 +254,39 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-xs"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs select-none"
       data-testid="agent-settings-drawer"
     >
-      <div
-        className="relative flex flex-col w-full max-w-lg h-full bg-surface-1 border-l border-border-strong shadow-2xl text-text-primary overflow-hidden animate-in slide-in-from-right duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="w-full max-w-xl bg-surface-1 border-l border-border-subtle h-full flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-200">
         {/* Drawer Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle bg-surface-2/60">
+        <div className="p-4 border-b border-border-subtle bg-surface-2/40 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
               src={avatarSrc}
               alt={agentName}
-              className="size-10 rounded-full object-cover border border-border-strong"
+              className="size-10 rounded-full object-cover border border-border-strong shadow-xs"
             />
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm tracking-wide text-text-primary">
-                  {agentName}
-                </span>
-                <span className="text-[11px] px-2 py-0.5 rounded bg-surface-3 text-text-secondary font-medium">
-                  {agentRole}
-                </span>
-              </div>
-              <span className="text-xs text-text-muted">Agent Settings</span>
+              <h2 className="text-sm font-bold text-text-primary tracking-tight">
+                {agentName}&apos;s Settings
+              </h2>
+              <p className="text-xs text-text-muted">{agentRole} &middot; Croviq Core Agent</p>
             </div>
           </div>
+
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors"
+            className="p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-3 rounded-md transition-colors"
+            title="Close Settings"
             aria-label="Close"
           >
-            <X className="size-5" />
+            <X className="size-4" />
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-border-subtle bg-surface-2/30 px-5">
+        {/* Tab Switcher */}
+        <div className="flex border-b border-border-subtle px-4 bg-surface-2/20">
           <button
             type="button"
             onClick={() => setActiveTab("prompt")}
@@ -294,8 +297,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
             }`}
             data-testid="tab-prompt"
           >
-            <FileText className="size-3.5" />
-            Prompt
+            Working Prompt
           </button>
           <button
             type="button"
@@ -356,7 +358,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
               </div>
 
               <textarea
-                value={promptText}
+                value={promptText || ""}
                 onChange={(e) => setPromptText(e.target.value)}
                 rows={14}
                 className="w-full rounded-md border border-border-strong bg-surface-2 p-3 text-xs font-mono text-text-primary leading-relaxed focus:border-primary focus:outline-hidden resize-none"
@@ -385,7 +387,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                   <button
                     type="button"
                     onClick={handleSavePrompt}
-                    disabled={isSaving || !promptText.trim()}
+                    disabled={isSaving || !promptText?.trim()}
                     className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-primary hover:bg-primary/90 text-white text-xs font-semibold disabled:opacity-40 shadow-xs transition-colors"
                     data-testid="btn-save-prompt"
                   >
@@ -451,31 +453,19 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                       {(memorySummary.lessons || []).map((item, idx) => (
                         <div
                           key={idx}
-                          className="p-3 rounded-lg border border-border-subtle bg-surface-2/50 space-y-1.5"
+                          className="p-2.5 rounded-md border border-border-subtle/50 bg-surface-2/30 space-y-1 text-xs"
                         >
-                          <div className="text-xs font-semibold text-text-primary">
+                          <span className="font-semibold text-text-primary block">
                             {item.topic}
-                          </div>
-                          <div className="text-xs text-text-secondary leading-relaxed">
-                            {item.content}
-                          </div>
-                          {item.learned_from && (
-                            <div className="text-[10px] text-text-muted">
-                              Learned from:{" "}
-                              <span className="font-mono text-text-secondary">
-                                {item.learned_from}
-                              </span>
-                            </div>
-                          )}
+                          </span>
+                          <p className="text-text-secondary">{item.content}</p>
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="text-xs text-text-muted py-6 text-center">
-                  No memory bank entries found.
-                </div>
+                <p className="text-xs text-text-muted">No channel memory profile loaded.</p>
               )}
             </div>
           ) : (
@@ -483,17 +473,18 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
             <div className="space-y-6" data-testid="settings-voice-view">
               <div>
                 <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">
-                  Narration & Studio Voice
+                  Narration & Voice Modes
                 </h3>
                 <p className="text-[11px] text-text-muted mt-0.5">
-                  Configure spoken dialogue replacement and preview official Google voices.
+                  Configure spoken dialogue replacement, prebuilt Studio Voice, or creator My Voice
+                  replication.
                 </p>
               </div>
 
               {/* Narration Mode Selector */}
               <div className="space-y-2.5">
                 <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block">
-                  Narration Mode
+                  Voice Mode
                 </span>
                 <div className="space-y-2">
                   {[
@@ -504,17 +495,23 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                     },
                     {
                       id: "enhanced_original" as NarrationMode,
-                      label: "Enhanced Original Voice",
-                      desc: "Apply deterministic broadcast speech enhancement and loudness mastering.",
+                      label: "Enhanced Original",
+                      desc: "Apply broadcast speech enhancement and loudness mastering.",
                     },
                     {
                       id: "studio_voice" as NarrationMode,
                       label: "Studio Voice",
-                      desc: "Replace spoken narration with Studio Voice, timed to original speech.",
+                      desc: "Synthesize clear, paced narration using Google Gemini 3.1 Flash TTS.",
+                    },
+                    {
+                      id: "my_voice" as NarrationMode,
+                      label: "My Voice (Preview)",
+                      desc: "Replicate your own voice using Gemini 3.1 Flash TTS voice replication (Pre-GA / Allowlist).",
                     },
                   ].map((mode) => (
                     <label
                       key={mode.id}
+                      data-testid={`voice-mode-${mode.id}`}
                       className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                         voiceSettings?.narration_mode === mode.id
                           ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
@@ -530,7 +527,14 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                         className="mt-0.5 text-primary focus:ring-primary"
                       />
                       <div>
-                        <div className="text-xs font-semibold text-text-primary">{mode.label}</div>
+                        <div className="text-xs font-semibold text-text-primary flex items-center gap-2">
+                          <span>{mode.label}</span>
+                          {mode.id === "my_voice" && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-medium">
+                              Vertex Voices Pre-GA
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-text-muted mt-0.5">{mode.desc}</div>
                       </div>
                     </label>
@@ -538,55 +542,100 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Studio Voice Selection (Active when Studio Voice chosen) */}
-              <div className="space-y-3 pt-2 border-t border-border-subtle">
-                <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block">
-                  Studio Voice Catalog
-                </span>
-
-                <div className="space-y-2">
-                  <label className="text-[11px] text-text-secondary block">Voice Selection</label>
-                  <select
-                    value={voiceSettings?.selected_voice || "Puck"}
-                    onChange={(e) => handleSelectVoice(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md bg-surface-2 border border-border-strong text-xs text-text-primary focus:border-primary focus:outline-hidden"
-                    data-testid="voice-selector-dropdown"
-                  >
-                    {voices.map((v) => (
-                      <option key={v.voice_id} value={v.voice_id}>
-                        {v.display_name} ({v.gender})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Audition Voice Sample */}
-                <div className="p-3.5 rounded-lg border border-border-subtle bg-surface-2/50 flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <span className="text-xs font-medium text-text-primary block truncate">
-                      Audition Voice
-                    </span>
-                    <span className="text-[11px] text-text-muted block truncate">
-                      &quot;{DEFAULT_SAMPLE_TEXT}&quot;
-                    </span>
+              {/* My Voice Replication Details (When My Voice is selected) */}
+              {voiceSettings?.narration_mode === "my_voice" && (
+                <div className="space-y-4 pt-3 border-t border-border-subtle bg-purple-950/20 p-4 rounded-xl border border-purple-800/30">
+                  <div className="flex items-center gap-2 text-purple-300 text-xs font-bold uppercase tracking-wider">
+                    <ShieldCheck className="size-4 text-purple-400" />
+                    <span>My Voice Setup & Consent</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handlePlayVoiceSample}
-                    disabled={isPlayingAudio}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface-3 hover:bg-surface-4 text-text-primary text-xs font-semibold border border-border-strong shrink-0 transition-colors"
-                    data-testid="btn-play-voice-sample"
-                  >
-                    {isPlayingAudio ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Play className="size-3.5 fill-current" />
-                    )}
-                    Play Sample
-                  </button>
+
+                  <div className="space-y-3 text-xs text-text-secondary leading-relaxed">
+                    <div className="p-3 bg-surface-2/80 rounded-lg border border-border-subtle space-y-1">
+                      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block">
+                        1. Suggested Voice Sample
+                      </span>
+                      <p className="text-[11px] text-text-muted">
+                        Croviq automatically extracts a clean 10–30s speech segment from your
+                        uploaded video (LINEAR16, 24 kHz, mono WAV).
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-surface-2/80 rounded-lg border border-border-subtle space-y-2">
+                      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block flex items-center gap-1.5">
+                        <Mic className="size-3 text-purple-400" />
+                        2. Required Google Consent Recording
+                      </span>
+                      <p className="text-[11px] text-text-muted">
+                        Google requires a separate verified consent recording with the exact phrase:
+                      </p>
+                      <blockquote className="p-2 rounded bg-surface-3 text-[11px] font-mono text-purple-200 border-l-2 border-purple-500">
+                        &quot;{GOOGLE_CONSENT_PHRASE}&quot;
+                      </blockquote>
+                    </div>
+
+                    <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-2 text-[11px] text-amber-300">
+                      <AlertCircle className="size-4 shrink-0 text-amber-400" />
+                      <span>
+                        Access Status: Google Gemini-TTS Voice Replication requires project
+                        allowlist access. Replicated keys expire after 7 days.
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                {audioError && <p className="text-[11px] text-rose-400">{audioError}</p>}
-              </div>
+              )}
+
+              {/* Studio Voice Selection (Active when Studio Voice chosen) */}
+              {voiceSettings?.narration_mode === "studio_voice" && (
+                <div className="space-y-3 pt-2 border-t border-border-subtle">
+                  <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block">
+                    Studio Voice Catalog
+                  </span>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-text-secondary block">Voice Selection</label>
+                    <select
+                      value={voiceSettings?.selected_voice || "Puck"}
+                      onChange={(e) => handleSelectVoice(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md bg-surface-2 border border-border-strong text-xs text-text-primary focus:border-primary focus:outline-hidden"
+                      data-testid="voice-selector-dropdown"
+                    >
+                      {voices.map((v) => (
+                        <option key={v.voice_id} value={v.voice_id}>
+                          {v.display_name} ({v.gender})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Audition Voice Sample */}
+                  <div className="p-3.5 rounded-lg border border-border-subtle bg-surface-2/50 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <span className="text-xs font-medium text-text-primary block truncate">
+                        Audition Voice
+                      </span>
+                      <span className="text-[11px] text-text-muted block truncate">
+                        &quot;{DEFAULT_SAMPLE_TEXT}&quot;
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handlePlayVoiceSample}
+                      disabled={isPlayingAudio}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface-3 hover:bg-surface-4 text-text-primary text-xs font-semibold border border-border-strong shrink-0 transition-colors"
+                      data-testid="btn-play-voice-sample"
+                    >
+                      {isPlayingAudio ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Play className="size-3.5 fill-current" />
+                      )}
+                      Play Sample
+                    </button>
+                  </div>
+                  {audioError && <p className="text-[11px] text-rose-400">{audioError}</p>}
+                </div>
+              )}
             </div>
           )}
         </div>

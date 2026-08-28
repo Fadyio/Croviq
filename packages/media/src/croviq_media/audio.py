@@ -117,6 +117,16 @@ class AudioExtractor(ABC):
     ) -> Path:
         """Extract a single-channel 16kHz WAV audio stream from the source video."""
         pass
+    @abstractmethod
+    def extract_voice_sample_wav(
+        self,
+        video_path: Path | str,
+        target_path: Path | str | None = None,
+        start_ms: int = 0,
+        duration_ms: int = 15000,
+    ) -> Path:
+        """Extract clean little-endian LINEAR16 24 kHz mono WAV for voice replication."""
+        pass
 
     @contextmanager
     def temporary_speech_audio(
@@ -158,6 +168,24 @@ class FakeAudioExtractor(AudioExtractor):
         temp_file = Path(temp_dir) / "extracted_speech.wav"
         temp_file.touch()
         return temp_file
+    def extract_voice_sample_wav(
+        self,
+        video_path: Path | str,
+        target_path: Path | str | None = None,
+        start_ms: int = 0,
+        duration_ms: int = 15000,
+    ) -> Path:
+        if target_path is not None:
+            target = Path(target_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.touch()
+            return target
+
+        temp_dir = tempfile.mkdtemp(prefix="croviq_voice_sample_fake_")
+        temp_file = Path(temp_dir) / "voice_sample_24k.wav"
+        temp_file.touch()
+        return temp_file
+
 
 
 class FFmpegAudioExtractor(AudioExtractor):
@@ -224,5 +252,63 @@ class FFmpegAudioExtractor(AudioExtractor):
 
         if not target.exists() or target.stat().st_size == 0:
             raise AudioExtractionError(f"Extracted audio file is missing or empty at {target}")
+
+        return target
+
+    def extract_voice_sample_wav(
+        self,
+        video_path: Path | str,
+        target_path: Path | str | None = None,
+        start_ms: int = 0,
+        duration_ms: int = 15000,
+    ) -> Path:
+        """Extract 10-30s clean LINEAR16 24 kHz mono WAV specifically formatted for Google Gemini TTS voice replication."""
+        video = Path(video_path)
+        if not video.exists() or not video.is_file():
+            raise AudioExtractionError(f"Source video file not found: {video}")
+
+        ffmpeg_bin = self._resolve_ffmpeg()
+
+        if target_path is not None:
+            target = Path(target_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            temp_dir = tempfile.mkdtemp(prefix="croviq_voice_sample_")
+            target = Path(temp_dir) / "voice_sample_24k.wav"
+
+        start_s = start_ms / 1000.0
+        dur_s = duration_ms / 1000.0
+
+        cmd = [
+            ffmpeg_bin,
+            "-y",
+            "-ss", f"{start_s:.3f}",
+            "-i", str(video),
+            "-t", f"{dur_s:.3f}",
+            "-vn",
+            "-acodec", "pcm_s16le",
+            "-ac", "1",
+            "-ar", "24000",
+            str(target),
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                raise AudioExtractionError(
+                    f"FFmpeg voice sample extraction failed with return code {result.returncode}: {result.stderr}"
+                )
+        except Exception as e:
+            if not isinstance(e, AudioExtractionError):
+                raise AudioExtractionError(f"Failed to execute FFmpeg voice sample extraction: {e}") from e
+            raise
+
+        if not target.exists() or target.stat().st_size == 0:
+            raise AudioExtractionError(f"Extracted voice sample WAV is missing or empty at {target}")
 
         return target

@@ -23,9 +23,9 @@ import { AgentActivityFeed } from "../components/editor/AgentActivityFeed";
 import { DecisionInspector } from "../components/editor/DecisionInspector";
 import { MediaBin, type BRollAssetItem } from "../components/editor/MediaBin";
 import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
-import { ProductionRunStrip } from "../components/editor/ProductionRunStrip";
 import {
   edlToTwickTimeline,
+  deriveKeepSegments,
   type EditDecisionList,
   type EditorProposal,
   type DirectorReview,
@@ -86,6 +86,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     components["schemas"]["RenderArtifactResponse"] | null
   >(null);
   const [shortArtifact, setShortArtifact] = useState<
+    components["schemas"]["RenderArtifactResponse"] | null
+  >(null);
+  const [studioVoiceArtifact, setStudioVoiceArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
   >(null);
   const [renderReview, setRenderReview] = useState<components["schemas"]["RenderReview"] | null>(
@@ -221,6 +224,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
     setPreviewArtifact(preview);
     setMasterArtifact(master);
     setShortArtifact(short);
+    setStudioVoiceArtifact(svPreview);
 
     if (brollPayload?.artifacts) {
       setBrollArtifacts(brollPayload.artifacts);
@@ -445,11 +449,24 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
         activeCutCount: 0,
         coverageMarkerCount: 0,
         keepSegments: [[0, durationMs]] as Array<[number, number]>,
+        chapters: proposal?.chapters || [],
+        shortCandidate: proposal?.short_candidate,
       };
     }
-    return edlToTwickTimeline(edl, proposal, review);
-  }, [edl, durationMs, proposal, review]);
-
+    return edlToTwickTimeline(edl, proposal, review, transcript);
+  }, [edl, durationMs, proposal, review, transcript]);
+  // Compute actual or estimated edited duration
+  const derivedEditedDurationMs = useMemo(() => {
+    if (previewArtifact?.duration_ms && previewArtifact.duration_ms > 0) {
+      return previewArtifact.duration_ms;
+    }
+    if (edl) {
+      const keeps = deriveKeepSegments(edl);
+      const total = keeps.reduce((acc, [s, e]) => acc + (e - s), 0);
+      if (total > 0) return total;
+    }
+    return durationMs;
+  }, [previewArtifact?.duration_ms, edl, durationMs]);
   const selectedDecision = useMemo(() => {
     if (!selectedDecisionId || !proposal || !proposal.decisions) return null;
     return (
@@ -632,36 +649,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
           </button>
         </div>
       </header>
-      <ProductionRunStrip
-        stages={deriveProductionRunStages(
-          {
-            uploaded: production?.source_media?.status === "uploaded",
-            uploadedAt: production?.source_media?.uploaded_at,
-            transcriptCreatedAt: transcript?.created_at,
-            editorialRun,
-            activities,
-            edlCreatedAt: edl?.created_at,
-            renderCompletedAt: previewArtifact?.completed_at,
-            renderStatus: previewArtifact?.status,
-            renderDurationMs: previewArtifact?.duration_ms,
-            renderReview,
-            masterArtifact,
-            masterStatus: masterArtifact?.status,
-            masterCompletedAt: masterArtifact?.completed_at,
-            shortArtifact,
-            shortStatus: shortArtifact?.status,
-            shortCompletedAt: shortArtifact?.completed_at,
-            needsManualReview:
-              isManualReviewRequired ||
-              (renderReview?.verdict === "CORRECT" && renderSubStatus === "Needs manual review"),
-          },
-          {
-            active: activeProcessingStage,
-            failed: failedProcessingStage,
-            renderSubStatus,
-          },
-        )}
-      />
 
       {/* Main Professional Editor NLE Workstation (3 Columns) */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -669,13 +656,19 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
         <MediaBin
           currentMode={previewMode}
           sourceDurationMs={durationMs}
-          editedDurationMs={
-            previewArtifact?.duration_ms || (edl as any)?.estimated_target_duration_ms || durationMs
+          editedDurationMs={derivedEditedDurationMs}
+          studioVoiceDurationMs={studioVoiceArtifact?.duration_ms}
+          masterDurationMs={masterArtifact?.duration_ms}
+          shortDurationMs={
+            shortArtifact?.duration_ms ||
+            (proposal?.short_candidate
+              ? proposal.short_candidate.end_ms - proposal.short_candidate.start_ms
+              : null)
           }
           hasRenderedPreview={Boolean(renderedPreviewUrl)}
           hasMaster={Boolean(masterArtifact?.playback_url || masterUrl)}
           hasStudioVoice={Boolean(studioVoicePreviewUrl)}
-          hasShort={Boolean(shortArtifact?.playback_url)}
+          hasShort={Boolean(shortArtifact?.playback_url || proposal?.short_candidate)}
           brollAssets={brollBinItems}
           onSelectMode={setPreviewMode}
           onSeek={handleSeek}
@@ -691,6 +684,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             shortPlaybackUrl={shortArtifact?.playback_url}
             currentTimeMs={currentTimeMs}
             durationMs={durationMs}
+            editedDurationMs={derivedEditedDurationMs}
+            studioVoiceDurationMs={studioVoiceArtifact?.duration_ms}
+            shortDurationMs={
+              shortArtifact?.duration_ms ||
+              (proposal?.short_candidate
+                ? proposal.short_candidate.end_ms - proposal.short_candidate.start_ms
+                : null)
+            }
             isPlaying={isPlaying}
             previewMode={previewMode}
             edl={edl}
@@ -702,7 +703,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ productionId, onNavigate
             className="flex-1 min-h-0"
           />
         </div>
-
         {/* Right Column: Production Room (340-400px, Inspector Tabs: AGENTS / TRANSCRIPT / DECISION) */}
         <aside
           className="w-[360px] shrink-0 h-full min-h-0 flex flex-col bg-surface-1 border-l border-border-subtle overflow-hidden"

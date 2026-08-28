@@ -3464,6 +3464,49 @@
         "title": "ChannelMemoryProfile",
         "description": "Canonical structured memory profile for a channel stored in Memory Bank."
       },
+      "ChapterMarker": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "description": "Concise descriptive chapter title"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms",
+            "description": "Start time in milliseconds on the source video timeline"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source End Ms",
+            "description": "End time in milliseconds on the source video timeline"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Summary",
+            "description": "Summary of narrative and visual content covered in this chapter"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence score for this chapter boundary",
+            "default": 0.95
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["title", "source_start_ms", "source_end_ms", "summary"],
+        "title": "ChapterMarker",
+        "description": "Semantic chapter candidate generated from Leo's multimodal video understanding."
+      },
       "ClientErrorEvent": {
         "properties": {
           "firebase_uid": {
@@ -4459,14 +4502,22 @@
         "type": "string",
         "enum": [
           "KEEP",
+          "REMOVE_SILENCE",
           "REMOVE_FILLER",
           "REMOVE_FALSE_START",
           "REMOVE_REPETITION",
           "TRIM_PAUSE",
+          "TIGHTEN_PAUSE",
           "TIGHTEN_EXPLANATION",
+          "REMOVE_LOW_VALUE_SECTION",
           "KEEP_FOR_CLARITY",
+          "BROLL_COVER",
           "BROLL_COVER_CANDIDATE",
-          "SHORT_CANDIDATE"
+          "SOURCE_COVER",
+          "CHAPTER_MARKER",
+          "SHORT_CANDIDATE",
+          "NARRATION_REWRITE",
+          "CAPTION_EMPHASIS"
         ],
         "title": "EditorDecisionType",
         "description": "Semantic action types supported by Video Editor (Leo)."
@@ -4523,6 +4574,14 @@
             "type": "array",
             "title": "Section Plan",
             "description": "Full-timeline editorial section plan covering the whole production"
+          },
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterMarker"
+            },
+            "type": "array",
+            "title": "Chapters",
+            "description": "Multimodal semantic chapter markers across the video timeline"
           },
           "overall_confidence": {
             "type": "number",
@@ -4950,7 +5009,7 @@
       },
       "NarrationMode": {
         "type": "string",
-        "enum": ["original", "enhanced_original", "studio_voice"],
+        "enum": ["original", "enhanced_original", "studio_voice", "my_voice"],
         "title": "NarrationMode",
         "description": "Narration audio mode."
       },
@@ -6839,6 +6898,17 @@
             "minLength": 2,
             "title": "Language",
             "default": "en-US"
+          },
+          "my_voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoiceReplicationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional My Voice replication configuration"
           }
         },
         "additionalProperties": false,
@@ -7045,6 +7115,45 @@
             "minimum": 0.0,
             "title": "Confidence",
             "description": "Model confidence score for this section decision"
+          },
+          "visual_summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visual Summary",
+            "description": "Summary of screen content, slides, demonstration, or camera visual moments"
+          },
+          "speech_summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech Summary",
+            "description": "Summary of spoken dialogue or audio in this section"
+          },
+          "editorial_intent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editorial Intent",
+            "description": "Leo's editorial rationale and narrative purpose for this section"
           }
         },
         "additionalProperties": false,
@@ -7106,6 +7215,104 @@
         "required": ["voice_id", "display_name"],
         "title": "VoiceCatalogItem",
         "description": "Studio Voice catalog entry."
+      },
+      "VoiceReplicationConfig": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/VoiceReplicationStatus",
+            "description": "Replication access and lifecycle status",
+            "default": "consent_required"
+          },
+          "voice_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Key",
+            "description": "Encrypted/persisted Vertex Voices API voice key (expires in 7 days)"
+          },
+          "key_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Expires At",
+            "description": "Expiration datetime for the replicated voice key (7-day maximum TTL)"
+          },
+          "consent_recorded": {
+            "type": "boolean",
+            "title": "Consent Recorded",
+            "description": "Whether creator consent audio has been verified with exact required phrase",
+            "default": false
+          },
+          "source_sample_start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Sample Start Ms",
+            "description": "Start offset in source video of clean 10-30s speech sample"
+          },
+          "source_sample_end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Sample End Ms",
+            "description": "End offset in source video of clean 10-30s speech sample"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason",
+            "description": "Reason why voice replication is blocked (e.g. Google allowlist access required)"
+          },
+          "suggested_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Action",
+            "description": "Suggested resolution action when blocked"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "VoiceReplicationConfig",
+        "description": "My Voice configuration for creator voice replication."
+      },
+      "VoiceReplicationStatus": {
+        "type": "string",
+        "enum": ["available", "blocked", "consent_required", "expired"],
+        "title": "VoiceReplicationStatus",
+        "description": "Capability / operational state for Gemini 3.1 Flash TTS My Voice replication."
       },
       "VoiceSampleRequest": {
         "properties": {
@@ -7186,6 +7393,17 @@
             "format": "date-time",
             "title": "Updated At",
             "description": "Timestamp when settings were updated"
+          },
+          "my_voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoiceReplicationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "My Voice replication settings and consent status"
           }
         },
         "additionalProperties": false,

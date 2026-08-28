@@ -1,5 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ZoomIn, ZoomOut, Maximize, Scissors, Layers, Video } from "lucide-react";
+import {
+  ZoomIn,
+  ZoomOut,
+  Maximize,
+  Scissors,
+  Layers,
+  Video,
+  Volume2,
+  Bookmark,
+  Smartphone,
+  Sparkles,
+  FileText,
+} from "lucide-react";
 import {
   formatTimecode,
   type TwickTimelineRepresentation,
@@ -75,7 +87,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
     [durationMs, timelineContentWidth],
   );
 
-  // Auto-fit zoom to available container width (hides scrollbar)
+  // Auto-fit zoom to available container width
   const handleZoomFit = () => {
     setZoomScale(null);
   };
@@ -143,15 +155,22 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
 
   const playheadPx = msToPixels(currentTimeMs);
 
-  // Group blocks by track
-  const sourceBlocks = twickData.blocks.filter((b) => b.trackId === "source-video");
-  const dialogueCutBlocks = twickData.blocks.filter((b) => b.trackId === "dialogue-edits");
-  const coverageBlocks = twickData.blocks.filter((b) => b.trackId === "coverage");
+  // Group blocks by canonical track
+  const dialogueCutBlocks = twickData.blocks.filter(
+    (b) => b.trackId === "edits" || b.trackId === "dialogue-edits",
+  );
+  const coverageBlocks = twickData.blocks.filter(
+    (b) => b.trackId === "broll" || b.trackId === "coverage",
+  );
+  const chapterBlocks = twickData.blocks.filter((b) => b.trackId === "chapters");
+  const shortBlocks = twickData.blocks.filter((b) => b.trackId === "short");
+  const narrationBlocks = twickData.blocks.filter((b) => b.trackId === "narration");
+  const captionBlocks = twickData.blocks.filter((b) => b.trackId === "captions");
 
   return (
     <div
       ref={containerRef}
-      className={`h-[156px] shrink-0 flex flex-col bg-surface-1 rounded-xl border border-border-subtle overflow-hidden select-none shadow-md ${className}`}
+      className={`h-[180px] shrink-0 flex flex-col bg-surface-1 rounded-xl border border-border-subtle overflow-hidden select-none shadow-md ${className}`}
       data-testid="editor-timeline"
     >
       {/* Timeline Header Bar with Track Labels & Zoom Toolbar */}
@@ -165,6 +184,12 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             <span className="font-medium text-text-secondary">{twickData.activeCutCount} cuts</span>
             <span>&middot;</span>
             <span>{twickData.coverageMarkerCount} coverage</span>
+            {chapterBlocks.length > 0 && (
+              <>
+                <span>&middot;</span>
+                <span>{chapterBlocks.length} chapters</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -202,36 +227,62 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
 
       {/* Main Track Workspace Viewport (Left Track Headers + Right Scrollable Tracks) */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left Track Headers Column (Fixed Width 80px) */}
-        <div className="w-20 shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col pt-5 z-10">
-          <div className="h-5 px-2 flex items-center gap-1 border-b border-border-subtle/30 text-[10px] font-medium text-text-muted">
+        {/* Left Track Headers Column (Fixed Width 90px) */}
+        <div className="w-[90px] shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col pt-5 z-10 overflow-y-auto divide-y divide-border-subtle/30">
+          {/* Track 1 Header: Video */}
+          <div className="h-5 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
             <Video className="w-3 h-3 text-text-muted/70 shrink-0" />
-            <span className="truncate">Source</span>
+            <span className="truncate">Video</span>
           </div>
 
-          <div className="h-9 px-2 flex items-center gap-1 border-b border-border-subtle/30 text-[10px] font-semibold text-text-primary">
+          {/* Track 2 Header: Audio */}
+          <div className="h-5 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
+            <Volume2 className="w-3 h-3 text-text-muted/70 shrink-0" />
+            <span className="truncate">Audio</span>
+          </div>
+
+          {/* Track 3 Header: Edits */}
+          <div className="h-8 px-2 flex items-center gap-1.5 text-[10px] font-semibold text-text-primary">
             <Scissors className="w-3 h-3 text-primary shrink-0" />
             <span className="truncate">Edits</span>
           </div>
 
-          <div className="h-6 px-2 flex items-center gap-1 text-[10px] font-medium text-text-muted">
+          {/* Track 4 Header: B-roll (Always shown or collapsible) */}
+          <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
             <Layers className="w-3 h-3 text-info shrink-0" />
-            <span className="truncate">Coverage</span>
+            <span className="truncate">B-roll</span>
           </div>
+
+          {/* Track 5 Header: Chapters */}
+          {chapterBlocks.length > 0 && (
+            <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-amber-400/80">
+              <Bookmark className="w-3 h-3 text-amber-400 shrink-0" />
+              <span className="truncate">Chapters</span>
+            </div>
+          )}
+
+          {/* Track 6 Header: Short */}
+          {shortBlocks.length > 0 && (
+            <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-purple-400">
+              <Smartphone className="w-3 h-3 text-purple-400 shrink-0" />
+              <span className="truncate">Short</span>
+            </div>
+          )}
         </div>
+
         {/* Right Scrollable Timeline Canvas */}
         <div
           ref={trackAreaRef}
           className={`flex-1 ${
             isOverflowing ? "overflow-x-auto" : "overflow-x-hidden"
-          } overflow-y-hidden relative bg-surface-1 cursor-crosshair focus:outline-none`}
+          } overflow-y-auto relative bg-surface-1 cursor-crosshair focus:outline-none`}
           onMouseDown={handleScrubStart}
           role="region"
           aria-label="Timeline Tracks Canvas"
           tabIndex={0}
         >
           <div
-            className="relative h-full flex flex-col"
+            className="relative flex flex-col min-h-full"
             style={{ width: `${timelineContentWidth}px` }}
           >
             {/* 1. Time Ruler Bar (Top 20px) */}
@@ -253,13 +304,31 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               })}
             </div>
 
-            {/* 2. Track 1 Content: SOURCE VIDEO (Thin Rail Line) */}
+            {/* 2. Track 1 Content: VIDEO (Continuous solid rail with cuts) */}
             <div className="h-5 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-1">
-              <div className="absolute inset-x-1 h-1.5 rounded-full bg-surface-3/90 border border-border-subtle" />
+              <div className="absolute inset-x-1 h-2 rounded bg-surface-3/90 border border-border-subtle flex overflow-hidden">
+                {twickData.keepSegments.map(([startMs, endMs], idx) => {
+                  const segLeft = msToPixels(startMs);
+                  const segWidth = Math.max(2, msToPixels(endMs) - segLeft);
+                  return (
+                    <div
+                      key={`keep-${idx}`}
+                      className="absolute top-0 bottom-0 bg-primary/40 border-r border-background/60"
+                      style={{ left: `${segLeft}px`, width: `${segWidth}px` }}
+                      title={`Keep segment ${formatTimecode(startMs)} → ${formatTimecode(endMs)}`}
+                    />
+                  );
+                })}
+              </div>
             </div>
 
-            {/* 3. Track 2 Content: EDITS (Primary Prominent Visible Markers) */}
-            <div className="h-9 border-b border-border-subtle/30 relative flex items-center px-1 bg-surface-2/15 shrink-0">
+            {/* 3. Track 2 Content: AUDIO (Waveform/speech representation) */}
+            <div className="h-5 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-2/10">
+              <div className="absolute inset-x-1 h-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30" />
+            </div>
+
+            {/* 4. Track 3 Content: EDITS (Clean Human Tooltips & Badges) */}
+            <div className="h-8 border-b border-border-subtle/30 relative flex items-center px-1 bg-surface-2/20 shrink-0">
               {dialogueCutBlocks.length === 0 ? (
                 <div className="absolute inset-0 flex items-center px-3 text-[10px] text-text-muted pointer-events-none">
                   <span>No dialogue cuts</span>
@@ -267,7 +336,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               ) : (
                 dialogueCutBlocks.map((cut) => {
                   const leftPx = msToPixels(cut.startMs);
-                  const widthPx = Math.max(14, msToPixels(cut.endMs) - leftPx);
+                  const widthPx = Math.max(16, msToPixels(cut.endMs) - leftPx);
                   const isSelected = selectedBlockId === cut.id;
 
                   return (
@@ -277,28 +346,28 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                         e.stopPropagation();
                         onSelectBlock(cut);
                       }}
-                      className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center justify-center px-1 text-[10px] font-mono font-semibold truncate ${
+                      className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center justify-center px-1.5 text-[9px] font-mono font-medium truncate ${
                         cut.type === "cut-safe"
-                          ? "bg-danger/25 border border-danger/70 text-danger hover:bg-danger/40 shadow-sm"
+                          ? "bg-danger/20 border border-danger/60 text-danger hover:bg-danger/35 shadow-xs"
                           : cut.type === "cut-needs-coverage"
-                            ? "bg-warning/25 border border-warning/70 text-warning hover:bg-warning/40 shadow-sm"
+                            ? "bg-warning/20 border border-warning/60 text-warning hover:bg-warning/35 shadow-xs"
                             : "bg-surface-3 border border-border-strong text-text-muted line-through opacity-60"
                       } ${isSelected ? "ring-2 ring-primary shadow-md scale-[1.02] z-10" : ""}`}
                       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                      title={`${cut.label}: ${formatTimecode(cut.startMs)} → ${formatTimecode(cut.endMs)} (${((cut.endMs - cut.startMs) / 1000).toFixed(1)}s)`}
+                      title={`${cut.label}: ${formatTimecode(cut.startMs)} → ${formatTimecode(cut.endMs)}`}
                     >
-                      <span className="truncate">{cut.label}</span>
+                      <span className="truncate font-sans font-semibold">{cut.label}</span>
                     </div>
                   );
                 })
               )}
             </div>
 
-            {/* 4. Track 3 Content: COVERAGE (Thin Secondary Track) */}
-            <div className="h-6 relative flex items-center px-1 shrink-0 bg-surface-1">
+            {/* 5. Track 4 Content: B-ROLL & COVERAGE */}
+            <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-1">
               {coverageBlocks.map((cov) => {
                 const leftPx = msToPixels(cov.startMs);
-                const widthPx = Math.max(14, msToPixels(cov.endMs) - leftPx);
+                const widthPx = Math.max(16, msToPixels(cov.endMs) - leftPx);
                 const isSelected = selectedBlockId === cov.id;
                 const isCurrentActive = currentTimeMs >= cov.startMs && currentTimeMs <= cov.endMs;
 
@@ -325,12 +394,67 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 );
               })}
             </div>
-            {/* Canonical Playhead Line across all tracks */}
+
+            {/* 6. Track 5 Content: CHAPTERS (Semantic Chapter Markers) */}
+            {chapterBlocks.length > 0 && (
+              <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-amber-500/5">
+                {chapterBlocks.map((chap) => {
+                  const leftPx = msToPixels(chap.startMs);
+                  const widthPx = Math.max(20, msToPixels(chap.endMs) - leftPx);
+
+                  return (
+                    <div
+                      key={chap.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSeek(chap.startMs);
+                        onSelectBlock(chap);
+                      }}
+                      className="absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 truncate"
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                      title={`Chapter: ${chap.label} (${formatTimecode(chap.startMs)} → ${formatTimecode(chap.endMs)})`}
+                    >
+                      <Bookmark className="w-2.5 h-2.5 shrink-0 text-amber-400" />
+                      <span className="truncate font-semibold">{chap.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 7. Track 6 Content: SHORT CANDIDATE */}
+            {shortBlocks.length > 0 && (
+              <div className="h-6 relative flex items-center px-1 shrink-0 bg-purple-500/5">
+                {shortBlocks.map((sc) => {
+                  const leftPx = msToPixels(sc.startMs);
+                  const widthPx = Math.max(24, msToPixels(sc.endMs) - leftPx);
+
+                  return (
+                    <div
+                      key={sc.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSeek(sc.startMs);
+                        onSelectBlock(sc);
+                      }}
+                      className="absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-2 text-[9px] font-medium bg-purple-600/20 border border-purple-500/60 text-purple-200 hover:bg-purple-600/35 truncate"
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                      title={`${sc.label} (${formatTimecode(sc.startMs)} → ${formatTimecode(sc.endMs)})`}
+                    >
+                      <Smartphone className="w-2.5 h-2.5 shrink-0 text-purple-400" />
+                      <span className="truncate font-semibold">{sc.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Playhead Indicator Line across all tracks */}
             <div
               className="absolute top-0 bottom-0 w-0.5 bg-primary z-20 pointer-events-none transition-[left] duration-75 shadow-sm"
               style={{ left: `${playheadPx}px` }}
             >
-              {/* Playhead Handle Needle */}
+              {/* Playhead Needle */}
               <div className="w-3 h-3 bg-primary text-white rounded-sm -translate-x-[5px] -translate-y-0.5 rotate-45 flex items-center justify-center shadow-md" />
             </div>
           </div>

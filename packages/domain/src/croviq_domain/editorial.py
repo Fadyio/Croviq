@@ -10,15 +10,22 @@ from croviq_domain.validators import validate_timezone_aware
 class EditorDecisionType(StrEnum):
     """Semantic action types supported by Video Editor (Leo)."""
     KEEP = "KEEP"
+    REMOVE_SILENCE = "REMOVE_SILENCE"
     REMOVE_FILLER = "REMOVE_FILLER"
     REMOVE_FALSE_START = "REMOVE_FALSE_START"
     REMOVE_REPETITION = "REMOVE_REPETITION"
     TRIM_PAUSE = "TRIM_PAUSE"
+    TIGHTEN_PAUSE = "TIGHTEN_PAUSE"
     TIGHTEN_EXPLANATION = "TIGHTEN_EXPLANATION"
+    REMOVE_LOW_VALUE_SECTION = "REMOVE_LOW_VALUE_SECTION"
     KEEP_FOR_CLARITY = "KEEP_FOR_CLARITY"
+    BROLL_COVER = "BROLL_COVER"
     BROLL_COVER_CANDIDATE = "BROLL_COVER_CANDIDATE"
+    SOURCE_COVER = "SOURCE_COVER"
+    CHAPTER_MARKER = "CHAPTER_MARKER"
     SHORT_CANDIDATE = "SHORT_CANDIDATE"
-
+    NARRATION_REWRITE = "NARRATION_REWRITE"
+    CAPTION_EMPHASIS = "CAPTION_EMPHASIS"
 
 class SectionAction(StrEnum):
     """Editorial action applied to a full-timeline production section."""
@@ -80,7 +87,21 @@ class VideoSectionDecision(BaseModel):
         le=1.0,
         description="Model confidence score for this section decision",
     )
-
+    visual_summary: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Summary of screen content, slides, demonstration, or camera visual moments",
+    )
+    speech_summary: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Summary of spoken dialogue or audio in this section",
+    )
+    editorial_intent: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Leo's editorial rationale and narrative purpose for this section",
+    )
     @model_validator(mode="after")
     def validate_bounds(self) -> "VideoSectionDecision":
         if self.source_end_ms < self.source_start_ms:
@@ -90,6 +111,52 @@ class VideoSectionDecision(BaseModel):
         if self.transcript_end_word < self.transcript_start_word:
             raise ValueError(
                 f"transcript_end_word ({self.transcript_end_word}) must be >= transcript_start_word ({self.transcript_start_word})"
+            )
+        return self
+
+class ChapterMarker(BaseModel):
+    """Semantic chapter candidate generated from Leo's multimodal video understanding."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=120,
+        description="Concise descriptive chapter title",
+    )
+    source_start_ms: int = Field(
+        ...,
+        ge=0,
+        description="Start time in milliseconds on the source video timeline",
+    )
+    source_end_ms: int = Field(
+        ...,
+        ge=0,
+        description="End time in milliseconds on the source video timeline",
+    )
+    summary: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Summary of narrative and visual content covered in this chapter",
+    )
+    confidence: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for this chapter boundary",
+    )
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "ChapterMarker":
+        if self.source_end_ms < self.source_start_ms:
+            raise ValueError(
+                f"source_end_ms ({self.source_end_ms}) must be >= source_start_ms ({self.source_start_ms})"
             )
         return self
 
@@ -350,6 +417,10 @@ class EditorProposal(BaseModel):
     section_plan: list[VideoSectionDecision] = Field(
         default_factory=list,
         description="Full-timeline editorial section plan covering the whole production",
+    )
+    chapters: list[ChapterMarker] = Field(
+        default_factory=list,
+        description="Multimodal semantic chapter markers across the video timeline",
     )
     overall_confidence: float = Field(
         ...,

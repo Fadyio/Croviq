@@ -30,6 +30,9 @@ interface VideoStageProps {
   shortPlaybackUrl?: string | null;
   currentTimeMs: number;
   durationMs: number;
+  editedDurationMs?: number;
+  studioVoiceDurationMs?: number | null;
+  shortDurationMs?: number | null;
   isPlaying: boolean;
   previewMode: PreviewMode;
   edl: EditDecisionList | null;
@@ -40,6 +43,7 @@ interface VideoStageProps {
   onDurationChange?: (durationMs: number) => void;
   className?: string;
 }
+
 export const VideoStage: React.FC<VideoStageProps> = ({
   playbackUrl,
   renderedPreviewUrl,
@@ -47,6 +51,9 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   shortPlaybackUrl,
   currentTimeMs,
   durationMs,
+  editedDurationMs,
+  studioVoiceDurationMs,
+  shortDurationMs,
   isPlaying,
   previewMode,
   edl,
@@ -78,10 +85,12 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       video.pause();
     }
   }, [isPlaying]);
+
   const isUsingShortArtifact = previewMode === "short" && Boolean(shortPlaybackUrl);
   const isUsingStudioVoiceArtifact =
     previewMode === "studio_voice" && Boolean(studioVoicePreviewUrl);
   const isUsingRenderedArtifact = previewMode === "edited" && Boolean(renderedPreviewUrl);
+
   const activeVideoUrl = isUsingShortArtifact
     ? shortPlaybackUrl
     : isUsingStudioVoiceArtifact
@@ -89,7 +98,28 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       : isUsingRenderedArtifact
         ? renderedPreviewUrl
         : playbackUrl;
-  // Sync external seek (e.g. from timeline scrub or transcript click) to video
+
+  // Active duration and current time based on preview mode
+  const activeDurationMs =
+    previewMode === "short"
+      ? shortDurationMs ||
+        (shortCandidate ? shortCandidate.end_ms - shortCandidate.start_ms : 30000)
+      : previewMode === "studio_voice"
+        ? studioVoiceDurationMs || editedDurationMs || durationMs
+        : previewMode === "edited"
+          ? editedDurationMs || durationMs
+          : durationMs;
+
+  const activeCurrentTimeMs =
+    previewMode === "short"
+      ? Math.max(0, Math.min(activeDurationMs, currentTimeMs - (shortCandidate?.start_ms ?? 0)))
+      : previewMode === "edited" && edl
+        ? sourceToEditedTimeMs(currentTimeMs, edl)
+        : previewMode === "studio_voice" && edl
+          ? sourceToEditedTimeMs(currentTimeMs, edl)
+          : currentTimeMs;
+
+  // Sync external seek to video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video || isSeekingInternallyRef.current) return;
@@ -102,13 +132,12 @@ export const VideoStage: React.FC<VideoStageProps> = ({
           ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
           : currentTimeMs / 1000;
 
-    // Only update if difference is greater than 100ms to avoid feedback loops
     if (Math.abs(video.currentTime - targetSec) > 0.1) {
       video.currentTime = targetSec;
     }
-  }, [currentTimeMs, edl, isUsingRenderedArtifact, previewMode]);
+  }, [currentTimeMs, edl, isUsingRenderedArtifact, previewMode, shortCandidate]);
 
-  // Preserve playback position across source switches (e.g. Original vs Edited Preview)
+  // Preserve playback position across source switches
   const prevActiveUrlRef = useRef<string | null>(null);
   useEffect(() => {
     const video = videoRef.current;
@@ -127,9 +156,17 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       }
     }
     prevActiveUrlRef.current = activeVideoUrl;
-  }, [activeVideoUrl, currentTimeMs, edl, isPlaying, isUsingRenderedArtifact, previewMode]);
+  }, [
+    activeVideoUrl,
+    currentTimeMs,
+    edl,
+    isPlaying,
+    isUsingRenderedArtifact,
+    previewMode,
+    shortCandidate,
+  ]);
 
-  // Handle time update from video element & execute Edited Preview cut skipping
+  // Handle time update from video element & execute cut skipping
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -147,7 +184,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       return;
     }
 
-    // If Edited Preview is active and falling back to client simulation (no real render yet)
+    // Client EDL simulation fallback
     if (previewMode === "edited" && !isUsingRenderedArtifact && edl) {
       const skipInterval = findExecutableSkipInterval(currentMs, edl);
       if (skipInterval) {
@@ -171,8 +208,8 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
 
     onSeek(currentMs);
-  }, [edl, onSeek, previewMode, isUsingRenderedArtifact]);
-  // Handle loaded metadata for duration
+  }, [edl, onSeek, previewMode, isUsingRenderedArtifact, shortCandidate]);
+
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -235,15 +272,35 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
   };
 
-  // Restart video from beginning
   const handleRestart = () => {
-    onSeek(0);
+    if (previewMode === "short") {
+      const shortStartMs = shortCandidate?.start_ms ?? 0;
+      onSeek(shortStartMs);
+    } else {
+      onSeek(0);
+    }
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
     }
   };
 
-  const progressPercent = durationMs > 0 ? (currentTimeMs / durationMs) * 100 : 0;
+  const progressPercent = activeDurationMs > 0 ? (activeCurrentTimeMs / activeDurationMs) * 100 : 0;
+
+  const handleScrubberClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const targetModeMs = Math.round(clickRatio * activeDurationMs);
+
+    if (previewMode === "short") {
+      const shortStartMs = shortCandidate?.start_ms ?? 0;
+      onSeek(shortStartMs + targetModeMs);
+    } else if (previewMode === "edited" && edl) {
+      const sourceMs = editedToSourceTimeMs(targetModeMs, edl);
+      onSeek(sourceMs);
+    } else {
+      onSeek(targetModeMs);
+    }
+  };
 
   return (
     <div
@@ -261,90 +318,61 @@ export const VideoStage: React.FC<VideoStageProps> = ({
                 ref={videoRef}
                 src={activeVideoUrl}
                 playsInline
-                crossOrigin="anonymous"
-                className="w-full h-full object-cover"
+                preload="auto"
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
-                onEnded={() => onPlayPause()}
-                onError={() => {
-                  setVideoError("Unable to load video stream from signed storage URL");
-                }}
-                onClick={onPlayPause}
+                onError={() => setVideoError("Playback stream could not be loaded")}
+                className="w-full h-full object-cover"
+                data-testid="video-element-short"
               />
             ) : (
-              <div className="flex flex-col items-center justify-center gap-3 p-6 text-center text-text-muted">
-                <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center border border-border-subtle">
-                  <Smartphone className="w-6 h-6 text-text-secondary" />
-                </div>
-                <p className="text-xs text-text-secondary font-medium">Short 9:16 preview ready</p>
+              <div className="text-center p-4 text-xs text-text-muted space-y-2">
+                <Smartphone className="w-8 h-8 mx-auto text-primary animate-pulse" />
+                <p className="font-semibold text-text-primary">Short rendering candidate</p>
+                <p className="text-[11px] text-text-muted">
+                  {shortCandidate ? shortCandidate.hook_title : "Selecting highlight…"}
+                </p>
               </div>
             )}
           </div>
         ) : activeVideoUrl ? (
           <video
-            key={activeVideoUrl || previewMode}
+            key={activeVideoUrl || "preview"}
             ref={videoRef}
             src={activeVideoUrl}
             playsInline
-            crossOrigin="anonymous"
-            className="w-full h-full object-contain max-h-full"
+            preload="auto"
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
-            onEnded={() => onPlayPause()}
-            onError={() => {
-              setVideoError("Unable to load video stream from signed storage URL");
-            }}
-            onClick={onPlayPause}
+            onError={() => setVideoError("Playback stream could not be loaded")}
+            className="w-full h-full object-contain max-h-full rounded-lg"
+            data-testid="video-element"
           />
         ) : (
-          <div className="flex flex-col items-center justify-center gap-3 p-8 text-center text-text-muted">
-            <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center border border-border-subtle">
-              <Play className="w-6 h-6 text-text-secondary translate-x-0.5" />
-            </div>
-            <p className="text-xs text-text-secondary font-medium">
-              Source video ready for playback
-            </p>
-          </div>
-        )}
-        {/* Rendered Preview Active Badge Overlay */}
-        {isUsingRenderedArtifact && (
-          <div
-            className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-1/90 backdrop-blur-md text-text-primary text-[11px] font-medium shadow-md border border-border-subtle"
-            data-testid="rendered-preview-badge"
-          >
-            <span className="size-1.5 rounded-full bg-success" />
-            <span>Rendered Preview</span>
-          </div>
-        )}
-        {/* Video Loading or Network Error Overlay */}
-        {videoError && (
-          <div className="absolute inset-0 bg-surface-1/90 flex flex-col items-center justify-center p-6 text-center gap-2">
-            <p className="text-xs text-danger font-medium">{videoError}</p>
-            <p className="text-[11px] text-text-muted">
-              Check that CORS GET permissions are active on the private storage bucket.
-            </p>
+          <div className="flex flex-col items-center justify-center text-center p-6 text-text-muted gap-2">
+            <p className="text-xs font-medium">Video media is ready for playback.</p>
           </div>
         )}
 
-        {/* Active B-Roll Coverage Badge Overlay */}
+        {/* Visual B-roll Coverage Overlay */}
         {activeCoverage && (
           <div
-            className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-md bg-info/90 backdrop-blur-md text-white text-xs font-medium shadow-lg border border-info/40 animate-fade-in"
+            className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-info/90 text-white text-xs font-semibold backdrop-blur-md shadow-lg transition-all animate-pulse"
             data-testid="active-coverage-overlay"
           >
-            <Layers className="w-3.5 h-3.5 text-white animate-pulse shrink-0" />
             <span>
-              B-Roll Coverage Active &middot; {formatTimecode(activeCoverage.source_start_ms)}{" "}
-              &rarr; {formatTimecode(activeCoverage.source_end_ms)}
+              {activeCoverage.coverage_type === "BROLL_CANDIDATE"
+                ? "B-Roll Coverage"
+                : "Source Screen Coverage"}
             </span>
           </div>
         )}
 
-        {/* Rendered Short Mode Badge */}
+        {/* Short 9:16 Aspect Indicator */}
         {isUsingShortArtifact && (
           <div
-            className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/90 backdrop-blur-md text-white text-xs font-medium shadow-lg border border-primary/40"
-            data-testid="rendered-short-badge"
+            className="absolute top-4 left-4 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-600/90 text-white text-xs font-semibold backdrop-blur-md shadow-lg"
+            data-testid="short-mode-badge"
           >
             <Smartphone className="w-3.5 h-3.5 text-white shrink-0" />
             <span>Short (9:16)</span>
@@ -377,16 +405,12 @@ export const VideoStage: React.FC<VideoStageProps> = ({
         {/* Playhead Progress Bar */}
         <div
           className="relative w-full h-2 bg-surface-3 rounded-full cursor-pointer overflow-hidden group/scrub"
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-            onSeek(Math.round(clickRatio * durationMs));
-          }}
+          onClick={handleScrubberClick}
           role="slider"
           aria-label="Video scrubber"
           aria-valuemin={0}
-          aria-valuemax={durationMs}
-          aria-valuenow={currentTimeMs}
+          aria-valuemax={activeDurationMs}
+          aria-valuenow={activeCurrentTimeMs}
           tabIndex={0}
         >
           <div
@@ -422,11 +446,11 @@ export const VideoStage: React.FC<VideoStageProps> = ({
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
 
-            {/* Timecode Readout */}
+            {/* Mode-appropriate Timecode Readout */}
             <div className="font-mono text-[11px] text-text-primary font-medium tracking-tight flex items-center gap-1">
-              <span>{formatTimecode(currentTimeMs)}</span>
+              <span>{formatTimecode(activeCurrentTimeMs)}</span>
               <span className="text-text-muted">/</span>
-              <span className="text-text-muted">{formatTimecode(durationMs)}</span>
+              <span className="text-text-muted">{formatTimecode(activeDurationMs)}</span>
             </div>
           </div>
 

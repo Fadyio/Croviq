@@ -21,10 +21,24 @@ export type Transcript = components["schemas"]["Transcript"];
 export type TranscriptWord = components["schemas"]["TranscriptWord"];
 export type TranscriptSegment = components["schemas"]["TranscriptSegment"];
 export type ShortCandidate = components["schemas"]["ShortCandidate"];
+export type ChapterMarker = components["schemas"]["ChapterMarker"];
+
+export type TimelineTrackId =
+  | "video"
+  | "audio"
+  | "edits"
+  | "broll"
+  | "narration"
+  | "captions"
+  | "chapters"
+  | "short"
+  | "source-video"
+  | "dialogue-edits"
+  | "coverage";
 
 export interface TimelineBlock {
   id: string;
-  trackId: "source-video" | "dialogue-edits" | "coverage";
+  trackId: TimelineTrackId;
   label: string;
   startMs: number;
   endMs: number;
@@ -36,6 +50,10 @@ export interface TimelineBlock {
     | "cut-rejected"
     | "coverage-broll"
     | "coverage-screen"
+    | "narration"
+    | "caption"
+    | "chapter"
+    | "short"
     | "keep";
   decisionId?: string;
   cutId?: string;
@@ -48,6 +66,7 @@ export interface TimelineBlock {
     confidence?: number;
     safetyStatus?: string;
     coverageType?: string;
+    summary?: string;
   };
 }
 
@@ -58,6 +77,8 @@ export interface TwickTimelineRepresentation {
   activeCutCount: number;
   coverageMarkerCount: number;
   keepSegments: Array<[number, number]>;
+  chapters: ChapterMarker[];
+  shortCandidate?: ShortCandidate | null;
 }
 
 /**
@@ -67,6 +88,39 @@ export interface TwickTimelineRepresentation {
 export function getExecutableCuts(edl?: EditDecisionList | null): CutInstruction[] {
   if (!edl || !edl.cuts) return [];
   return edl.cuts.filter((c) => c.safety_status === "SAFE" || c.safety_status === "NEEDS_COVERAGE");
+}
+
+/**
+ * Format user-facing, human-friendly cut labels rather than raw enums.
+ * Examples: "Silence removed 2.1s", "False start removed 0.8s", "Tightened pause 1.2s".
+ */
+export function formatCutLabel(decisionType: string, durationMs: number): string {
+  const durS = (durationMs / 1000).toFixed(1);
+  switch (decisionType) {
+    case "REMOVE_SILENCE":
+    case "TRIM_PAUSE":
+      return `Silence removed ${durS}s`;
+    case "REMOVE_FALSE_START":
+      return `False start removed ${durS}s`;
+    case "REMOVE_REPETITION":
+      return `Repetition removed ${durS}s`;
+    case "TIGHTEN_PAUSE":
+    case "TIGHTEN_EXPLANATION":
+      return `Tightened pause ${durS}s`;
+    case "REMOVE_LOW_VALUE_SECTION":
+    case "REMOVE_FILLER":
+      return `Filler removed ${durS}s`;
+    case "BROLL_COVER":
+    case "BROLL_COVER_CANDIDATE":
+      return `B-roll cover ${durS}s`;
+    case "KEEP_FOR_CLARITY":
+    case "KEEP":
+      return `Walkthrough preserved`;
+    default: {
+      const clean = decisionType.replace(/_/g, " ").toLowerCase();
+      return `${clean.charAt(0).toUpperCase() + clean.slice(1)} ${durS}s`;
+    }
+  }
 }
 
 /**
@@ -161,7 +215,6 @@ export function findExecutableSkipInterval(
 
   const executableCuts = getExecutableCuts(edl);
   for (const cut of executableCuts) {
-    // If the playhead is right at or inside the cut range (with a small anticipation buffer)
     if (
       currentTimeMs >= cut.safe_start_ms - leadThresholdMs &&
       currentTimeMs < cut.safe_end_ms - 20
@@ -183,15 +236,16 @@ export function edlToTwickTimeline(
   edl: EditDecisionList,
   proposal?: EditorProposal | null,
   review?: DirectorReview | null,
+  transcript?: Transcript | null,
 ): TwickTimelineRepresentation {
   const sourceDurationMs = edl.source_duration_ms || 113824;
   const blocks: TimelineBlock[] = [];
 
-  // 1. SOURCE VIDEO track (continuous base footage)
+  // 1. VIDEO track (continuous base footage)
   blocks.push({
-    id: "block-source-video",
-    trackId: "source-video",
-    label: "Source Video Footage",
+    id: "block-video",
+    trackId: "video",
+    label: "Continuous Video Footage",
     startMs: 0,
     endMs: sourceDurationMs,
     durationMs: sourceDurationMs,
@@ -202,25 +256,25 @@ export function edlToTwickTimeline(
   });
 
   // Index Leo decisions and Maya reviews by decision_id / editor_decision_id
-  const leoDecisionMap = new Map<string, EditorDecision>();
+  const leoDecisionMap: Record<string, EditorDecision> = {};
   if (proposal?.decisions) {
     for (const d of proposal.decisions) {
-      leoDecisionMap.set(d.decision_id, d);
+      leoDecisionMap[d.decision_id] = d;
     }
   }
 
-  const mayaDecisionMap = new Map<string, DirectorDecision>();
+  const mayaDecisionMap: Record<string, DirectorDecision> = {};
   if (review?.decisions) {
     for (const d of review.decisions) {
-      mayaDecisionMap.set(d.editor_decision_id, d);
+      mayaDecisionMap[d.editor_decision_id] = d;
     }
   }
 
-  // 2. DIALOGUE EDITS track (cut instructions or proposed cuts)
+  // 2. EDITS track (cut instructions or proposed cuts)
   const cuts = edl.cuts || [];
   for (const cut of cuts) {
-    const leoDec = leoDecisionMap.get(cut.decision_id);
-    const mayaDec = mayaDecisionMap.get(cut.decision_id);
+    const leoDec = leoDecisionMap[cut.decision_id];
+    const mayaDec = mayaDecisionMap[cut.decision_id];
 
     let blockType: TimelineBlock["type"] = "cut-safe";
     if (cut.safety_status === "NEEDS_COVERAGE") {
@@ -230,10 +284,12 @@ export function edlToTwickTimeline(
     }
 
     const duration = cut.safe_end_ms - cut.safe_start_ms;
+    const humanLabel = formatCutLabel(cut.decision_type, duration);
+
     blocks.push({
       id: `cut-${cut.cut_id}`,
-      trackId: "dialogue-edits",
-      label: cut.decision_type.replace(/_/g, " "),
+      trackId: "edits",
+      label: humanLabel,
       startMs: cut.safe_start_ms,
       endMs: cut.safe_end_ms,
       durationMs: duration,
@@ -251,17 +307,17 @@ export function edlToTwickTimeline(
     });
   }
 
-  // 3. COVERAGE track (BROLL_CANDIDATE or SOURCE_SCREEN)
+  // 3. B-ROLL / COVERAGE track
   const coverageMarkers = edl.coverage_markers || [];
   for (const marker of coverageMarkers) {
-    const leoDec = leoDecisionMap.get(marker.decision_id);
-    const mayaDec = mayaDecisionMap.get(marker.decision_id);
+    const leoDec = leoDecisionMap[marker.decision_id];
+    const mayaDec = mayaDecisionMap[marker.decision_id];
 
     const duration = marker.source_end_ms - marker.source_start_ms;
     blocks.push({
       id: `cov-${marker.marker_id}`,
-      trackId: "coverage",
-      label: marker.coverage_type === "BROLL_CANDIDATE" ? "B-Roll Candidate" : "Screen Coverage",
+      trackId: "broll",
+      label: marker.coverage_type === "BROLL_CANDIDATE" ? "B-Roll Visual" : "Source Coverage",
       startMs: marker.source_start_ms,
       endMs: marker.source_end_ms,
       durationMs: duration,
@@ -279,12 +335,75 @@ export function edlToTwickTimeline(
     });
   }
 
-  // Construct Twick Track instances
-  const sourceTrack = new Track("SOURCE VIDEO", "ELEMENT", "track-source-video");
-  const editsTrack = new Track("DIALOGUE EDITS", "ELEMENT", "track-dialogue-edits");
-  const coverageTrack = new Track("COVERAGE", "ELEMENT", "track-coverage");
+  // 4. CHAPTERS track
+  const rawChapters = proposal?.chapters || [];
+  for (let i = 0; i < rawChapters.length; i++) {
+    const chap = rawChapters[i];
+    const duration = chap.source_end_ms - chap.source_start_ms;
+    blocks.push({
+      id: `chapter-${i}`,
+      trackId: "chapters",
+      label: chap.title,
+      startMs: chap.source_start_ms,
+      endMs: chap.source_end_ms,
+      durationMs: duration,
+      type: "chapter",
+      details: {
+        summary: chap.summary,
+        confidence: chap.confidence,
+      },
+    });
+  }
 
-  const tracks = [sourceTrack, editsTrack, coverageTrack];
+  // 5. SHORT CANDIDATE track
+  if (proposal?.short_candidate) {
+    const sc = proposal.short_candidate;
+    const duration = sc.end_ms - sc.start_ms;
+    blocks.push({
+      id: "block-short-candidate",
+      trackId: "short",
+      label: `Short: ${sc.hook_title}`,
+      startMs: sc.start_ms,
+      endMs: sc.end_ms,
+      durationMs: duration,
+      type: "short",
+      details: {
+        conciseReason: sc.concise_reason,
+        confidence: sc.confidence,
+      },
+    });
+  }
+
+  // 6. CAPTIONS track (from canonical transcript segments)
+  if (transcript?.segments) {
+    for (const seg of transcript.segments) {
+      blocks.push({
+        id: `caption-${seg.segment_id}`,
+        trackId: "captions",
+        label: seg.text,
+        startMs: seg.start_ms,
+        endMs: seg.end_ms,
+        durationMs: seg.end_ms - seg.start_ms,
+        type: "caption",
+        details: {
+          originalText: seg.text,
+        },
+      });
+    }
+  }
+
+  // Construct Twick Track instances
+  const tracks = [
+    new Track("Video", "ELEMENT", "track-video"),
+    new Track("Audio", "ELEMENT", "track-audio"),
+    new Track("Edits", "ELEMENT", "track-edits"),
+    new Track("B-roll", "ELEMENT", "track-broll"),
+    new Track("Narration", "ELEMENT", "track-narration"),
+    new Track("Captions", "ELEMENT", "track-captions"),
+    new Track("Chapters", "ELEMENT", "track-chapters"),
+    new Track("Short", "ELEMENT", "track-short"),
+  ];
+
   const keepSegments = deriveKeepSegments(edl);
 
   return {
@@ -294,6 +413,8 @@ export function edlToTwickTimeline(
     activeCutCount: getExecutableCuts(edl).length,
     coverageMarkerCount: coverageMarkers.length,
     keepSegments,
+    chapters: rawChapters,
+    shortCandidate: proposal?.short_candidate,
   };
 }
 

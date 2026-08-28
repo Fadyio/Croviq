@@ -38,28 +38,31 @@ def format_timecode_ms(ms: int) -> str:
 def format_leo_decision_message(decision: EditorDecision) -> str:
     """Format clean, product-facing natural conversational message for Leo's edit decisions."""
     reason = decision.concise_reason.strip()
+    start_tc = format_timecode_ms(decision.source_start_ms)
+    dur_s = (decision.source_end_ms - decision.source_start_ms) / 1000.0
+
     if reason.startswith("I "):
         return reason
 
-    if decision.decision_type == EditorDecisionType.REMOVE_FALSE_START:
+    if decision.decision_type in (EditorDecisionType.REMOVE_FALSE_START,):
         clean = reason.removeprefix("Remove false start ").removeprefix("Removed false start ").removeprefix("Remove ").removeprefix("Removed ")
-        if clean.lower().startswith("before ") or clean.lower().startswith("on ") or clean.lower().startswith("during "):
-            return f"I removed a false start {clean}"
-        return f"I removed a false start: {clean}"
-    elif decision.decision_type == EditorDecisionType.REMOVE_FILLER:
-        clean = reason.removeprefix("Remove filler ").removeprefix("Removed filler ").removeprefix("Remove ").removeprefix("Removed ")
-        return f"I removed filler hesitation: {clean}"
-    elif decision.decision_type == EditorDecisionType.TRIM_PAUSE:
-        clean = reason.removeprefix("Trim dead air ").removeprefix("Trim silence ").removeprefix("Trim pause ").removeprefix("Trim ").removeprefix("Trimmed ")
-        return f"I trimmed a speech pause: {clean}"
-    elif decision.decision_type == EditorDecisionType.REMOVE_REPETITION:
+        return f"Removed a false start at {start_tc}: {clean}"
+    elif decision.decision_type in (EditorDecisionType.REMOVE_SILENCE, EditorDecisionType.TRIM_PAUSE):
+        return f"Removed {dur_s:.1f}s of dead air at {start_tc}"
+    elif decision.decision_type in (EditorDecisionType.REMOVE_REPETITION,):
         clean = reason.removeprefix("Remove repetition ").removeprefix("Removed repetition ").removeprefix("Remove ").removeprefix("Removed ")
-        return f"I removed a repetition: {clean}"
+        return f"Removed duplicate phrasing at {start_tc}: {clean}"
+    elif decision.decision_type in (EditorDecisionType.TIGHTEN_PAUSE, EditorDecisionType.TIGHTEN_EXPLANATION):
+        return f"Tightened pause at {start_tc} ({dur_s:.1f}s)"
+    elif decision.decision_type in (EditorDecisionType.REMOVE_LOW_VALUE_SECTION, EditorDecisionType.REMOVE_FILLER):
+        clean = reason.removeprefix("Remove filler ").removeprefix("Removed filler ").removeprefix("Remove ").removeprefix("Removed ")
+        return f"Removed filler hesitation at {start_tc}: {clean}"
+    elif decision.decision_type in (EditorDecisionType.BROLL_COVER, EditorDecisionType.BROLL_COVER_CANDIDATE):
+        return f"Flagged B-roll visual coverage at {start_tc}"
     elif decision.decision_type in (EditorDecisionType.KEEP, EditorDecisionType.KEEP_FOR_CLARITY):
         clean = reason.removeprefix("Preserve ").removeprefix("Keep ").removeprefix("Retain ")
-        return f"I preserved this segment: {clean}"
-    return reason
-
+        return f"Preserved technical walkthrough at {start_tc}: {clean}"
+    return f"Edit at {start_tc}: {reason}"
 def ensure_full_timeline_coverage(
     sections: list[VideoSectionDecision],
     total_duration_ms: int,
@@ -77,6 +80,9 @@ def ensure_full_timeline_coverage(
                 action=SectionAction.KEEP,
                 reason="Default full timeline preservation",
                 confidence=1.0,
+                visual_summary="Full continuous source recording",
+                speech_summary="Complete spoken presentation",
+                editorial_intent="Preserve full original source duration",
             )
         ]
 
@@ -97,6 +103,9 @@ def ensure_full_timeline_coverage(
                 action=SectionAction.KEEP,
                 reason="Preserve natural pacing between edited sections",
                 confidence=1.0,
+                visual_summary="Continuous screen capture and demonstration",
+                speech_summary="Spoken dialogue flow",
+                editorial_intent="Maintain conversational cadence and context",
             )
             covered.append(gap_sec)
 
@@ -115,8 +124,10 @@ def ensure_full_timeline_coverage(
             action=SectionAction.KEEP,
             reason="Preserve closing video footage",
             confidence=1.0,
+            visual_summary="Closing screen state and wrap-up demonstration",
+            speech_summary="Final remarks and outro",
+            editorial_intent="Preserve natural video conclusion",
         )
-        covered.append(end_sec)
 
     return covered
 
@@ -282,6 +293,38 @@ class LeoVideoEditor:
                     role="Video Editor",
                     activity_type="proposal",
                     message="I inspected the test cut preview stream and verified continuous audio/video flow.",
+                    related_decision_id=None,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+        if proposal.chapters:
+            chapter_titles = ", ".join(c.title for c in proposal.chapters[:3])
+            activities.append(
+                AgentActivity(
+                    activity_id=f"act_chapters_{uuid.uuid4().hex[:8]}",
+                    production_id=analysis_input.production_id,
+                    run_id=run_id_val,
+                    agent="Leo",
+                    role="Video Editor",
+                    activity_type="proposal",
+                    message=f"Identified {len(proposal.chapters)} chapters from multimodal analysis: {chapter_titles}{'…' if len(proposal.chapters) > 3 else ''}",
+                    related_decision_id=None,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+
+        if proposal.short_candidate:
+            sc = proposal.short_candidate
+            dur_s = int((sc.end_ms - sc.start_ms) / 1000)
+            activities.append(
+                AgentActivity(
+                    activity_id=f"act_short_{uuid.uuid4().hex[:8]}",
+                    production_id=analysis_input.production_id,
+                    run_id=run_id_val,
+                    agent="Leo",
+                    role="Video Editor",
+                    activity_type="proposal",
+                    message=f"Selected a {dur_s}s vertical Short candidate: '{sc.hook_title}' ({format_timecode_ms(sc.start_ms)} → {format_timecode_ms(sc.end_ms)}).",
                     related_decision_id=None,
                     created_at=datetime.now(timezone.utc),
                 )

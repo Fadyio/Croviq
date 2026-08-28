@@ -23,6 +23,7 @@ from croviq_domain.channel_provider import (
 )
 from croviq_domain.editorial import (
     AgentActivity,
+    ChapterMarker,
     DirectorDecision,
     DirectorReview,
     DirectorVerdict,
@@ -32,6 +33,7 @@ from croviq_domain.editorial import (
     EditorialRun,
     EditorialRunStatus,
     ShortCandidate,
+    VideoSectionDecision,
 )
 from croviq_domain.edl import (
     CoverageMarker,
@@ -90,10 +92,13 @@ from croviq_domain.narration import (
     StudioVoiceResult,
 )
 from croviq_domain.agent_config import (
+    GOOGLE_VOICE_CONSENT_PHRASE_EN,
     AgentId,
     AgentPromptConfig,
     NarrationMode,
     VoiceCatalogItem,
+    VoiceReplicationConfig,
+    VoiceReplicationStatus,
     VoiceSampleRequest,
     VoiceSampleResponse,
     VoiceSettingsConfig,
@@ -101,13 +106,13 @@ from croviq_domain.agent_config import (
 
 __all__ = [
     "AgentActivity",
+    "ChapterMarker",
     "DirectorDecision",
     "DirectorReview",
+    "VideoSectionDecision",
     "CoverageMarker",
     "CoverageType",
     "CutInstruction",
-    "CutSafetyStatus",
-    "EditDecisionList",
     "derive_keep_segments",
     "DirectorVerdict",
     "EditorDecision",

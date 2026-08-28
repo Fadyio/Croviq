@@ -25,13 +25,16 @@ from croviq_domain.render_review import (
     RenderReviewVerdict,
 )
 from croviq_domain.editorial import (
+    ChapterMarker,
     DirectorDecision,
     DirectorReview,
     DirectorVerdict,
     EditorDecision,
     EditorDecisionType,
     EditorProposal,
+    SectionAction,
     ShortCandidate,
+    VideoSectionDecision,
 )
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile
 from croviq_domain.transcript import Transcript
@@ -156,6 +159,21 @@ def reconcile_editor_proposal_with_transcript(
             confidence=sc.confidence,
         )
 
+    reconciled_chapters: list[ChapterMarker] = []
+    total_dur_ms = transcript.duration_ms or (transcript.words[-1].end_ms if transcript.words else 0)
+    for chap in proposal.chapters:
+        start_ms = max(0, min(chap.source_start_ms, total_dur_ms))
+        end_ms = max(start_ms, min(chap.source_end_ms, total_dur_ms))
+        reconciled_chapters.append(
+            ChapterMarker(
+                title=chap.title,
+                source_start_ms=start_ms,
+                source_end_ms=end_ms,
+                summary=chap.summary,
+                confidence=chap.confidence,
+            )
+        )
+
     return EditorProposal(
         production_id=proposal.production_id,
         agent="leo",
@@ -163,9 +181,10 @@ def reconcile_editor_proposal_with_transcript(
         summary=proposal.summary,
         decisions=reconciled_decisions,
         short_candidate=reconciled_short,
+        section_plan=proposal.section_plan,
+        chapters=reconciled_chapters,
         overall_confidence=proposal.overall_confidence,
     )
-
 
 def reconcile_director_review_with_transcript(
     review: DirectorReview,
@@ -1031,16 +1050,34 @@ class FakeGenAIClient(GenAIClient):
                     confidence=0.90,
                 )
 
+            total_dur = transcript.duration_ms or (words[-1].end_ms if words else 0)
+            default_chapters = [
+                ChapterMarker(
+                    title="Introduction & Overview",
+                    source_start_ms=0,
+                    source_end_ms=min(total_dur, 15000),
+                    summary="Opening hook and workflow introduction",
+                    confidence=0.95,
+                ),
+                ChapterMarker(
+                    title="Technical Demonstration",
+                    source_start_ms=min(total_dur, 15000),
+                    source_end_ms=total_dur,
+                    summary="Main technical demonstration and workflow execution",
+                    confidence=0.92,
+                ),
+            ] if total_dur > 0 else []
+
             proposal = EditorProposal(
                 production_id=production_id,
                 agent="leo",
                 model="fake-gemini-3.7-flash",
-                summary=f"Dialogue pass completed with {len(decisions)} proposed edits.",
+                summary=f"Multimodal video analysis and dialogue pass completed with {len(decisions)} proposed edits.",
                 decisions=decisions,
                 short_candidate=short_candidate,
+                chapters=default_chapters,
                 overall_confidence=0.93,
             )
-
         reconciled = reconcile_editor_proposal_with_transcript(proposal, transcript)
         usage = AgentUsageMetadata(input_tokens=420, output_tokens=180, latency_ms=45)
         return reconciled, usage

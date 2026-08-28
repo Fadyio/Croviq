@@ -1,5 +1,5 @@
 import React from "react";
-import { Film, Video, Sparkles, Smartphone, CheckCircle2, Clock, Layers } from "lucide-react";
+import { Film, Video, Sparkles, Smartphone, CheckCircle2, Layers } from "lucide-react";
 import { formatTimecode, formatDuration } from "../../lib/edl-adapter";
 import type { PreviewMode } from "./PreviewToggle";
 
@@ -8,11 +8,11 @@ export type MediaAssetId = "original" | "edited" | "studio_voice" | "master" | "
 export interface MediaBinItem {
   id: MediaAssetId;
   name: string;
-  category: "media" | "broll";
+  category: "source" | "output" | "broll";
   mode: PreviewMode;
   durationMs: number;
   isAvailable: boolean;
-  statusText?: string;
+  typeLabel: string;
 }
 
 export interface BRollAssetItem {
@@ -27,6 +27,9 @@ interface MediaBinProps {
   currentMode: PreviewMode;
   sourceDurationMs: number;
   editedDurationMs: number;
+  studioVoiceDurationMs?: number | null;
+  masterDurationMs?: number | null;
+  shortDurationMs?: number | null;
   hasRenderedPreview: boolean;
   hasMaster: boolean;
   hasStudioVoice: boolean;
@@ -41,6 +44,9 @@ export const MediaBin: React.FC<MediaBinProps> = ({
   currentMode,
   sourceDurationMs,
   editedDurationMs,
+  studioVoiceDurationMs,
+  masterDurationMs,
+  shortDurationMs,
   hasRenderedPreview,
   hasMaster,
   hasStudioVoice,
@@ -50,35 +56,36 @@ export const MediaBin: React.FC<MediaBinProps> = ({
   onSeek,
   className = "",
 }) => {
-  const mediaItems: MediaBinItem[] = [
-    {
-      id: "original",
-      name: "Source Video",
-      category: "media",
-      mode: "original",
-      durationMs: sourceDurationMs,
-      isAvailable: sourceDurationMs > 0,
-      statusText: "Raw",
-    },
+  const sourceItem: MediaBinItem = {
+    id: "original",
+    name: "Source Video",
+    category: "source",
+    mode: "original",
+    durationMs: sourceDurationMs,
+    isAvailable: sourceDurationMs > 0,
+    typeLabel: "Raw",
+  };
+
+  const outputItems: MediaBinItem[] = [
     {
       id: "edited",
       name: "Edited Preview",
-      category: "media",
+      category: "output",
       mode: "edited",
-      durationMs: editedDurationMs || sourceDurationMs,
+      durationMs: editedDurationMs > 0 ? editedDurationMs : sourceDurationMs,
       isAvailable: true,
-      statusText: hasRenderedPreview ? "Rendered" : "Virtual",
+      typeLabel: hasRenderedPreview ? "Rendered" : "EDL",
     },
     ...(hasStudioVoice
       ? [
           {
             id: "studio_voice",
             name: "Studio Voice",
-            category: "media" as const,
+            category: "output" as const,
             mode: "studio_voice" as PreviewMode,
-            durationMs: editedDurationMs || sourceDurationMs,
+            durationMs: studioVoiceDurationMs || editedDurationMs || sourceDurationMs,
             isAvailable: true,
-            statusText: "Narrated",
+            typeLabel: "Narrated",
           },
         ]
       : []),
@@ -87,11 +94,11 @@ export const MediaBin: React.FC<MediaBinProps> = ({
           {
             id: "master",
             name: "Master Video",
-            category: "media" as const,
+            category: "output" as const,
             mode: "edited" as PreviewMode,
-            durationMs: editedDurationMs || sourceDurationMs,
+            durationMs: masterDurationMs || editedDurationMs || sourceDurationMs,
             isAvailable: true,
-            statusText: "Approved",
+            typeLabel: "Master",
           },
         ]
       : []),
@@ -100,15 +107,17 @@ export const MediaBin: React.FC<MediaBinProps> = ({
           {
             id: "short",
             name: "Vertical Short",
-            category: "media" as const,
+            category: "output" as const,
             mode: "short" as PreviewMode,
-            durationMs: Math.min(60000, Math.max(15000, editedDurationMs)),
+            durationMs: shortDurationMs || Math.min(60000, Math.max(15000, editedDurationMs)),
             isAvailable: true,
-            statusText: "9:16",
+            typeLabel: "9:16",
           },
         ]
       : []),
   ];
+
+  const totalItemCount = 1 + outputItems.length + brollAssets.length;
 
   const getIcon = (item: MediaBinItem) => {
     if (item.mode === "short") return Smartphone;
@@ -121,102 +130,134 @@ export const MediaBin: React.FC<MediaBinProps> = ({
   return (
     <aside
       className={`flex flex-col bg-surface-1 border-r border-border-subtle select-none h-full overflow-hidden ${className}`}
-      data-testid="media-bin"
+      data-testid="project-bin"
     >
       {/* Panel Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border-subtle bg-surface-2/40">
         <span className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
-          Project Bin
+          PROJECT
         </span>
-        <span className="text-[10px] text-text-muted font-medium">
-          {mediaItems.length + brollAssets.length} items
+        <span className="text-[10px] text-text-muted font-medium font-mono">
+          {totalItemCount} items
         </span>
       </div>
 
-      {/* Scrollable Bin Rows */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-4">
-        {/* Media Section */}
-        <div>
-          <div className="px-1.5 pb-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
-            Media
-          </div>
-          <div className="space-y-1">
-            {mediaItems.map((item) => {
+      {/* Asset Categories */}
+      <div className="flex-1 overflow-y-auto divide-y divide-border-subtle/30">
+        {/* SOURCE GROUP */}
+        <div className="p-2">
+          <p className="px-1.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            SOURCE
+          </p>
+          <button
+            type="button"
+            onClick={() => onSelectMode("original")}
+            className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-all ${
+              currentMode === "original"
+                ? "bg-primary/10 border border-primary/40 text-text-primary shadow-xs"
+                : "hover:bg-surface-2 text-text-secondary hover:text-text-primary border border-transparent"
+            }`}
+            data-testid="asset-source-video"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Video
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  currentMode === "original" ? "text-primary" : "text-text-muted"
+                }`}
+              />
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-semibold truncate leading-tight">
+                  {sourceItem.name}
+                </span>
+                <span className="text-[10px] text-text-muted">{sourceItem.typeLabel}</span>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono text-text-muted tabular-nums shrink-0 ml-2">
+              {formatDuration(sourceItem.durationMs)}
+            </span>
+          </button>
+        </div>
+
+        {/* OUTPUTS GROUP */}
+        <div className="p-2">
+          <p className="px-1.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            OUTPUTS
+          </p>
+          <div className="flex flex-col gap-1">
+            {outputItems.map((item) => {
               const Icon = getIcon(item);
               const isSelected =
-                (item.mode === currentMode && item.id !== "master") ||
-                (item.id === "studio_voice" && currentMode === "studio_voice") ||
-                (item.id === "short" && currentMode === "short");
+                item.id === "studio_voice"
+                  ? currentMode === "studio_voice"
+                  : item.id === "short"
+                    ? currentMode === "short"
+                    : currentMode === "edited";
 
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => onSelectMode(item.mode)}
-                  className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-left transition-colors text-xs ${
+                  className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-all ${
                     isSelected
-                      ? "bg-primary/15 text-text-primary font-medium border border-primary/30"
-                      : "text-text-secondary hover:bg-surface-2 hover:text-text-primary border border-transparent"
+                      ? "bg-primary/10 border border-primary/40 text-text-primary shadow-xs"
+                      : "hover:bg-surface-2 text-text-secondary hover:text-text-primary border border-transparent"
                   }`}
-                  data-testid={`media-bin-row-${item.id}`}
+                  data-testid={`asset-${item.id}`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={`p-1 rounded ${
-                        isSelected ? "bg-primary text-white" : "bg-surface-3 text-text-muted"
+                    <Icon
+                      className={`w-3.5 h-3.5 shrink-0 ${
+                        isSelected ? "text-primary" : "text-text-muted"
                       }`}
-                    >
-                      <Icon className="size-3.5" />
-                    </span>
-                    <div className="truncate">
-                      <div className="truncate text-xs">{item.name}</div>
-                      {item.statusText && (
-                        <div className="text-[10px] text-text-muted">{item.statusText}</div>
-                      )}
+                    />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-semibold truncate leading-tight">
+                        {item.name}
+                      </span>
+                      <span className="text-[10px] text-text-muted">{item.typeLabel}</span>
                     </div>
                   </div>
-                  <div className="text-[10px] text-text-muted font-mono shrink-0">
-                    {formatTimecode(item.durationMs)}
-                  </div>
+                  <span className="text-[10px] font-mono text-text-muted tabular-nums shrink-0 ml-2">
+                    {formatDuration(item.durationMs)}
+                  </span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Generated B-roll Assets Section (only when B-roll exists) */}
+        {/* GENERATED ASSETS GROUP (Only rendered if assets exist) */}
         {brollAssets.length > 0 && (
-          <div>
-            <div className="px-1.5 pb-1.5 text-[10px] font-semibold text-text-muted uppercase tracking-wider flex items-center justify-between">
-              <span>Generated B-Roll</span>
-              <span className="text-[10px] text-primary">{brollAssets.length}</span>
-            </div>
-            <div className="space-y-1">
+          <div className="p-2">
+            <p className="px-1.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              GENERATED
+            </p>
+            <div className="flex flex-col gap-1">
               {brollAssets.map((asset, idx) => (
-                <button
-                  key={asset.artifactId || `broll_${idx}`}
-                  type="button"
-                  onClick={() => onSeek?.(asset.sourceStartMs)}
-                  className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-left transition-colors text-xs text-text-secondary hover:bg-surface-2 hover:text-text-primary border border-transparent"
-                  data-testid={`media-bin-broll-${idx}`}
+                <div
+                  key={asset.artifactId || idx}
+                  onClick={() => onSeek && onSeek(asset.sourceStartMs)}
+                  className="p-2 rounded-lg border border-border-subtle/50 bg-surface-2/30 hover:bg-surface-2 cursor-pointer transition-colors flex flex-col gap-1"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="p-1 rounded bg-surface-3 text-primary">
-                      <Layers className="size-3.5" />
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-text-primary flex items-center gap-1.5 truncate">
+                      <Layers className="w-3 h-3 text-info shrink-0" />
+                      <span className="truncate text-[11px]">B-Roll {idx + 1}</span>
                     </span>
-                    <div className="truncate">
-                      <div className="truncate text-xs">
-                        {asset.promptSummary || `Coverage #${idx + 1}`}
-                      </div>
-                      <div className="text-[10px] text-text-muted">
-                        At {formatTimecode(asset.sourceStartMs)}
-                      </div>
-                    </div>
+                    <span className="text-[10px] font-mono text-text-muted tabular-nums shrink-0">
+                      {formatDuration(asset.durationMs)}
+                    </span>
                   </div>
-                  <div className="text-[10px] text-text-muted font-mono shrink-0">
-                    {formatDuration(asset.durationMs)}
-                  </div>
-                </button>
+                  {asset.promptSummary && (
+                    <p className="text-[10px] text-text-secondary line-clamp-2 italic">
+                      "{asset.promptSummary}"
+                    </p>
+                  )}
+                  <span className="text-[9px] font-mono text-text-muted">
+                    At {formatTimecode(asset.sourceStartMs)}
+                  </span>
+                </div>
               ))}
             </div>
           </div>
