@@ -313,6 +313,28 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/release-review": {
+    post: {
+      responses: {
+        200: components["schemas"]["ReleaseReviewDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+    get: {
+      responses: {
+        200: components["schemas"]["ReleaseReviewDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/release-review/correct": {
+    post: {
+      responses: {
+        200: components["schemas"]["AutoCorrectQAResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
   "/api/channels/sample/dashboard": {
     get: {
       responses: {
@@ -434,7 +456,7 @@ export interface components {
       /** Timestamp when the activity occurred */
       created_at?: string;
     };
-    AgentId: "leo" | "maya" | "alex" | "nina";
+    AgentId: "leo" | "maya" | "alex" | "nina" | "iris";
     AgentMemorySummaryResponse: {
       channel_title: string;
       style_guide: string;
@@ -442,7 +464,7 @@ export interface components {
       lessons?: components["schemas"]["MemoryItemResponse"][];
     };
     AgentPromptConfig: {
-      /** Target agent identifier (alex, leo, maya, or nina) */
+      /** Target agent identifier (alex, leo, maya, nina, or iris) */
       agent_id: components["schemas"]["AgentId"];
       /** Complete agent working prompt text */
       prompt_text: string;
@@ -538,6 +560,22 @@ export interface components {
       firebase_uid?: string | null;
       git_sha?: string | null;
       event_type: "auth.token.refreshed";
+    };
+    AutoCorrectQARequest: {
+      /** Optional specific review ID to correct */
+      review_id?: string | null;
+    };
+    AutoCorrectQAResponse: {
+      /** Unique production identifier */
+      production_id: string;
+      /** Corrected Nina packaging proposal */
+      revised_proposal?: components["schemas"]["PackagingProposal"] | null;
+      /** Fresh Iris QA review after correction */
+      new_review: components["schemas"]["ReleaseReview"];
+      /** Whether output is now ready to publish */
+      release_ready?: boolean;
+      /** Summary of applied corrections */
+      message: string;
     };
     BRollArtifact: {
       /** Unique artifact identifier */
@@ -692,6 +730,20 @@ export interface components {
       summary: string;
       /** Confidence score for this chapter boundary */
       confidence?: number;
+    };
+    ClaimSupportStatus:
+      "SUPPORTED_BY_VIDEO" | "SUPPORTED_EXTERNALLY" | "UNSUPPORTED" | "MANUAL_REVIEW";
+    ClaimVerification: {
+      /** Specific factual claim examined */
+      claim_text: string;
+      /** Where the claim appears (title, description, video, chapter, short) */
+      location?: string;
+      /** Claim support status */
+      status: components["schemas"]["ClaimSupportStatus"];
+      /** Evidence or rationale supporting status */
+      evidence: string;
+      /** External reference URL if verified externally */
+      source_url?: string | null;
     };
     ClientErrorEvent: {
       firebase_uid?: string | null;
@@ -1049,6 +1101,10 @@ export interface components {
       /** Whether to bypass cached proposal and generate a fresh packaging proposal */
       force_regenerate?: boolean;
     };
+    GenerateReleaseReviewRequest: {
+      /** Whether to bypass cached review and execute a fresh Iris QA pass */
+      force_regenerate?: boolean;
+    };
     HTTPValidationError: {
       detail?: components["schemas"]["ValidationError"][];
     };
@@ -1260,6 +1316,133 @@ export interface components {
       short_playback_url?: string | null;
     };
     ProductionStatus: "pending" | "uploading" | "uploaded" | "deleting" | "failed";
+    ReleaseChecklist: {
+      /** Master video continuity and encoding status */
+      master_video?: boolean;
+      /** Audio level, peak, and sync status */
+      audio?: boolean;
+      /** Caption accuracy, timing, and bounds status */
+      captions?: boolean;
+      /** Chapter timestamp ordering and topic accuracy */
+      chapters?: boolean;
+      /** Short framing, captions, and context status */
+      short?: boolean;
+      /** Packaging title, description, and thumbnail status */
+      packaging?: boolean;
+      /** Factual and packaging claims validity status */
+      claims?: boolean;
+    };
+    ReleaseIssue: {
+      /** Unique identifier for the issue */
+      issue_id: string;
+      /** Categorized issue type */
+      issue_type: components["schemas"]["ReleaseIssueType"];
+      /** Severity level */
+      severity: components["schemas"]["ReleaseIssueSeverity"];
+      /** Start timestamp in video ms if time-bound */
+      source_start_ms?: number | null;
+      /** End timestamp in video ms if time-bound */
+      source_end_ms?: number | null;
+      /** Affected artifact type (master, short, packaging, caption, chapter) */
+      artifact_type?: string | null;
+      /** Related editorial or packaging decision ID if applicable */
+      related_decision_id?: string | null;
+      /** Concise creator-facing description of defect */
+      message: string;
+      /** Concrete suggested fix or routing */
+      suggested_action: string;
+      /** Objective factual or media evidence observed */
+      evidence: string;
+    };
+    ReleaseIssueSeverity: "LOW" | "MEDIUM" | "HIGH" | "BLOCKING";
+    ReleaseIssueType:
+      | "AUDIO_ARTIFACT"
+      | "AUDIO_LEVEL"
+      | "AUDIO_SYNC"
+      | "BAD_CUT"
+      | "VISUAL_JUMP"
+      | "BLACK_FRAME"
+      | "FRAME_GLITCH"
+      | "ENCODE_ISSUE"
+      | "CAPTION_MISMATCH"
+      | "CAPTION_TIMING"
+      | "CAPTION_OVERFLOW"
+      | "CHAPTER_MISMATCH"
+      | "CHAPTER_TIMING"
+      | "UNSUPPORTED_CLAIM"
+      | "FACTUAL_INCONSISTENCY"
+      | "TITLE_MISMATCH"
+      | "DESCRIPTION_MISMATCH"
+      | "THUMBNAIL_MISMATCH"
+      | "PACKAGING_INCONSISTENCY"
+      | "SHORT_QUALITY"
+      | "SHORT_CAPTION_QUALITY"
+      | "SHORT_CROP"
+      | "MISSING_CONTENT"
+      | "CONTEXT_LOSS";
+    ReleaseReview: {
+      /** Unique review identifier */
+      review_id: string;
+      /** Parent production ID */
+      production_id: string;
+      /** Evaluating agent identifier (must be iris) */
+      agent?: string;
+      /** Underlying multimodal GenAI model ID */
+      model?: string;
+      /** Overall gate verdict (PASS, FIX_REQUIRED, MANUAL_REVIEW) */
+      verdict: components["schemas"]["ReleaseVerdict"];
+      /** Concise synthesis of evaluation findings */
+      summary: string;
+      /** List of identified issues */
+      issues?: components["schemas"]["ReleaseIssue"][];
+      /** True if output satisfies all quality thresholds */
+      approved_for_release?: boolean;
+      /** Iris assessment confidence score */
+      confidence?: number;
+      /** UTC timestamp of evaluation generation */
+      created_at?: string;
+      /** Evaluated Master RenderArtifact ID */
+      master_artifact_id?: string | null;
+      /** Evaluated Short RenderArtifact ID */
+      short_artifact_id?: string | null;
+      /** Evaluated PackagingProposal ID */
+      packaging_proposal_id?: string | null;
+      /** Compact component checklist summary */
+      checklist?: components["schemas"]["ReleaseChecklist"];
+      /** Itemized factual and packaging claim audits */
+      claim_verifications?: components["schemas"]["ClaimVerification"][];
+      /** Evaluations of thumbnail concepts */
+      thumbnail_evaluations?: components["schemas"]["ThumbnailEvaluation"][];
+    };
+    ReleaseReviewDetailResponse: {
+      /** Unique production identifier */
+      production_id: string;
+      /** Latest Iris QA release review */
+      review?: components["schemas"]["ReleaseReview"] | null;
+      /** Creator-facing release pipeline status */
+      release_status: string;
+      /** Whether output satisfies all release gate conditions */
+      release_ready?: boolean;
+      /** Compact release verification checklist */
+      checklist?: components["schemas"]["ReleaseChecklist"] | null;
+      /** Master video artifact details */
+      master_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
+      /** Short video artifact details */
+      short_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
+      /** Signed playback URL for master video */
+      master_url?: string | null;
+      /** Signed playback URL for short video */
+      short_url?: string | null;
+      /** Whether approved Master video artifact exists */
+      has_master?: boolean;
+      /** Whether vertical Short video artifact exists */
+      has_short?: boolean;
+      /** Whether Nina packaging proposal exists */
+      has_packaging?: boolean;
+      /** UTC timestamp of review generation */
+      generated_at?: string | null;
+    };
+    ReleaseVerdict: "PASS" | "FIX_REQUIRED" | "MANUAL_REVIEW";
     RenderArtifactResponse: {
       /** Canonical unique render artifact identifier */
       artifact_id: string;
@@ -1580,6 +1763,16 @@ export interface components {
       frame_verified?: boolean;
       /** Optional storage URI of extracted frame image */
       frame_artifact_uri?: string | null;
+    };
+    ThumbnailEvaluation: {
+      /** Index of evaluated thumbnail concept */
+      concept_index: number;
+      /** Thumbnail headline text */
+      headline: string;
+      /** PASS or REJECT */
+      verdict: string;
+      /** Concise visual QA assessment */
+      reason: string;
     };
     TitleAngle:
       | "DIRECT_VALUE"

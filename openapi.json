@@ -1791,6 +1791,176 @@
         }
       }
     },
+    "/api/productions/{production_id}/release-review": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Generate Iris QA Release Review",
+        "description": "Invoke Iris (QA Agent) to evaluate Master video, Short, transcript, captions, chapters, and packaging truth before release.",
+        "operationId": "generate_release_review_api_productions__production_id__release_review_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/GenerateReleaseReviewRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseReviewDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get Production Release Review Details",
+        "description": "Retrieve the latest Iris QA evaluation, checklist, and release readiness for a production.",
+        "operationId": "get_release_review_details_api_productions__production_id__release_review_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseReviewDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/release-review/correct": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Execute 1-Cycle QA Auto-Correction",
+        "description": "Perform bounded 1-cycle auto-correction routing flagged packaging/claim issues to Nina and re-evaluating with Iris.",
+        "operationId": "auto_correct_qa_api_productions__production_id__release_review_correct_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AutoCorrectQARequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoCorrectQAResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/channels/sample/dashboard": {
       "get": {
         "tags": ["Channel Intelligence"],
@@ -2386,7 +2556,7 @@
       },
       "AgentId": {
         "type": "string",
-        "enum": ["leo", "maya", "alex", "nina"],
+        "enum": ["leo", "maya", "alex", "nina", "iris"],
         "title": "AgentId",
         "description": "Supported Croviq agents."
       },
@@ -2425,7 +2595,7 @@
         "properties": {
           "agent_id": {
             "$ref": "#/components/schemas/AgentId",
-            "description": "Target agent identifier (alex, leo, maya, or nina)"
+            "description": "Target agent identifier (alex, leo, maya, nina, or iris)"
           },
           "prompt_text": {
             "type": "string",
@@ -2924,6 +3094,66 @@
         "type": "object",
         "required": ["event_type"],
         "title": "AuthTokenRefreshedEvent"
+      },
+      "AutoCorrectQARequest": {
+        "properties": {
+          "review_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Id",
+            "description": "Optional specific review ID to correct"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AutoCorrectQARequest",
+        "description": "Request payload to perform 1-cycle auto-correction on QA issues."
+      },
+      "AutoCorrectQAResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Unique production identifier"
+          },
+          "revised_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackagingProposal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Corrected Nina packaging proposal"
+          },
+          "new_review": {
+            "$ref": "#/components/schemas/ReleaseReview",
+            "description": "Fresh Iris QA review after correction"
+          },
+          "release_ready": {
+            "type": "boolean",
+            "title": "Release Ready",
+            "description": "Whether output is now ready to publish",
+            "default": false
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Summary of applied corrections"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id", "new_review", "message"],
+        "title": "AutoCorrectQAResponse",
+        "description": "Response from executing bounded QA auto-correction."
       },
       "BRollArtifact": {
         "properties": {
@@ -3679,6 +3909,57 @@
         "required": ["title", "source_start_ms", "source_end_ms", "summary"],
         "title": "ChapterMarker",
         "description": "Semantic chapter candidate generated from Leo's multimodal video understanding."
+      },
+      "ClaimSupportStatus": {
+        "type": "string",
+        "enum": ["SUPPORTED_BY_VIDEO", "SUPPORTED_EXTERNALLY", "UNSUPPORTED", "MANUAL_REVIEW"],
+        "title": "ClaimSupportStatus",
+        "description": "Categorized status for claim evaluation."
+      },
+      "ClaimVerification": {
+        "properties": {
+          "claim_text": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Claim Text",
+            "description": "Specific factual claim examined"
+          },
+          "location": {
+            "type": "string",
+            "title": "Location",
+            "description": "Where the claim appears (title, description, video, chapter, short)",
+            "default": "description"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClaimSupportStatus",
+            "description": "Claim support status"
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 2,
+            "title": "Evidence",
+            "description": "Evidence or rationale supporting status"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url",
+            "description": "External reference URL if verified externally"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["claim_text", "status", "evidence"],
+        "title": "ClaimVerification",
+        "description": "Individual factual or packaging claim verification result."
       },
       "ClientErrorEvent": {
         "properties": {
@@ -5176,6 +5457,20 @@
         "title": "GeneratePackagingRequest",
         "description": "Request payload to generate packaging proposal for a production."
       },
+      "GenerateReleaseReviewRequest": {
+        "properties": {
+          "force_regenerate": {
+            "type": "boolean",
+            "title": "Force Regenerate",
+            "description": "Whether to bypass cached review and execute a fresh Iris QA pass",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GenerateReleaseReviewRequest",
+        "description": "Request payload to execute Iris QA review."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -6098,6 +6393,455 @@
         "type": "string",
         "enum": ["pending", "uploading", "uploaded", "deleting", "failed"],
         "title": "ProductionStatus"
+      },
+      "ReleaseChecklist": {
+        "properties": {
+          "master_video": {
+            "type": "boolean",
+            "title": "Master Video",
+            "description": "Master video continuity and encoding status",
+            "default": true
+          },
+          "audio": {
+            "type": "boolean",
+            "title": "Audio",
+            "description": "Audio level, peak, and sync status",
+            "default": true
+          },
+          "captions": {
+            "type": "boolean",
+            "title": "Captions",
+            "description": "Caption accuracy, timing, and bounds status",
+            "default": true
+          },
+          "chapters": {
+            "type": "boolean",
+            "title": "Chapters",
+            "description": "Chapter timestamp ordering and topic accuracy",
+            "default": true
+          },
+          "short": {
+            "type": "boolean",
+            "title": "Short",
+            "description": "Short framing, captions, and context status",
+            "default": true
+          },
+          "packaging": {
+            "type": "boolean",
+            "title": "Packaging",
+            "description": "Packaging title, description, and thumbnail status",
+            "default": true
+          },
+          "claims": {
+            "type": "boolean",
+            "title": "Claims",
+            "description": "Factual and packaging claims validity status",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReleaseChecklist",
+        "description": "Compact status checklist for release components."
+      },
+      "ReleaseIssue": {
+        "properties": {
+          "issue_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 3,
+            "title": "Issue Id",
+            "description": "Unique identifier for the issue"
+          },
+          "issue_type": {
+            "$ref": "#/components/schemas/ReleaseIssueType",
+            "description": "Categorized issue type"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/ReleaseIssueSeverity",
+            "description": "Severity level"
+          },
+          "source_start_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Start Ms",
+            "description": "Start timestamp in video ms if time-bound"
+          },
+          "source_end_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source End Ms",
+            "description": "End timestamp in video ms if time-bound"
+          },
+          "artifact_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Type",
+            "description": "Affected artifact type (master, short, packaging, caption, chapter)"
+          },
+          "related_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Decision Id",
+            "description": "Related editorial or packaging decision ID if applicable"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 5,
+            "title": "Message",
+            "description": "Concise creator-facing description of defect"
+          },
+          "suggested_action": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 5,
+            "title": "Suggested Action",
+            "description": "Concrete suggested fix or routing"
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 2,
+            "title": "Evidence",
+            "description": "Objective factual or media evidence observed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "issue_id",
+          "issue_type",
+          "severity",
+          "message",
+          "suggested_action",
+          "evidence"
+        ],
+        "title": "ReleaseIssue",
+        "description": "Specific defect, inconsistency, or unverified claim flagged by Iris."
+      },
+      "ReleaseIssueSeverity": {
+        "type": "string",
+        "enum": ["LOW", "MEDIUM", "HIGH", "BLOCKING"],
+        "title": "ReleaseIssueSeverity",
+        "description": "Severity classification of identified quality or packaging defects."
+      },
+      "ReleaseIssueType": {
+        "type": "string",
+        "enum": [
+          "AUDIO_ARTIFACT",
+          "AUDIO_LEVEL",
+          "AUDIO_SYNC",
+          "BAD_CUT",
+          "VISUAL_JUMP",
+          "BLACK_FRAME",
+          "FRAME_GLITCH",
+          "ENCODE_ISSUE",
+          "CAPTION_MISMATCH",
+          "CAPTION_TIMING",
+          "CAPTION_OVERFLOW",
+          "CHAPTER_MISMATCH",
+          "CHAPTER_TIMING",
+          "UNSUPPORTED_CLAIM",
+          "FACTUAL_INCONSISTENCY",
+          "TITLE_MISMATCH",
+          "DESCRIPTION_MISMATCH",
+          "THUMBNAIL_MISMATCH",
+          "PACKAGING_INCONSISTENCY",
+          "SHORT_QUALITY",
+          "SHORT_CAPTION_QUALITY",
+          "SHORT_CROP",
+          "MISSING_CONTENT",
+          "CONTEXT_LOSS"
+        ],
+        "title": "ReleaseIssueType",
+        "description": "Categorized quality and factual issues evaluated by Iris."
+      },
+      "ReleaseReview": {
+        "properties": {
+          "review_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 3,
+            "title": "Review Id",
+            "description": "Unique review identifier"
+          },
+          "production_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 3,
+            "title": "Production Id",
+            "description": "Parent production ID"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent",
+            "description": "Evaluating agent identifier (must be iris)",
+            "default": "iris"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Underlying multimodal GenAI model ID",
+            "default": "gemini-3.7-flash"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/ReleaseVerdict",
+            "description": "Overall gate verdict (PASS, FIX_REQUIRED, MANUAL_REVIEW)"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 5,
+            "title": "Summary",
+            "description": "Concise synthesis of evaluation findings"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseIssue"
+            },
+            "type": "array",
+            "title": "Issues",
+            "description": "List of identified issues"
+          },
+          "approved_for_release": {
+            "type": "boolean",
+            "title": "Approved For Release",
+            "description": "True if output satisfies all quality thresholds",
+            "default": false
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Iris assessment confidence score",
+            "default": 0.95
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "UTC timestamp of evaluation generation"
+          },
+          "master_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Master Artifact Id",
+            "description": "Evaluated Master RenderArtifact ID"
+          },
+          "short_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Artifact Id",
+            "description": "Evaluated Short RenderArtifact ID"
+          },
+          "packaging_proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Packaging Proposal Id",
+            "description": "Evaluated PackagingProposal ID"
+          },
+          "checklist": {
+            "$ref": "#/components/schemas/ReleaseChecklist",
+            "description": "Compact component checklist summary"
+          },
+          "claim_verifications": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimVerification"
+            },
+            "type": "array",
+            "title": "Claim Verifications",
+            "description": "Itemized factual and packaging claim audits"
+          },
+          "thumbnail_evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/ThumbnailEvaluation"
+            },
+            "type": "array",
+            "title": "Thumbnail Evaluations",
+            "description": "Evaluations of thumbnail concepts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["review_id", "production_id", "verdict", "summary"],
+        "title": "ReleaseReview",
+        "description": "Canonical release evaluation emitted by Iris (QA Agent)."
+      },
+      "ReleaseReviewDetailResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Unique production identifier"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReleaseReview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Latest Iris QA release review"
+          },
+          "release_status": {
+            "type": "string",
+            "title": "Release Status",
+            "description": "Creator-facing release pipeline status"
+          },
+          "release_ready": {
+            "type": "boolean",
+            "title": "Release Ready",
+            "description": "Whether output satisfies all release gate conditions",
+            "default": false
+          },
+          "checklist": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReleaseChecklist"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Compact release verification checklist"
+          },
+          "master_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenderArtifactResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Master video artifact details"
+          },
+          "short_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenderArtifactResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short video artifact details"
+          },
+          "master_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Master Url",
+            "description": "Signed playback URL for master video"
+          },
+          "short_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Url",
+            "description": "Signed playback URL for short video"
+          },
+          "has_master": {
+            "type": "boolean",
+            "title": "Has Master",
+            "description": "Whether approved Master video artifact exists",
+            "default": false
+          },
+          "has_short": {
+            "type": "boolean",
+            "title": "Has Short",
+            "description": "Whether vertical Short video artifact exists",
+            "default": false
+          },
+          "has_packaging": {
+            "type": "boolean",
+            "title": "Has Packaging",
+            "description": "Whether Nina packaging proposal exists",
+            "default": false
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At",
+            "description": "UTC timestamp of review generation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id", "release_status"],
+        "title": "ReleaseReviewDetailResponse",
+        "description": "Comprehensive release evaluation, checklist, media playback, and publishing readiness."
+      },
+      "ReleaseVerdict": {
+        "type": "string",
+        "enum": ["PASS", "FIX_REQUIRED", "MANUAL_REVIEW"],
+        "title": "ReleaseVerdict",
+        "description": "Evaluation verdict issued by Iris (QA Agent) for publishing gate."
       },
       "RenderArtifactResponse": {
         "properties": {
@@ -7503,6 +8247,40 @@
         ],
         "title": "ThumbnailConcept",
         "description": "Structured thumbnail concept referencing a verified visual frame in Master."
+      },
+      "ThumbnailEvaluation": {
+        "properties": {
+          "concept_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Concept Index",
+            "description": "Index of evaluated thumbnail concept"
+          },
+          "headline": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Headline",
+            "description": "Thumbnail headline text"
+          },
+          "verdict": {
+            "type": "string",
+            "title": "Verdict",
+            "description": "PASS or REJECT"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Reason",
+            "description": "Concise visual QA assessment"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["concept_index", "headline", "verdict", "reason"],
+        "title": "ThumbnailEvaluation",
+        "description": "Evaluation of a specific Nina ThumbnailConcept."
       },
       "TitleAngle": {
         "type": "string",

@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
   Copy,
   Edit3,
   ExternalLink,
@@ -10,6 +15,7 @@ import {
   Flame,
   HelpCircle,
   Image as ImageIcon,
+  Info,
   Layers,
   Lightbulb,
   Loader2,
@@ -18,25 +24,37 @@ import {
   Minimize2,
   Pause,
   Play,
+  RefreshCw,
   RotateCcw,
   Save,
   Scissors,
+  ShieldAlert,
   ShieldCheck,
   Smartphone,
   Sparkles,
   Volume2,
   VolumeX,
+  Wand2,
+  XCircle,
 } from "lucide-react";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
 import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
 import ninaAvatar from "../assets/agents/Nina.png";
+import irisAvatar from "../assets/agents/Iris.png";
 import type { components } from "../api/generated";
 
 type PackagingDetailResponse = components["schemas"]["PackagingDetailResponse"];
 type PackagingChapter = components["schemas"]["PackagingChapter"];
 type TitleCandidate = components["schemas"]["TitleCandidate"];
 type ThumbnailConcept = components["schemas"]["ThumbnailConcept"];
+type ReleaseReviewDetailResponse = components["schemas"]["ReleaseReviewDetailResponse"];
+type ReleaseReview = components["schemas"]["ReleaseReview"];
+type ReleaseIssue = components["schemas"]["ReleaseIssue"];
+type ReleaseChecklist = components["schemas"]["ReleaseChecklist"];
+type ClaimVerification = components["schemas"]["ClaimVerification"];
+type ThumbnailEvaluation = components["schemas"]["ThumbnailEvaluation"];
+type AutoCorrectQAResponse = components["schemas"]["AutoCorrectQAResponse"];
 
 interface ReleasePageProps {
   productionId: string;
@@ -89,6 +107,66 @@ const getAngleFriendlyName = (angle: string) => {
   }
 };
 
+const getIssueFriendlyName = (type: string) => {
+  const map: Record<string, string> = {
+    AUDIO_ARTIFACT: "Audio Artifact",
+    AUDIO_LEVEL: "Audio Level",
+    AUDIO_SYNC: "Audio / Video Sync",
+    BAD_CUT: "Bad Cut / Edit Gap",
+    VISUAL_JUMP: "Visual Jump Cut",
+    BLACK_FRAME: "Black Frame / Freeze",
+    FRAME_GLITCH: "Visual Glitch",
+    ENCODE_ISSUE: "Encoding Issue",
+    CAPTION_MISMATCH: "Caption Text Mismatch",
+    CAPTION_TIMING: "Caption Timing Drift",
+    CAPTION_OVERFLOW: "Caption Overflow",
+    CHAPTER_MISMATCH: "Chapter Topic Mismatch",
+    CHAPTER_TIMING: "Chapter Timestamp Issue",
+    UNSUPPORTED_CLAIM: "Unsupported Claim",
+    FACTUAL_INCONSISTENCY: "Factual Inconsistency",
+    TITLE_MISMATCH: "Title Content Mismatch",
+    DESCRIPTION_MISMATCH: "Description Mismatch",
+    THUMBNAIL_MISMATCH: "Thumbnail Concept Mismatch",
+    PACKAGING_INCONSISTENCY: "Packaging Inconsistency",
+    SHORT_QUALITY: "Short Quality Issue",
+    SHORT_CAPTION_QUALITY: "Short Caption Quality",
+    SHORT_CROP: "Short Vertical Framing Issue",
+    MISSING_CONTENT: "Missing Content / Demo",
+    CONTEXT_LOSS: "Context Loss",
+  };
+  return map[type] || type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+const getClaimStatusBadge = (status: string) => {
+  switch (status) {
+    case "SUPPORTED_BY_VIDEO":
+      return {
+        label: "Supported by Video",
+        color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+        icon: CheckCircle2,
+      };
+    case "SUPPORTED_EXTERNALLY":
+      return {
+        label: "Supported Externally",
+        color: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+        icon: ExternalLink,
+      };
+    case "UNSUPPORTED":
+      return {
+        label: "Unsupported",
+        color: "bg-rose-500/15 text-rose-400 border-rose-500/30",
+        icon: XCircle,
+      };
+    case "MANUAL_REVIEW":
+    default:
+      return {
+        label: "Manual Review",
+        color: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+        icon: AlertTriangle,
+      };
+  }
+};
+
 export const ReleasePage: React.FC<ReleasePageProps> = ({
   productionId,
   onNavigateHome,
@@ -97,12 +175,17 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   const { firebaseUser, logout } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const [activeStage, setActiveStage] = useState<"packaging" | "qa" | "ready">("qa");
   const [packagingData, setPackagingData] = useState<PackagingDetailResponse | null>(null);
+  const [qaData, setQaData] = useState<ReleaseReviewDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isGeneratingPackaging, setIsGeneratingPackaging] = useState<boolean>(false);
+  const [isRunningQA, setIsRunningQA] = useState<boolean>(false);
+  const [isCorrectingQA, setIsCorrectingQA] = useState<boolean>(false);
   const [isSavingOverrides, setIsSavingOverrides] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [correctionSuccessMsg, setCorrectionSuccessMsg] = useState<string | null>(null);
 
   // Editable local state
   const [titleInput, setTitleInput] = useState<string>("");
@@ -118,10 +201,9 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
   const [durationMs, setDurationMs] = useState<number>(113824);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  // Nina Settings Drawer state
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  // Agent Settings Drawers state
+  const [drawerAgent, setDrawerAgent] = useState<"nina" | "iris" | null>(null);
 
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -132,10 +214,8 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     return headers;
   }, [firebaseUser]);
 
-  // Load packaging details on mount (idempotent, no Gemini call on GET)
+  // Load initial packaging details (idempotent GET, 0 model calls)
   const loadPackaging = useCallback(async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
     try {
       const headers = await getAuthHeaders();
       const res = await fetch(`/api/productions/${productionId}/packaging`, { headers });
@@ -159,25 +239,95 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
             setShortDescInput(data.effective_short_package.description);
           }
         }
-      } else {
-        const err = await res.json().catch(() => ({ detail: "Failed to load packaging" }));
-        setErrorMessage(err.detail || "Failed to load packaging");
       }
     } catch (err: unknown) {
       console.error("Error loading packaging:", err);
-      setErrorMessage(err instanceof Error ? err.message : "Failed to connect to API");
-    } finally {
-      setIsLoading(false);
+    }
+  }, [getAuthHeaders, productionId]);
+
+  // Load QA review details (idempotent GET, 0 model calls)
+  const loadQA = useCallback(async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/productions/${productionId}/release-review`, { headers });
+      if (res.ok) {
+        const data: ReleaseReviewDetailResponse = await res.json();
+        setQaData(data);
+      }
+    } catch (err: unknown) {
+      console.error("Error loading QA review:", err);
     }
   }, [getAuthHeaders, productionId]);
 
   useEffect(() => {
-    loadPackaging();
-  }, [loadPackaging]);
+    const init = async () => {
+      setIsLoading(true);
+      await Promise.all([loadPackaging(), loadQA()]);
+      setIsLoading(false);
+    };
+    init();
+  }, [loadPackaging, loadQA]);
+
+  // Run or re-run Iris QA Review
+  const handleRunQA = async (forceRegenerate: boolean = false) => {
+    setIsRunningQA(true);
+    setErrorMessage(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/productions/${productionId}/release-review`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ force_regenerate: forceRegenerate }),
+      });
+      if (res.ok) {
+        const data: ReleaseReviewDetailResponse = await res.json();
+        setQaData(data);
+        setSaveMessage(forceRegenerate ? "Fresh QA pass completed!" : "QA review loaded.");
+        setTimeout(() => setSaveMessage(null), 3000);
+      } else {
+        const err = await res.json().catch(() => ({ detail: "QA review failed" }));
+        setErrorMessage(err.detail || "QA review execution failed");
+      }
+    } catch (err: unknown) {
+      console.error("Error executing QA review:", err);
+      setErrorMessage(err instanceof Error ? err.message : "Error executing QA review");
+    } finally {
+      setIsRunningQA(false);
+    }
+  };
+
+  // Perform 1-cycle auto-correction (Nina revises packaging, Iris re-evaluates)
+  const handleAutoCorrectQA = async () => {
+    setIsCorrectingQA(true);
+    setErrorMessage(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/productions/${productionId}/release-review/correct`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const data: AutoCorrectQAResponse = await res.json();
+        setCorrectionSuccessMsg(data.message);
+        setTimeout(() => setCorrectionSuccessMsg(null), 5000);
+        // Refresh both packaging and QA state
+        await Promise.all([loadPackaging(), loadQA()]);
+      } else {
+        const err = await res.json().catch(() => ({ detail: "Auto-correction failed" }));
+        setErrorMessage(err.detail || "Auto-correction failed");
+      }
+    } catch (err: unknown) {
+      console.error("Error during auto-correction:", err);
+      setErrorMessage(err instanceof Error ? err.message : "Error during auto-correction");
+    } finally {
+      setIsCorrectingQA(false);
+    }
+  };
 
   // Explicit packaging generation pass
   const handleGeneratePackaging = async (forceRegenerate: boolean = false) => {
-    setIsGenerating(true);
+    setIsGeneratingPackaging(true);
     setErrorMessage(null);
     try {
       const headers = await getAuthHeaders();
@@ -208,6 +358,8 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
         }
         setSaveMessage("Packaging generated successfully!");
         setTimeout(() => setSaveMessage(null), 3000);
+        // Trigger QA review after packaging
+        await loadQA();
       } else {
         const err = await res.json().catch(() => ({ detail: "Packaging generation failed" }));
         setErrorMessage(err.detail || "Packaging generation failed");
@@ -216,11 +368,11 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       console.error("Error generating packaging:", err);
       setErrorMessage(err instanceof Error ? err.message : "Error generating packaging");
     } finally {
-      setIsGenerating(false);
+      setIsGeneratingPackaging(false);
     }
   };
 
-  // Save creator overrides
+  // Save creator packaging overrides
   const handleSaveOverrides = async () => {
     setIsSavingOverrides(true);
     try {
@@ -244,6 +396,8 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
         setPackagingData(updated);
         setSaveMessage("Changes saved successfully!");
         setTimeout(() => setSaveMessage(null), 2500);
+        // Trigger fresh QA check on packaging override change
+        await handleRunQA(true);
       }
     } catch (err: unknown) {
       console.error("Error saving overrides:", err);
@@ -284,7 +438,10 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     });
   };
 
-  const activeVideoSrc = packagingData?.master_url || "";
+  const activeVideoSrc = packagingData?.master_url || qaData?.master_url || "";
+  const releaseStatusText =
+    qaData?.release_status || (packagingData?.proposal ? "Checking final output" : "Packaging");
+  const isReleaseReady = Boolean(qaData?.release_ready);
 
   return (
     <div
@@ -292,12 +449,12 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       data-testid="release-workspace"
     >
       {/* Top Navbar */}
-      <header className="h-12 bg-surface-1 border-b border-border-subtle px-4 flex items-center justify-between shrink-0 sticky top-0 z-30">
+      <header className="h-14 bg-surface-1 border-b border-border-subtle px-4 md:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30 shadow-xs">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={onNavigateEditor || onNavigateHome}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-border-subtle"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-lg transition-colors border border-border-subtle"
             title="Back to Editor"
             data-testid="btn-back-to-editor"
           >
@@ -308,30 +465,78 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
           <span className="text-border-strong select-none font-light">/</span>
 
           <div className="flex items-center gap-2">
-            <CroviqLogo height={20} className="h-5 w-auto" />
+            <CroviqLogo height={22} className="h-5 w-auto" />
             <span className="text-xs font-semibold text-text-primary tracking-tight">
-              Release & Packaging
+              Release Gate
             </span>
           </div>
         </div>
 
-        {/* Center: Packaging Readiness Status */}
-        <div
-          className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-2 border border-border-subtle text-xs"
-          data-testid="packaging-status-badge"
-        >
-          {isGenerating ? (
-            <Loader2 className="size-3.5 text-primary animate-spin" />
-          ) : (
-            <CheckCircle2 className="size-3.5 text-emerald-400" />
-          )}
-          <span className="font-medium text-text-secondary text-[11px]">
-            {isGenerating
-              ? "Nina is packaging the approved master…"
-              : packagingData?.proposal
-                ? "Publish-ready package generated"
-                : "Awaiting packaging generation"}
-          </span>
+        {/* Center: Pipeline Stages & Status */}
+        <div className="flex items-center gap-2 md:gap-4">
+          {/* Stage Tabs */}
+          <div className="hidden sm:flex items-center p-0.5 rounded-lg bg-surface-2 border border-border-subtle text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setActiveStage("packaging")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                activeStage === "packaging"
+                  ? "bg-surface-1 text-text-primary shadow-xs font-semibold"
+                  : "text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              1. Packaging
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveStage("qa")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                activeStage === "qa"
+                  ? "bg-surface-1 text-text-primary shadow-xs font-semibold"
+                  : "text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              2. QA Review
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveStage("ready")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                activeStage === "ready"
+                  ? "bg-surface-1 text-text-primary shadow-xs font-semibold"
+                  : "text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              3. Ready
+            </button>
+          </div>
+
+          {/* Canonical Creator-Facing Status Chip */}
+          <div
+            className={`flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold transition-all ${
+              isReleaseReady
+                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                : releaseStatusText === "Fix required"
+                  ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                  : releaseStatusText === "Manual review"
+                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                    : "bg-surface-2 text-text-secondary border-border-subtle"
+            }`}
+            data-testid="release-status-badge"
+          >
+            {isRunningQA ? (
+              <Loader2 className="size-3.5 text-primary animate-spin" />
+            ) : isReleaseReady ? (
+              <CheckCircle2 className="size-3.5 text-emerald-400" />
+            ) : releaseStatusText === "Fix required" ? (
+              <AlertCircle className="size-3.5 text-rose-400" />
+            ) : releaseStatusText === "Manual review" ? (
+              <AlertTriangle className="size-3.5 text-amber-400" />
+            ) : (
+              <Sparkles className="size-3.5 text-text-muted" />
+            )}
+            <span className="text-[11px]">{releaseStatusText}</span>
+          </div>
         </div>
 
         {/* Right actions */}
@@ -346,8 +551,8 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
           <button
             type="button"
             onClick={handleSaveOverrides}
-            disabled={isSavingOverrides || isGenerating || !packagingData?.proposal}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-surface-2 hover:bg-surface-3 text-text-primary border border-border-subtle rounded-md transition-colors disabled:opacity-50"
+            disabled={isSavingOverrides || isGeneratingPackaging || !packagingData?.proposal}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-surface-2 hover:bg-surface-3 text-text-primary border border-border-subtle rounded-lg transition-colors disabled:opacity-50"
             data-testid="btn-save-package-changes"
           >
             {isSavingOverrides ? (
@@ -355,27 +560,48 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
             ) : (
               <Save className="size-3.5" />
             )}
-            <span>Save Overrides</span>
+            <span className="hidden sm:inline">Save Overrides</span>
           </button>
 
           <button
             onClick={logout}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-transparent hover:border-border-subtle"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-2 rounded-lg transition-colors border border-transparent hover:border-border-subtle"
             title="Sign out"
           >
             <LogOut className="size-3.5" />
-            <span className="hidden sm:inline">Logout</span>
+            <span className="hidden md:inline">Logout</span>
           </button>
         </div>
       </header>
 
+      {/* Error & Success Toasts */}
+      {errorMessage && (
+        <div className="bg-rose-500/10 border-b border-rose-500/20 px-4 py-2 text-xs text-rose-400 flex items-center justify-between">
+          <span>{errorMessage}</span>
+          <button onClick={() => setErrorMessage(null)} className="hover:text-rose-200">
+            <XCircle className="size-4" />
+          </button>
+        </div>
+      )}
+      {correctionSuccessMsg && (
+        <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-2 text-xs text-emerald-400 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <CheckCircle2 className="size-4" />
+            {correctionSuccessMsg}
+          </span>
+          <button onClick={() => setCorrectionSuccessMsg(null)} className="hover:text-emerald-200">
+            <XCircle className="size-4" />
+          </button>
+        </div>
+      )}
+
       {/* Main Container */}
-      <div className="flex-1 max-w-[1680px] w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left / Center: Master Preview & Packaging Content (8 cols) */}
+      <div className="flex-1 max-w-[1720px] w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column (8 cols): Master Video, Packaging Editor, QA Checklist, Issues */}
         <div className="lg:col-span-8 space-y-6">
           {/* 1. Master Video Preview Stage */}
           <section
-            className="bg-surface-1 border border-border-subtle rounded-xl overflow-hidden shadow-sm"
+            className="bg-surface-1 border border-border-subtle rounded-xl overflow-hidden shadow-xs"
             data-testid="section-master-preview"
           >
             <div className="p-3 border-b border-border-subtle bg-surface-2/40 flex items-center justify-between">
@@ -465,49 +691,236 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
             </div>
           </section>
 
-          {/* Initial State / Missing Proposal Banner */}
-          {!packagingData?.proposal && (
-            <div
-              className="p-6 bg-surface-1 border border-border-subtle rounded-xl text-center space-y-4"
-              data-testid="banner-initial-package"
-            >
-              <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
-                <Sparkles className="size-6" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-text-primary">
-                  Ready to Package for YouTube
-                </h3>
-                <p className="text-xs text-text-secondary max-w-md mx-auto mt-1">
-                  Nina will inspect the approved Master video, channel audience patterns, and
-                  research findings to generate high-CTR titles, publish-ready descriptions,
-                  chapters, and thumbnail concepts.
-                </p>
+          {/* 2. Iris QA Release Gate & Checklist Section */}
+          <section
+            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-5 shadow-xs"
+            data-testid="section-iris-qa"
+          >
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <ShieldCheck className="size-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                    <span>Quality Assurance & Release Gate</span>
+                    <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-surface-2 text-text-muted">
+                      Iris • gemini-3.7-flash
+                    </span>
+                  </h3>
+                  <p className="text-xs text-text-secondary">
+                    Evaluating actual finished Master, Short, captions, chapters, and packaging
+                    truth.
+                  </p>
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleGeneratePackaging(false)}
-                disabled={isGenerating || !packagingData?.has_master}
-                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors shadow-sm disabled:opacity-50"
-                data-testid="btn-generate-packaging-initial"
-              >
-                {isGenerating ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Sparkles className="size-4" />
-                )}
-                <span>Generate Packaging with Nina</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleRunQA(true)}
+                  disabled={isRunningQA || !packagingData?.has_master}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-surface-2 hover:bg-surface-3 text-text-primary border border-border-subtle rounded-lg transition-colors disabled:opacity-50"
+                  data-testid="btn-rerun-qa"
+                >
+                  {isRunningQA ? (
+                    <Loader2 className="size-3.5 animate-spin text-primary" />
+                  ) : (
+                    <RefreshCw className="size-3.5" />
+                  )}
+                  <span>Re-check Output</span>
+                </button>
+              </div>
             </div>
-          )}
 
-          {/* Packaging Content Surfaces */}
+            {/* Compact Release Checklist */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                Release Verification Checklist
+              </label>
+
+              <div
+                className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5"
+                data-testid="release-checklist"
+              >
+                {[
+                  {
+                    key: "master_video",
+                    label: "Master Video",
+                    pass: qaData?.checklist?.master_video,
+                  },
+                  { key: "audio", label: "Audio", pass: qaData?.checklist?.audio },
+                  { key: "captions", label: "Captions", pass: qaData?.checklist?.captions },
+                  { key: "chapters", label: "Chapters", pass: qaData?.checklist?.chapters },
+                  {
+                    key: "short",
+                    label: "Short",
+                    pass: qaData?.has_short ? qaData?.checklist?.short : null,
+                  },
+                  { key: "packaging", label: "Packaging", pass: qaData?.checklist?.packaging },
+                  { key: "claims", label: "Claims", pass: qaData?.checklist?.claims },
+                ].map((item) => (
+                  <div
+                    key={item.key}
+                    className={`p-2.5 rounded-lg border flex flex-col items-center justify-center text-center transition-all ${
+                      item.pass === true
+                        ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                        : item.pass === false
+                          ? "bg-rose-500/10 border-rose-500/25 text-rose-400"
+                          : "bg-surface-2/60 border-border-subtle text-text-muted"
+                    }`}
+                    data-testid={`checklist-item-${item.key}`}
+                  >
+                    <span className="text-[11px] font-medium text-text-secondary truncate w-full">
+                      {item.label}
+                    </span>
+                    <div className="mt-1 font-bold text-sm">
+                      {item.pass === true ? "✓" : item.pass === false ? "!" : "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Identified Issues & Auto-correction Bar */}
+            {Boolean(qaData?.review?.issues?.length) && (
+              <div className="space-y-3 pt-2" data-testid="section-qa-issues">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="size-4 text-rose-400" />
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-rose-400">
+                      QA Defects Requiring Fix ({qaData?.review?.issues?.length})
+                    </h4>
+                  </div>
+
+                  {/* 1-Cycle Auto-correct button */}
+                  <button
+                    type="button"
+                    onClick={handleAutoCorrectQA}
+                    disabled={isCorrectingQA || isRunningQA}
+                    className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-primary text-white hover:bg-primary/90 rounded-md transition-colors shadow-xs disabled:opacity-50"
+                    data-testid="btn-auto-correct-qa"
+                  >
+                    {isCorrectingQA ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Wand2 className="size-3.5" />
+                    )}
+                    <span>Auto-correct with Nina</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {qaData?.review?.issues?.map((issue: ReleaseIssue, idx: number) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/25 space-y-2 text-xs"
+                      data-testid={`qa-issue-${idx}`}
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-rose-300">
+                            {getIssueFriendlyName(issue.issue_type)}
+                          </span>
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded uppercase ${
+                              issue.severity === "BLOCKING" || issue.severity === "HIGH"
+                                ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                                : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                            }`}
+                          >
+                            {issue.severity}
+                          </span>
+                        </div>
+
+                        {issue.source_start_ms !== null && issue.source_start_ms !== undefined && (
+                          <button
+                            type="button"
+                            onClick={() => handleSeek(issue.source_start_ms!)}
+                            className="px-2 py-0.5 bg-surface-2 hover:bg-surface-3 text-text-primary rounded font-mono text-[11px] flex items-center gap-1 transition-colors border border-border-subtle"
+                            title="Jump video to defect timestamp"
+                            data-testid={`btn-seek-issue-${idx}`}
+                          >
+                            <Play className="size-2.5" />
+                            <span>
+                              {Math.floor(issue.source_start_ms / 60000)}:
+                              {String(Math.floor((issue.source_start_ms % 60000) / 1000)).padStart(
+                                2,
+                                "0",
+                              )}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="text-text-primary font-medium">{issue.message}</p>
+                      <div className="text-[11px] text-text-secondary bg-surface-1/60 p-2 rounded border border-border-subtle space-y-1">
+                        <p>
+                          <strong className="text-text-primary font-semibold">
+                            Suggested Action:
+                          </strong>{" "}
+                          {issue.suggested_action}
+                        </p>
+                        {issue.evidence && (
+                          <p className="text-text-muted">
+                            <strong className="text-text-secondary font-medium">Evidence:</strong>{" "}
+                            {issue.evidence}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Itemized Claim Audit */}
+            {Boolean(qaData?.review?.claim_verifications?.length) && (
+              <div className="space-y-2.5 pt-2" data-testid="section-claim-audit">
+                <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                  Factual & Packaging Claims Audit
+                </label>
+
+                <div className="space-y-2">
+                  {qaData?.review?.claim_verifications?.map(
+                    (claim: ClaimVerification, idx: number) => {
+                      const badge = getClaimStatusBadge(claim.status);
+                      const StatusIcon = badge.icon;
+                      return (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-lg bg-surface-2/60 border border-border-subtle space-y-1 text-xs"
+                          data-testid={`claim-verification-${idx}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="font-semibold text-text-primary">
+                              "{claim.claim_text}"
+                            </span>
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${badge.color}`}
+                            >
+                              <StatusIcon className="size-3" />
+                              {badge.label}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-text-secondary leading-relaxed">
+                            {claim.evidence}
+                          </p>
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* 3. Nina Packaging Proposal Surfaces (Editable) */}
           {packagingData?.proposal && (
             <>
-              {/* 2. Primary Title & Title Candidates */}
+              {/* Primary Title & Candidates */}
               <section
-                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-sm"
+                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
                 data-testid="section-titles"
               >
                 <div className="flex items-center justify-between">
@@ -522,7 +935,6 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                   </span>
                 </div>
 
-                {/* Primary Title Input (Editable) */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
@@ -560,7 +972,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                             key={idx}
                             className={`p-3 rounded-lg border transition-all cursor-pointer ${
                               isSelected
-                                ? "bg-primary/10 border-primary/40 shadow-sm"
+                                ? "bg-primary/10 border-primary/40 shadow-xs"
                                 : "bg-surface-2/70 border-border-subtle hover:border-border-strong hover:bg-surface-2"
                             }`}
                             onClick={() => {
@@ -613,9 +1025,9 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                 </div>
               </section>
 
-              {/* 3. Description (Editable) */}
+              {/* Description */}
               <section
-                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-3 shadow-sm"
+                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-3 shadow-xs"
                 data-testid="section-description"
               >
                 <div className="flex items-center justify-between">
@@ -640,9 +1052,9 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                 />
               </section>
 
-              {/* 4. Canonical Chapters (Editable Titles, Fixed Timestamps) */}
+              {/* Chapters */}
               <section
-                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-sm"
+                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
                 data-testid="section-chapters"
               >
                 <div className="flex items-center justify-between">
@@ -686,9 +1098,9 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                 </div>
               </section>
 
-              {/* 5. Thumbnail Concepts */}
+              {/* Thumbnails */}
               <section
-                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-sm"
+                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
                 data-testid="section-thumbnails"
               >
                 <div className="flex items-center justify-between">
@@ -713,7 +1125,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                           key={idx}
                           className={`p-4 rounded-xl border flex flex-col justify-between space-y-3 transition-all cursor-pointer ${
                             isSelected
-                              ? "bg-primary/10 border-primary/50 shadow-sm"
+                              ? "bg-primary/10 border-primary/50 shadow-xs"
                               : "bg-surface-2/60 border-border-subtle hover:border-border-strong hover:bg-surface-2"
                           }`}
                           onClick={() => setSelectedThumbnailId(concept.concept_id)}
@@ -792,10 +1204,10 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                 </div>
               </section>
 
-              {/* 6. Vertical Short Package (if exists) */}
+              {/* Short Package */}
               {packagingData.proposal.short_package && (
                 <section
-                  className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-sm"
+                  className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
                   data-testid="section-short-package"
                 >
                   <div className="flex items-center justify-between">
@@ -867,18 +1279,126 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
           )}
         </div>
 
-        {/* Right Rail: Nina Agent Activity & Channel Evidence (4 cols) */}
-        <div className="lg:col-span-4 space-y-5 lg:sticky lg:top-16">
-          {/* Nina Avatar & Persona Card */}
+        {/* Right Rail (4 cols): Release Action, Agent Team (Iris & Nina), Summary */}
+        <div className="lg:col-span-4 space-y-5 lg:sticky lg:top-20">
+          {/* Release Gate Summary / Ready to Publish Card */}
           <div
-            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-sm"
+            className={`rounded-xl p-5 border space-y-4 shadow-sm transition-all ${
+              isReleaseReady
+                ? "bg-emerald-500/10 border-emerald-500/30"
+                : "bg-surface-1 border-border-subtle"
+            }`}
+            data-testid="release-gate-card"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                Release Gate Status
+              </span>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  isReleaseReady
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                    : "bg-surface-2 text-text-secondary border border-border-subtle"
+                }`}
+              >
+                {isReleaseReady ? "Gate Passed" : "Gate Locked"}
+              </span>
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-text-primary">
+                {isReleaseReady ? "Ready to Publish" : "Release Gate Review"}
+              </h3>
+              <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                {isReleaseReady
+                  ? "All media continuity, loudness, caption alignment, and packaging claims are verified."
+                  : "Iris must approve all quality and factual criteria before publishing."}
+              </p>
+            </div>
+
+            {/* Publishing Readiness Action */}
+            <div className="pt-2 border-t border-border-subtle space-y-2">
+              <button
+                type="button"
+                disabled={!isReleaseReady}
+                className={`w-full py-2.5 px-4 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs ${
+                  isReleaseReady
+                    ? "bg-emerald-500 hover:bg-emerald-600 text-white cursor-default"
+                    : "bg-surface-3 text-text-muted cursor-not-allowed opacity-60"
+                }`}
+                data-testid="btn-ready-to-publish"
+              >
+                <CheckCircle2 className="size-4" />
+                <span>{isReleaseReady ? "Ready to Publish ✓" : "Fix Required to Release"}</span>
+              </button>
+              <p className="text-[10px] text-center text-text-muted">
+                YouTube direct publishing will be activated in the next release milestone.
+              </p>
+            </div>
+          </div>
+
+          {/* Iris (QA Agent) Card */}
+          <div
+            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
+            data-testid="iris-agent-card"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDrawerAgent("iris")}
+                  className="relative group focus:outline-none"
+                  title="Click to configure Iris QA settings & view memory"
+                  data-testid="btn-iris-avatar"
+                >
+                  <img
+                    src={irisAvatar}
+                    alt="Iris QA Agent"
+                    className="size-12 rounded-full object-cover border-2 border-emerald-500/40 group-hover:border-emerald-500 transition-all shadow-sm"
+                  />
+                  <div className="absolute inset-0 rounded-full bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <span className="text-[9px] text-white font-bold">Edit</span>
+                  </div>
+                </button>
+
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-sm font-bold text-text-primary">Iris</h3>
+                    <span className="size-2 rounded-full bg-emerald-400"></span>
+                  </div>
+                  <p className="text-xs text-text-secondary">Quality Assurance Gate</p>
+                </div>
+              </div>
+
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                gemini-3.7-flash
+              </span>
+            </div>
+
+            <p className="text-xs text-text-muted leading-relaxed">
+              Iris is the independent release gatekeeper evaluating video continuity, audio
+              loudness, caption timing, chapter order, and factual claim truth.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setDrawerAgent("iris")}
+              className="w-full py-1.5 text-xs font-semibold bg-surface-2 hover:bg-surface-3 text-text-primary rounded-lg border border-border-subtle transition-colors"
+            >
+              Open Iris Settings
+            </button>
+          </div>
+
+          {/* Nina (Packaging Agent) Card */}
+          <div
+            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
             data-testid="nina-agent-card"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsSettingsOpen(true)}
+                  onClick={() => setDrawerAgent("nina")}
                   className="relative group focus:outline-none"
                   title="Click to configure Nina's prompt & view memory"
                   data-testid="btn-nina-avatar"
@@ -886,7 +1406,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                   <img
                     src={ninaAvatar}
                     alt="Nina Packaging Agent"
-                    className="size-12 rounded-full object-cover border-2 border-primary/40 group-hover:border-primary transition-all shadow-md"
+                    className="size-12 rounded-full object-cover border-2 border-primary/40 group-hover:border-primary transition-all shadow-sm"
                   />
                   <div className="absolute inset-0 rounded-full bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                     <span className="text-[9px] text-white font-bold">Edit</span>
@@ -908,33 +1428,30 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
             </div>
 
             <p className="text-xs text-text-muted leading-relaxed">
-              Nina turns your approved Master video into high-converting titles, publish-ready
+              Nina turns approved master video into high-converting titles, publish-ready
               descriptions, chapters, and thumbnail moments.
             </p>
 
-            {/* Explicit Regenerate Button */}
-            <div className="pt-2 border-t border-border-subtle">
-              <button
-                type="button"
-                onClick={() => handleGeneratePackaging(true)}
-                disabled={isGenerating || !packagingData?.has_master}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-text-primary bg-surface-2 hover:bg-surface-3 border border-border-subtle rounded-lg transition-colors disabled:opacity-50 shadow-sm"
-                data-testid="btn-regenerate-packaging"
-              >
-                {isGenerating ? (
-                  <Loader2 className="size-3.5 animate-spin text-primary" />
-                ) : (
-                  <RotateCcw className="size-3.5" />
-                )}
-                <span>Regenerate Packaging</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleGeneratePackaging(true)}
+              disabled={isGeneratingPackaging || !packagingData?.has_master}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-text-primary bg-surface-2 hover:bg-surface-3 border border-border-subtle rounded-lg transition-colors disabled:opacity-50 shadow-xs"
+              data-testid="btn-regenerate-packaging"
+            >
+              {isGeneratingPackaging ? (
+                <Loader2 className="size-3.5 animate-spin text-primary" />
+              ) : (
+                <RotateCcw className="size-3.5" />
+              )}
+              <span>Regenerate Packaging</span>
+            </button>
           </div>
 
           {/* Channel Evidence & Packaging Summary Card */}
           {packagingData?.proposal && (
             <div
-              className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-sm"
+              className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
               data-testid="section-packaging-rationale"
             >
               <div className="flex items-center gap-2">
@@ -966,47 +1483,37 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
             </div>
           )}
 
-          {/* Agent Activity Feed */}
+          {/* Nina Agent Activity Feed */}
           <div
-            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-3 shadow-sm"
+            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-3 shadow-xs"
             data-testid="section-agent-activity"
           >
             <h4 className="text-xs font-semibold tracking-wide uppercase text-text-secondary">
-              Nina Activity
+              Agent Activity
             </h4>
 
             <div className="space-y-2.5 text-xs">
               <div className="flex items-start gap-2 text-text-secondary">
                 <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <span>Packaging the final approved video.</span>
+                <span>Nina packaged the approved master video.</span>
               </div>
               <div className="flex items-start gap-2 text-text-secondary">
                 <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <span>The repairability angle is the strongest fit for this channel.</span>
-              </div>
-              <div className="flex items-start gap-2 text-text-secondary">
-                <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <span>I found three frames that could work as high-contrast thumbnails.</span>
-              </div>
-              <div className="flex items-start gap-2 text-text-secondary">
-                <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <span>
-                  The first title is my recommendation because similar practical hardware videos on
-                  this channel have stronger click-through rates.
-                </span>
+                <span>Iris evaluated media continuity, audio levels, and packaging claims.</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Nina Agent Settings Drawer (Prompt & Memory tabs) */}
+      {/* Agent Settings Drawer (Prompt & Memory tabs) */}
       <AgentSettingsDrawer
-        isOpen={isSettingsOpen}
-        agentId="nina"
-        onClose={() => setIsSettingsOpen(false)}
+        isOpen={drawerAgent !== null}
+        agentId={drawerAgent || "iris"}
+        onClose={() => setDrawerAgent(null)}
       />
     </div>
   );
 };
+
 export default ReleasePage;

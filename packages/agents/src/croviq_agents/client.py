@@ -10,6 +10,7 @@ import time
 from typing import Any, Sequence
 
 from croviq_agents.prompts import (
+    DEFAULT_IRIS_PROMPT,
     build_director_prompt,
     build_director_render_review_prompt,
     build_editor_correction_prompt,
@@ -17,6 +18,7 @@ from croviq_agents.prompts import (
     build_editor_self_review_prompt,
     build_narration_rewrite_prompt,
     build_packaging_prompt,
+    build_release_qa_prompt,
 )
 from croviq_domain.channel_intelligence import ResearchFinding
 from croviq_domain.packaging import (
@@ -38,6 +40,18 @@ from croviq_domain.render_review import (
     RenderReviewSeverity,
     RenderReviewVerdict,
 )
+from croviq_domain.release_review import (
+    ClaimSupportStatus,
+    ClaimVerification,
+    ReleaseChecklist,
+    ReleaseIssue,
+    ReleaseIssueSeverity,
+    ReleaseIssueType,
+    ReleaseReview,
+    ReleaseVerdict,
+    ThumbnailEvaluation,
+)
+from croviq_domain.packaging import CreatorPackageOverrides
 from croviq_domain.editorial import (
     ChapterMarker,
     DirectorDecision,
@@ -408,6 +422,116 @@ def reconcile_packaging_proposal(
     )
 
 
+def reconcile_release_review(
+    review: ReleaseReview,
+    master_duration_ms: int | None = None,
+) -> ReleaseReview:
+    """Ensure Iris's QA issues, checklist, claim audits, and verdict are strictly consistent."""
+    reconciled_issues: list[ReleaseIssue] = []
+
+    for idx, iss in enumerate(review.issues):
+        start_ms = iss.source_start_ms
+        end_ms = iss.source_end_ms
+        if start_ms is not None and master_duration_ms is not None and master_duration_ms > 0:
+            start_ms = min(max(0, start_ms), master_duration_ms)
+        if end_ms is not None and master_duration_ms is not None and master_duration_ms > 0:
+            end_ms = min(max(start_ms or 0, end_ms), master_duration_ms)
+
+        reconciled_issues.append(
+            ReleaseIssue(
+                issue_id=iss.issue_id or f"iss_{idx + 1:02d}",
+                issue_type=iss.issue_type,
+                severity=iss.severity,
+                source_start_ms=start_ms,
+                source_end_ms=end_ms,
+                artifact_type=iss.artifact_type,
+                related_decision_id=iss.related_decision_id,
+                message=iss.message.strip(),
+                suggested_action=iss.suggested_action.strip(),
+                evidence=iss.evidence.strip(),
+            )
+        )
+
+    has_audio_defect = any(
+        i.issue_type in {ReleaseIssueType.AUDIO_ARTIFACT, ReleaseIssueType.AUDIO_LEVEL, ReleaseIssueType.AUDIO_SYNC}
+        for i in reconciled_issues
+    )
+    has_caption_defect = any(
+        i.issue_type in {ReleaseIssueType.CAPTION_MISMATCH, ReleaseIssueType.CAPTION_TIMING, ReleaseIssueType.CAPTION_OVERFLOW}
+        for i in reconciled_issues
+    )
+    has_chapter_defect = any(
+        i.issue_type in {ReleaseIssueType.CHAPTER_MISMATCH, ReleaseIssueType.CHAPTER_TIMING}
+        for i in reconciled_issues
+    )
+    has_short_defect = any(
+        i.issue_type in {ReleaseIssueType.SHORT_QUALITY, ReleaseIssueType.SHORT_CAPTION_QUALITY, ReleaseIssueType.SHORT_CROP}
+        for i in reconciled_issues
+    )
+    has_claims_defect = any(
+        i.issue_type in {ReleaseIssueType.UNSUPPORTED_CLAIM, ReleaseIssueType.FACTUAL_INCONSISTENCY}
+        for i in reconciled_issues
+    )
+    has_packaging_defect = any(
+        i.issue_type in {ReleaseIssueType.TITLE_MISMATCH, ReleaseIssueType.DESCRIPTION_MISMATCH, ReleaseIssueType.THUMBNAIL_MISMATCH, ReleaseIssueType.PACKAGING_INCONSISTENCY}
+        for i in reconciled_issues
+    )
+    has_video_defect = any(
+        i.issue_type in {ReleaseIssueType.BAD_CUT, ReleaseIssueType.VISUAL_JUMP, ReleaseIssueType.BLACK_FRAME, ReleaseIssueType.FRAME_GLITCH, ReleaseIssueType.ENCODE_ISSUE, ReleaseIssueType.MISSING_CONTENT, ReleaseIssueType.CONTEXT_LOSS}
+        for i in reconciled_issues
+    )
+
+    checklist = ReleaseChecklist(
+        master_video=not has_video_defect,
+        audio=not has_audio_defect,
+        captions=not has_caption_defect,
+        chapters=not has_chapter_defect,
+        short=not has_short_defect,
+        packaging=not has_packaging_defect,
+        claims=not has_claims_defect,
+    )
+
+    blocking_or_high = [
+        i
+        for i in reconciled_issues
+        if i.severity in (ReleaseIssueSeverity.BLOCKING, ReleaseIssueSeverity.HIGH)
+    ]
+
+    verdict = review.verdict
+    approved = review.approved_for_release
+
+    if blocking_or_high:
+        if verdict == ReleaseVerdict.PASS:
+            verdict = ReleaseVerdict.FIX_REQUIRED
+        approved = False
+    elif not checklist.all_passed:
+        if verdict == ReleaseVerdict.PASS:
+            verdict = ReleaseVerdict.FIX_REQUIRED
+        approved = False
+    else:
+        verdict = ReleaseVerdict.PASS
+        approved = True
+
+    return ReleaseReview(
+        review_id=review.review_id,
+        production_id=review.production_id,
+        agent="iris",
+        model=review.model or "gemini-3.7-flash",
+        verdict=verdict,
+        summary=review.summary,
+        issues=reconciled_issues,
+        approved_for_release=approved,
+        confidence=review.confidence,
+        created_at=review.created_at,
+        master_artifact_id=review.master_artifact_id,
+        short_artifact_id=review.short_artifact_id,
+        packaging_proposal_id=review.packaging_proposal_id,
+        checklist=checklist,
+        claim_verifications=review.claim_verifications,
+        thumbnail_evaluations=review.thumbnail_evaluations,
+    )
+
+
 class GenAIClient(ABC):
     """Abstract interface for GenAI model invocation."""
 
@@ -530,6 +654,32 @@ class GenAIClient(ABC):
         request_id: str = "unknown",
     ) -> tuple[PackagingProposal, AgentUsageMetadata]:
         """Invoke Nina (Packaging Agent) to generate title candidates, descriptions, chapters, thumbnails, and Short package."""
+        pass
+
+    @abstractmethod
+    async def generate_release_review(
+        self,
+        master_video_uri: str,
+        master_mime_type: str,
+        transcript: Transcript,
+        proposal: PackagingProposal,
+        production_id: str,
+        short_video_uri: str | None = None,
+        short_mime_type: str = "video/mp4",
+        overrides: CreatorPackageOverrides | None = None,
+        render_review: RenderReview | None = None,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        research_findings: Sequence[ResearchFinding] | None = None,
+        deterministic_results: dict[str, Any] | None = None,
+        custom_prompt: str | None = None,
+        prompt_version: int = 1,
+        master_artifact_id: str | None = None,
+        short_artifact_id: str | None = None,
+        master_duration_ms: int | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[ReleaseReview, AgentUsageMetadata]:
+        """Invoke Iris (QA Agent) to evaluate Master, Short, Packaging, and Claims before release."""
         pass
 
 
@@ -1359,6 +1509,149 @@ class GoogleGenAIClient(GenAIClient):
             cause=last_error,
         )
 
+    async def generate_release_review(
+        self,
+        master_video_uri: str,
+        master_mime_type: str,
+        transcript: Transcript,
+        proposal: PackagingProposal,
+        production_id: str,
+        short_video_uri: str | None = None,
+        short_mime_type: str = "video/mp4",
+        overrides: CreatorPackageOverrides | None = None,
+        render_review: RenderReview | None = None,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        research_findings: Sequence[ResearchFinding] | None = None,
+        deterministic_results: dict[str, Any] | None = None,
+        custom_prompt: str | None = None,
+        prompt_version: int = 1,
+        master_artifact_id: str | None = None,
+        short_artifact_id: str | None = None,
+        master_duration_ms: int | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[ReleaseReview, AgentUsageMetadata]:
+        from google.genai import types
+
+        client = self._get_client()
+        prompt = build_release_qa_prompt(
+            transcript=transcript,
+            master_artifact=None,
+            proposal=proposal,
+            short_artifact=None,
+            overrides=overrides,
+            render_review=render_review,
+            channel_profile=channel_profile,
+            lessons=lessons,
+            research_findings=research_findings,
+            deterministic_results=deterministic_results,
+            custom_prompt=custom_prompt,
+            production_id=production_id,
+        )
+
+        contents: list[Any] = [
+            types.Part.from_uri(file_uri=master_video_uri, mime_type=master_mime_type)
+        ]
+        if short_video_uri:
+            contents.append(
+                types.Part.from_uri(file_uri=short_video_uri, mime_type=short_mime_type)
+            )
+        contents.append(prompt)
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=ReleaseReview,
+            temperature=0.2,
+            max_output_tokens=8192,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+
+        log_ai_event(
+            event_type=EventType.AI_CALL_STARTED,
+            agent="iris",
+            model=self._model_id,
+            status="started",
+            production_id=production_id,
+            request_id=request_id,
+        )
+
+        start_time = time.perf_counter()
+        last_error: Exception | None = None
+
+        for attempt in range(2):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=self._model_id,
+                    contents=contents,
+                    config=config,
+                )
+
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                input_tokens = 0
+                output_tokens = 0
+                if hasattr(response, "usage_metadata") and response.usage_metadata:
+                    input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                    output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+
+                raw_review: ReleaseReview
+                if hasattr(response, "parsed") and response.parsed is not None and isinstance(response.parsed, ReleaseReview):
+                    raw_review = response.parsed
+                elif hasattr(response, "text") and response.text:
+                    raw_review = ReleaseReview.model_validate_json(response.text)
+                else:
+                    raise GenAIError("Gemini response did not include parsed ReleaseReview or text payload")
+
+                reconciled = reconcile_release_review(
+                    raw_review,
+                    master_duration_ms=master_duration_ms,
+                )
+                reconciled.master_artifact_id = master_artifact_id
+                reconciled.short_artifact_id = short_artifact_id
+                reconciled.packaging_proposal_id = proposal.proposal_id
+
+                usage = AgentUsageMetadata(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                log_ai_event(
+                    event_type=EventType.AI_CALL_COMPLETED,
+                    agent="iris",
+                    model=self._model_id,
+                    status="success",
+                    production_id=production_id,
+                    request_id=request_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=latency_ms,
+                )
+
+                return reconciled, usage
+
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Iris QA review attempt %d failed: %s", attempt + 1, str(exc))
+                if attempt == 0:
+                    time.sleep(1.0)
+
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+        log_ai_event(
+            event_type=EventType.AI_CALL_FAILED,
+            agent="iris",
+            model=self._model_id,
+            status="failed",
+            production_id=production_id,
+            request_id=request_id,
+            latency_ms=latency_ms,
+            error_code="QA_REVIEW_FAILURE",
+        )
+        raise GenAIError(
+            f"Iris QA review generation failed after retry: {last_error}",
+            error_code="QA_REVIEW_FAILURE",
+            cause=last_error,
+        )
+
 
 class FakeGenAIClient(GenAIClient):
     """Deterministic fake GenAI client for unit tests and local non-cloud execution."""
@@ -1974,3 +2267,127 @@ class FakeGenAIClient(GenAIClient):
         reconciled = reconcile_packaging_proposal(proposal, master_duration_ms=master_duration_ms, chapters=chapters)
         usage = AgentUsageMetadata(input_tokens=680, output_tokens=220, latency_ms=45)
         return reconciled, usage
+
+    async def generate_release_review(
+        self,
+        master_video_uri: str,
+        master_mime_type: str,
+        transcript: Transcript,
+        proposal: PackagingProposal,
+        production_id: str,
+        short_video_uri: str | None = None,
+        short_mime_type: str = "video/mp4",
+        overrides: CreatorPackageOverrides | None = None,
+        render_review: RenderReview | None = None,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        research_findings: Sequence[ResearchFinding] | None = None,
+        deterministic_results: dict[str, Any] | None = None,
+        custom_prompt: str | None = None,
+        prompt_version: int = 1,
+        master_artifact_id: str | None = None,
+        short_artifact_id: str | None = None,
+        master_duration_ms: int | None = None,
+        request_id: str = "unknown",
+    ) -> tuple[ReleaseReview, AgentUsageMetadata]:
+        self.call_history.append({
+            "agent": "iris_qa",
+            "production_id": production_id,
+            "master_uri": master_video_uri,
+            "short_uri": short_video_uri,
+        })
+        desc = proposal.description if proposal else ""
+        has_unsupported_upcoming_review = "upcoming full" in desc.lower() or "stay tuned for the upcoming" in desc.lower()
+
+        claim_verifs = [
+            ClaimVerification(
+                claim_text="12 user-replaceable parts",
+                location="description",
+                status=ClaimSupportStatus.SUPPORTED_BY_VIDEO,
+                evidence="At 00:51, host demonstrates phone disassembly and repair parts.",
+            ),
+            ClaimVerification(
+                claim_text="Snapdragon internals",
+                location="description",
+                status=ClaimSupportStatus.SUPPORTED_EXTERNALLY,
+                evidence="Verified hardware specs for Fairphone 6 Plus platform.",
+            ),
+            ClaimVerification(
+                claim_text="microSD",
+                location="description",
+                status=ClaimSupportStatus.SUPPORTED_BY_VIDEO,
+                evidence="Spoken in video and visible on chassis expansion slot.",
+            ),
+        ]
+
+        if has_unsupported_upcoming_review:
+            claim_verifs.append(
+                ClaimVerification(
+                    claim_text="Stay tuned for the upcoming full Fairphone 6+ review!",
+                    location="description",
+                    status=ClaimSupportStatus.UNSUPPORTED,
+                    evidence="No planned future review or scheduling found in Croviq channel memory or production context.",
+                )
+            )
+
+        issues: list[ReleaseIssue] = []
+        if has_unsupported_upcoming_review:
+            issues.append(
+                ReleaseIssue(
+                    issue_id="iss_claim_upcoming_review",
+                    issue_type=ReleaseIssueType.UNSUPPORTED_CLAIM,
+                    severity=ReleaseIssueSeverity.HIGH,
+                    source_start_ms=None,
+                    source_end_ms=None,
+                    artifact_type="packaging",
+                    message="Description claims an upcoming full review that isn't supported.",
+                    suggested_action="Remove the upcoming review promise from YouTube description.",
+                    evidence="Claim: 'Stay tuned for the upcoming full Fairphone 6+ review!' has no corroboration.",
+                )
+            )
+
+        verdict = ReleaseVerdict.FIX_REQUIRED if issues else ReleaseVerdict.PASS
+        approved = len(issues) == 0
+
+        checklist = ReleaseChecklist(
+            master_video=True,
+            audio=True,
+            captions=True,
+            chapters=True,
+            short=True,
+            packaging=len(issues) == 0,
+            claims=len(issues) == 0,
+        )
+
+        thumb_evals = []
+        if proposal and proposal.thumbnail_concepts:
+            for idx, th in enumerate(proposal.thumbnail_concepts):
+                thumb_evals.append(
+                    ThumbnailEvaluation(
+                        concept_index=idx,
+                        headline=th.headline,
+                        verdict="PASS",
+                        reason=f"Frame at {th.supporting_frame_ms}ms accurately shows {th.visual_subject}.",
+                    )
+                )
+
+        review = ReleaseReview(
+            review_id=f"rev_{production_id[:12]}",
+            production_id=production_id,
+            agent="iris",
+            model="fake-gemini-3.7-flash",
+            verdict=verdict,
+            summary="All quality and packaging checks passed." if approved else f"Found {len(issues)} packaging/claim defects requiring fix.",
+            issues=issues,
+            approved_for_release=approved,
+            confidence=0.98 if approved else 0.95,
+            created_at=datetime.now(timezone.utc),
+            master_artifact_id=master_artifact_id,
+            short_artifact_id=short_artifact_id,
+            packaging_proposal_id=proposal.proposal_id if proposal else None,
+            checklist=checklist,
+            claim_verifications=claim_verifs,
+            thumbnail_evaluations=thumb_evals,
+        )
+        usage = AgentUsageMetadata(input_tokens=850, output_tokens=320, latency_ms=50)
+        return review, usage

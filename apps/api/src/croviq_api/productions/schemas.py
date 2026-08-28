@@ -24,6 +24,18 @@ from croviq_domain.transcript import Transcript
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
 from croviq_domain.render_review import EditorSelfReview, RenderReview
 from croviq_domain.narration import BRollArtifact, StudioVoiceResult
+from croviq_domain.release_review import (
+    ClaimSupportStatus,
+    ClaimVerification,
+    ReleaseChecklist,
+    ReleaseIssue,
+    ReleaseIssueSeverity,
+    ReleaseIssueType,
+    ReleaseReview,
+    ReleaseStatus,
+    ReleaseVerdict,
+    ThumbnailEvaluation,
+)
 class CreateUploadRequest(BaseModel):
     """Request payload to initiate a direct GCS media upload."""
 
@@ -575,3 +587,54 @@ class PackagingDetailResponse(BaseModel):
     has_short: bool = Field(default=False, description="Whether a vertical Short video artifact exists")
     status: str = Field(default="completed", description="Packaging readiness status ('completed' or 'needs_master')")
     generated_at: datetime | None = Field(default=None, description="UTC timestamp of last proposal generation")
+
+
+class GenerateReleaseReviewRequest(BaseModel):
+    """Request payload to execute Iris QA review."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    force_regenerate: bool = Field(
+        default=False,
+        description="Whether to bypass cached review and execute a fresh Iris QA pass",
+    )
+
+
+class ReleaseReviewDetailResponse(BaseModel):
+    """Comprehensive release evaluation, checklist, media playback, and publishing readiness."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    production_id: str = Field(..., description="Unique production identifier")
+    review: ReleaseReview | None = Field(default=None, description="Latest Iris QA release review")
+    release_status: str = Field(..., description="Creator-facing release pipeline status")
+    release_ready: bool = Field(default=False, description="Whether output satisfies all release gate conditions")
+    checklist: ReleaseChecklist | None = Field(default=None, description="Compact release verification checklist")
+    master_artifact: RenderArtifactResponse | None = Field(default=None, description="Master video artifact details")
+    short_artifact: RenderArtifactResponse | None = Field(default=None, description="Short video artifact details")
+    master_url: str | None = Field(default=None, description="Signed playback URL for master video")
+    short_url: str | None = Field(default=None, description="Signed playback URL for short video")
+    has_master: bool = Field(default=False, description="Whether approved Master video artifact exists")
+    has_short: bool = Field(default=False, description="Whether vertical Short video artifact exists")
+    has_packaging: bool = Field(default=False, description="Whether Nina packaging proposal exists")
+    generated_at: datetime | None = Field(default=None, description="UTC timestamp of review generation")
+
+
+class AutoCorrectQARequest(BaseModel):
+    """Request payload to perform 1-cycle auto-correction on QA issues."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    review_id: str | None = Field(default=None, description="Optional specific review ID to correct")
+
+
+class AutoCorrectQAResponse(BaseModel):
+    """Response from executing bounded QA auto-correction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    production_id: str = Field(..., description="Unique production identifier")
+    revised_proposal: PackagingProposal | None = Field(default=None, description="Corrected Nina packaging proposal")
+    new_review: ReleaseReview = Field(..., description="Fresh Iris QA review after correction")
+    release_ready: bool = Field(default=False, description="Whether output is now ready to publish")
+    message: str = Field(..., description="Summary of applied corrections")

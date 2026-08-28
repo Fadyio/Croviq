@@ -605,3 +605,124 @@ TRANSCRIPT EXCERPT & CONTEXT:
 
 Output a strictly compliant PackagingProposal matching the requested schema.
 """
+
+
+DEFAULT_IRIS_PROMPT = (
+    "You are Iris, Croviq's Quality Assurance (QA) Agent and final Release Gatekeeper for YouTube creators.\n"
+    "Your mission is to evaluate the ACTUAL finished production (Master video, Short video, transcript, captions, chapters, packaging proposal, and claims) before Croviq calls it 'Ready to publish'.\n\n"
+    "You are the independent release gate. You evaluate actual media and packaging truth.\n"
+    "Key QA Criteria:\n"
+    "1. Master Video: Visual continuity, edit pacing, transitions, black frames, encoding glitches, screen/cursor discontinuities, accidental content loss.\n"
+    "2. Audio Quality: Integrated loudness target (~ -16 LUFS, -1 dBTP), clipping, pops/clicks, speech intelligibility, audio/video sync.\n"
+    "3. Captions: Timing alignment, missing/wrong words, caption overflow, active highlighting.\n"
+    "4. Chapters: Correct final master timestamps, accurate topic titles, monotonic order, no source-time leak beyond duration.\n"
+    "5. Claims Verification: Review factual claims in video, title, description, chapters, and Short. Separate source-supported claims from external factual claims. Do NOT manufacture citations or hallucinate fact-checking. Flag unsupported claims or manual review if unverified.\n"
+    "Specifically scrutinize any future commitments or review promises: If there is no evidence of a planned future review (e.g. 'Stay tuned for the upcoming full Fairphone 6+ review!'), flag it as an unsupported claim with severity HIGH.\n"
+    "6. Packaging Consistency: Verify title, description, and thumbnail concepts accurately match the actual video content. Thumbnails must reference clear, sharp, visible frames from this production.\n"
+    "7. Short QA: If Short is present, evaluate vertical framing (9:16), caption crop/sync, hook, visual focus, audio, duration (20-60s), and title match.\n"
+    "Output Verdict: PASS (approved_for_release=True), FIX_REQUIRED (actionable defect), or MANUAL_REVIEW (unresolvable or creator confirmation needed)."
+)
+
+
+def build_release_qa_prompt(
+    transcript: Transcript,
+    master_artifact: Any,
+    proposal: Any,
+    short_artifact: Any = None,
+    overrides: Any = None,
+    render_review: Any = None,
+    channel_profile: ChannelMemoryProfile | None = None,
+    lessons: list[ChannelLesson] | None = None,
+    research_findings: Sequence[ResearchFinding] | None = None,
+    deterministic_results: dict[str, Any] | None = None,
+    custom_prompt: str | None = None,
+    production_id: str = "unknown",
+) -> str:
+    """Construct the comprehensive Quality Assurance and Release Gate prompt for Iris."""
+    formatted_transcript = format_transcript_for_prompt(transcript, max_words=300)
+    memory_context = format_channel_memory_summary(channel_profile, lessons)
+
+    # Packaging proposal details
+    title = getattr(proposal, "primary_title", "Untitled")
+    description = getattr(proposal, "description", "")
+    chapters = getattr(proposal, "chapters", [])
+    thumbnails = getattr(proposal, "thumbnail_concepts", [])
+    short_pkg = getattr(proposal, "short_package", None)
+
+    chapters_lines = []
+    for ch in chapters:
+        formatted_time = getattr(ch, "formatted_time", "0:00")
+        ch_title = getattr(ch, "title", "Chapter")
+        chapters_lines.append(f"- {formatted_time} {ch_title}")
+    chapters_text = "\n".join(chapters_lines) if chapters_lines else "No chapters provided."
+
+    thumb_lines = []
+    for idx, th in enumerate(thumbnails):
+        hl = getattr(th, "headline", "")
+        subj = getattr(th, "visual_subject", "")
+        frame_ms = getattr(th, "supporting_frame_ms", 0)
+        thumb_lines.append(f"- Concept {idx + 1}: '{hl}' | Subject: {subj} | Supporting Frame: {frame_ms}ms")
+    thumbnails_text = "\n".join(thumb_lines) if thumb_lines else "No thumbnails provided."
+
+    short_text = "No vertical Short artifact provided."
+    if short_artifact or short_pkg:
+        st_title = getattr(short_pkg, "title", "Short") if short_pkg else "Short"
+        st_desc = getattr(short_pkg, "description", "") if short_pkg else ""
+        short_text = f"Short Title: {st_title}\nShort Description: {st_desc}\nShort Artifact Present: {bool(short_artifact)}"
+
+    deterministic_text = "Deterministic Checks: Pending or None."
+    if deterministic_results:
+        parts = []
+        for k, v in deterministic_results.items():
+            parts.append(f"- {k}: {v}")
+        deterministic_text = "\n".join(parts)
+
+    system_role = custom_prompt if (custom_prompt and custom_prompt.strip()) else DEFAULT_IRIS_PROMPT
+
+    return f"""{system_role}
+
+IRIS — QUALITY ASSURANCE RELEASE GATE AUDIT
+Production ID: {production_id}
+
+EVALUATION CRITERIA:
+1. MASTER VIDEO CONTINUITY & EDIT QUALITY
+2. AUDIO QUALITY & LOUDNESS CONFORMANCE (-16 LUFS target)
+3. CAPTION TIMING & TRANSCRIPT ALIGNMENT
+4. CHAPTER TIMESTAMPS & ORDERING
+5. THUMBNAIL CONCEPTS & SUPPORTING FRAME VERIFICATION
+6. SHORT VERTICAL FRAMING (9:16) & CAPTION SYNC
+7. CLAIM AUDIT & FACT CHECKING:
+   - Verify all claims in title, description, and Short against the actual video footage.
+   - Specifically audit technical claims:
+     * '12 user-replaceable parts'
+     * 'Snapdragon' internals
+     * 'Android' / 'microSD'
+     * 'Sony' camera
+   - Scrutinize future review promises: E.g., 'Stay tuned for the upcoming full Fairphone 6+ review!'. If Croviq has no evidence of a planned future review, flag as UNSUPPORTED_CLAIM and set verdict to FIX_REQUIRED.
+
+CURRENT PACKAGING PROPOSAL:
+Primary Title: {title}
+
+Description:
+{description}
+
+Chapters:
+{chapters_text}
+
+Thumbnail Concepts:
+{thumbnails_text}
+
+Short Packaging:
+{short_text}
+
+CHANNEL MEMORY & CONTEXT:
+{memory_context}
+
+DETERMINISTIC PRE-CHECK FINDINGS:
+{deterministic_text}
+
+TRANSCRIPT EXCERPT:
+{formatted_transcript}
+
+Output a strictly compliant ReleaseReview structured object with review_id, verdict (PASS, FIX_REQUIRED, MANUAL_REVIEW), summary, issues, approved_for_release, checklist, claim_verifications, and thumbnail_evaluations.
+"""

@@ -15,6 +15,7 @@ import {
 import leoAvatar from "../../assets/agents/leo.webp";
 import mayaAvatar from "../../assets/agents/maya.webp";
 import ninaAvatar from "../../assets/agents/Nina.png";
+import irisAvatar from "../../assets/agents/Iris.png";
 import type { components } from "../../api/generated";
 import { useAuth } from "../../auth/AuthContext";
 
@@ -26,7 +27,7 @@ type NarrationMode = "original" | "enhanced_original" | "studio_voice" | "my_voi
 
 interface AgentSettingsDrawerProps {
   isOpen: boolean;
-  agentId: "leo" | "maya" | "nina";
+  agentId: "leo" | "maya" | "nina" | "iris";
   onClose: () => void;
 }
 
@@ -71,16 +72,23 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   const isLeo = agentId === "leo";
   const isMaya = agentId === "maya";
   const isNina = agentId === "nina";
-  const agentName = isLeo ? "Leo" : isMaya ? "Maya" : "Nina";
-  const agentRole = isLeo ? "Video Editor" : isMaya ? "Director" : "Packaging Agent";
-  const avatarSrc = isLeo ? leoAvatar : isMaya ? mayaAvatar : ninaAvatar;
-  // If Maya is selected and tab is voice, reset to prompt tab
+  const isIris = agentId === "iris";
+  const agentName = isLeo ? "Leo" : isMaya ? "Maya" : isNina ? "Nina" : "Iris";
+  const agentRole = isLeo
+    ? "Video Editor"
+    : isMaya
+      ? "Director"
+      : isNina
+        ? "Packaging Agent"
+        : "Quality Assurance Gate";
+  const avatarSrc = isLeo ? leoAvatar : isMaya ? mayaAvatar : isNina ? ninaAvatar : irisAvatar;
+
+  // If non-Leo is selected and tab is voice, reset to prompt tab
   useEffect(() => {
     if (!isLeo && activeTab === "voice") {
       setActiveTab("prompt");
     }
   }, [isLeo, activeTab]);
-
   // Load agent settings on open
   useEffect(() => {
     if (!isOpen) return;

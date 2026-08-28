@@ -34,6 +34,20 @@ from croviq_domain.packaging import (
     TitleAngle,
     TitleCandidate,
 )
+from croviq_domain.release_review import (
+    ClaimSupportStatus,
+    ClaimVerification,
+    ReleaseChecklist,
+    ReleaseIssue,
+    ReleaseIssueSeverity,
+    ReleaseIssueType,
+    ReleaseReview,
+    ReleaseStatus,
+    ReleaseVerdict,
+    ThumbnailEvaluation,
+    get_creator_facing_release_status,
+    get_issue_type_friendly_label,
+)
 
 __all__ = [
     "AgentActivity",
@@ -64,4 +78,16 @@ __all__ = [
     "ThumbnailConcept",
     "TitleAngle",
     "TitleCandidate",
+    "ClaimSupportStatus",
+    "ClaimVerification",
+    "ReleaseChecklist",
+    "ReleaseIssue",
+    "ReleaseIssueSeverity",
+    "ReleaseIssueType",
+    "ReleaseReview",
+    "ReleaseStatus",
+    "ReleaseVerdict",
+    "ThumbnailEvaluation",
+    "get_creator_facing_release_status",
+    "get_issue_type_friendly_label",
 ]

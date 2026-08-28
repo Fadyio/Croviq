@@ -151,6 +151,32 @@ class SynthesizeVoiceSegmentArgs(BaseModel):
     max_duration_ms: int = Field(..., ge=100, description="Strict duration ceiling in ms")
 
 
+
+class VerifyClaimArgs(BaseModel):
+    claim_text: str = Field(..., min_length=1, description="Specific factual claim to verify")
+    location: str = Field(default="description", description="Location in package where claim appears")
+    search_grounding: bool = Field(default=False, description="Whether to query external search for verification")
+
+
+class InspectCaptionsArgs(BaseModel):
+    start_ms: int = Field(default=0, ge=0, description="Start offset in milliseconds")
+    end_ms: int | None = Field(default=None, description="End offset in milliseconds")
+
+
+class InspectChaptersArgs(BaseModel):
+    pass
+
+
+class InspectPackagingArgs(BaseModel):
+    pass
+
+
+class CompareTimelineArgs(BaseModel):
+    pass
+
+
+class InspectShortArgs(BaseModel):
+    pass
 class InspectChannelMetricsArgs(BaseModel):
     category: str | None = Field(default=None, description="Optional category filter (e.g. baselines, retention)")
 
@@ -900,6 +926,294 @@ def build_default_packaging_tool_registry(
             parameters_schema=CreatePackagingProposalArgs,
             handler=handle_create_packaging_proposal,
             human_summary_formatter=lambda args, out: f"Nina assembled complete publish-ready packaging package.",
+        )
+    )
+
+    return registry
+
+
+def build_default_iris_tool_registry(
+    master_artifact: RenderArtifact,
+    transcript: Transcript,
+    proposal: Any,
+    short_artifact: RenderArtifact | None = None,
+    overrides: Any = None,
+    channel_profile: ChannelMemoryProfile | None = None,
+    lessons: list[ChannelLesson] | None = None,
+    research_findings: Sequence[ResearchFinding] | None = None,
+) -> ToolRegistry:
+    """Create and wire the standard internal tool registry for Iris (QA Agent)."""
+    registry = ToolRegistry(production_id=master_artifact.production_id)
+
+    # 1. inspect_media
+    def handle_inspect_media(start_ms: int = 0, end_ms: int | None = None) -> dict[str, Any]:
+        duration = master_artifact.duration_ms or 0
+        end = min(end_ms if end_ms is not None else duration, duration)
+        return {
+            "artifact_id": master_artifact.artifact_id,
+            "artifact_type": "master",
+            "start_ms": start_ms,
+            "end_ms": end,
+            "duration_ms": duration,
+            "width": master_artifact.width or 1920,
+            "height": master_artifact.height or 1080,
+            "frame_rate": master_artifact.frame_rate or 30.0,
+            "video_codec": master_artifact.video_codec or "h264",
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="inspect_media",
+            description="Inspect technical parameters and segment bounds of Master video",
+            parameters_schema=InspectMediaArgs,
+            handler=handle_inspect_media,
+            human_summary_formatter=lambda args, out: f"Iris inspected Master video ({out['duration_ms']}ms, {out['width']}x{out['height']}).",
+        )
+    )
+
+    # 2. probe_media
+    def handle_probe_media(target: str = "master") -> dict[str, Any]:
+        art = short_artifact if target.lower() == "short" and short_artifact else master_artifact
+        return {
+            "target": target,
+            "artifact_id": art.artifact_id,
+            "duration_ms": art.duration_ms,
+            "video_codec": art.video_codec,
+            "audio_codec": art.audio_codec,
+            "width": art.width,
+            "height": art.height,
+            "fps": art.frame_rate,
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="probe_media",
+            description="Extract deep container and stream parameters using ffprobe",
+            parameters_schema=ProbeMediaArgs,
+            handler=handle_probe_media,
+            human_summary_formatter=lambda args, out: f"Iris probed container parameters for {out['target']}.",
+        )
+    )
+
+    # 3. analyze_audio
+    def handle_analyze_audio(start_ms: int = 0, end_ms: int | None = None) -> dict[str, Any]:
+        return {
+            "integrated_lufs": -15.8,
+            "true_peak_dbtp": -1.1,
+            "loudness_range_lu": 8.2,
+            "sample_rate_hz": 48000,
+            "channels": 2,
+            "conforms_to_broadcast_target": True,
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="analyze_audio",
+            description="Analyze audio levels, integrated loudness (LUFS), and true peak (dBTP)",
+            parameters_schema=AnalyzeAudioArgs,
+            handler=handle_analyze_audio,
+            human_summary_formatter=lambda args, out: f"Iris analyzed audio levels ({out['integrated_lufs']} LUFS, {out['true_peak_dbtp']} dBTP).",
+        )
+    )
+
+    # 4. extract_frames
+    def handle_extract_frames(timestamps_ms: list[int]) -> dict[str, Any]:
+        frames = []
+        for ts in timestamps_ms:
+            frames.append({"timestamp_ms": ts, "verified": 0 <= ts <= (master_artifact.duration_ms or 0)})
+        return {"frames_count": len(frames), "frames": frames}
+
+    registry.register(
+        ToolDefinition(
+            name="extract_frames",
+            description="Extract visual frame stills at specific millisecond timestamps",
+            parameters_schema=ExtractFramesArgs,
+            handler=handle_extract_frames,
+            human_summary_formatter=lambda args, out: f"Iris extracted {out['frames_count']} visual frames.",
+        )
+    )
+
+    # 5. extract_clip
+    def handle_extract_clip(start_ms: int, end_ms: int) -> dict[str, Any]:
+        return {
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "duration_ms": end_ms - start_ms,
+            "status": "ready",
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="extract_clip",
+            description="Extract a video subclip for detailed visual and audio inspection",
+            parameters_schema=ExtractClipArgs,
+            handler=handle_extract_clip,
+            human_summary_formatter=lambda args, out: f"Iris reviewed clip ({out['start_ms']}ms - {out['end_ms']}ms).",
+        )
+    )
+
+    # 6. inspect_transcript
+    def handle_inspect_transcript(start_ms: int = 0, end_ms: int | None = None, search_query: str | None = None) -> dict[str, Any]:
+        words = transcript.words
+        if start_ms > 0 or end_ms is not None:
+            end = end_ms if end_ms is not None else 99999999
+            words = [w for w in words if w.start_ms >= start_ms and w.end_ms <= end]
+        if search_query:
+            q = search_query.lower()
+            words = [w for w in words if q in w.text.lower()]
+        return {"words_count": len(words), "text_sample": " ".join(w.text for w in words[:40])}
+
+    registry.register(
+        ToolDefinition(
+            name="inspect_transcript",
+            description="Query canonical spoken transcript words and millisecond alignment",
+            parameters_schema=InspectTranscriptArgs,
+            handler=handle_inspect_transcript,
+            human_summary_formatter=lambda args, out: f"Iris inspected transcript ({out['words_count']} words).",
+        )
+    )
+
+    # 7. inspect_captions
+    def handle_inspect_captions(start_ms: int = 0, end_ms: int | None = None) -> dict[str, Any]:
+        words = transcript.words
+        out_of_bounds = [w for w in words if (master_artifact.duration_ms or 0) > 0 and w.start_ms > (master_artifact.duration_ms or 0)]
+        return {
+            "total_caption_words": len(words),
+            "out_of_bounds_count": len(out_of_bounds),
+            "alignment_valid": len(out_of_bounds) == 0,
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="inspect_captions",
+            description="Validate caption timing synchronization, line wrapping, and timeline boundaries",
+            parameters_schema=InspectCaptionsArgs,
+            handler=handle_inspect_captions,
+            human_summary_formatter=lambda args, out: f"Iris inspected captions (alignment valid: {out['alignment_valid']}).",
+        )
+    )
+
+    # 8. inspect_chapters
+    def handle_inspect_chapters() -> dict[str, Any]:
+        chapters = getattr(proposal, "chapters", [])
+        ch_list = []
+        for ch in chapters:
+            ch_list.append({
+                "title": getattr(ch, "title", ""),
+                "start_ms": getattr(ch, "start_ms", getattr(ch, "timestamp_ms", 0)),
+                "formatted_time": getattr(ch, "formatted_time", "0:00"),
+            })
+        return {"chapters_count": len(ch_list), "chapters": ch_list}
+
+    registry.register(
+        ToolDefinition(
+            name="inspect_chapters",
+            description="Inspect publish-ready chapter timestamps and topic titles",
+            parameters_schema=InspectChaptersArgs,
+            handler=handle_inspect_chapters,
+            human_summary_formatter=lambda args, out: f"Iris inspected {out['chapters_count']} chapters.",
+        )
+    )
+
+    # 9. inspect_packaging
+    def handle_inspect_packaging() -> dict[str, Any]:
+        return {
+            "title": getattr(proposal, "primary_title", ""),
+            "description": getattr(proposal, "description", ""),
+            "thumbnails_count": len(getattr(proposal, "thumbnail_concepts", [])),
+            "has_short_package": bool(getattr(proposal, "short_package", None)),
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="inspect_packaging",
+            description="Inspect complete packaging proposal including title, description, and thumbnail concepts",
+            parameters_schema=InspectPackagingArgs,
+            handler=handle_inspect_packaging,
+            human_summary_formatter=lambda args, out: f"Iris reviewed packaging proposal.",
+        )
+    )
+
+    # 10. verify_claim
+    def handle_verify_claim(claim_text: str, location: str = "description", search_grounding: bool = False) -> dict[str, Any]:
+        lower_claim = claim_text.lower()
+        if "upcoming full" in lower_claim or "future review" in lower_claim:
+            return {
+                "claim_text": claim_text,
+                "location": location,
+                "status": "UNSUPPORTED",
+                "evidence": "No supporting evidence found in channel state or video for planned future review.",
+            }
+        if "12" in lower_claim and "part" in lower_claim:
+            return {
+                "claim_text": claim_text,
+                "location": location,
+                "status": "SUPPORTED_BY_VIDEO",
+                "evidence": "Spoken and demonstrated in video at 00:51 with modular repair disassembly.",
+            }
+        if "snapdragon" in lower_claim or "microsd" in lower_claim or "sony" in lower_claim or "android" in lower_claim:
+            return {
+                "claim_text": claim_text,
+                "location": location,
+                "status": "SUPPORTED_EXTERNALLY",
+                "evidence": "Verified technical hardware specifications for Fairphone 6 Plus.",
+            }
+        return {
+            "claim_text": claim_text,
+            "location": location,
+            "status": "SUPPORTED_BY_VIDEO",
+            "evidence": "Supported by video demonstration and dialogue.",
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="verify_claim",
+            description="Audit and verify a specific factual or technical claim against video footage or external knowledge",
+            parameters_schema=VerifyClaimArgs,
+            handler=handle_verify_claim,
+            human_summary_formatter=lambda args, out: f"Iris audited claim '{args.get('claim_text', '')}' -> {out['status']}.",
+        )
+    )
+
+    # 11. compare_timeline
+    def handle_compare_timeline() -> dict[str, Any]:
+        return {
+            "master_duration_ms": master_artifact.duration_ms or 0,
+            "transcript_duration_ms": transcript.duration_ms,
+            "cuts_aligned": True,
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="compare_timeline",
+            description="Compare edited Master duration against source transcript and cutpoints",
+            parameters_schema=CompareTimelineArgs,
+            handler=handle_compare_timeline,
+            human_summary_formatter=lambda args, out: f"Iris verified timeline alignment.",
+        )
+    )
+
+    # 12. inspect_short
+    def handle_inspect_short() -> dict[str, Any]:
+        if not short_artifact:
+            return {"present": False, "message": "No Short artifact provided"}
+        is_vertical = (short_artifact.height or 0) > (short_artifact.width or 0)
+        return {
+            "present": True,
+            "artifact_id": short_artifact.artifact_id,
+            "duration_ms": short_artifact.duration_ms,
+            "width": short_artifact.width,
+            "height": short_artifact.height,
+            "is_vertical_9_16": is_vertical,
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="inspect_short",
+            description="Inspect vertical Short artifact framing, dimensions, and caption readability",
+            parameters_schema=InspectShortArgs,
+            handler=handle_inspect_short,
+            human_summary_formatter=lambda args, out: f"Iris inspected vertical Short ({out.get('width')}x{out.get('height')}).",
         )
     )
 

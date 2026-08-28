@@ -1,6 +1,7 @@
 """Croviq autonomous production agents: Leo (Dialogue Editor) and Maya (Director)."""
 from croviq_agents.alex import AlexDataScientist
 from croviq_agents.nina import NinaPackagingAgent
+from croviq_agents.iris import IrisQAAgent
 from croviq_agents.client import (
     AgentUsageMetadata,
     FakeGenAIClient,
@@ -10,6 +11,7 @@ from croviq_agents.client import (
     reconcile_director_review_with_transcript,
     reconcile_editor_proposal_with_transcript,
     reconcile_packaging_proposal,
+    reconcile_release_review,
 )
 from croviq_agents.director import MayaDirector
 from croviq_agents.editor import LeoDialogueEditor, LeoVideoEditor, ensure_full_timeline_coverage
@@ -20,6 +22,7 @@ from croviq_agents.tools import (
     ToolResult,
     build_default_editor_tool_registry,
     build_default_packaging_tool_registry,
+    build_default_iris_tool_registry,
 )
 from croviq_agents.voice import (
     GOOGLE_GEMINI_VOICES,
@@ -32,6 +35,8 @@ from croviq_agents.prompts import (
     build_director_prompt,
     build_editor_prompt,
     build_packaging_prompt,
+    build_release_qa_prompt,
+    DEFAULT_IRIS_PROMPT,
     format_channel_memory_summary,
     format_transcript_for_prompt,
 )
@@ -39,6 +44,11 @@ from croviq_agents.prompts import (
 __all__ = [
     "AlexDataScientist",
     "NinaPackagingAgent",
+    "IrisQAAgent",
+    "DEFAULT_IRIS_PROMPT",
+    "build_release_qa_prompt",
+    "reconcile_release_review",
+    "build_default_iris_tool_registry",
     "DEFAULT_NINA_PROMPT",
     "build_packaging_prompt",
     "reconcile_packaging_proposal",

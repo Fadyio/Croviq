@@ -14,7 +14,7 @@ class AgentId(StrEnum):
     MAYA = "maya"
     ALEX = "alex"
     NINA = "nina"
-
+    IRIS = "iris"
 class AgentPromptConfig(BaseModel):
     """Creator-editable working prompt configuration for an agent."""
 
@@ -25,7 +25,7 @@ class AgentPromptConfig(BaseModel):
     )
 
     agent_id: AgentId = Field(
-        ..., description="Target agent identifier (alex, leo, maya, or nina)"
+        ..., description="Target agent identifier (alex, leo, maya, nina, or iris)"
     )
     prompt_text: str = Field(
         ..., min_length=1, description="Complete agent working prompt text"

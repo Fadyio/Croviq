@@ -133,6 +133,14 @@ class EventType(StrEnum):
     PACKAGING_COMPLETED = "packaging.completed"
     PACKAGING_FAILED = "packaging.failed"
     PACKAGING_REGENERATED = "packaging.regenerated"
+
+    # Iris QA & Release Gate events (Issue #33)
+    RELEASE_REVIEW_STARTED = "release.review.started"
+    RELEASE_REVIEW_COMPLETED = "release.review.completed"
+    RELEASE_REVIEW_FAILED = "release.review.failed"
+    QA_CORRECTION_STARTED = "qa.correction.started"
+    QA_CORRECTION_COMPLETED = "qa.correction.completed"
+    QA_CORRECTION_FAILED = "qa.correction.failed"
 # Normalized set of all standard event names
 NORMALIZED_EVENT_TYPES: frozenset[str] = frozenset(e.value for e in EventType)
 

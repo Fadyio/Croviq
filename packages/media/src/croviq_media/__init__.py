@@ -41,6 +41,13 @@ from croviq_media.silence import (
     SilenceCleanupPlanner,
     format_silence_plan_for_prompt,
 )
+from croviq_media.qa import (
+    AudioQAResult,
+    CaptionQAResult,
+    ChapterQAResult,
+    DeterministicMediaQAService,
+    MediaQAResult,
+)
 __all__ = [
     "AudioExtractionError",
     "AudioExtractor",
@@ -72,5 +79,10 @@ __all__ = [
     "DEFAULT_NATURAL_PAUSE_MS",
     "SilenceCleanupPlanner",
     "format_silence_plan_for_prompt",
+    "AudioQAResult",
+    "CaptionQAResult",
+    "ChapterQAResult",
+    "DeterministicMediaQAService",
+    "MediaQAResult",
 ]
 __version__ = "0.1.0"

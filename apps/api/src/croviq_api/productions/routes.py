@@ -79,6 +79,28 @@ from croviq_api.productions.schemas import (
     GeneratePackagingRequest,
     PackagingDetailResponse,
     UpdatePackagingOverridesRequest,
+    GenerateReleaseReviewRequest,
+    ReleaseReviewDetailResponse,
+    AutoCorrectQARequest,
+    AutoCorrectQAResponse,
+)
+from croviq_api.productions.release_review_repository import (
+    ReleaseReviewRepository,
+    get_release_review_repository,
+)
+from croviq_agents.iris import IrisQAAgent
+from croviq_domain.release_review import (
+    ClaimSupportStatus,
+    ClaimVerification,
+    ReleaseChecklist,
+    ReleaseIssue,
+    ReleaseIssueSeverity,
+    ReleaseIssueType,
+    ReleaseReview,
+    ReleaseStatus,
+    ReleaseVerdict,
+    ThumbnailEvaluation,
+    get_creator_facing_release_status,
 )
 from croviq_api.productions.packaging_repository import (
     PackagingRepository,
@@ -584,6 +606,7 @@ async def delete_production(
     studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
     broll_repo: Annotated[BRollRepository, Depends(get_broll_repository)],
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
+    release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> DeleteProductionResponse:
     request_id = getattr(request.state, "request_id", "unknown")
@@ -676,6 +699,11 @@ async def delete_production(
         await packaging_repo.delete_by_production_id(production_id)
     except Exception as exc:
         logger.warning("Error deleting packaging records for %s: %s", production_id, exc)
+
+    try:
+        await release_review_repo.delete_by_production_id(production_id)
+    except Exception as exc:
+        logger.warning("Error deleting release reviews for %s: %s", production_id, exc)
     # 4. Delete root production record
     await production_repo.delete_production(production_id)
 
@@ -2299,4 +2327,409 @@ async def update_packaging_overrides(
         master_artifact=master_artifact,
         short_artifact=short_artifact,
         media_storage=media_storage,
+    )
+
+
+async def _build_release_review_response(
+    production_id: str,
+    review: ReleaseReview | None,
+    master_artifact: RenderArtifact | None,
+    short_artifact: RenderArtifact | None,
+    proposal: PackagingProposal | None,
+    media_storage: MediaStorage,
+) -> ReleaseReviewDetailResponse:
+    settings = get_settings()
+    master_url: str | None = None
+    if master_artifact and master_artifact.status == ArtifactStatus.completed:
+        try:
+            target = await media_storage.generate_signed_read_target(
+                bucket=master_artifact.gcs_bucket,
+                object_name=master_artifact.gcs_object,
+                expiry_seconds=settings.signed_url_expiry_seconds,
+            )
+            master_url = target.read_url
+        except Exception as exc:
+            logger.warning("Could not generate signed master url for release review: %s", exc)
+
+    short_url: str | None = None
+    if short_artifact and short_artifact.status == ArtifactStatus.completed:
+        try:
+            target = await media_storage.generate_signed_read_target(
+                bucket=short_artifact.gcs_bucket,
+                object_name=short_artifact.gcs_object,
+                expiry_seconds=settings.signed_url_expiry_seconds,
+            )
+            short_url = target.read_url
+        except Exception as exc:
+            logger.warning("Could not generate signed short url for release review: %s", exc)
+
+    master_resp = RenderArtifactResponse(
+        artifact_id=master_artifact.artifact_id,
+        production_id=master_artifact.production_id,
+        edl_id=master_artifact.edl_id,
+        artifact_type=master_artifact.artifact_type.value if hasattr(master_artifact.artifact_type, "value") else str(master_artifact.artifact_type),
+        status=master_artifact.status.value if hasattr(master_artifact.status, "value") else str(master_artifact.status),
+        duration_ms=master_artifact.duration_ms,
+        created_at=master_artifact.created_at,
+        completed_at=master_artifact.completed_at,
+        playback_url=master_url,
+    ) if master_artifact else None
+
+    short_resp = RenderArtifactResponse(
+        artifact_id=short_artifact.artifact_id,
+        production_id=short_artifact.production_id,
+        edl_id=short_artifact.edl_id,
+        artifact_type=short_artifact.artifact_type.value if hasattr(short_artifact.artifact_type, "value") else str(short_artifact.artifact_type),
+        status=short_artifact.status.value if hasattr(short_artifact.status, "value") else str(short_artifact.status),
+        duration_ms=short_artifact.duration_ms,
+        created_at=short_artifact.created_at,
+        completed_at=short_artifact.completed_at,
+        playback_url=short_url,
+    ) if short_artifact else None
+
+    has_master = bool(master_artifact and (master_artifact.status == ArtifactStatus.completed or (hasattr(master_artifact.status, "value") and master_artifact.status.value == ArtifactStatus.completed.value)))
+    has_short = bool(short_artifact and (short_artifact.status == ArtifactStatus.completed or (hasattr(short_artifact.status, "value") and short_artifact.status.value == ArtifactStatus.completed.value)))
+    has_packaging = bool(proposal is not None)
+
+    release_ready = False
+    release_status = "Packaging"
+
+    if not has_packaging:
+        release_status = "Packaging"
+        release_ready = False
+    elif not review:
+        release_status = "Checking final output"
+        release_ready = False
+    else:
+        is_pass = review.verdict == ReleaseVerdict.PASS
+        approved = review.approved_for_release
+        release_ready = bool(has_master and has_packaging and is_pass and approved)
+        if has_short and review.checklist and not review.checklist.short:
+            release_ready = False
+
+        if release_ready:
+            release_status = "Ready to publish"
+        elif review.verdict == ReleaseVerdict.FIX_REQUIRED:
+            release_status = "Fix required"
+        elif review.verdict == ReleaseVerdict.MANUAL_REVIEW:
+            release_status = "Manual review"
+        else:
+            release_status = "Checking final output"
+
+    return ReleaseReviewDetailResponse(
+        production_id=production_id,
+        review=review,
+        release_status=release_status,
+        release_ready=release_ready,
+        checklist=review.checklist if review else None,
+        master_artifact=master_resp,
+        short_artifact=short_resp,
+        master_url=master_url,
+        short_url=short_url,
+        has_master=has_master,
+        has_short=has_short,
+        has_packaging=has_packaging,
+        generated_at=review.created_at if review else None,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/release-review",
+    response_model=ReleaseReviewDetailResponse,
+    summary="Generate Iris QA Release Review",
+    description="Invoke Iris (QA Agent) to evaluate Master video, Short, transcript, captions, chapters, and packaging truth before release.",
+)
+async def generate_release_review(
+    production_id: str,
+    request: Request,
+    payload: GenerateReleaseReviewRequest | None = None,
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)] = None,
+    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)] = None,
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)] = None,
+    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)] = None,
+    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)] = None,
+    release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)] = None,
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)] = None,
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)] = None,
+    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)] = None,
+    genai_client: Annotated[GenAIClient, Depends(get_genai_client)] = None,
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)] = None,
+) -> ReleaseReviewDetailResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    force_regenerate = payload.force_regenerate if payload else False
+
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+
+    renders = await render_repo.list_render_artifacts(prod.production_id)
+    master_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+    if not master_artifact:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Master video must be rendered and completed before executing Iris QA review.",
+        )
+
+    short_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+
+    proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
+    if not proposal:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nina packaging proposal must exist before executing Iris QA review.",
+        )
+
+    overrides = await packaging_repo.get_package_overrides(prod.production_id)
+    render_review = await render_review_repo.get_latest_render_review(prod.production_id)
+
+    # Idempotency check: Return cached review if matching same Master, Short, and Packaging proposal
+    if not force_regenerate:
+        latest_review = await release_review_repo.get_latest_release_review(prod.production_id)
+        if (
+            latest_review
+            and latest_review.master_artifact_id == master_artifact.artifact_id
+            and latest_review.packaging_proposal_id == proposal.proposal_id
+            and (not short_artifact or latest_review.short_artifact_id == short_artifact.artifact_id)
+        ):
+            return await _build_release_review_response(
+                production_id=prod.production_id,
+                review=latest_review,
+                master_artifact=master_artifact,
+                short_artifact=short_artifact,
+                proposal=proposal,
+                media_storage=media_storage,
+            )
+
+    # Load Transcript
+    transcript = await transcript_repo.get_transcript_by_production_id(prod.production_id)
+    if not transcript:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Transcript must exist before executing Iris QA review.",
+        )
+
+    # Load Channel Memory & Research Findings
+    channel_profile = None
+    lessons = []
+    if prod.channel_id:
+        try:
+            channel_profile = await memory_store.get_profile(prod.channel_id)
+            if not channel_profile:
+                sample_provider = SampleChannelDataProvider()
+                c_data = await sample_provider.get_channel(prod.channel_id)
+                if c_data:
+                    channel_profile, lessons = ChannelProfileBuilder.build(c_data)
+                    await memory_store.save_profile(channel_profile)
+                    if lessons:
+                        await memory_store.save_lessons(prod.channel_id, lessons)
+            else:
+                lessons = await memory_store.get_lessons(prod.channel_id)
+        except Exception as exc:
+            logger.warning("Could not load channel memory for release review: %s", exc)
+
+    research_findings = []
+    if prod.channel_id:
+        try:
+            research_findings = await research_repo.list_findings(
+                workspace_id=prod.workspace_id,
+                channel_id=prod.channel_id,
+                limit=5,
+            )
+        except Exception as exc:
+            logger.warning("Could not load research findings for release review: %s", exc)
+
+    # Load Iris prompt config
+    iris_prompt_config = await agent_config_repo.get_agent_prompt(
+        workspace_id=prod.workspace_id,
+        agent_id=AgentId.IRIS,
+    )
+
+    # Execute Iris QA Review
+    iris_agent = IrisQAAgent(genai_client=genai_client, model_id="gemini-3.7-flash")
+    review, _ = await iris_agent.review_production(
+        production_id=prod.production_id,
+        master_artifact=master_artifact,
+        short_artifact=short_artifact,
+        transcript=transcript,
+        proposal=proposal,
+        overrides=overrides,
+        render_review=render_review,
+        channel_profile=channel_profile,
+        lessons=lessons,
+        research_findings=research_findings,
+        custom_prompt=iris_prompt_config.prompt_text if iris_prompt_config.is_custom else None,
+        prompt_version=iris_prompt_config.version,
+        request_id=request_id,
+    )
+
+    # Persist review
+    await release_review_repo.save_release_review(review)
+
+    return await _build_release_review_response(
+        production_id=prod.production_id,
+        review=review,
+        master_artifact=master_artifact,
+        short_artifact=short_artifact,
+        proposal=proposal,
+        media_storage=media_storage,
+    )
+
+
+@router.get(
+    "/productions/{production_id}/release-review",
+    response_model=ReleaseReviewDetailResponse,
+    summary="Get Production Release Review Details",
+    description="Retrieve the latest Iris QA evaluation, checklist, and release readiness for a production.",
+)
+async def get_release_review_details(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
+    release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> ReleaseReviewDetailResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+
+    renders = await render_repo.list_render_artifacts(prod.production_id)
+    master_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+    short_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+    proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
+    review = await release_review_repo.get_latest_release_review(prod.production_id)
+
+    return await _build_release_review_response(
+        production_id=prod.production_id,
+        review=review,
+        master_artifact=master_artifact,
+        short_artifact=short_artifact,
+        proposal=proposal,
+        media_storage=media_storage,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/release-review/correct",
+    response_model=AutoCorrectQAResponse,
+    summary="Execute 1-Cycle QA Auto-Correction",
+    description="Perform bounded 1-cycle auto-correction routing flagged packaging/claim issues to Nina and re-evaluating with Iris.",
+)
+async def auto_correct_qa(
+    production_id: str,
+    request: Request,
+    payload: AutoCorrectQARequest | None = None,
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)] = None,
+    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)] = None,
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)] = None,
+    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)] = None,
+    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)] = None,
+    release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)] = None,
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)] = None,
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)] = None,
+    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)] = None,
+    genai_client: Annotated[GenAIClient, Depends(get_genai_client)] = None,
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)] = None,
+) -> AutoCorrectQAResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+
+    renders = await render_repo.list_render_artifacts(prod.production_id)
+    master_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+    if not master_artifact:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Master video must exist to execute QA auto-correction.",
+        )
+
+    short_artifact = next(
+        (r for r in renders if (r.artifact_type == ArtifactType.SHORT or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.SHORT.value)) and r.status == ArtifactStatus.completed),
+        None,
+    )
+    proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
+    if not proposal:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Packaging proposal must exist to execute QA auto-correction.",
+        )
+
+    latest_review = await release_review_repo.get_latest_release_review(prod.production_id)
+    if not latest_review or not latest_review.issues:
+        return AutoCorrectQAResponse(
+            production_id=prod.production_id,
+            revised_proposal=proposal,
+            new_review=latest_review or ReleaseReview(
+                review_id=f"rev_{prod.production_id[:12]}",
+                production_id=prod.production_id,
+                verdict=ReleaseVerdict.PASS,
+                summary="No issues found.",
+                issues=[],
+                approved_for_release=True,
+                confidence=0.98,
+                master_artifact_id=master_artifact.artifact_id,
+                packaging_proposal_id=proposal.proposal_id,
+            ),
+            release_ready=True,
+            message="No actionable QA defects found.",
+        )
+
+    transcript = await transcript_repo.get_transcript_by_production_id(prod.production_id)
+
+    # 1. Nina 1-cycle auto-revision of packaging
+    nina_agent = NinaPackagingAgent(genai_client=genai_client, model_id="gemini-3.7-flash")
+    corrected_proposal, _ = await nina_agent.revise_packaging_for_qa(
+        production_id=prod.production_id,
+        current_proposal=proposal,
+        qa_issues=latest_review.issues,
+        master_artifact=master_artifact,
+        transcript=transcript,
+        request_id=request_id,
+    )
+    await packaging_repo.save_packaging_proposal(corrected_proposal)
+
+    # 2. Iris re-evaluates corrected proposal
+    iris_agent = IrisQAAgent(genai_client=genai_client, model_id="gemini-3.7-flash")
+    new_review, _ = await iris_agent.review_production(
+        production_id=prod.production_id,
+        master_artifact=master_artifact,
+        short_artifact=short_artifact,
+        transcript=transcript or Transcript(
+            transcript_id="tr_dummy",
+            production_id=prod.production_id,
+            language_code="en",
+            created_at=datetime.now(timezone.utc),
+            duration_ms=master_artifact.duration_ms or 0,
+            words=[],
+        ),
+        proposal=corrected_proposal,
+        request_id=request_id,
+    )
+    await release_review_repo.save_release_review(new_review)
+
+    release_ready = (
+        new_review.verdict == ReleaseVerdict.PASS
+        and new_review.approved_for_release
+        and (not short_artifact or (new_review.checklist and new_review.checklist.short))
+    )
+
+    return AutoCorrectQAResponse(
+        production_id=prod.production_id,
+        revised_proposal=corrected_proposal,
+        new_review=new_review,
+        release_ready=release_ready,
+        message="Nina revised packaging based on QA findings and Iris re-evaluated.",
     )
