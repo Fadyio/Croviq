@@ -263,7 +263,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
       {/* 2. Top Navigation: Clean, minimal navbar */}
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border-subtle bg-surface-1 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-5">
-          <CroviqLogo height={22} className="h-5.5 w-auto shrink-0" />
+          <CroviqLogo height={24} className="h-6 w-auto shrink-0" />
 
           {/* 3. Channel Selector: Narrow, clean dropdown */}
           <div className="relative" ref={selectorRef}>
@@ -665,7 +665,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
                     className="rounded-lg bg-surface-2/50 border border-border-subtle p-4 text-xs space-y-3 transition-colors hover:border-border-strong"
                   >
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-                      <Sparkles className="h-3 w-3" />
+                      <TrendingUp className="h-3 w-3" />
                       <span>{insight.type}</span>
                     </div>
 
@@ -802,7 +802,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateNewProject }) => {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
-                    <Sparkles className="h-3 w-3" />
+                    <TrendingUp className="h-3 w-3" />
                     Evidence Analysis
                   </span>
                   <h3 className="mt-1 text-base font-semibold text-text-primary">
