@@ -8,12 +8,14 @@ import {
   Send,
   Settings,
   Sparkles,
+  Trash2,
   User,
   Wrench,
   X,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { AGENT_IDENTITIES, type AgentId } from "./AgentTeamSelector";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface ToolExecution {
   tool_name: string;
@@ -70,6 +72,8 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
   const [inputMessage, setInputMessage] = useState("");
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -162,6 +166,27 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
       void sendMessage();
     }
   };
+  const handleClearChat = async () => {
+    if (!firebaseUser || isClearing) return;
+    setIsClearing(true);
+    setError(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/workspace/agents/${agentId}/chat`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) {
+        throw new Error("Failed to clear conversation");
+      }
+      setMessages([]);
+      setShowClearConfirm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear conversation");
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -190,6 +215,42 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {messages.length > 0 && !showClearConfirm && (
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-text-muted hover:border-danger/40 hover:bg-danger/10 hover:text-danger transition-colors cursor-pointer"
+                title="Clear conversation"
+                data-testid="btn-clear-chat"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Clear chat</span>
+              </button>
+            )}
+
+            {showClearConfirm && (
+              <div className="flex items-center gap-1.5 rounded-lg border border-danger/40 bg-danger/10 px-2 py-1 text-xs">
+                <span className="text-[11px] font-medium text-danger">Clear conversation?</span>
+                <button
+                  type="button"
+                  onClick={() => void handleClearChat()}
+                  disabled={isClearing}
+                  className="rounded bg-danger px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-danger/90 disabled:opacity-50 transition-colors cursor-pointer"
+                  data-testid="btn-confirm-clear-chat"
+                >
+                  {isClearing ? "Clearing..." : "Yes, clear"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  disabled={isClearing}
+                  className="rounded px-1.5 py-0.5 text-[11px] text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
             {onOpenSettings && (
               <button
                 type="button"
@@ -275,7 +336,11 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
                       : "bg-surface-2 border border-border-subtle text-text-primary"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  {msg.role === "assistant" ? (
+                    <MarkdownRenderer content={msg.content} />
+                  ) : (
+                    <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  )}
 
                   {/* Tool Execution Badges */}
                   {msg.tool_executions && msg.tool_executions.length > 0 && (

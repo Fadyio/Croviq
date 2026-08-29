@@ -423,25 +423,77 @@ const mockBackendApis = async (page: Page) => {
     });
   });
 
+  let dynamicMessages: Array<{
+    message_id: string;
+    role: "user" | "assistant";
+    content: string;
+    tool_executions?: Array<Record<string, unknown>>;
+    created_at: string;
+  }> = [
+    {
+      message_id: "msg_1",
+      role: "user",
+      content: "hi",
+      created_at: "2026-08-29T08:00:00Z",
+    },
+    {
+      message_id: "msg_2",
+      role: "assistant",
+      content: "Hello! I am Alex, your Channel Data Scientist.",
+      tool_executions: [],
+      created_at: "2026-08-29T08:00:01Z",
+    },
+  ];
+
   await page.route("**/api/workspace/agents/*/chat", async (route) => {
-    if (route.request().method() === "POST") {
-      const data = route.request().postDataJSON();
-      const msg = data.message || "";
+    if (route.request().method() === "DELETE") {
+      dynamicMessages = [];
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          message_id: `msg_${Date.now()}`,
-          role: "assistant",
-          content: `Alex Data Scientist: I analyzed your request '${msg}'. Retention baselines remain strong at 58.4%.`,
-          tool_executions: [
-            {
-              tool_name: "channel_analytics_inspection",
-              goal: "Evaluate channel performance baselines",
-            },
-          ],
-          created_at: new Date().toISOString(),
+          agent_id: "alex",
+          messages: [],
         }),
+      });
+    } else if (route.request().method() === "POST") {
+      const data = route.request().postDataJSON();
+      const msg = data.message || "";
+      let content = "";
+      if (msg.includes("table")) {
+        content =
+          "Here is the cohort breakdown:\n\n| Video Title | Views | Retention | Conversion |\n| :--- | :--- | :--- | :--- |\n| Google GenAI SDK (Part 5) | 23,314 | 64.2% | +334 |\n| Agent Benchmarks | 19,450 | 58.1% | +210 |\n| LangGraph Deep Dive | 27,800 | 61.5% | +380 |\n\n**Key Takeaway**: Agent and developer tooling videos consistently convert higher.";
+      } else if (msg.includes("perform") || msg.includes("last video")) {
+        content =
+          "Here is the performance analysis for your latest published video **Google GenAI SDK Tutorial for Beginners (Part 5)**:\n\n- **Views**: 23,314 (+31.2% vs lifetime channel median of 17,760)\n- **Retention**: 64.2% (+5.8 points vs lifetime channel median of 58.4%)\n- **Subscribers Gained**: +334\n- **CTR**: 8.4%\n\n**Data Scientist Assessment**: Retention was 64.2%, tracking well above channel baseline. Subscriber conversion remained strong at +334 net subscribers.\n\n**Recommendation**: The audience engagement indicates the demonstration structure in this video resonated well. Maintain this hook pacing in your upcoming production.";
+      } else {
+        content = `Here is my data science analysis for '${msg}':\n\n- **Metric**: Retention correlation r=0.62\n- **Sample Size**: 100 historical videos\n\n**Recommendation**: Test terminal demos within 25s.`;
+      }
+      const newMsg = {
+        message_id: `msg_${Date.now()}`,
+        role: "assistant" as const,
+        content,
+        tool_executions: [
+          {
+            tool_name: "channel_analytics_inspection",
+            goal: "Inspect metrics for latest upload",
+            video_id: "vid_syn_100",
+            published_at: "2026-08-23T14:30:00Z",
+          },
+        ],
+        created_at: new Date().toISOString(),
+      };
+      dynamicMessages.push({
+        message_id: `msg_u_${Date.now()}`,
+        role: "user" as const,
+        content: msg,
+        created_at: new Date().toISOString(),
+      });
+      dynamicMessages.push(newMsg);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(newMsg),
       });
     } else {
       await route.fulfill({
@@ -449,21 +501,7 @@ const mockBackendApis = async (page: Page) => {
         contentType: "application/json",
         body: JSON.stringify({
           agent_id: "alex",
-          messages: [
-            {
-              message_id: "msg_1",
-              role: "user",
-              content: "hi",
-              created_at: "2026-08-29T08:00:00Z",
-            },
-            {
-              message_id: "msg_2",
-              role: "assistant",
-              content: "Hello! I am Alex, your Channel Data Scientist.",
-              tool_executions: [],
-              created_at: "2026-08-29T08:00:01Z",
-            },
-          ],
+          messages: dynamicMessages,
         }),
       });
     }
@@ -502,7 +540,9 @@ test.describe("Canonical Agent Architecture, Settings, and Ideas Worth Making", 
     await page.screenshot({ path: "e2e/screenshots/alex-menu-1440x900.png" });
   });
 
-  test("Chat with Alex opens canonical AgentChatDrawer and sends messages", async ({ page }) => {
+  test("Chat with Alex renders Markdown, tables, and supports Clear Conversation", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await signInAndGoTo(page, "/app");
 
@@ -515,19 +555,47 @@ test.describe("Canonical Agent Architecture, Settings, and Ideas Worth Making", 
     await expect(chatDrawer).toBeVisible();
     await expect(page.getByText("Chat with Alex")).toBeVisible();
 
-    // Send a message
+    // 1. Short answer / latest video question
     const chatInput = page.getByTestId("input-chat-message");
     await chatInput.fill("How did my last video perform?");
     await page.getByTestId("btn-send-chat").click();
 
-    await expect(page.getByText("Alex Data Scientist: I analyzed your request")).toBeVisible();
+    // Assert Markdown bolding, list rendering, and latest video title
+    await expect(page.getByText("Google GenAI SDK Tutorial for Beginners (Part 5)")).toBeVisible();
+    await expect(page.getByText("Data Scientist Assessment")).toBeVisible();
+    await page.screenshot({ path: "e2e/screenshots/alex-chat-short-answer.png" });
     await page.screenshot({ path: "e2e/screenshots/alex-chat-1440x900.png" });
+
+    // 2. In-depth analysis question
+    await chatInput.fill("What is unusual about my last 10 videos?");
+    await page.getByTestId("btn-send-chat").click();
+    await expect(page.getByText("data science analysis")).toBeVisible();
+    await page.screenshot({ path: "e2e/screenshots/alex-chat-analysis.png" });
+
+    // 3. Markdown table rendering
+    await chatInput.fill("Show me a comparison table");
+    await page.getByTestId("btn-send-chat").click();
+    await expect(page.locator("table")).toBeVisible();
+    await expect(page.getByText("LangGraph Deep Dive")).toBeVisible();
+    await page.screenshot({ path: "e2e/screenshots/alex-chat-markdown-table.png" });
+
+    // 4. Clear chat conversation
+    const clearBtn = page.getByTestId("btn-clear-chat");
+    await expect(clearBtn).toBeVisible();
+    await clearBtn.click();
+
+    const confirmBtn = page.getByTestId("btn-confirm-clear-chat");
+    await expect(confirmBtn).toBeVisible();
+    await confirmBtn.click();
+
+    // Confirm conversation is empty and starter prompts are shown
+    await expect(page.getByText("Suggested Prompts")).toBeVisible();
+    await page.screenshot({ path: "e2e/screenshots/alex-chat-cleared.png" });
 
     // Close chat
     await page.getByTestId("btn-close-chat").click();
     await expect(chatDrawer).not.toBeVisible();
   });
-
   test("Alex Settings drawer renders Prompt, Memory, and Research tabs without UI artifacts", async ({
     page,
   }) => {

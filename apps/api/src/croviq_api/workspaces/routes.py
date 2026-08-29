@@ -24,6 +24,7 @@ from croviq_api.channels.youtube_repository import (
 )
 from croviq_api.workspaces.chat_service import (
     AgentChatService,
+    clear_conversation_history,
     get_conversation_history,
 )
 from croviq_api.workspaces.schemas import (
@@ -396,6 +397,23 @@ async def get_agent_chat_history(
     return AgentConversationHistoryResponse(
         agent_id=agent_id.lower(),
         messages=[AgentChatMessageResponse.model_validate(m) for m in history],
+    )
+
+@router.delete(
+    "/workspace/agents/{agent_id}/chat",
+    response_model=AgentConversationHistoryResponse,
+    summary="Clear Agent Conversation History",
+)
+async def clear_agent_chat_history(
+    agent_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+) -> AgentConversationHistoryResponse:
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    clear_conversation_history(workspace.workspace_id, agent_id)
+    return AgentConversationHistoryResponse(
+        agent_id=agent_id.lower(),
+        messages=[],
     )
 
 

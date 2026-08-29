@@ -164,3 +164,47 @@ def test_alex_chat_topic_recommendation_and_prompt_override(client: TestClient) 
         headers=headers,
     )
     assert reset_resp.status_code == 200
+
+def test_clear_agent_chat_history(client: TestClient) -> None:
+    headers = {"Authorization": "Bearer creator-token"}
+    # 1. Send a message to ensure history exists
+    client.post(
+        "/api/workspace/agents/alex/chat",
+        headers=headers,
+        json={"message": "hello alex"},
+    )
+    hist_before = client.get("/api/workspace/agents/alex/chat", headers=headers)
+    assert hist_before.status_code == 200
+    assert len(hist_before.json()["messages"]) > 0
+
+    # 2. Clear conversation
+    clear_resp = client.delete("/api/workspace/agents/alex/chat", headers=headers)
+    assert clear_resp.status_code == 200
+    assert clear_resp.json()["agent_id"] == "alex"
+    assert clear_resp.json()["messages"] == []
+
+    # 3. Verify history is empty
+    hist_after = client.get("/api/workspace/agents/alex/chat", headers=headers)
+    assert hist_after.status_code == 200
+    assert hist_after.json()["messages"] == []
+
+
+def test_latest_video_selection_provenance_and_shuffled_ordering(client: TestClient) -> None:
+    headers = {"Authorization": "Bearer creator-token"}
+    resp = client.post(
+        "/api/workspace/agents/alex/chat",
+        headers=headers,
+        json={"message": "How did my last video perform?"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["role"] == "assistant"
+    tool_execs = data.get("tool_executions", [])
+    inspection_tool = next((t for t in tool_execs if t["tool_name"] == "channel_analytics_inspection"), None)
+    assert inspection_tool is not None
+    assert inspection_tool["video_id"] == "vid_syn_100"
+    assert inspection_tool["title"] == "Google GenAI SDK Tutorial for Beginners (Part 5)"
+    assert inspection_tool["published_at"] is not None
+    assert inspection_tool["source_provider"] == "sample"
+    assert inspection_tool["channel_median_views"] > 0
+    assert inspection_tool["channel_median_retention"] > 0

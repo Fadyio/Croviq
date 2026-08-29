@@ -28,6 +28,10 @@ def get_conversation_history(workspace_id: str, agent_id: str) -> list[dict[str,
     key = f"{workspace_id}:{agent_id.lower()}"
     return list(_CONVERSATION_STORE.get(key, []))
 
+def clear_conversation_history(workspace_id: str, agent_id: str) -> None:
+    key = f"{workspace_id}:{agent_id.lower()}"
+    _CONVERSATION_STORE.pop(key, None)
+
 
 def append_conversation_message(
     workspace_id: str,
@@ -95,8 +99,17 @@ class AgentChatService:
 
         # 2. Extract channel history, videos, and memory safely
         channel = await provider.get_channel()
-        videos = await provider.get_videos(limit=20)
-        
+        raw_videos = await provider.get_videos(limit=100)
+        # Order videos chronologically newest-first based on canonical published_at
+        videos = sorted(
+            raw_videos,
+            key=lambda v: (
+                getattr(getattr(v, "public", None), "published_at", None)
+                or getattr(v, "published_at", None)
+                or datetime.min.replace(tzinfo=UTC)
+            ),
+            reverse=True,
+        )
         try:
             profile = await self.memory_store.get_profile(channel.channel_id)
         except Exception as exc:

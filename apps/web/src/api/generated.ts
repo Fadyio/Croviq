@@ -127,6 +127,12 @@ export interface paths {
         422: components["schemas"]["HTTPValidationError"];
       };
     };
+    delete: {
+      responses: {
+        200: components["schemas"]["AgentConversationHistoryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
     post: {
       responses: {
         200: components["schemas"]["AgentChatMessageResponse"];
