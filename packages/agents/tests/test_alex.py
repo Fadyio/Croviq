@@ -151,7 +151,7 @@ def test_alex_distills_lesson_for_high_opportunity_finding() -> None:
 
     lesson = alex.distill_lesson(finding, channel_id="croviq_syn_ai_eng_01")
     assert lesson is not None
-    assert lesson.target_agent == TargetAgent.DIRECTOR
+    assert lesson.target_agent == TargetAgent.LEO
     assert "Dynamic Thinking Budgets" in lesson.directive
     assert lesson.confidence == 0.95
 

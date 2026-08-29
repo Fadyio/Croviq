@@ -26,7 +26,7 @@ from croviq_domain.narration import (
     NarrationSegmentStatus,
 )
 from croviq_domain.channel_intelligence import ResearchFinding
-from croviq_domain.editorial import ChapterMarker, ShortCandidate
+from croviq_domain.editorial import ChapterMarker
 from croviq_domain.packaging import format_ms_as_timestamp
 from croviq_domain.render import RenderArtifact
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
@@ -139,7 +139,7 @@ class GenerateBRollArgs(BaseModel):
     )
     reference_video_uri: str | None = Field(
         default=None,
-        description="Optional GCS URI of short reference video context",
+        description="Optional GCS URI of brief reference video context",
     )
     previous_interaction_id: str | None = Field(
         default=None,
@@ -185,8 +185,6 @@ class CompareTimelineArgs(BaseModel):
     pass
 
 
-class InspectShortArgs(BaseModel):
-    pass
 class InspectChannelMetricsArgs(BaseModel):
     category: str | None = Field(default=None, description="Optional category filter (e.g. baselines, retention)")
 
@@ -932,7 +930,6 @@ def build_default_iris_tool_registry(
     master_artifact: RenderArtifact,
     transcript: Transcript,
     proposal: Any,
-    short_artifact: RenderArtifact | None = None,
     overrides: Any = None,
     channel_profile: ChannelMemoryProfile | None = None,
     lessons: list[ChannelLesson] | None = None,
@@ -969,7 +966,7 @@ def build_default_iris_tool_registry(
 
     # 2. probe_media
     def handle_probe_media(target: str = "master") -> dict[str, Any]:
-        art = short_artifact if target.lower() == "short" and short_artifact else master_artifact
+        art = master_artifact
         return {
             "target": target,
             "artifact_id": art.artifact_id,
@@ -1117,7 +1114,6 @@ def build_default_iris_tool_registry(
             "title": getattr(proposal, "primary_title", ""),
             "description": getattr(proposal, "description", ""),
             "thumbnails_count": len(getattr(proposal, "thumbnail_concepts", [])),
-            "has_short_package": bool(getattr(proposal, "short_package", None)),
         }
 
     registry.register(
@@ -1189,28 +1185,5 @@ def build_default_iris_tool_registry(
         )
     )
 
-    # 12. inspect_short
-    def handle_inspect_short() -> dict[str, Any]:
-        if not short_artifact:
-            return {"present": False, "message": "No Short artifact provided"}
-        is_vertical = (short_artifact.height or 0) > (short_artifact.width or 0)
-        return {
-            "present": True,
-            "artifact_id": short_artifact.artifact_id,
-            "duration_ms": short_artifact.duration_ms,
-            "width": short_artifact.width,
-            "height": short_artifact.height,
-            "is_vertical_9_16": is_vertical,
-        }
-
-    registry.register(
-        ToolDefinition(
-            name="inspect_short",
-            description="Inspect vertical Short artifact framing, dimensions, and caption readability",
-            parameters_schema=InspectShortArgs,
-            handler=handle_inspect_short,
-            human_summary_formatter=lambda args, out: f"Iris inspected vertical Short ({out.get('width')}x{out.get('height')}).",
-        )
-    )
 
     return registry

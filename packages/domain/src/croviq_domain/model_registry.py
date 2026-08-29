@@ -51,7 +51,7 @@ CANONICAL_MODEL_REGISTRY: list[ModelCapabilityEntry] = [
         implemented=ModelImplementationStatus.IMPLEMENTED,
         live_upstream_proven=UpstreamVerificationStatus.YES,
         last_verified_at="2026-08-29",
-        notes="Multimodal video analysis, Maya/Leo editorial decisions, and Alex grounded research.",
+        notes="Multimodal video analysis, Leo editorial decisions, and Alex grounded research.",
     ),
     ModelCapabilityEntry(
         model_id="gemini-3.5-transcribe-preview",

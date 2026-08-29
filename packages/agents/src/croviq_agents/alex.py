@@ -33,20 +33,28 @@ from croviq_observability.events import EventType
 logger = logging.getLogger(__name__)
 
 ALEX_SYSTEM_INSTRUCTION = (
-    "You are Alex, Croviq's Data Scientist for YouTube creators.\n"
-    "Observe canonical channel data, calculate defensible comparisons, test patterns, "
-    "and recommend bounded actions or experiments.\n\n"
-    "Core Contracts:\n"
-    "- FACT: Directly computed from YouTube or canonical channel data.\n"
-    "- INFERENCE: Statistically supported interpretation; label bounds and confounders. Never turn correlation into causation.\n"
-    "- RESEARCH: Externally grounded web information backed by verifiable source citations.\n"
-    "- RECOMMENDATION: Concrete, bounded creative or technical action for the creator.\n\n"
-    "Research Grounding Rules:\n"
-    "- Label external findings as web research synthesized by Gemini 3.7 Flash with Google Search Grounding, not as direct YouTube trend or category data.\n"
-    "- When researching emerging topics, search public documentation, announcements, and releases.\n"
-    "- Every research finding MUST have at least one valid public source citation (URL and domain).\n"
-    "- Synthesize why the topic matters specifically to this channel's audience and content pillars.\n"
-    "- Provide normalized topic fingerprints for deduplication.\n"
+    "You are Alex, Croviq's senior Channel Data Scientist and research partner.\n\n"
+    "Your core mission is to investigate why a creator's channel behaves the way it does, "
+    "uncover deep quantitative patterns, and guide high-conviction creative decisions. "
+    "You do not merely summarize dashboards or narrate KPIs.\n\n"
+    "Data Science & Analytical Principles:\n"
+    "1. Evidence Before Conclusions: Ground every observation in verifiable channel metrics, "
+    "distribution curves, or authoritative external sources before offering an interpretation.\n"
+    "2. Strict Epistemic Discipline: Categorize and separate distinct levels of knowledge:\n"
+    "   - FACT / MEASUREMENT: Directly computed from verified channel or video time series.\n"
+    "   - INFERENCE: Statistically supported pattern; always cite sample size, effect size, and uncertainty.\n"
+    "   - HYPOTHESIS: Falsifiable proposed explanation to test with structured experiments.\n"
+    "   - RECOMMENDATION: Concrete, creator-actionable next step with clear trade-offs.\n"
+    "3. Quantitative Rigor: Use Python/code execution for mathematical computations, rolling averages, "
+    "retention regressions, cohort analysis, and scenario forecasting. Never approximate or guess numbers in prose.\n"
+    "4. Correlation vs. Causation: Never claim causation from correlation without experimental validation or clear confounder analysis.\n"
+    "5. Truthfulness & Data Integrity: Never fabricate channel metrics. Never substitute synthetic sample data "
+    "6. Channel-Aligned Research: Build your understanding from content pillars, top-performing topics, audience retention patterns, "
+    "and Channel Memory. Label external findings as web research synthesized by Gemini 3.7 Flash with Google Search Grounding, not as direct YouTube trend data. "
+    "Research public web developments (benchmarks, community discussions, technical releases) that matter specifically to this channel rather than generic news.\n"
+    "7. Continuity Through Memory: Read and update Channel Memory to retain historical baselines, creator preferences, "
+    "and verified lessons across productions.\n"
+    "8. Creator-Facing Clarity: Explain complex statistical relationships in clear, professional, and accessible language."
 )
 
 
@@ -797,6 +805,20 @@ class AlexDataScientist:
                 "opportunity_score": 0.89,
                 "citations": [
                     SourceCitation(
+                        url="https://news.ycombinator.com/item?id=39501234",
+                        title="Discussion: Failure Modes and Evaluation in Production Agent Swarms — Hacker News",
+                        domain="news.ycombinator.com",
+                        published_at=None,
+                        grounding_metadata={"source": "hacker_news"},
+                    ),
+                    SourceCitation(
+                        url="https://github.com/langchain-ai/langgraph",
+                        title="LangGraph: Build Resilient Agentic Workflows — GitHub",
+                        domain="github.com",
+                        published_at=None,
+                        grounding_metadata={"source": "github_repo"},
+                    ),
+                    SourceCitation(
                         url="https://cloud.google.com/products/agent-builder",
                         title="Google Cloud Agent Builder and Evaluation Standards",
                         domain="cloud.google.com",
@@ -816,6 +838,20 @@ class AlexDataScientist:
                 "freshness_score": 0.92,
                 "opportunity_score": 0.90,
                 "citations": [
+                    SourceCitation(
+                        url="https://www.reddit.com/r/LocalLLaMA/comments/1ai_vision_benchmarks",
+                        title="Community Benchmarks: Low-Latency Multimodal Frame Analysis — r/LocalLLaMA",
+                        domain="reddit.com",
+                        published_at=None,
+                        grounding_metadata={"source": "reddit_community"},
+                    ),
+                    SourceCitation(
+                        url="https://github.com/ggerganov/llama.cpp",
+                        title="llama.cpp: Fast Multimodal and LLM Inference in C/C++ — GitHub",
+                        domain="github.com",
+                        published_at=None,
+                        grounding_metadata={"source": "github_repo"},
+                    ),
                     SourceCitation(
                         url="https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API",
                         title="WebCodecs API Standards — MDN Web Docs",
@@ -1009,7 +1045,7 @@ class AlexDataScientist:
                     lesson_id=f"lsn_{finding_or_analysis.topic_fingerprint[:12]}",
                     channel_id=channel_id,
                     directive=f"Highlight concrete capabilities from {finding_or_analysis.title} in the opening 30 seconds.",
-                    target_agent=TargetAgent.DIRECTOR,
+                    target_agent=TargetAgent.LEO,
                     evidence_summary=finding_or_analysis.why_it_matters,
                     confidence=finding_or_analysis.opportunity_score,
                     status="active",

@@ -86,7 +86,7 @@ class TestChannelLessonSchema:
             lesson_id="lsn_01",
             channel_id="croviq_syn_ai_eng_01",
             directive="Show terminal demo within 30 seconds.",
-            target_agent=TargetAgent.DIRECTOR,
+            target_agent=TargetAgent.LEO,
             evidence_summary="Early demo videos average 58.4% retention vs 44.1% late demos.",
             confidence=0.92,
             status="active",
@@ -94,7 +94,7 @@ class TestChannelLessonSchema:
         )
 
         assert lesson.lesson_id == "lsn_01"
-        assert lesson.target_agent == TargetAgent.DIRECTOR
+        assert lesson.target_agent == TargetAgent.LEO
         assert lesson.confidence == 0.92
 
     def test_lesson_confidence_bounds(self) -> None:
@@ -103,7 +103,7 @@ class TestChannelLessonSchema:
                 lesson_id="lsn_bad",
                 channel_id="c_01",
                 directive="Test",
-                target_agent=TargetAgent.EDITOR,
+                target_agent=TargetAgent.LEO,
                 evidence_summary="Summary",
                 confidence=1.5,
             )
@@ -155,12 +155,11 @@ class TestChannelProfileBuilder:
 
         assert len(lessons) >= 4
         target_agents = {l.target_agent for l in lessons}
-        assert TargetAgent.DIRECTOR in target_agents
-        assert TargetAgent.EDITOR in target_agents
-        assert TargetAgent.PACKAGING in target_agents
-        assert TargetAgent.QA in target_agents
+        assert TargetAgent.LEO in target_agents
+        assert TargetAgent.ALEX in target_agents
+        assert TargetAgent.IRIS in target_agents
 
-        director_lesson = next(l for l in lessons if l.target_agent == TargetAgent.DIRECTOR)
-        assert "30 seconds" in director_lesson.directive
-        assert director_lesson.confidence >= 0.8
-        assert director_lesson.channel_id == sample_channel.channel_id
+        leo_lesson = next(l for l in lessons if l.target_agent == TargetAgent.LEO)
+        assert "30 seconds" in leo_lesson.directive or "CLI" in leo_lesson.directive
+        assert leo_lesson.confidence >= 0.8
+        assert leo_lesson.channel_id == sample_channel.channel_id

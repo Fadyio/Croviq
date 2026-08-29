@@ -8,10 +8,9 @@ from croviq_domain.validators import validate_timezone_aware
 
 
 class TargetAgent(StrEnum):
-    DIRECTOR = "director"
-    EDITOR = "editor"
-    PACKAGING = "packaging"
-    QA = "qa"
+    ALEX = "alex"
+    LEO = "leo"
+    IRIS = "iris"
 
 
 class ChannelMemoryProfile(BaseModel):
@@ -256,40 +255,40 @@ class ChannelProfileBuilder:
 
         return [
             ChannelLesson(
-                lesson_id=f"{channel_id}_director_early_demo",
+                lesson_id=f"{channel_id}_leo_early_demo",
                 channel_id=channel_id,
                 directive="Introduce live code or terminal demonstration within the first 30 seconds.",
-                target_agent=TargetAgent.DIRECTOR,
+                target_agent=TargetAgent.LEO,
                 evidence_summary="Videos featuring early demonstrations (<=00:30) achieve 58.4% mean retention vs 44.1% for late demos.",
                 confidence=0.92,
                 status="active",
                 created_at=now,
             ),
             ChannelLesson(
-                lesson_id=f"{channel_id}_editor_cut_idle_cli",
+                lesson_id=f"{channel_id}_leo_cut_idle_cli",
                 channel_id=channel_id,
                 directive="Cut CLI installation wait times, package download progress bars, and repetitive boilerplate setup.",
-                target_agent=TargetAgent.EDITOR,
+                target_agent=TargetAgent.LEO,
                 evidence_summary="Audience retention graphs reveal sharp drop-offs during unedited CLI build steps.",
                 confidence=0.88,
                 status="active",
                 created_at=now,
             ),
             ChannelLesson(
-                lesson_id=f"{channel_id}_packaging_outcome_titles",
+                lesson_id=f"{channel_id}_alex_outcome_titles",
                 channel_id=channel_id,
                 directive="Lead with outcome-focused titles and concrete tool names rather than generic beginner labels.",
-                target_agent=TargetAgent.PACKAGING,
+                target_agent=TargetAgent.ALEX,
                 evidence_summary="Outcome-focused titles achieved an average CTR of 8.6% compared to 4.8% for generic tutorial phrasing.",
                 confidence=0.90,
                 status="active",
                 created_at=now,
             ),
             ChannelLesson(
-                lesson_id=f"{channel_id}_qa_verify_demo_timing",
+                lesson_id=f"{channel_id}_iris_verify_demo_timing",
                 channel_id=channel_id,
                 directive="Verify that narrative script and timeline reach the primary technical artifact demonstration before 00:30.",
-                target_agent=TargetAgent.QA,
+                target_agent=TargetAgent.IRIS,
                 evidence_summary="Consistent with channel-wide retention correlation with early demonstration pacing.",
                 confidence=0.89,
                 status="active",

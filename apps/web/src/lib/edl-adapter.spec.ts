@@ -136,7 +136,7 @@ test.describe("EDL Adapter & Playback Logic", () => {
 
   test("edlToTwickTimeline builds canonical tracks and populates blocks truthfully", () => {
     const twickData = edlToTwickTimeline(fairphoneEDL);
-    expect(twickData.tracks.length).toBe(8);
+    expect(twickData.tracks.length).toBe(7);
     expect(twickData.tracks[0].getName()).toBe("Video");
     expect(twickData.tracks[1].getName()).toBe("Audio");
     expect(twickData.tracks[2].getName()).toBe("Edits");

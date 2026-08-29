@@ -297,9 +297,9 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
           updated_at: "2026-08-27T00:00:00Z",
           is_custom: false,
         },
-        maya_prompt: {
-          agent_id: "maya",
-          prompt_text: "You are Maya, the Director.",
+        iris_prompt: {
+          agent_id: "iris",
+          prompt_text: "You are Iris, the Quality Assurance agent.",
           version: 1,
           updated_at: "2026-08-27T00:00:00Z",
           is_custom: false,
@@ -433,16 +433,6 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
       body: Buffer.from(""),
     });
   });
-  await page.route("**/fake-short.mp4*", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "video/mp4",
-      headers: {
-        "access-control-allow-origin": "*",
-      },
-      body: Buffer.from(""),
-    });
-  });
 
   await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/transcribe`, async (route) => {
     options.requests?.push("transcribe");
@@ -515,7 +505,7 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
     });
   });
 
-  // Mock Editorial Run (Leo proposals, Maya reviews, AgentActivities)
+  // Mock Editorial Run (Leo proposals and system activities)
   await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/editorial-run`, async (route) => {
     if (!state.editorialRun) {
       await route.fulfill({ status: 404, body: "not found" });
@@ -641,46 +631,6 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
               confidence: 0.95,
             },
           ],
-          short_candidate: {
-            start_ms: 22260,
-            end_ms: 42340,
-            transcript_start_word: 60,
-            transcript_end_word: 121,
-            hook_title: "Fairphone Teardown & Screws",
-            concise_reason: "High energy, witty accessory swap and repairability demo.",
-            confidence: 0.95,
-          },
-        },
-        review: {
-          production_id: FAIRPHONE_PRODUCTION_ID,
-          agent: "maya",
-          model: "director-maya-v2",
-          overall_assessment:
-            "Leo's editorial decisions effectively preserve the video's high energy, wit, and core product value proposition.",
-          decisions: [
-            {
-              editor_decision_id: "dec_001",
-              verdict: "APPROVE",
-              concise_reason:
-                "Strong opening hook clearly stating product differentiation within critical first 15s.",
-            },
-            {
-              editor_decision_id: "dec_002",
-              verdict: "APPROVE",
-              concise_reason:
-                "Covering the modular plate swap with detailed close-up B-roll enhances viewer comprehension while maintaining comedic commentary pacing.",
-            },
-            {
-              editor_decision_id: "dec_003",
-              verdict: "APPROVE",
-              concise_reason: "Preserves key repairability explanation without altering pacing.",
-            },
-            {
-              editor_decision_id: "dec_004",
-              verdict: "APPROVE",
-              concise_reason: "Essential silicon specification delivered concisely.",
-            },
-          ],
         },
         activities: [
           {
@@ -692,16 +642,6 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
             message: "[BROLL_COVER_CANDIDATE] At 00:26.2, use close-up visual coverage.",
             related_decision_id: "dec_002",
             created_at: "2026-08-26T00:02:15Z",
-          },
-          {
-            activity_id: "act_002",
-            production_id: FAIRPHONE_PRODUCTION_ID,
-            run_id: FAIRPHONE_RUN_ID,
-            agent: "maya",
-            activity_type: "director_review",
-            message: "[APPROVE] Approved Leo's coverage decision.",
-            related_decision_id: "dec_002",
-            created_at: "2026-08-26T00:02:30Z",
           },
         ],
       }),
@@ -829,24 +769,6 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
             created_at: "2026-08-26T00:02:45Z",
             completed_at: "2026-08-26T00:02:50Z",
           },
-          {
-            artifact_id: "art_short_001",
-            production_id: FAIRPHONE_PRODUCTION_ID,
-            edl_id: defaultFairphoneEdl.edl_id,
-            artifact_type: "SHORT",
-            status: "completed",
-            duration_ms: 39800,
-            size_bytes: 850000,
-            width: 1080,
-            height: 1920,
-            frame_rate: 30.0,
-            video_codec: "h264",
-            audio_codec: "aac",
-            playback_url: "https://storage.googleapis.com/fake-short.mp4",
-            playback_expires_at: "2026-08-27T00:00:00Z",
-            created_at: "2026-08-26T00:03:05Z",
-            completed_at: "2026-08-26T00:03:10Z",
-          },
         ],
       }),
     });
@@ -895,101 +817,6 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
           playback_expires_at: "2026-08-27T00:00:00Z",
           created_at: "2026-08-26T00:02:45Z",
           completed_at: "2026-08-26T00:02:50Z",
-        }),
-      });
-    },
-  );
-
-  // Mock Post-Render Review & Render Review listing (Issue #30)
-  await page.route(
-    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/render-reviews`,
-    async (route) => {
-      if (!state.render) {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            production_id: FAIRPHONE_PRODUCTION_ID,
-            review: null,
-            reviews: [],
-            needs_manual_review: false,
-          }),
-        });
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          production_id: FAIRPHONE_PRODUCTION_ID,
-          review: {
-            review_id: "rrv_fairphone_01",
-            production_id: FAIRPHONE_PRODUCTION_ID,
-            edl_id: defaultFairphoneEdl.edl_id,
-            preview_artifact_id: "art_preview_001",
-            agent: "maya",
-            model: "gemini-3.7-flash",
-            verdict: "APPROVE",
-            summary: "Dialogue flows naturally. Edit approved.",
-            issues: [],
-            approved_for_master: true,
-            confidence: 0.98,
-            created_at: "2026-08-26T00:02:55Z",
-          },
-          reviews: [],
-          needs_manual_review: false,
-        }),
-      });
-    },
-  );
-
-  await page.route(
-    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/review-preview`,
-    async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          production_id: FAIRPHONE_PRODUCTION_ID,
-          review: {
-            review_id: "rrv_fairphone_01",
-            production_id: FAIRPHONE_PRODUCTION_ID,
-            edl_id: defaultFairphoneEdl.edl_id,
-            preview_artifact_id: "art_preview_001",
-            agent: "maya",
-            model: "gemini-3.7-flash",
-            verdict: "APPROVE",
-            summary: "Dialogue flows naturally. Edit approved.",
-            issues: [],
-            approved_for_master: true,
-            confidence: 0.98,
-            created_at: "2026-08-26T00:02:55Z",
-          },
-          master_artifact: {
-            artifact_id: "art_master_001",
-            production_id: FAIRPHONE_PRODUCTION_ID,
-            edl_id: defaultFairphoneEdl.edl_id,
-            artifact_type: "MASTER",
-            status: "completed",
-            duration_ms: 113824,
-            playback_url: "https://storage.googleapis.com/fake-master.mp4",
-            playback_expires_at: "2026-08-27T00:00:00Z",
-            created_at: "2026-08-26T00:03:00Z",
-            completed_at: "2026-08-26T00:03:05Z",
-          },
-          status: "complete",
-          activities: [
-            {
-              activity_id: "act_003",
-              production_id: FAIRPHONE_PRODUCTION_ID,
-              run_id: FAIRPHONE_RUN_ID,
-              agent: "maya",
-              role: "Director",
-              activity_type: "render_review",
-              message: "The dialogue flows naturally. Edit approved.",
-              created_at: "2026-08-26T00:03:00Z",
-            },
-          ],
         }),
       });
     },
@@ -1067,7 +894,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     });
   }
 
-  test("polls a persisted in-progress review without starting duplicate analysis", async ({
+  test("polls a persisted in-progress edit without starting duplicate analysis", async ({
     page,
   }) => {
     const requests: string[] = [];
@@ -1077,15 +904,12 @@ test.describe("Editor Workspace (Issue #28)", () => {
       completeEditorialAfterGets: 3,
       requests,
     });
-
-    await expect(page.getByText("Maya is reviewing Leo's edit…").first()).toBeVisible();
+    await expect(page.getByText("Leo is reviewing the footage…").first()).toBeVisible();
     expect(requests).toEqual([]);
     await expect.poll(() => requests, { timeout: 4000 }).toEqual(["edl", "renders/preview"]);
   });
 
-  test("shows Leo and Maya only while their persisted analysis stages are active", async ({
-    page,
-  }) => {
+  test("shows Leo while the persisted analysis stage is active", async ({ page }) => {
     await loginAndNavigateToEditor(page, {
       initialState: { transcript: true, editorialRun: false, edl: true },
       analyzeDelayMs: 1600,
@@ -1093,10 +917,10 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     await expect(page.getByText("Leo is reviewing the footage…").first()).toBeVisible();
     await expect(page.getByTestId("agent-presence-leo")).toHaveAttribute("data-active", "true");
-    await expect(page.getByText("Maya is reviewing Leo's edit…").first()).toBeVisible({
+    await expect(page.getByText("Leo is reviewing the footage…").first()).toBeVisible({
       timeout: 3000,
     });
-    await expect(page.getByTestId("agent-presence-maya")).toHaveAttribute("data-active", "true");
+    await expect(page.getByTestId("agent-presence-leo")).toHaveAttribute("data-active", "true");
     await expect(page.getByTestId("compact-status-banner")).toBeVisible();
   });
 
@@ -1114,14 +938,6 @@ test.describe("Editor Workspace (Issue #28)", () => {
       failStage: "editorialRun",
       message: "Leo analysis failed",
       expectedRequests: ["analyze", "analyze"],
-    },
-    {
-      name: "director review",
-      initialState: { transcript: true, editorialRun: true, edl: false },
-      editorialStatus: "failed",
-      failStage: "editorialRun",
-      message: "Director review failed",
-      expectedRequests: ["analyze"],
     },
     {
       name: "edit plan",
@@ -1146,7 +962,14 @@ test.describe("Editor Workspace (Issue #28)", () => {
       const requests: string[] = [];
       await loginAndNavigateToEditor(page, {
         initialState: failureCase.initialState,
-        editorialStatus: "editorialStatus" in failureCase ? failureCase.editorialStatus : undefined,
+        editorialStatus:
+          "editorialStatus" in failureCase
+            ? (
+                failureCase as {
+                  editorialStatus?: "analyzing" | "reviewing" | "completed" | "failed";
+                }
+              ).editorialStatus
+            : undefined,
         failStage: failureCase.failStage,
         requests,
       });
@@ -1179,7 +1002,6 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await page.getByTestId("tab-transcript").click();
     await expect(page.getByTestId("transcript-panel")).toBeVisible();
     await expect(page.getByTestId("agent-presence-leo")).toBeVisible();
-    await expect(page.getByTestId("agent-presence-maya")).toBeVisible();
     await expect(page.getByTestId("rendered-preview-badge")).not.toBeVisible();
     await expect(
       page
@@ -1254,7 +1076,6 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByText("Review Completed")).toHaveCount(0);
     await expect(page.getByText(/editorial decisions|decisions approved/i)).toHaveCount(0);
     await expect(page.getByText(/use close-up visual coverage/i)).toBeVisible();
-    await expect(page.getByText(/Approved Leo/i)).toBeVisible();
     await expect(page.getByText(/\[(KEEP|BROLL_COVER_CANDIDATE|APPROVE)\]/)).toHaveCount(0);
 
     // 6. Activity selection seeks the media and opens concise decision details.
@@ -1262,12 +1083,10 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.locator("[data-testid='decision-inspector']")).toBeVisible();
     await expect(page.locator("[data-testid='active-coverage-overlay']")).toBeVisible();
     await expect(page.getByText("Leo · Video Editor")).toBeVisible();
-    await expect(page.getByText("Maya · Director")).toBeVisible();
     await expect(
-      page.locator("[data-testid='decision-inspector']").getByText("Approved", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByText(/Covering the modular plate swap with detailed close-up B-roll/i),
+      page.getByText(
+        /Close-up macro demonstration of unscrewing and swapping the rear plate accessory/i,
+      ),
     ).toBeVisible();
 
     // 7. Verify NO new Gemini or transcription calls on loading completed editor
@@ -1405,7 +1224,6 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     // 4. Verify chapters, short, and b-roll appear on timeline
     await expect(page.getByText("Modular Teardown & Screws")).toBeVisible();
-    await expect(page.getByText("Fairphone Teardown & Screws")).toBeVisible();
   });
 
   test("verifies bounded 100dvh desktop layout at 1440x900 without document scroll", async ({
@@ -1440,7 +1258,6 @@ test.describe("Editor Workspace (Issue #28)", () => {
       expect(transcriptBox.height / railBox.height).toBeGreaterThan(0.55);
     }
     await expect(page.getByTestId("agent-presence-leo").locator("img")).toBeVisible();
-    await expect(page.getByTestId("agent-presence-maya").locator("img")).toBeVisible();
 
     // Capture screenshots at 1440x900
     await page.screenshot({ path: "e2e/screenshots/editor-1440x900.png" });
@@ -1492,26 +1309,6 @@ test.describe("Editor Workspace (Issue #28)", () => {
     expect(railBox?.width).toBeLessThanOrEqual(400);
     // Capture screenshot at 1280x800
     await page.screenshot({ path: "e2e/screenshots/editor-1280x800.png" });
-  });
-
-  test("displays Short output option and switches to vertical Short preview", async ({ page }) => {
-    await loginAndNavigateToEditor(page);
-
-    // 1. Verify Short toggle option is visible in header controls
-    const previewMode = page.getByRole("group", { name: "Preview Mode Selection" });
-    await expect(previewMode.getByRole("button", { name: "Short", exact: true })).toBeVisible();
-
-    // 2. Click Short toggle to activate vertical 9:16 Short playback
-    await previewMode.getByRole("button", { name: "Short", exact: true }).click();
-
-    // 3. Verify Short active state and badge
-    await expect(previewMode.getByRole("button", { name: "Short", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await expect(
-      page.getByTestId("short-mode-badge").or(page.getByTestId("rendered-short-badge")),
-    ).toBeVisible();
   });
 
   test("clicking Leo avatar opens Agent Settings drawer with Prompt, Memory, Voice and NO Tools or Activity tabs", async ({

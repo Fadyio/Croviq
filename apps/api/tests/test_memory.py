@@ -148,42 +148,41 @@ async def test_fake_store_profile_lifecycle(fake_store: FakeChannelMemoryStore) 
 async def test_fake_store_lessons_lifecycle(fake_store: FakeChannelMemoryStore) -> None:
     """Fake store handles lesson recording and target-agent filtered retrieval."""
     now = datetime.now(timezone.utc)
-    lesson_dir = ChannelLesson(
-        lesson_id="lsn_dir_01",
+    lesson_leo = ChannelLesson(
+        lesson_id="lsn_leo_01",
         channel_id="chan_alpha",
         directive="Hook viewers within 30s",
-        target_agent=TargetAgent.DIRECTOR,
+        target_agent=TargetAgent.LEO,
         evidence_summary="58% retention on early demos",
         confidence=0.9,
         created_at=now,
     )
-    lesson_edit = ChannelLesson(
-        lesson_id="lsn_edit_01",
+    lesson_alex = ChannelLesson(
+        lesson_id="lsn_alex_01",
         channel_id="chan_alpha",
-        directive="Cut silence",
-        target_agent=TargetAgent.EDITOR,
-        evidence_summary="Drop-offs during pauses",
+        directive="Focus on outcome titles",
+        target_agent=TargetAgent.ALEX,
+        evidence_summary="Outcome titles get 8.6% CTR",
         confidence=0.85,
         created_at=now,
     )
 
-    await fake_store.add_lesson(lesson_dir)
-    await fake_store.add_lesson(lesson_edit)
+    await fake_store.add_lesson(lesson_leo)
+    await fake_store.add_lesson(lesson_alex)
 
     all_lessons = await fake_store.get_lessons("chan_alpha")
     assert len(all_lessons) == 2
 
-    dir_lessons = await fake_store.get_lessons("chan_alpha", target_agent=TargetAgent.DIRECTOR)
-    assert len(dir_lessons) == 1
-    assert dir_lessons[0].lesson_id == "lsn_dir_01"
+    leo_lessons = await fake_store.get_lessons("chan_alpha", target_agent=TargetAgent.LEO)
+    assert len(leo_lessons) == 1
+    assert leo_lessons[0].lesson_id == "lsn_leo_01"
 
-    edit_lessons = await fake_store.get_lessons("chan_alpha", target_agent="editor")
-    assert len(edit_lessons) == 1
-    assert edit_lessons[0].lesson_id == "lsn_edit_01"
+    alex_lessons = await fake_store.get_lessons("chan_alpha", target_agent="alex")
+    assert len(alex_lessons) == 1
+    assert alex_lessons[0].lesson_id == "lsn_alex_01"
 
-    qa_lessons = await fake_store.get_lessons("chan_alpha", target_agent=TargetAgent.QA)
-    assert len(qa_lessons) == 0
-
+    iris_lessons = await fake_store.get_lessons("chan_alpha", target_agent=TargetAgent.IRIS)
+    assert len(iris_lessons) == 0
 
 # -----------------------------------------------------------------------------
 # 2. GoogleMemoryBankStore Adapter Tests (Mocked Network / GCP)
@@ -201,7 +200,7 @@ async def test_google_store_retrieve_profile_success() -> None:
 
     fake_profile_data = {
         "channel_id": "croviq_syn_ai_eng_01",
-        "channel_name": "Modern AI Engineering",
+        "channel_name": "Croviq",
         "primary_topics": ["AI Agents"],
         "content_pillars": ["Architecture"],
         "language": "en",
@@ -227,7 +226,7 @@ async def test_google_store_retrieve_profile_success() -> None:
         profile = await store.get_profile("croviq_syn_ai_eng_01")
         assert profile is not None
         assert profile.channel_id == "croviq_syn_ai_eng_01"
-        assert profile.channel_name == "Modern AI Engineering"
+        assert profile.channel_name == "Croviq"
 
 
 @pytest.mark.asyncio
@@ -292,7 +291,7 @@ def test_get_memory_profile_sample_channel_auto_initializes(
     assert response.status_code == 200
     data = response.json()
     assert data["channel_id"] == "croviq_syn_ai_eng_01"
-    assert data["channel_name"] == "Modern AI Engineering"
+    assert data["channel_name"] == "Croviq"
     assert len(data["primary_topics"]) > 0
     assert len(data["content_pillars"]) > 0
     assert "mean_views" in data["historical_baselines"]
@@ -342,12 +341,12 @@ def test_get_memory_lessons_endpoint(
     lessons = response.json()
     assert len(lessons) >= 4
 
-    # 2. Filter by director
-    dir_response = client.get(
-        "/api/channel/memory/lessons?channel_id=croviq_syn_ai_eng_01&target_agent=director",
+    # 2. Filter by leo
+    leo_response = client.get(
+        "/api/channel/memory/lessons?channel_id=croviq_syn_ai_eng_01&target_agent=leo",
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert dir_response.status_code == 200
-    dir_lessons = dir_response.json()
-    assert len(dir_lessons) >= 1
-    assert all(l["target_agent"] == "director" for l in dir_lessons)
+    assert leo_response.status_code == 200
+    leo_lessons = leo_response.json()
+    assert len(leo_lessons) >= 1
+    assert all(l["target_agent"] == "leo" for l in leo_lessons)

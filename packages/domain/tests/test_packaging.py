@@ -1,4 +1,4 @@
-"""Unit tests for Nina Packaging domain models and schemas."""
+"""Unit tests for Packaging domain models and schemas."""
 
 from datetime import datetime, timezone
 import pytest
@@ -9,7 +9,6 @@ from croviq_domain.packaging import (
     PackagingChapter,
     PackagingProposal,
     PublishMetadata,
-    ShortPackage,
     ThumbnailConcept,
     TitleAngle,
     TitleCandidate,
@@ -39,8 +38,6 @@ def test_packaging_proposal_validation_success():
     proposal = PackagingProposal(
         proposal_id="pkg_test_01",
         production_id="prod_01",
-        agent="nina",
-        model="gemini-3.7-flash",
         primary_title="Inside the Most Repairable Modern Smartphone",
         title_candidates=[
             TitleCandidate(
@@ -85,30 +82,21 @@ def test_packaging_proposal_validation_success():
                 frame_verified=True,
             )
         ],
-        short_package=ShortPackage(
-            title="You Can Actually Repair This Phone Yourself!",
-            description="The Fairphone 6 Plus teardown in 45 seconds.",
-            hook="Tired of glued-together phones?",
-            hashtags=["#fairphone", "#tech", "#shorts"],
-        ),
         packaging_summary="Practical hardware repair framing tailored to tech enthusiast audience.",
         channel_evidence="Practical demonstration framing outperforms spec sheets by 34% on this channel.",
         confidence=0.94,
         created_at=now,
     )
 
-    assert proposal.agent == "nina"
     assert len(proposal.title_candidates) == 2
     assert proposal.chapters[0].formatted_time == "0:00"
     assert proposal.thumbnail_concepts[0].frame_verified is True
-    assert proposal.short_package is not None
-    assert proposal.short_package.title == "You Can Actually Repair This Phone Yourself!"
 
 
 def test_packaging_proposal_validation_errors():
     with pytest.raises(ValidationError):
         # Missing required fields
-        PackagingProposal.model_validate({"agent": "nina"})
+        PackagingProposal.model_validate({"production_id": "p1"})
 
     with pytest.raises(ValidationError):
         # Negative confidence
@@ -143,6 +131,6 @@ def test_publish_metadata_creation():
 
 def test_agent_id_contains_supported_agents():
     assert AgentId.LEO.value == "leo"
-    assert AgentId.MAYA.value == "maya"
     assert AgentId.ALEX.value == "alex"
     assert AgentId.IRIS.value == "iris"
+    assert "maya" not in [a.value for a in AgentId]

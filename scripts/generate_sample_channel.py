@@ -827,12 +827,12 @@ def generate_sample_dataset() -> SampleChannelFixture:
 
     channel_public = ChannelPublicMetadata(
         channel_id=channel_id,
-        title="Modern AI Engineering",
+        title="Croviq",
         description=(
             "Deep-dive technical tutorials, architecture walkthroughs, and production benchmarks "
             "for AI engineers building with Gemini, Vertex AI, Cloud Run, Python, and GitHub Actions."
         ),
-        custom_url="@ModernAIEngineering",
+        custom_url="@croviq",
         subscriber_count=current_subs,
         video_count=len(videos),
         total_views=total_views_accum,

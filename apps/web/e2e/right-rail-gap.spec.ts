@@ -206,7 +206,7 @@ const mockBackendApis = async (page: Page) => {
         channel: {
           channel_id: "croviq_syn_ai_eng_01",
           source_type: "synthetic",
-          title: "Modern AI Engineering",
+          title: "Croviq",
           description: "Sample channel",
           avatar_url: null,
           subscriber_count: 51317,
@@ -382,13 +382,8 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
         await page.setViewportSize(vp);
         await signInAndGoTo(page, route);
 
-        if (route === "/app") {
-          await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
-        } else if (route === "/app/performance") {
-          await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
-        } else {
-          await expect(page.getByRole("heading", { name: "Proposed Experiments" })).toBeVisible();
-        }
+        await expect(page).toHaveURL(/\/app$/);
+        await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
 
         const alexRail = page.locator("aside");
         await expect(alexRail).toBeVisible();
@@ -400,21 +395,40 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
         });
         expect(isNoOverflow).toBe(true);
 
-        // 2. Measure right gap and compare against canonical edge padding (32px for lg:px-8)
+        // 2. The workspace and navbar must share the same intentional edge inset.
+        // A larger workspace inset visually detaches Alex's rail from the browser edge.
         const metrics = await page.evaluate(() => {
           const rail = document.querySelector("aside");
-          const vpW = window.innerWidth;
-          const docW = document.documentElement.clientWidth;
-          const railRight = rail ? rail.getBoundingClientRect().right : 0;
+          const main = document.querySelector("main");
+          const workspace = main?.parentElement?.parentElement;
+          const navbar = document.querySelector("header");
+          const workspaceStyle = workspace ? window.getComputedStyle(workspace) : null;
+          const navbarStyle = navbar ? window.getComputedStyle(navbar) : null;
+          const viewportWidth = window.innerWidth;
+          const clientWidth = document.documentElement.clientWidth;
+          const railRight = rail?.getBoundingClientRect().right ?? 0;
           return {
-            unusedRightGap: Math.round((vpW - railRight) * 100) / 100,
-            docClientRightGap: Math.round((docW - railRight) * 100) / 100,
+            viewportWidth,
+            clientWidth,
+            workspaceRight: workspace?.getBoundingClientRect().right ?? 0,
+            railRight,
+            scrollbarWidth: viewportWidth - clientWidth,
+            workspacePaddingRight: Number.parseFloat(workspaceStyle?.paddingRight ?? "0"),
+            navbarPaddingRight: Number.parseFloat(navbarStyle?.paddingRight ?? "0"),
+            gridGap: Number.parseFloat(
+              main?.parentElement ? window.getComputedStyle(main.parentElement).columnGap : "0",
+            ),
+            viewportRightGap: Math.round((viewportWidth - railRight) * 100) / 100,
+            clientRightGap: Math.round((clientWidth - railRight) * 100) / 100,
           };
         });
 
-        // Canonical edge padding is 32px (lg:px-8). Unused gap must not exceed edge padding.
-        expect(metrics.unusedRightGap).toBeLessThanOrEqual(32);
-        expect(metrics.docClientRightGap).toBeLessThanOrEqual(32);
+        expect(metrics.workspaceRight).toBe(metrics.clientWidth);
+        expect(metrics.workspacePaddingRight).toBe(metrics.navbarPaddingRight);
+        expect(metrics.clientRightGap).toBe(metrics.workspacePaddingRight);
+        expect(metrics.viewportRightGap).toBe(
+          metrics.workspacePaddingRight + metrics.scrollbarWidth,
+        );
 
         // 3. Verify sticky behavior while scrolled
         await page.evaluate(() => window.scrollTo(0, 400));
@@ -440,35 +454,40 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
   }
 
   test("Capture Bug #1 verification screenshots", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1600, height: 900 });
     await signInAndGoTo(page, "/app");
-    await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
 
-    // 1. bug01-overview-1440x900.png
+    // 1. bug01-overview-1600x900.png
+    await page.screenshot({ path: "e2e/screenshots/bug01-overview-1600x900.png" });
+
+    // 2. bug01-overview-1440x900.png
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(400);
     await page.screenshot({ path: "e2e/screenshots/bug01-overview-1440x900.png" });
 
-    // 2. bug01-overview-1280x800.png
+    // 3. bug01-overview-1280x800.png
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.waitForTimeout(400);
     await page.screenshot({ path: "e2e/screenshots/bug01-overview-1280x800.png" });
 
-    // 3. bug01-performance-1440x900.png
+    // 4. bug01-performance-1440x900.png
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/app/performance");
-    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
     await page.screenshot({ path: "e2e/screenshots/bug01-performance-1440x900.png" });
-
-    // 4. bug01-experiments-1440x900.png
+    // 5. bug01-experiments-1440x900.png
     await page.goto("/app/experiments");
-    await expect(page.getByRole("heading", { name: "Proposed Experiments" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
     await page.screenshot({ path: "e2e/screenshots/bug01-experiments-1440x900.png" });
-
-    // 5. Scrolled screenshot where sticky rail is visible
+    // 6. Scrolled screenshot where sticky rail is visible
     await page.goto("/app");
-    await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, 450));
     await page.waitForTimeout(500);
     await page.screenshot({ path: "e2e/screenshots/bug01-overview-1440x900-scrolled.png" });

@@ -57,13 +57,11 @@ from croviq_domain.editorial import (
     EditorProposal,
     EditorialRun,
     EditorialRunStatus,
-    ShortCandidate,
 )
 from croviq_domain.packaging import (
     CreatorPackageOverrides,
     PackagingChapter,
     PackagingProposal,
-    ShortPackage,
     ThumbnailConcept,
     TitleAngle,
     TitleCandidate,
@@ -187,31 +185,12 @@ def test_master_artifact(test_production: Production) -> RenderArtifact:
 
 
 @pytest.fixture
-def test_short_artifact(test_production: Production) -> RenderArtifact:
-    now = datetime.now(timezone.utc)
-    return RenderArtifact(
-        artifact_id="art_short_pkg_100",
-        production_id=test_production.production_id,
-        edl_id="edl_pkg_100",
-        artifact_type=ArtifactType.SHORT,
-        status=ArtifactStatus.completed,
-        gcs_bucket="croviq-media-raw",
-        gcs_object=f"workspaces/ws_pkg_test/productions/{test_production.production_id}/renders/edl_pkg_100/short.mp4",
-        content_type="video/mp4",
-        duration_ms=39800,
-        created_at=now,
-        completed_at=now,
-    )
-
-
-@pytest.fixture
 def app_and_repos(
     test_user: User,
     test_workspace: Workspace,
     test_production: Production,
     test_transcript: Transcript,
     test_master_artifact: RenderArtifact,
-    test_short_artifact: RenderArtifact,
 ):
     prod_repo = InMemoryProductionRepository()
     ws_repo = InMemoryWorkspaceRepository()
@@ -271,7 +250,6 @@ def app_and_repos(
         "fake_client": fake_client,
         "test_production": test_production,
         "test_master_artifact": test_master_artifact,
-        "test_short_artifact": test_short_artifact,
     }
 
 
@@ -288,8 +266,6 @@ async def test_get_and_patch_packaging_overrides(app_and_repos):
     proposal = PackagingProposal(
         proposal_id="pkg_test_01",
         production_id=prod.production_id,
-        agent="iris",
-        model="gemini-3.7-flash",
         primary_title="Fairphone 6 Plus Teardown",
         title_candidates=[
             TitleCandidate(

@@ -37,10 +37,6 @@ from croviq_api.productions.render_repository import (
     RenderRepository,
     get_render_repository,
 )
-from croviq_api.productions.render_review_repository import (
-    RenderReviewRepository,
-    get_render_review_repository,
-)
 from croviq_api.productions.edl_repository import (
     EDLRepository,
     get_edl_repository,
@@ -59,7 +55,7 @@ from croviq_api.productions.editorial_repository import (
     EditorialRepository,
     get_editorial_repository,
 )
-from croviq_api.productions.editorial_service import DirectorEditorService
+from croviq_api.productions.editorial_service import EditorialService
 from croviq_api.productions.schemas import (
     AssembleEDLResponse,
     EDLDetailResponse,
@@ -73,8 +69,6 @@ from croviq_api.productions.schemas import (
     ProductionPlaybackResponse,
     RenderArtifactResponse,
     RenderListResponse,
-    ReviewPreviewResponse,
-    RenderReviewDetailResponse,
     StudioVoiceGenerationResponse,
     BRollListResponse,
     PackagingDetailResponse,
@@ -120,7 +114,6 @@ from croviq_domain.packaging import (
     CreatorPackageOverrides,
     PackagingChapter,
     PackagingProposal,
-    ShortPackage,
     ThumbnailConcept,
     TitleAngle,
     TitleCandidate,
@@ -197,7 +190,6 @@ from croviq_observability import (
     EventType,
     log_media_inspect_event,
     log_render_event,
-    log_short_render_event,
     log_transcription_event,
 )
 
@@ -621,7 +613,6 @@ async def delete_production(
     editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)],
     edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
-    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)],
     studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
     broll_repo: Annotated[BRollRepository, Depends(get_broll_repository)],
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
@@ -697,11 +688,6 @@ async def delete_production(
         await render_repo.delete_by_production_id(production_id)
     except Exception as exc:
         logger.warning("Error deleting renders for %s: %s", production_id, exc)
-
-    try:
-        await render_review_repo.delete_by_production_id(production_id)
-    except Exception as exc:
-        logger.warning("Error deleting render reviews for %s: %s", production_id, exc)
 
     try:
         await studio_voice_repo.delete_by_production_id(production_id)
@@ -1026,18 +1012,18 @@ async def get_source_analysis_input(
 @router.post(
     "/productions/{production_id}/analyze",
     response_model=AnalyzeProductionResponse,
-    summary="Run Director + Editor Editorial Analysis",
-    description="Execute Leo dialogue editing pass and Maya director review sequence using Gemini 3.7 Flash.",
+    summary="Run Leo Editorial Analysis and Render Preview",
+    description="Run Leo's dialogue edit, deterministic cut safety, EDL assembly, and Preview rendering.",
 )
 async def analyze_production(
     production_id: str,
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
-    editorial_service: Annotated[DirectorEditorService, Depends(get_editorial_service)],
+    editorial_service: Annotated[EditorialService, Depends(get_editorial_service)],
     force: bool = False,
 ) -> AnalyzeProductionResponse:
     request_id = getattr(request.state, "request_id", "unknown")
-    run, proposal, review, activities = await editorial_service.run_editorial_analysis(
+    run, proposal, edl, preview, activities = await editorial_service.run_editorial_analysis(
         production_id=production_id,
         current_user=current_user,
         request_id=request_id,
@@ -1048,7 +1034,8 @@ async def analyze_production(
         production_id=run.production_id,
         status=run.status,
         editor_proposal_id=run.editor_proposal_id,
-        director_review_id=run.director_review_id,
+        edl_id=edl.edl_id,
+        preview_artifact_id=preview.artifact_id,
         started_at=run.started_at,
         completed_at=run.completed_at,
     )
@@ -1058,7 +1045,7 @@ async def analyze_production(
     "/productions/{production_id}/editorial-run",
     response_model=EditorialRunDetailResponse,
     summary="Get Latest Editorial Run Details",
-    description="Retrieve the latest EditorialRun, EditorProposal, DirectorReview, and AgentActivities.",
+    description="Retrieve the latest editorial run, Leo proposal, and agent activities.",
 )
 async def get_editorial_run(
     production_id: str,
@@ -1080,16 +1067,12 @@ async def get_editorial_run(
     if run.editor_proposal_id:
         proposal = await editorial_repo.get_editor_proposal(production_id, run.editor_proposal_id)
 
-    review = None
-    if run.director_review_id:
-        review = await editorial_repo.get_director_review(production_id, run.director_review_id)
 
     activities = await editorial_repo.list_activities(production_id, run_id=run.run_id)
 
     return EditorialRunDetailResponse(
         run=run,
         proposal=proposal,
-        review=review,
         activities=activities,
     )
 
@@ -1098,7 +1081,7 @@ async def get_editorial_run(
     "/productions/{production_id}/edl",
     response_model=AssembleEDLResponse,
     summary="Assemble Canonical Edit Decision List (EDL)",
-    description="Deterministically derives audio-safe cut instructions and visual coverage markers from approved Director review.",
+    description="Deterministically derives audio-safe cut instructions and visual coverage markers from Leo's proposal.",
 )
 async def assemble_edl(
     production_id: str,
@@ -1386,204 +1369,6 @@ async def render_master_video(
 
 
 
-@router.post(
-    "/productions/{production_id}/renders/short",
-    response_model=RenderArtifactResponse,
-    summary="Render Vertical Short Video",
-    description="Deterministically render a 9:16 vertical Short MP4 with word-synced captions for an approved production.",
-)
-async def render_short_video(
-    production_id: str,
-    request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
-    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
-    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
-    editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)],
-    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
-    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)],
-    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
-    render_service: Annotated[RenderService, Depends(get_render_service)],
-    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
-) -> RenderArtifactResponse:
-    request_id = getattr(request.state, "request_id", "unknown")
-    prod = await _get_owned_production(production_id, current_user, production_repo)
-    if not prod.source_media or not prod.source_media.gcs_bucket or not prod.source_media.gcs_object:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Production '{production_id}' has no uploaded source media to render",
-        )
-    request_id = getattr(request.state, "request_id", "unknown")
-    settings = get_settings()
-    edl = await edl_repo.get_latest_edl(production_id)
-    if not edl:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Production '{production_id}' has no assembled EDL.",
-        )
-
-    # 1. Approval Gate: Maya review must approve for Master
-    latest_review = await render_review_repo.get_latest_render_review(production_id)
-    if not latest_review or not latest_review.approved_for_master:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Production '{production_id}' has not been approved for Master render by Director review.",
-        )
-
-    # 2. ShortCandidate check
-    latest_run = await editorial_repo.get_latest_editorial_run(production_id)
-    if not latest_run or not latest_run.editor_proposal_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Production '{production_id}' has no editorial proposal.",
-        )
-    proposal = await editorial_repo.get_editor_proposal(production_id, latest_run.editor_proposal_id)
-    if not proposal or not proposal.short_candidate:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Production '{production_id}' has no ShortCandidate selected by Leo.",
-        )
-    short_candidate = proposal.short_candidate
-
-    # 3. Idempotency check: if completed artifact exists in storage, return signed target
-    existing_artifact = await render_repo.get_render_artifact_by_type(
-        production_id=production_id,
-        edl_id=edl.edl_id,
-        artifact_type=ArtifactType.SHORT,
-    )
-    if existing_artifact and existing_artifact.status == ArtifactStatus.completed:
-        meta = await media_storage.get_object_metadata(
-            existing_artifact.gcs_bucket,
-            existing_artifact.gcs_object,
-        )
-        if meta.exists:
-            signed_target = await media_storage.generate_signed_read_target(
-                bucket=existing_artifact.gcs_bucket,
-                object_name=existing_artifact.gcs_object,
-                expiry_seconds=settings.signed_url_expiry_seconds,
-            )
-            return RenderArtifactResponse.from_domain(
-                artifact=existing_artifact,
-                playback_url=signed_target.read_url,
-                playback_expires_at=signed_target.expires_at,
-            )
-
-    # 4. Load transcript
-    transcript = await transcript_repo.get_transcript_by_production_id(production_id)
-
-    # 5. Execute render
-    artifact_id = f"art_short_{uuid.uuid4().hex[:12]}"
-    gcs_bucket = prod.source_media.gcs_bucket
-    gcs_object = build_render_artifact_gcs_object_path(
-        workspace_id=prod.workspace_id,
-        production_id=prod.production_id,
-        edl_id=edl.edl_id,
-        artifact_type=ArtifactType.SHORT,
-    )
-    now = datetime.now(timezone.utc)
-    log_short_render_event(
-        event_type=EventType.SHORT_RENDER_STARTED,
-        production_id=prod.production_id,
-        edl_id=edl.edl_id,
-        artifact_id=artifact_id,
-        short_start_ms=short_candidate.start_ms,
-        short_end_ms=short_candidate.end_ms,
-        status="started",
-        request_id=request_id,
-        git_sha=settings.git_sha,
-    )
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_path = Path(tmpdir)
-        local_src = tmp_path / "source.mp4"
-        local_out = tmp_path / "short.mp4"
-
-        try:
-            await media_storage.download_object_to_path(
-                bucket=prod.source_media.gcs_bucket,
-                object_name=prod.source_media.gcs_object,
-                target_path=local_src,
-            )
-
-            render_res = render_service.render_short(
-                source_path=local_src,
-                edl=edl,
-                short_candidate=short_candidate,
-                transcript=transcript,
-                output_path=local_out,
-            )
-
-            await media_storage.upload_object_from_path(
-                bucket=gcs_bucket,
-                object_name=gcs_object,
-                source_path=local_out,
-                content_type="video/mp4",
-            )
-
-            completed_at = datetime.now(timezone.utc)
-            artifact = RenderArtifact(
-                artifact_id=artifact_id,
-                production_id=prod.production_id,
-                edl_id=edl.edl_id,
-                artifact_type=ArtifactType.SHORT,
-                status=ArtifactStatus.completed,
-                gcs_bucket=gcs_bucket,
-                gcs_object=gcs_object,
-                content_type="video/mp4",
-                size_bytes=render_res.size_bytes,
-                duration_ms=render_res.duration_ms,
-                width=render_res.width,
-                height=render_res.height,
-                frame_rate=render_res.frame_rate,
-                video_codec=render_res.video_codec,
-                audio_codec=render_res.audio_codec,
-                created_at=now,
-                completed_at=completed_at,
-                failure_code=None,
-            )
-            await render_repo.save_render_artifact(artifact)
-
-            log_short_render_event(
-                event_type=EventType.SHORT_RENDER_COMPLETED,
-                production_id=prod.production_id,
-                edl_id=edl.edl_id,
-                artifact_id=artifact_id,
-                short_start_ms=short_candidate.start_ms,
-                short_end_ms=short_candidate.end_ms,
-                duration_ms=render_res.duration_ms,
-                render_time_ms=render_res.render_time_ms,
-                size_bytes=render_res.size_bytes,
-                status="completed",
-                request_id=request_id,
-                git_sha=settings.git_sha,
-            )
-
-            signed_target = await media_storage.generate_signed_read_target(
-                bucket=artifact.gcs_bucket,
-                object_name=artifact.gcs_object,
-                expiry_seconds=settings.signed_url_expiry_seconds,
-            )
-            return RenderArtifactResponse.from_domain(
-                artifact=artifact,
-                playback_url=signed_target.read_url,
-                playback_expires_at=signed_target.expires_at,
-            )
-        except Exception as exc:
-            sanitized_err = str(exc)
-            log_short_render_event(
-                event_type=EventType.SHORT_RENDER_FAILED,
-                production_id=prod.production_id,
-                edl_id=edl.edl_id,
-                artifact_id=artifact_id,
-                status="failed",
-                request_id=request_id,
-                git_sha=settings.git_sha,
-                error_code=sanitized_err,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Rendering SHORT failed: {sanitized_err}",
-            ) from exc
-
 @router.get(
     "/productions/{production_id}/renders",
     response_model=RenderListResponse,
@@ -1629,97 +1414,11 @@ async def list_production_renders(
     )
 
 
-@router.post(
-    "/productions/{production_id}/review-preview",
-    response_model=ReviewPreviewResponse,
-    summary="Review Preview Render & Gate Master Render",
-    description="Maya (Director) inspects the rendered preview video, evaluates editorial quality, and either approves for Master render or executes a single bounded correction loop.",
-)
-async def review_preview_video(
-    production_id: str,
-    request: Request,
-    current_user: Annotated[User, Depends(get_current_user)],
-    editorial_service: Annotated[DirectorEditorService, Depends(get_editorial_service)],
-    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
-) -> ReviewPreviewResponse:
-    request_id = getattr(request.state, "request_id", "unknown")
-    settings = get_settings()
-    (
-        review,
-        master_art,
-        second_review,
-        status_str,
-        activities,
-        self_review,
-    ) = await editorial_service.review_preview(
-        production_id=production_id,
-        current_user=current_user,
-        request_id=request_id,
-    )
-    master_response = None
-    if master_art is not None and master_art.status == ArtifactStatus.completed:
-        playback_url = None
-        playback_expires_at = None
-        try:
-            target = await media_storage.generate_signed_read_target(
-                bucket=master_art.gcs_bucket,
-                object_name=master_art.gcs_object,
-                expiry_seconds=settings.signed_url_expiry_seconds,
-            )
-            playback_url = target.read_url
-            playback_expires_at = target.expires_at
-        except Exception:
-            pass
-        master_response = RenderArtifactResponse.from_domain(
-            artifact=master_art,
-            playback_url=playback_url,
-            playback_expires_at=playback_expires_at,
-        )
-    return ReviewPreviewResponse(
-        production_id=production_id,
-        review=review,
-        self_review=self_review,
-        master_artifact=master_response,
-        second_review=second_review,
-        status=status_str,
-        activities=activities,
-    )
-
-
-@router.get(
-    "/productions/{production_id}/render-reviews",
-    response_model=RenderReviewDetailResponse,
-    summary="Get Render Reviews",
-    description="Retrieve all post-render reviews for a production.",
-)
-@router.get(
-    "/productions/{production_id}/render-review",
-    response_model=RenderReviewDetailResponse,
-    summary="Get Latest Render Review",
-    description="Retrieve latest post-render review for a production.",
-)
-async def get_render_reviews(
-    production_id: str,
-    current_user: Annotated[User, Depends(get_current_user)],
-    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
-    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)],
-) -> RenderReviewDetailResponse:
-    prod = await _get_owned_production(production_id, current_user, production_repo)
-    reviews = await render_review_repo.list_render_reviews(prod.production_id)
-    latest = reviews[0] if reviews else None
-    needs_manual = len(reviews) >= 2 and latest is not None and latest.verdict == "CORRECT"
-
-    return RenderReviewDetailResponse(
-        production_id=prod.production_id,
-        review=latest,
-        reviews=reviews,
-        needs_manual_review=needs_manual,
-    )
 @router.get(
     "/productions/{production_id}/playback",
     response_model=ProductionPlaybackResponse,
     summary="Get Production Media Playback URLs",
-    description="Retrieve distinct signed URLs for Original source, Edited Preview, Master, Studio Voice, and Short.",
+    description="Retrieve distinct signed URLs for Original, Edited Preview, Master, and Studio Voice media.",
 )
 async def get_production_playback_urls(
     production_id: str,
@@ -1747,7 +1446,6 @@ async def get_production_playback_urls(
     preview_url = None
     master_url = None
     sv_url = None
-    short_url = None
 
     for r in renders:
         status_val = r.status.value if hasattr(r.status, "value") else str(r.status)
@@ -1765,8 +1463,6 @@ async def get_production_playback_urls(
                     master_url = target.read_url
                 elif type_val == ArtifactType.STUDIO_VOICE_PREVIEW.value and sv_url is None:
                     sv_url = target.read_url
-                elif type_val == ArtifactType.SHORT.value and short_url is None:
-                    short_url = target.read_url
             except Exception as exc:
                 logger.warning("Failed to generate signed read target for artifact %s: %s", r.artifact_id, exc)
 
@@ -1776,7 +1472,6 @@ async def get_production_playback_urls(
         rendered_preview_url=preview_url,
         master_url=master_url,
         studio_voice_preview_url=sv_url,
-        short_playback_url=short_url,
     )
 
 
@@ -2030,7 +1725,6 @@ async def _build_packaging_detail_response(
     proposal: PackagingProposal | None,
     overrides: CreatorPackageOverrides | None,
     master_artifact: RenderArtifact | None,
-    short_artifact: RenderArtifact | None,
     media_storage: MediaStorage,
 ) -> PackagingDetailResponse:
     settings = get_settings()
@@ -2046,83 +1740,44 @@ async def _build_packaging_detail_response(
         except Exception as exc:
             logger.warning("Could not generate signed master url for packaging: %s", exc)
 
-    short_url: str | None = None
-    if short_artifact and short_artifact.status == ArtifactStatus.completed:
-        try:
-            target = await media_storage.generate_signed_read_target(
-                bucket=short_artifact.gcs_bucket,
-                object_name=short_artifact.gcs_object,
-                expiry_seconds=settings.signed_url_expiry_seconds,
-            )
-            short_url = target.read_url
-        except Exception as exc:
-            logger.warning("Could not generate signed short url for packaging: %s", exc)
-
-    master_resp = RenderArtifactResponse(
-        artifact_id=master_artifact.artifact_id,
-        production_id=master_artifact.production_id,
-        edl_id=master_artifact.edl_id,
-        artifact_type=master_artifact.artifact_type.value if hasattr(master_artifact.artifact_type, "value") else str(master_artifact.artifact_type),
-        status=master_artifact.status.value if hasattr(master_artifact.status, "value") else str(master_artifact.status),
-        duration_ms=master_artifact.duration_ms,
-        created_at=master_artifact.created_at,
-        completed_at=master_artifact.completed_at,
-        playback_url=master_url,
-    ) if master_artifact else None
-
-    short_resp = RenderArtifactResponse(
-        artifact_id=short_artifact.artifact_id,
-        production_id=short_artifact.production_id,
-        edl_id=short_artifact.edl_id,
-        artifact_type=short_artifact.artifact_type.value if hasattr(short_artifact.artifact_type, "value") else str(short_artifact.artifact_type),
-        status=short_artifact.status.value if hasattr(short_artifact.status, "value") else str(short_artifact.status),
-        duration_ms=short_artifact.duration_ms,
-        created_at=short_artifact.created_at,
-        completed_at=short_artifact.completed_at,
-        playback_url=short_url,
-    ) if short_artifact else None
-
-    effective_title = ""
-    if overrides and overrides.custom_title:
-        effective_title = overrides.custom_title
-    elif overrides and overrides.selected_title:
-        effective_title = overrides.selected_title
-    elif proposal and proposal.primary_title:
-        effective_title = proposal.primary_title
-
-    effective_description = ""
-    if overrides and overrides.custom_description:
-        effective_description = overrides.custom_description
-    elif proposal and proposal.description:
-        effective_description = proposal.description
-
-    effective_chapters: list[PackagingChapter] = []
-    if overrides and overrides.custom_chapters is not None:
-        effective_chapters = overrides.custom_chapters
-    elif proposal and proposal.chapters:
-        effective_chapters = proposal.chapters
-
-    effective_short: ShortPackage | None = None
-    if proposal and proposal.short_package:
-        stitle = overrides.custom_short_title if (overrides and overrides.custom_short_title) else proposal.short_package.title
-        sdesc = overrides.custom_short_description if (overrides and overrides.custom_short_description) else proposal.short_package.description
-        effective_short = ShortPackage(
-            title=stitle,
-            description=sdesc,
-            hook=proposal.short_package.hook,
-            hashtags=proposal.short_package.hashtags,
-        )
-
-    effective_thumb_id = None
-    if overrides and overrides.selected_thumbnail_concept_id:
-        effective_thumb_id = overrides.selected_thumbnail_concept_id
-    elif proposal and proposal.thumbnail_concepts:
-        effective_thumb_id = proposal.thumbnail_concepts[0].concept_id
-
-    has_master_bool = bool(master_artifact and master_artifact.status == ArtifactStatus.completed)
-    has_short_bool = bool(short_artifact and short_artifact.status == ArtifactStatus.completed)
-    status_str = "completed" if proposal else ("needs_master" if not has_master_bool else "ready")
-
+    master_response = (
+        RenderArtifactResponse.from_domain(master_artifact, playback_url=master_url)
+        if master_artifact
+        else None
+    )
+    effective_title = (
+        overrides.custom_title
+        if overrides and overrides.custom_title
+        else overrides.selected_title
+        if overrides and overrides.selected_title
+        else proposal.primary_title
+        if proposal
+        else ""
+    )
+    effective_description = (
+        overrides.custom_description
+        if overrides and overrides.custom_description
+        else proposal.description
+        if proposal
+        else ""
+    )
+    effective_chapters = (
+        overrides.custom_chapters
+        if overrides and overrides.custom_chapters is not None
+        else proposal.chapters
+        if proposal
+        else []
+    )
+    effective_thumbnail_id = (
+        overrides.selected_thumbnail_concept_id
+        if overrides and overrides.selected_thumbnail_concept_id
+        else proposal.thumbnail_concepts[0].concept_id
+        if proposal and proposal.thumbnail_concepts
+        else None
+    )
+    has_master = bool(
+        master_artifact and master_artifact.status == ArtifactStatus.completed
+    )
     return PackagingDetailResponse(
         production_id=production_id,
         proposal=proposal,
@@ -2130,15 +1785,11 @@ async def _build_packaging_detail_response(
         effective_title=effective_title,
         effective_description=effective_description,
         effective_chapters=effective_chapters,
-        effective_short_package=effective_short,
-        effective_thumbnail_concept_id=effective_thumb_id,
-        master_artifact=master_resp,
-        short_artifact=short_resp,
+        effective_thumbnail_concept_id=effective_thumbnail_id,
+        master_artifact=master_response,
         master_url=master_url,
-        short_url=short_url,
-        has_master=has_master_bool,
-        has_short=has_short_bool,
-        status=status_str,
+        has_master=has_master,
+        status="completed" if proposal else ("needs_master" if not has_master else "ready"),
         generated_at=proposal.created_at if proposal else None,
     )
 
@@ -2162,7 +1813,6 @@ async def get_packaging_details(
     prod = await _get_owned_production(production_id, current_user, production_repo)
     latest_edl = await edl_repo.get_latest_edl(prod.production_id)
     master_artifact = None
-    short_artifact = None
     if latest_edl:
         master_artifact = await render_repo.get_render_artifact_by_type(
             prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
@@ -2171,9 +1821,6 @@ async def get_packaging_details(
             master_artifact = await render_repo.get_render_artifact_by_type(
                 prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
             )
-        short_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
-        )
 
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     overrides = await packaging_repo.get_package_overrides(prod.production_id)
@@ -2183,7 +1830,6 @@ async def get_packaging_details(
         proposal=proposal,
         overrides=overrides,
         master_artifact=master_artifact,
-        short_artifact=short_artifact,
         media_storage=media_storage,
     )
 
@@ -2192,7 +1838,7 @@ async def get_packaging_details(
     "/productions/{production_id}/packaging",
     response_model=PackagingDetailResponse,
     summary="Update Creator Package Overrides",
-    description="Update creator overrides for title selection, custom title, description, chapter titles, Short title/description, or thumbnail concept selection.",
+    description="Update creator overrides for title, description, chapters, or thumbnail selection.",
 )
 async def update_packaging_overrides(
     production_id: str,
@@ -2212,8 +1858,6 @@ async def update_packaging_overrides(
     custom_title = payload.custom_title if payload.custom_title is not None else (existing_overrides.custom_title if existing_overrides else None)
     custom_description = payload.custom_description if payload.custom_description is not None else (existing_overrides.custom_description if existing_overrides else None)
     custom_chapters = payload.custom_chapters if payload.custom_chapters is not None else (existing_overrides.custom_chapters if existing_overrides else None)
-    custom_short_title = payload.custom_short_title if payload.custom_short_title is not None else (existing_overrides.custom_short_title if existing_overrides else None)
-    custom_short_description = payload.custom_short_description if payload.custom_short_description is not None else (existing_overrides.custom_short_description if existing_overrides else None)
     selected_thumb_id = payload.selected_thumbnail_concept_id if payload.selected_thumbnail_concept_id is not None else (existing_overrides.selected_thumbnail_concept_id if existing_overrides else None)
 
     updated_overrides = CreatorPackageOverrides(
@@ -2221,8 +1865,6 @@ async def update_packaging_overrides(
         custom_title=custom_title,
         custom_description=custom_description,
         custom_chapters=custom_chapters,
-        custom_short_title=custom_short_title,
-        custom_short_description=custom_short_description,
         selected_thumbnail_concept_id=selected_thumb_id,
         updated_at=now,
     )
@@ -2230,7 +1872,6 @@ async def update_packaging_overrides(
 
     latest_edl = await edl_repo.get_latest_edl(prod.production_id)
     master_artifact = None
-    short_artifact = None
     if latest_edl:
         master_artifact = await render_repo.get_render_artifact_by_type(
             prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
@@ -2239,9 +1880,6 @@ async def update_packaging_overrides(
             master_artifact = await render_repo.get_render_artifact_by_type(
                 prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
             )
-        short_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
-        )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
 
     return await _build_packaging_detail_response(
@@ -2249,7 +1887,6 @@ async def update_packaging_overrides(
         proposal=proposal,
         overrides=updated_overrides,
         master_artifact=master_artifact,
-        short_artifact=short_artifact,
         media_storage=media_storage,
     )
 
@@ -2258,7 +1895,6 @@ async def _build_release_review_response(
     production_id: str,
     review: ReleaseReview | None,
     master_artifact: RenderArtifact | None,
-    short_artifact: RenderArtifact | None,
     proposal: PackagingProposal | None,
     media_storage: MediaStorage,
 ) -> ReleaseReviewDetailResponse:
@@ -2275,112 +1911,57 @@ async def _build_release_review_response(
         except Exception as exc:
             logger.warning("Could not generate signed master url for release review: %s", exc)
 
-    short_url: str | None = None
-    if short_artifact and short_artifact.status == ArtifactStatus.completed:
-        try:
-            target = await media_storage.generate_signed_read_target(
-                bucket=short_artifact.gcs_bucket,
-                object_name=short_artifact.gcs_object,
-                expiry_seconds=settings.signed_url_expiry_seconds,
-            )
-            short_url = target.read_url
-        except Exception as exc:
-            logger.warning("Could not generate signed short url for release review: %s", exc)
-
-    master_resp = RenderArtifactResponse(
-        artifact_id=master_artifact.artifact_id,
-        production_id=master_artifact.production_id,
-        edl_id=master_artifact.edl_id,
-        artifact_type=master_artifact.artifact_type.value if hasattr(master_artifact.artifact_type, "value") else str(master_artifact.artifact_type),
-        status=master_artifact.status.value if hasattr(master_artifact.status, "value") else str(master_artifact.status),
-        duration_ms=master_artifact.duration_ms,
-        created_at=master_artifact.created_at,
-        completed_at=master_artifact.completed_at,
-        playback_url=master_url,
-    ) if master_artifact else None
-
-    short_resp = RenderArtifactResponse(
-        artifact_id=short_artifact.artifact_id,
-        production_id=short_artifact.production_id,
-        edl_id=short_artifact.edl_id,
-        artifact_type=short_artifact.artifact_type.value if hasattr(short_artifact.artifact_type, "value") else str(short_artifact.artifact_type),
-        status=short_artifact.status.value if hasattr(short_artifact.status, "value") else str(short_artifact.status),
-        duration_ms=short_artifact.duration_ms,
-        created_at=short_artifact.created_at,
-        completed_at=short_artifact.completed_at,
-        playback_url=short_url,
-    ) if short_artifact else None
-
+    master_response = (
+        RenderArtifactResponse.from_domain(master_artifact, playback_url=master_url)
+        if master_artifact
+        else None
+    )
     calculated_fingerprint = None
     if master_artifact:
-        pkg_id = proposal.proposal_id if proposal else "none"
-        pkg_ver = (proposal.version if hasattr(proposal, "version") else 1) if proposal else 1
         calculated_fingerprint = build_release_fingerprint(
             production_id=production_id,
             edl_id=master_artifact.edl_id,
             master_artifact_id=master_artifact.artifact_id,
             master_hash=master_artifact.sha256 or "unhashed",
-            packaging_proposal_id=pkg_id,
-            package_version=pkg_ver,
+            packaging_proposal_id=proposal.proposal_id if proposal else "none",
+            package_version=proposal.version if proposal else 1,
             release_review_id=review.review_id if review else None,
-            short_artifact_id=short_artifact.artifact_id if short_artifact else None,
-            short_hash=short_artifact.sha256 if short_artifact else None,
         )
-
-    has_master = bool(master_artifact and (master_artifact.status == ArtifactStatus.completed or (hasattr(master_artifact.status, "value") and master_artifact.status.value == ArtifactStatus.completed.value)))
-    has_short = bool(short_artifact and (short_artifact.status == ArtifactStatus.completed or (hasattr(short_artifact.status, "value") and short_artifact.status.value == ArtifactStatus.completed.value)))
-    has_packaging = bool(proposal is not None)
-
-    release_ready = False
-    release_status = "Pending review"
-
-    if not review:
-        release_status = "Pending review"
-        release_ready = False
+    has_master = bool(
+        master_artifact and master_artifact.status == ArtifactStatus.completed
+    )
+    release_ready = bool(
+        review
+        and has_master
+        and review.verdict == ReleaseVerdict.PASS
+        and review.approved_for_release
+        and review.master_artifact_id == master_artifact.artifact_id
+        and (
+            review.release_fingerprint is None
+            or calculated_fingerprint is None
+            or review.release_fingerprint == calculated_fingerprint
+        )
+    )
+    if release_ready:
+        release_status = "Ready to publish"
+    elif review and review.verdict == ReleaseVerdict.FIX_REQUIRED:
+        release_status = "Fix required"
+    elif review and review.verdict == ReleaseVerdict.MANUAL_REVIEW:
+        release_status = "Manual review"
+    elif review:
+        release_status = "Checking final output"
     else:
-        is_pass = review.verdict == ReleaseVerdict.PASS
-        approved = review.approved_for_release
-        matching_master = bool(master_artifact and review.master_artifact_id == master_artifact.artifact_id)
-        matching_short = bool(
-            (not has_short and not review.short_artifact_id)
-            or (has_short and short_artifact and review.short_artifact_id == short_artifact.artifact_id)
-        )
-        fingerprint_valid = bool(
-            review.release_fingerprint is None or calculated_fingerprint is None or review.release_fingerprint == calculated_fingerprint
-        )
-
-        release_ready = bool(
-            has_master
-            and is_pass
-            and approved
-            and matching_master
-            and matching_short
-            and fingerprint_valid
-        )
-        if has_short and review.checklist and not review.checklist.short:
-            release_ready = False
-
-        if release_ready:
-            release_status = "Ready to publish"
-        elif review.verdict == ReleaseVerdict.FIX_REQUIRED:
-            release_status = "Fix required"
-        elif review.verdict == ReleaseVerdict.MANUAL_REVIEW:
-            release_status = "Manual review"
-        else:
-            release_status = "Checking final output"
+        release_status = "Pending review"
     return ReleaseReviewDetailResponse(
         production_id=production_id,
         review=review,
         release_status=release_status,
         release_ready=release_ready,
         checklist=review.checklist if review else None,
-        master_artifact=master_resp,
-        short_artifact=short_resp,
+        master_artifact=master_response,
         master_url=master_url,
-        short_url=short_url,
         has_master=has_master,
-        has_short=has_short,
-        has_packaging=has_packaging,
+        has_packaging=proposal is not None,
         release_fingerprint=review.release_fingerprint if review else calculated_fingerprint,
         generated_at=review.created_at if review else None,
     )
@@ -2389,7 +1970,7 @@ async def _build_release_review_response(
     "/productions/{production_id}/release-review",
     response_model=ReleaseReviewDetailResponse,
     summary="Generate Iris QA Release Review",
-    description="Invoke Iris (QA Agent) to evaluate Master video, Short, transcript, captions, chapters, and packaging truth before release.",
+    description="Invoke Iris (QA Agent) to evaluate the Master video, transcript, captions, chapters, and packaging truth before release.",
 )
 async def generate_release_review(
     production_id: str,
@@ -2400,7 +1981,6 @@ async def generate_release_review(
     transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)] = None,
     edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)] = None,
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)] = None,
-    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)] = None,
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)] = None,
     release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)] = None,
     agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)] = None,
@@ -2416,7 +1996,6 @@ async def generate_release_review(
 
     latest_edl = await edl_repo.get_latest_edl(prod.production_id)
     master_artifact = None
-    short_artifact = None
     if latest_edl:
         master_artifact = await render_repo.get_render_artifact_by_type(
             prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
@@ -2425,9 +2004,6 @@ async def generate_release_review(
             master_artifact = await render_repo.get_render_artifact_by_type(
                 prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
             )
-        short_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
-        )
     else:
         renders = await render_repo.list_render_artifacts(prod.production_id)
         master_artifact = next(
@@ -2436,9 +2012,6 @@ async def generate_release_review(
         )
         if master_artifact and master_artifact.edl_id:
             latest_edl = await edl_repo.get_edl(prod.production_id, master_artifact.edl_id)
-            short_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, master_artifact.edl_id, ArtifactType.SHORT
-            )
 
     if not master_artifact or master_artifact.status != ArtifactStatus.completed:
         raise HTTPException(
@@ -2447,22 +2020,19 @@ async def generate_release_review(
         )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     overrides = await packaging_repo.get_package_overrides(prod.production_id)
-    render_review = await render_review_repo.get_latest_render_review(prod.production_id)
 
-    # Idempotency check: Return cached review if matching same Master, Short, and Packaging proposal
+    # Idempotency check for the same Master and packaging proposal.
     if not force_regenerate:
         latest_review = await release_review_repo.get_latest_release_review(prod.production_id)
         if (
             latest_review
             and latest_review.master_artifact_id == master_artifact.artifact_id
             and latest_review.packaging_proposal_id == proposal.proposal_id
-            and (not short_artifact or latest_review.short_artifact_id == short_artifact.artifact_id)
         ):
             return await _build_release_review_response(
                 production_id=prod.production_id,
                 review=latest_review,
                 master_artifact=master_artifact,
-                short_artifact=short_artifact,
                 proposal=proposal,
                 media_storage=media_storage,
             )
@@ -2516,11 +2086,9 @@ async def generate_release_review(
     review, _ = await iris_agent.review_production(
         production_id=prod.production_id,
         master_artifact=master_artifact,
-        short_artifact=short_artifact,
         transcript=transcript,
         proposal=proposal,
         overrides=overrides,
-        render_review=render_review,
         channel_profile=channel_profile,
         lessons=lessons,
         research_findings=research_findings,
@@ -2540,14 +2108,11 @@ async def generate_release_review(
         packaging_proposal_id=pkg_id,
         package_version=package_ver,
         release_review_id=review.review_id,
-        short_artifact_id=short_artifact.artifact_id if short_artifact else None,
-        short_hash=short_artifact.sha256 if short_artifact else None,
     )
     review = review.model_copy(
         update={
             "edl_id": effective_edl_id,
             "master_hash": master_artifact.sha256,
-            "short_hash": short_artifact.sha256 if short_artifact else None,
             "package_version": package_ver,
             "release_fingerprint": fp,
         }
@@ -2557,7 +2122,6 @@ async def generate_release_review(
         production_id=prod.production_id,
         review=review,
         master_artifact=master_artifact,
-        short_artifact=short_artifact,
         proposal=proposal,
         media_storage=media_storage,
     )
@@ -2583,7 +2147,6 @@ async def get_release_review_details(
 
     latest_edl = await edl_repo.get_latest_edl(prod.production_id)
     master_artifact = None
-    short_artifact = None
     if latest_edl:
         master_artifact = await render_repo.get_render_artifact_by_type(
             prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
@@ -2592,19 +2155,12 @@ async def get_release_review_details(
             master_artifact = await render_repo.get_render_artifact_by_type(
                 prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
             )
-        short_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
-        )
     else:
         renders = await render_repo.list_render_artifacts(prod.production_id)
         master_artifact = next(
             (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
             None,
         )
-        if master_artifact and master_artifact.edl_id:
-            short_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, master_artifact.edl_id, ArtifactType.SHORT
-            )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     review = await release_review_repo.get_latest_release_review(prod.production_id)
 
@@ -2612,7 +2168,6 @@ async def get_release_review_details(
         production_id=prod.production_id,
         review=review,
         master_artifact=master_artifact,
-        short_artifact=short_artifact,
         proposal=proposal,
         media_storage=media_storage,
     )
@@ -2673,7 +2228,6 @@ async def publish_to_youtube(
             selected_tags=payload.selected_tags,
             category_id=payload.category_id,
             thumbnail_frame_ms=payload.thumbnail_frame_ms,
-            upload_short=payload.upload_short,
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))

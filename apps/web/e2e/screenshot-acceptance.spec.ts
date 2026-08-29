@@ -226,7 +226,7 @@ const mockBackendApis = async (page: Page) => {
         channel: {
           channel_id: "croviq_syn_ai_eng_01",
           source_type: "synthetic",
-          title: "Modern AI Engineering",
+          title: "Croviq",
           description: "Sample channel",
           avatar_url: null,
           subscriber_count: 51317,
@@ -386,11 +386,12 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForURL("**/app*");
 
-    await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await expect(page.getByText("Here's what changed")).toBeVisible();
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: "e2e/screenshots/overview-1600x900.png" });
+    await page.screenshot({ path: "e2e/screenshots/home-1600x900.png" });
   });
 
   test("overview-1440x900.png", async ({ page }) => {
@@ -403,7 +404,7 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForURL("**/app*");
 
-    await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: "e2e/screenshots/overview-1440x900.png" });
@@ -421,7 +422,8 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.waitForURL("**/app*");
 
     await page.goto("/app/performance");
-    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: "e2e/screenshots/performance-1440x900.png" });
@@ -438,7 +440,8 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.waitForURL("**/app*");
 
     await page.goto("/app/experiments");
-    await expect(page.getByRole("heading", { name: "Proposed Experiments" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: "e2e/screenshots/experiments-1440x900.png" });
@@ -460,6 +463,22 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: "e2e/screenshots/new-project-1440x900.png" });
+  });
+
+  test("home-1280x800.png", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockFirebasePasswordSignIn(page);
+    await mockBackendApis(page);
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(DEMO_EMAIL);
+    await page.getByLabel("Password").fill("valid-password");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL("**/app*");
+
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await page.waitForTimeout(500);
+
+    await page.screenshot({ path: "e2e/screenshots/home-1280x800.png" });
   });
 
   test("new-project-1280x800.png", async ({ page }) => {

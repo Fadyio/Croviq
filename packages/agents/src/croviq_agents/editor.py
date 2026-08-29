@@ -21,7 +21,7 @@ from croviq_domain.editorial import (
 )
 from croviq_domain.edl import EditDecisionList
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile
-from croviq_domain.render_review import EditorSelfReview, EditorSelfReviewVerdict, RenderReview
+from croviq_domain.render_review import EditorSelfReview, EditorSelfReviewVerdict
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import Transcript
 from croviq_observability import log_ai_event
@@ -315,22 +315,6 @@ class LeoVideoEditor:
                 )
             )
 
-        if proposal.short_candidate:
-            sc = proposal.short_candidate
-            dur_s = int((sc.end_ms - sc.start_ms) / 1000)
-            activities.append(
-                AgentActivity(
-                    activity_id=f"act_short_{uuid.uuid4().hex[:8]}",
-                    production_id=analysis_input.production_id,
-                    run_id=run_id_val,
-                    agent="Leo",
-                    role="Video Editor",
-                    activity_type="proposal",
-                    message=f"Selected a {dur_s}s vertical Short candidate: '{sc.hook_title}' ({format_timecode_ms(sc.start_ms)} → {format_timecode_ms(sc.end_ms)}).",
-                    related_decision_id=None,
-                    created_at=datetime.now(timezone.utc),
-                )
-            )
         for decision in proposal.decisions:
             start_tc = format_timecode_ms(decision.source_start_ms)
             msg = format_leo_decision_message(decision)
@@ -363,104 +347,6 @@ class LeoVideoEditor:
 
         return proposal, usage, activities
 
-    async def revise(
-        self,
-        analysis_input: SourceVideoAnalysisInput,
-        render_review: RenderReview,
-        original_proposal: EditorProposal | None = None,
-        proposal: EditorProposal | None = None,
-        channel_profile: ChannelMemoryProfile | None = None,
-        lessons: list[ChannelLesson] | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[EditorProposal, AgentUsageMetadata, list[AgentActivity]]:
-        """Perform a targeted editorial correction pass based on Maya's post-render review."""
-        prop = original_proposal or proposal
-        if prop is None:
-            raise ValueError("Must provide either 'original_proposal' or 'proposal'")
-        run_id_val = run_id or f"run_{uuid.uuid4().hex[:8]}"
-
-        log_ai_event(
-            event_type=EventType.EDITOR_ANALYSIS_STARTED,
-            agent="leo",
-            model="gemini-3.7-flash",
-            status="started",
-            production_id=analysis_input.production_id,
-            run_id=run_id_val,
-            request_id=request_id,
-        )
-
-        video_gcs_uri = f"gs://{analysis_input.source_media.gcs_bucket}/{analysis_input.source_media.gcs_object}"
-        mime_type = analysis_input.source_media.content_type or "video/mp4"
-
-        revised_proposal, usage = await self._client.generate_editor_correction(
-            video_uri=video_gcs_uri,
-            mime_type=mime_type,
-            transcript=analysis_input.transcript,
-            proposal=prop,
-            render_review=render_review,
-            production_id=analysis_input.production_id,
-            channel_profile=channel_profile,
-            lessons=lessons,
-            run_id=run_id_val,
-            request_id=request_id,
-        )
-        # Ensure full timeline coverage across revised proposal
-        revised_sections = ensure_full_timeline_coverage(
-            sections=revised_proposal.section_plan,
-            total_duration_ms=analysis_input.media_metadata.duration_ms,
-            production_id=analysis_input.production_id,
-        )
-        revised_proposal = revised_proposal.model_copy(update={"section_plan": revised_sections})
-
-        activities: list[AgentActivity] = []
-        now = datetime.now(timezone.utc)
-
-        activities.append(
-            AgentActivity(
-                activity_id=f"act_leo_rev_sum_{uuid.uuid4().hex[:8]}",
-                production_id=analysis_input.production_id,
-                run_id=run_id_val,
-                agent="Leo",
-                role="Video Editor",
-                activity_type="proposal",
-                message=f"I revised the edit according to Maya's feedback: {revised_proposal.summary}",
-                related_decision_id=None,
-                created_at=now,
-            )
-        )
-
-        for decision in revised_proposal.decisions:
-            start_tc = format_timecode_ms(decision.source_start_ms)
-            msg = format_leo_decision_message(decision)
-            activities.append(
-                AgentActivity(
-                    activity_id=f"act_leo_rev_dec_{uuid.uuid4().hex[:8]}",
-                    production_id=analysis_input.production_id,
-                    run_id=run_id_val,
-                    agent="Leo",
-                    role="Video Editor",
-                    activity_type="decision",
-                    message=msg,
-                    related_decision_id=decision.decision_id,
-                    created_at=now,
-                )
-            )
-
-        log_ai_event(
-            event_type=EventType.EDITOR_ANALYSIS_COMPLETED,
-            agent="leo",
-            model=revised_proposal.model,
-            status="success",
-            production_id=analysis_input.production_id,
-            run_id=run_id_val,
-            request_id=request_id,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            latency_ms=usage.latency_ms,
-        )
-
-        return revised_proposal, usage, activities
 
     async def self_review_render(
         self,

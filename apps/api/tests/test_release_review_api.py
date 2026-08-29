@@ -36,10 +36,6 @@ from croviq_api.productions.render_repository import (
     InMemoryRenderRepository,
     set_render_repository,
 )
-from croviq_api.productions.render_review_repository import (
-    InMemoryRenderReviewRepository,
-    set_render_review_repository,
-)
 from croviq_api.productions.repository import (
     InMemoryProductionRepository,
     set_production_repository,
@@ -57,7 +53,6 @@ from croviq_domain.agent_config import AgentId, AgentPromptConfig
 from croviq_domain.packaging import (
     PackagingChapter,
     PackagingProposal,
-    ShortPackage,
     ThumbnailConcept,
     TitleAngle,
     TitleCandidate,
@@ -150,22 +145,6 @@ def sample_master_render(test_production: Production) -> RenderArtifact:
 
 
 @pytest.fixture
-def sample_short_render(test_production: Production) -> RenderArtifact:
-    now = datetime.now(timezone.utc)
-    return RenderArtifact(
-        artifact_id="art_short_01",
-        production_id=test_production.production_id,
-        edl_id="edl_01",
-        artifact_type=ArtifactType.SHORT,
-        status=ArtifactStatus.completed,
-        gcs_bucket="croviq-media-raw",
-        gcs_object="workspaces/ws_test_01/productions/prod_test_01/renders/short.mp4",
-        duration_ms=39800,
-        created_at=now,
-    )
-
-
-@pytest.fixture
 def sample_transcript(test_production: Production) -> Transcript:
     now = datetime.now(timezone.utc)
     return Transcript(
@@ -190,8 +169,6 @@ def sample_packaging_proposal(test_production: Production) -> PackagingProposal:
     return PackagingProposal(
         proposal_id="pkg_01",
         production_id=test_production.production_id,
-        agent="nina",
-        model="gemini-3.7-flash",
         primary_title="Fairphone 6 Plus: The Modular Smartphone That Actually Makes Sense",
         title_candidates=[
             TitleCandidate(
@@ -206,12 +183,11 @@ def sample_packaging_proposal(test_production: Production) -> PackagingProposal:
             PackagingChapter(title="Intro", start_ms=0, end_ms=30000, formatted_time="0:00"),
             PackagingChapter(title="Modularity", start_ms=30000, end_ms=113824, formatted_time="0:30"),
         ],
-        keywords=["fairphone", "repair"],
         thumbnail_concepts=[
             ThumbnailConcept(
                 concept_id="th_01",
                 headline="MODULAR PHONE!",
-                visual_subject="Fairphone backplate being removed",
+                visual_subject="Disassembled phone parts",
                 composition="Macro close up",
                 emotion="Curiosity",
                 supporting_frame_ms=28000,
@@ -220,12 +196,6 @@ def sample_packaging_proposal(test_production: Production) -> PackagingProposal:
                 frame_verified=True,
             )
         ],
-        short_package=ShortPackage(
-            title="A Modern Smartphone You Can Actually Repair!",
-            description="Short description",
-            hook="Can you repair this?",
-            hashtags=["#shorts"],
-        ),
         packaging_summary="Modular phone review",
         channel_evidence="Channel baseline supports teardowns.",
         confidence=0.95,
@@ -240,7 +210,6 @@ def api_client(
     test_workspace: Workspace,
     test_production: Production,
     sample_master_render: RenderArtifact,
-    sample_short_render: RenderArtifact,
     sample_transcript: Transcript,
     sample_packaging_proposal: PackagingProposal,
 ) -> TestClient:
@@ -250,7 +219,6 @@ def api_client(
     transcript_repo = InMemoryTranscriptRepository()
     packaging_repo = InMemoryPackagingRepository()
     release_review_repo = InMemoryReleaseReviewRepository()
-    render_review_repo = InMemoryRenderReviewRepository()
     edl_repo = InMemoryEDLRepository()
     editorial_repo = InMemoryEditorialRepository()
     agent_config_repo = InMemoryAgentConfigRepository()
@@ -261,10 +229,10 @@ def api_client(
 
     ws_repo.workspaces[test_workspace.workspace_id] = {
         "workspace_id": test_workspace.workspace_id,
-        "owner_user_id": test_workspace.owner_user_id,
+        "owner_user_id": test_user.user_id,
         "name": test_workspace.name,
-        "created_at": test_workspace.created_at.isoformat(),
-        "updated_at": test_workspace.updated_at.isoformat(),
+        "created_at": test_workspace.created_at,
+        "updated_at": test_workspace.updated_at,
     }
     ws_repo.users[test_user.user_id] = {
         "user_id": test_user.user_id,
@@ -278,7 +246,6 @@ def api_client(
     transcript_repo._by_production[test_production.production_id] = sample_transcript.transcript_id
     render_repo._by_production[test_production.production_id] = {
         sample_master_render.artifact_id: sample_master_render,
-        sample_short_render.artifact_id: sample_short_render,
     }
     packaging_repo._proposals[test_production.production_id] = {
         sample_packaging_proposal.proposal_id: sample_packaging_proposal
@@ -289,11 +256,10 @@ def api_client(
     set_render_repository(render_repo)
     set_transcript_repository(transcript_repo)
     set_packaging_repository(packaging_repo)
-    set_release_review_repo = release_review_repo
     set_release_review_repository(release_review_repo)
-    set_render_review_repository(render_review_repo)
     set_editorial_repository(editorial_repo)
     set_edl_repository(edl_repo)
+    set_agent_config_repo = agent_config_repo
     set_agent_config_repository(agent_config_repo)
     set_memory_store(memory_store)
     set_research_repository(research_repo)
@@ -308,7 +274,6 @@ def api_client(
 
 def test_generate_release_review_detects_unsupported_claim(api_client: TestClient, test_production: Production):
     resp = api_client.post(f"/api/productions/{test_production.production_id}/release-review", json={})
-    print("DETAIL:", resp.status_code, resp.json())
     assert resp.status_code == 200
     data = resp.json()
 
@@ -344,7 +309,6 @@ def test_release_review_pass_on_clean_production(
     test_workspace: Workspace,
     test_production: Production,
     sample_master_render: RenderArtifact,
-    sample_short_render: RenderArtifact,
     sample_transcript: Transcript,
 ):
     prod_repo = InMemoryProductionRepository()
@@ -353,7 +317,6 @@ def test_release_review_pass_on_clean_production(
     transcript_repo = InMemoryTranscriptRepository()
     packaging_repo = InMemoryPackagingRepository()
     release_review_repo = InMemoryReleaseReviewRepository()
-    render_review_repo = InMemoryRenderReviewRepository()
     edl_repo = InMemoryEDLRepository()
     editorial_repo = InMemoryEditorialRepository()
     agent_config_repo = InMemoryAgentConfigRepository()
@@ -374,7 +337,6 @@ def test_release_review_pass_on_clean_production(
     transcript_repo._by_production[test_production.production_id] = sample_transcript.transcript_id
     render_repo._by_production[test_production.production_id] = {
         sample_master_render.artifact_id: sample_master_render,
-        sample_short_render.artifact_id: sample_short_render,
     }
 
     set_production_repository(prod_repo)
@@ -383,7 +345,6 @@ def test_release_review_pass_on_clean_production(
     set_transcript_repository(transcript_repo)
     set_packaging_repository(packaging_repo)
     set_release_review_repository(release_review_repo)
-    set_render_review_repository(render_review_repo)
     set_editorial_repository(editorial_repo)
     set_edl_repository(edl_repo)
     set_agent_config_repository(agent_config_repo)
@@ -403,6 +364,8 @@ def test_release_review_pass_on_clean_production(
     assert data["release_status"] == "Ready to publish"
     assert data["review"]["verdict"] == ReleaseVerdict.PASS.value
     assert data["review"]["approved_for_release"] is True
+
+
 def test_release_review_missing_prerequisites(api_client: TestClient, test_production: Production):
     # Missing master
     render_repo = InMemoryRenderRepository()

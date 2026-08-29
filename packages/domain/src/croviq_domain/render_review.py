@@ -1,4 +1,4 @@
-"""Canonical domain models for Director (Maya) post-render review and bounded correction (Issue #30)."""
+"""Canonical domain models for post-render quality review and bounded correction."""
 
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -8,7 +8,7 @@ from croviq_domain.validators import validate_timezone_aware
 
 
 class RenderReviewVerdict(StrEnum):
-    """Post-render review verdicts issued by Director (Maya)."""
+    """Post-render quality review verdicts."""
 
     APPROVE = "APPROVE"
     CORRECT = "CORRECT"
@@ -93,7 +93,7 @@ class RenderReviewIssue(BaseModel):
 
 
 class RenderReview(BaseModel):
-    """Complete post-render review output emitted by Director (Maya) after watching preview MP4."""
+    """Complete post-render quality review after preview inspection."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -122,8 +122,8 @@ class RenderReview(BaseModel):
         description="Associated RenderArtifact identifier of the rendered preview",
     )
     agent: str = Field(
-        default="maya",
-        description="Agent identifier (Maya)",
+        default="iris",
+        description="Agent identifier (Iris)",
     )
     model: str = Field(
         ...,
@@ -151,7 +151,7 @@ class RenderReview(BaseModel):
         ...,
         ge=0.0,
         le=1.0,
-        description="Director's confidence in the review",
+        description="Iris confidence in the review",
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -250,12 +250,6 @@ class EditorSelfReview(BaseModel):
     coverage_needed: bool = Field(
         default=False,
         description="Whether additional B-roll visual coverage is recommended",
-    )
-    short_assessment: str = Field(
-        ...,
-        min_length=1,
-        max_length=500,
-        description="Evaluation of whether the vertical Short still works after editing",
     )
     findings: list[str] = Field(
         default_factory=list,

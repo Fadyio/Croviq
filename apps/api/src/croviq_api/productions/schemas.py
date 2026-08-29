@@ -5,7 +5,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from croviq_domain.editorial import (
     AgentActivity,
-    DirectorReview,
     EditorProposal,
     EditorialRun,
     EditorialRunStatus,
@@ -17,12 +16,10 @@ from croviq_domain.packaging import (
     CreatorPackageOverrides,
     PackagingChapter,
     PackagingProposal,
-    ShortPackage,
     ThumbnailConcept,
 )
 from croviq_domain.transcript import Transcript
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
-from croviq_domain.render_review import EditorSelfReview, RenderReview
 from croviq_domain.narration import BRollArtifact, StudioVoiceResult
 from croviq_domain.release_review import (
     ClaimSupportStatus,
@@ -190,9 +187,9 @@ class AnalyzeProductionResponse(BaseModel):
         default=None,
         description="Identifier of the generated EditorProposal record",
     )
-    director_review_id: str | None = Field(
-        default=None,
-        description="Identifier of the generated DirectorReview record",
+    edl_id: str = Field(..., description="Identifier of the assembled canonical EDL")
+    preview_artifact_id: str = Field(
+        ..., description="Identifier of the rendered Preview artifact"
     )
     started_at: datetime = Field(
         ...,
@@ -205,7 +202,7 @@ class AnalyzeProductionResponse(BaseModel):
 
 
 class EditorialRunDetailResponse(BaseModel):
-    """Detailed response for inspecting an editorial run, including proposal, review, and activities."""
+    """Detailed response for inspecting an editorial run and Leo's proposal."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -218,10 +215,6 @@ class EditorialRunDetailResponse(BaseModel):
     proposal: EditorProposal | None = Field(
         default=None,
         description="Leo's structured dialogue proposal",
-    )
-    review: DirectorReview | None = Field(
-        default=None,
-        description="Maya's structured director review",
     )
     activities: list[AgentActivity] = Field(
         default_factory=list,
@@ -444,66 +437,6 @@ class RenderListResponse(BaseModel):
     )
 
 
-class ReviewPreviewResponse(BaseModel):
-    """Response returned upon completing post-render preview review and Master render gating."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    production_id: str = Field(
-        ...,
-        description="Canonical unique production identifier",
-    )
-    review: RenderReview = Field(
-        ...,
-        description="Maya's post-render review record",
-    )
-    self_review: EditorSelfReview | None = Field(
-        default=None,
-        description="Leo's post-render self-review record",
-    )
-    master_artifact: RenderArtifactResponse | None = Field(
-        default=None,
-        description="Master render artifact if approved and rendered",
-    )
-    second_review: RenderReview | None = Field(
-        default=None,
-        description="Second post-render review if bounded correction was performed",
-    )
-    status: str = Field(
-        ...,
-        description="Current workflow status (complete, needs_manual_review, correcting, approved)",
-    )
-    activities: list[AgentActivity] = Field(
-        default_factory=list,
-        description="Product-facing agent activity messages emitted during review and correction",
-    )
-
-
-class RenderReviewDetailResponse(BaseModel):
-    """Response containing latest and historical post-render reviews for a production."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    production_id: str = Field(
-        ...,
-        description="Canonical unique production identifier",
-    )
-    review: RenderReview | None = Field(
-        default=None,
-        description="Most recent post-render review record",
-    )
-    reviews: list[RenderReview] = Field(
-        default_factory=list,
-        description="All post-render review records for this production",
-    )
-    needs_manual_review: bool = Field(
-        default=False,
-        description="Whether production requires manual human review after exhausted bounded correction",
-    )
 class ProductionPlaybackResponse(BaseModel):
     """Playback URLs for all available media outputs of a production."""
 
@@ -515,7 +448,6 @@ class ProductionPlaybackResponse(BaseModel):
     rendered_preview_url: str | None = Field(default=None, description="Edited preview video playback URL")
     master_url: str | None = Field(default=None, description="Master video playback URL")
     studio_voice_preview_url: str | None = Field(default=None, description="Studio Voice video playback URL")
-    short_playback_url: str | None = Field(default=None, description="Social Short video playback URL")
 
 class StudioVoiceGenerationResponse(BaseModel):
     """Response returned upon generating Studio Voice narration for a production."""
@@ -567,8 +499,6 @@ class UpdatePackagingOverridesRequest(BaseModel):
     custom_title: str | None = Field(default=None, description="Creator custom title override")
     custom_description: str | None = Field(default=None, description="Creator custom description override")
     custom_chapters: list[PackagingChapter] | None = Field(default=None, description="Creator custom chapters override")
-    custom_short_title: str | None = Field(default=None, description="Creator custom Short title override")
-    custom_short_description: str | None = Field(default=None, description="Creator custom Short description override")
     selected_thumbnail_concept_id: str | None = Field(default=None, description="Selected thumbnail concept ID")
 
 
@@ -583,14 +513,10 @@ class PackagingDetailResponse(BaseModel):
     effective_title: str = Field(..., description="Active title to publish")
     effective_description: str = Field(default="", description="Active description to publish")
     effective_chapters: list[PackagingChapter] = Field(default_factory=list, description="Active canonical video chapters")
-    effective_short_package: ShortPackage | None = Field(default=None, description="Active vertical Short packaging")
     effective_thumbnail_concept_id: str | None = Field(default=None, description="Active selected thumbnail concept ID")
     master_artifact: RenderArtifactResponse | None = Field(default=None, description="Master video artifact details")
-    short_artifact: RenderArtifactResponse | None = Field(default=None, description="Short video artifact details")
     master_url: str | None = Field(default=None, description="Signed playback URL for master video")
-    short_url: str | None = Field(default=None, description="Signed playback URL for short video")
     has_master: bool = Field(default=False, description="Whether an approved master video artifact exists")
-    has_short: bool = Field(default=False, description="Whether a vertical Short video artifact exists")
     status: str = Field(default="completed", description="Packaging readiness status ('completed' or 'needs_master')")
     generated_at: datetime | None = Field(default=None, description="UTC timestamp of last proposal generation")
 
@@ -617,11 +543,8 @@ class ReleaseReviewDetailResponse(BaseModel):
     release_ready: bool = Field(default=False, description="Whether output satisfies all release gate conditions")
     checklist: ReleaseChecklist | None = Field(default=None, description="Compact release verification checklist")
     master_artifact: RenderArtifactResponse | None = Field(default=None, description="Master video artifact details")
-    short_artifact: RenderArtifactResponse | None = Field(default=None, description="Short video artifact details")
     master_url: str | None = Field(default=None, description="Signed playback URL for master video")
-    short_url: str | None = Field(default=None, description="Signed playback URL for short video")
     has_master: bool = Field(default=False, description="Whether approved Master video artifact exists")
-    has_short: bool = Field(default=False, description="Whether vertical Short video artifact exists")
     has_packaging: bool = Field(default=False, description="Whether packaging proposal exists")
     generated_at: datetime | None = Field(default=None, description="UTC timestamp of review generation")
     release_fingerprint: str | None = Field(default=None, description="SHA-256 cryptographic release fingerprint locking immutable pipeline inputs")
@@ -648,9 +571,6 @@ class PublishPreparationResponse(BaseModel):
     suggested_category_id: str = Field(default="28", description="Default category ID (28 = Science & Technology)")
     suggested_synthetic_media: bool = Field(default=False, description="Suggested synthetic media disclosure based on Studio Voice/BRoll")
     verified_thumbnail_frames: list[dict[str, Any]] = Field(default_factory=list, description="Verified thumbnail frame candidates")
-    has_short: bool = Field(default=False, description="Whether an approved vertical Short artifact exists")
-    short_title: str | None = Field(default=None, description="Short title candidate")
-    short_description: str | None = Field(default=None, description="Short description candidate")
     release_ready: bool = Field(default=False, description="Whether Iris has approved the release (verdict PASS)")
 
     release_fingerprint: str | None = Field(default=None, description="SHA-256 release fingerprint locking release inputs")
@@ -697,10 +617,6 @@ class PublishRequest(BaseModel):
         default=None,
         ge=0,
         description="Selected timeline millisecond offset for extracting thumbnail still image",
-    )
-    upload_short: bool = Field(
-        default=False,
-        description="Whether to also upload the approved vertical Short as a separate video",
     )
 
 

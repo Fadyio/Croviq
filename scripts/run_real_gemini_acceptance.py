@@ -21,7 +21,7 @@ from croviq_agents.client import GoogleGenAIClient
 from croviq_agents.director import MayaDirector
 from croviq_domain.channel_provider import SampleChannelDataProvider
 from croviq_domain.memory import ChannelProfileBuilder
-from croviq_agents.editor import LeoDialogueEditor
+from croviq_agents.editor import LeoVideoEditor
 from croviq_api.config import get_settings
 from croviq_api.memory.dependencies import initialize_sample_channel_memory
 from croviq_api.memory.google import GoogleMemoryBankStore
@@ -128,9 +128,9 @@ async def main() -> None:
     await editorial_repo.save_editorial_run(run)
     print(f"\nCreated EditorialRun: {run_id} (Status: ANALYZING)")
 
-    # 6. Run Leo (Dialogue Editor)
-    print("\n--- Invoking Leo (Dialogue Editor) on Gemini 3.7 Flash via Vertex AI ---")
-    leo = LeoDialogueEditor(client=genai_client)
+    # 6. Run Leo (Video Editor)
+    print("\n--- Invoking Leo (Video Editor) on Gemini 3.7 Flash via Vertex AI ---")
+    leo = LeoVideoEditor(client=genai_client)
     t0 = time.perf_counter()
     proposal, leo_usage, leo_activities = await leo.analyze(
         analysis_input=analysis_input,

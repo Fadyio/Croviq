@@ -1,4 +1,4 @@
-"""Canonical domain models for Nina Packaging Agent (Issue #32)."""
+"""Canonical domain models for creator-owned publishing metadata."""
 
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -148,7 +148,7 @@ class ThumbnailConcept(BaseModel):
         ...,
         min_length=1,
         max_length=100,
-        description="Optional short thumbnail overlay headline / text (2-4 words)",
+        description="Optional concise thumbnail overlay headline / text (2-4 words)",
     )
     visual_subject: str = Field(
         ...,
@@ -195,41 +195,10 @@ class ThumbnailConcept(BaseModel):
     )
 
 
-class ShortPackage(BaseModel):
-    """Packaging metadata for vertical Short."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-    )
-
-    title: str = Field(
-        ...,
-        min_length=1,
-        max_length=100,
-        description="Vertical Short title",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        max_length=1000,
-        description="Short description / caption",
-    )
-    hook: str = Field(
-        ...,
-        min_length=1,
-        max_length=200,
-        description="Opening spoken / visual hook framing",
-    )
-    hashtags: list[str] = Field(
-        default_factory=list,
-        description="Useful hashtags (e.g. #shorts, #tech)",
-    )
 
 
 class PackagingProposal(BaseModel):
-    """Canonical packaging proposal emitted by Nina (Packaging Agent)."""
+    """Canonical creator-owned packaging proposal."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -253,15 +222,6 @@ class PackagingProposal(BaseModel):
         default=1,
         ge=1,
         description="Version number of packaging proposal for release locking",
-    )
-    agent: str = Field(
-        default="nina",
-        description="Agent identifier ('nina')",
-    )
-    model: str = Field(
-        default="gemini-3.7-flash",
-        min_length=1,
-        description="Model identifier used for packaging generation",
     )
     primary_title: str = Field(
         ...,
@@ -294,10 +254,6 @@ class PackagingProposal(BaseModel):
         max_length=5,
         description="Top thumbnail concepts with supporting frame references",
     )
-    short_package: ShortPackage | None = Field(
-        default=None,
-        description="Vertical Short packaging if Short exists",
-    )
     packaging_summary: str = Field(
         ...,
         min_length=1,
@@ -323,11 +279,6 @@ class PackagingProposal(BaseModel):
         default=None,
         description="Referenced Master RenderArtifact identifier",
     )
-    prompt_version: int = Field(
-        default=1,
-        ge=1,
-        description="Nina prompt version used for this generation",
-    )
 
     @field_validator("created_at", mode="after")
     @classmethod
@@ -336,7 +287,7 @@ class PackagingProposal(BaseModel):
 
 
 class CreatorPackageOverrides(BaseModel):
-    """Creator-defined overrides to Nina's packaging proposal."""
+    """Creator-defined overrides to a packaging proposal."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -361,16 +312,6 @@ class CreatorPackageOverrides(BaseModel):
     custom_chapters: list[PackagingChapter] | None = Field(
         default=None,
         description="Creator-edited chapter titles",
-    )
-    custom_short_title: str | None = Field(
-        default=None,
-        max_length=100,
-        description="Creator-edited Short title",
-    )
-    custom_short_description: str | None = Field(
-        default=None,
-        max_length=1000,
-        description="Creator-edited Short description",
     )
     selected_thumbnail_concept_id: str | None = Field(
         default=None,

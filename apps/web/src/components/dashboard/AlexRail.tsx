@@ -9,6 +9,7 @@ type ResearchFinding = components["schemas"]["ResearchFinding"];
 interface AlexRailProps {
   insights: ChannelInsight[];
   findings: ResearchFinding[];
+  onOpenChat?: () => void;
   onOpenSettings: () => void;
   onOpenEvidence: (insight: ChannelInsight) => void;
   onOpenAllFindings: () => void;
@@ -27,6 +28,7 @@ const formatDiscoveredAgo = (isoDate: string): string => {
 export const AlexRail: React.FC<AlexRailProps> = ({
   insights,
   findings,
+  onOpenChat,
   onOpenSettings,
   onOpenEvidence,
   onOpenAllFindings,
@@ -59,23 +61,32 @@ export const AlexRail: React.FC<AlexRailProps> = ({
       <div className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm space-y-5">
         {/* Alex Header */}
         <div className="flex items-center justify-between border-b border-border-subtle pb-4">
-          <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onOpenChat}
+            className="flex items-center gap-3 text-left transition-opacity hover:opacity-80 cursor-pointer"
+            title="Open Alex workspace & chat"
+            aria-label="Open Alex workspace"
+          >
             <img
               src={alexAvatar}
               alt="Alex"
               className="h-10 w-10 rounded-full object-cover ring-2 ring-primary/20"
             />
             <div>
-              <h2 className="text-sm font-semibold text-text-primary">Alex</h2>
-              <p className="text-xs text-text-muted">Data Scientist</p>
+              <h2 className="text-sm font-semibold text-text-primary hover:text-primary transition-colors">
+                Alex
+              </h2>
+              <p className="text-xs text-text-muted">Data Scientist · Chat</p>
             </div>
-          </div>
+          </button>
           <button
             type="button"
             onClick={onOpenSettings}
-            className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+            className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary cursor-pointer"
             title="Configure Alex settings & memory"
-            aria-label="Alex memory and settings"
+            aria-label="Open Alex settings"
+            data-testid="btn-alex-settings"
           >
             <Info className="h-4 w-4" />
           </button>

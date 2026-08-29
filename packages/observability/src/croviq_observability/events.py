@@ -71,10 +71,6 @@ class EventType(StrEnum):
     EDITOR_ANALYSIS_COMPLETED = "editor.analysis.completed"
     EDITOR_ANALYSIS_FAILED = "editor.analysis.failed"
 
-    # Director / Maya events
-    DIRECTOR_REVIEW_STARTED = "director.review.started"
-    DIRECTOR_REVIEW_COMPLETED = "director.review.completed"
-    DIRECTOR_REVIEW_FAILED = "director.review.failed"
 
     # Editorial Run lifecycle events
     EDITORIAL_RUN_COMPLETED = "editorial.run.completed"
@@ -91,10 +87,6 @@ class EventType(StrEnum):
     RENDER_FAILED = "render.failed"
 
 
-    # Director Render Review events (Issue #30)
-    DIRECTOR_RENDER_REVIEW_STARTED = "director.render_review.started"
-    DIRECTOR_RENDER_REVIEW_COMPLETED = "director.render_review.completed"
-    DIRECTOR_RENDER_REVIEW_FAILED = "director.render_review.failed"
 
     # Editor Correction events (Issue #30)
     EDITOR_CORRECTION_STARTED = "editor.correction.started"
@@ -104,10 +96,6 @@ class EventType(StrEnum):
     # Master render approval event (Issue #30)
     MASTER_APPROVED = "master.approved"
 
-    # Vertical Short Rendering events (Issue #31)
-    SHORT_RENDER_STARTED = "short.render.started"
-    SHORT_RENDER_COMPLETED = "short.render.completed"
-    SHORT_RENDER_FAILED = "short.render.failed"
 
 
     # Alex Data Scientist events
@@ -134,7 +122,7 @@ class EventType(StrEnum):
     RESEARCH_SCHEDULER_SKIPPED = "research.scheduler.skipped"
     RESEARCH_SCHEDULER_COMPLETED = "research.scheduler.completed"
 
-    # Nina Packaging events (Issue #32)
+    # Packaging events
     PACKAGING_STARTED = "packaging.started"
     PACKAGING_COMPLETED = "packaging.completed"
     PACKAGING_FAILED = "packaging.failed"

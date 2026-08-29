@@ -15,7 +15,7 @@ async def test_api_sample_channel_provider_contract() -> None:
     channel = await provider.get_channel()
     assert isinstance(channel, Channel)
     assert channel.channel_id == "croviq_syn_ai_eng_01"
-    assert channel.public.title == "Modern AI Engineering"
+    assert channel.public.title == "Croviq"
     assert channel.public.subscriber_count == 51317
     assert len(channel.videos) == 100
 

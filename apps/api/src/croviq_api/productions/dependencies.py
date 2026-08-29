@@ -1,4 +1,4 @@
-"""FastAPI dependency injection for GenAI client and DirectorEditorService."""
+"""FastAPI dependency injection for GenAI and production services."""
 
 from functools import lru_cache
 from typing import Annotated
@@ -14,11 +14,6 @@ from croviq_api.productions.render_repository import (
     RenderRepository,
     get_render_repository,
     set_render_repository,
-)
-from croviq_api.productions.render_review_repository import (
-    RenderReviewRepository,
-    get_render_review_repository,
-    set_render_review_repository,
 )
 from croviq_api.productions.packaging_repository import (
     PackagingRepository,
@@ -41,7 +36,7 @@ from croviq_api.productions.edl_repository import (
     get_edl_repository,
 )
 from croviq_api.productions.edl_service import EDLService
-from croviq_api.productions.editorial_service import DirectorEditorService
+from croviq_api.productions.editorial_service import EditorialService
 from croviq_api.productions.repository import (
     ProductionRepository,
     get_production_repository,
@@ -139,42 +134,37 @@ def get_editorial_service(
     media_inspector: Annotated[MediaInspector, Depends(get_media_inspector)],
     editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)],
     genai_client: Annotated[GenAIClient, Depends(get_genai_client)],
-    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)],
     edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
-    media_inspector_svc: Annotated[MediaInspector, Depends(get_media_inspector)],
     settings: Annotated[Settings, Depends(get_settings)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
-) -> DirectorEditorService:
-    """FastAPI dependency provider for DirectorEditorService."""
+) -> EditorialService:
+    """FastAPI dependency provider for the active editorial pipeline."""
     edl_svc = EDLService(
         production_repo=production_repo,
         transcript_repo=transcript_repo,
         editorial_repo=editorial_repo,
         edl_repo=edl_repo,
-        media_inspector=media_inspector,
     )
     render_svc = get_render_service(settings=settings)
-    return DirectorEditorService(
+    return EditorialService(
         production_repo=production_repo,
         transcript_repo=transcript_repo,
         memory_store=memory_store,
         media_inspector=media_inspector,
         editorial_repo=editorial_repo,
         genai_client=genai_client,
-        render_review_repo=render_review_repo,
-        edl_repo=edl_repo,
         render_repo=render_repo,
         edl_service=edl_svc,
         render_service=render_svc,
         media_storage=media_storage,
     )
+
 def get_edl_service(
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
     transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
     editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)],
     edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
-    media_inspector: Annotated[MediaInspector, Depends(get_media_inspector)],
 ) -> EDLService:
     """FastAPI dependency provider for EDLService."""
     return EDLService(
@@ -182,7 +172,6 @@ def get_edl_service(
         transcript_repo=transcript_repo,
         editorial_repo=editorial_repo,
         edl_repo=edl_repo,
-        media_inspector=media_inspector,
     )
 
 

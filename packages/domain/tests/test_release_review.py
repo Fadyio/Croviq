@@ -33,7 +33,6 @@ def test_issue_type_friendly_labels():
     assert get_issue_type_friendly_label(ReleaseIssueType.CAPTION_TIMING) == "Caption Timing Drift"
     assert get_issue_type_friendly_label(ReleaseIssueType.UNSUPPORTED_CLAIM) == "Unsupported Claim"
     assert get_issue_type_friendly_label(ReleaseIssueType.CHAPTER_TIMING) == "Chapter Timestamp Issue"
-    assert get_issue_type_friendly_label(ReleaseIssueType.SHORT_CROP) == "Short Vertical Framing Issue"
 
 
 def test_creator_facing_release_status():
@@ -58,14 +57,12 @@ def test_release_review_validation_pass():
         confidence=0.98,
         created_at=now,
         master_artifact_id="art_master_01",
-        short_artifact_id="art_short_01",
         packaging_proposal_id="pkg_01",
         checklist=ReleaseChecklist(
             master_video=True,
             audio=True,
             captions=True,
             chapters=True,
-            short=True,
             packaging=True,
             claims=True,
         ),
@@ -120,14 +117,12 @@ def test_release_review_validation_fix_required():
         approved_for_release=False,
         confidence=0.95,
         created_at=now,
-        master_artifact_id="art_master_01",
         packaging_proposal_id="pkg_01",
         checklist=ReleaseChecklist(
             master_video=True,
             audio=True,
             captions=True,
             chapters=True,
-            short=True,
             packaging=False,
             claims=False,
         ),
@@ -175,8 +170,6 @@ def test_release_fingerprint_deterministic_and_verification():
         packaging_proposal_id="pkg_01",
         package_version=1,
         release_review_id="rev_01",
-        short_artifact_id="art_short_01",
-        short_hash="sha256_short_hash_def",
     )
     fp2 = build_release_fingerprint(
         production_id="prod_01",
@@ -186,8 +179,6 @@ def test_release_fingerprint_deterministic_and_verification():
         packaging_proposal_id="pkg_01",
         package_version=1,
         release_review_id="rev_01",
-        short_artifact_id="art_short_01",
-        short_hash="sha256_short_hash_def",
     )
     assert fp1 == fp2
     assert len(fp1) == 64  # Valid SHA256 hex string
@@ -201,8 +192,6 @@ def test_release_fingerprint_deterministic_and_verification():
         packaging_proposal_id="pkg_01",
         package_version=1,
         release_review_id="rev_01",
-        short_artifact_id="art_short_01",
-        short_hash="sha256_short_hash_def",
     )
     assert is_valid is True
 

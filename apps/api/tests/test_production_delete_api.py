@@ -28,11 +28,6 @@ from croviq_api.productions.render_repository import (
     get_render_repository,
     set_render_repository,
 )
-from croviq_api.productions.render_review_repository import (
-    InMemoryRenderReviewRepository,
-    get_render_review_repository,
-    set_render_review_repository,
-)
 from croviq_api.productions.repository import (
     InMemoryProductionRepository,
     get_production_repository,
@@ -58,8 +53,6 @@ from croviq_domain.editorial import (
     EditorialRun,
     EditorialRunStatus,
     EditorProposal,
-    DirectorReview,
-    DirectorVerdict,
 )
 from croviq_domain.narration import (
     BRollArtifact,
@@ -115,7 +108,6 @@ def test_setup(user_a: User):
     editorial_repo = InMemoryEditorialRepository()
     edl_repo = InMemoryEDLRepository()
     render_repo = InMemoryRenderRepository()
-    render_review_repo = InMemoryRenderReviewRepository()
     studio_voice_repo = InMemoryStudioVoiceRepository()
     broll_repo = InMemoryBRollRepository()
     media_storage = FakeMediaStorage()
@@ -126,7 +118,6 @@ def test_setup(user_a: User):
     set_editorial_repository(editorial_repo)
     set_edl_repository(edl_repo)
     set_render_repository(render_repo)
-    set_render_review_repository(render_review_repo)
     set_studio_voice_repository(studio_voice_repo)
     set_broll_repository(broll_repo)
     set_media_storage(media_storage)
@@ -139,7 +130,6 @@ def test_setup(user_a: User):
     app.dependency_overrides[get_editorial_repository] = lambda: editorial_repo
     app.dependency_overrides[get_edl_repository] = lambda: edl_repo
     app.dependency_overrides[get_render_repository] = lambda: render_repo
-    app.dependency_overrides[get_render_review_repository] = lambda: render_review_repo
     app.dependency_overrides[get_studio_voice_repository] = lambda: studio_voice_repo
     app.dependency_overrides[get_broll_repository] = lambda: broll_repo
     app.dependency_overrides[get_media_storage] = lambda: media_storage
@@ -155,7 +145,6 @@ def test_setup(user_a: User):
         "editorial_repo": editorial_repo,
         "edl_repo": edl_repo,
         "render_repo": render_repo,
-        "render_review_repo": render_review_repo,
         "studio_voice_repo": studio_voice_repo,
         "broll_repo": broll_repo,
         "media_storage": media_storage,
@@ -167,7 +156,6 @@ def test_setup(user_a: User):
     set_editorial_repository(None)
     set_edl_repository(None)
     set_render_repository(None)
-    set_render_review_repository(None)
     set_studio_voice_repository(None)
     set_broll_repository(None)
     set_media_storage(None)
@@ -182,7 +170,6 @@ async def test_delete_production_success(test_setup, user_a: User):
     editorial_repo: InMemoryEditorialRepository = test_setup["editorial_repo"]
     edl_repo: InMemoryEDLRepository = test_setup["edl_repo"]
     render_repo: InMemoryRenderRepository = test_setup["render_repo"]
-    render_review_repo: InMemoryRenderReviewRepository = test_setup["render_review_repo"]
     studio_voice_repo: InMemoryStudioVoiceRepository = test_setup["studio_voice_repo"]
     broll_repo: InMemoryBRollRepository = test_setup["broll_repo"]
     media_storage: FakeMediaStorage = test_setup["media_storage"]
@@ -277,22 +264,6 @@ async def test_delete_production_success(test_setup, user_a: User):
     )
     await render_repo.save_render_artifact(render_art)
 
-    # 6. Seed Render Review
-    review = RenderReview(
-        review_id="rev_01",
-        production_id=production_id,
-        edl_id="edl_01",
-        preview_artifact_id="art_prev_01",
-        agent="maya",
-        model="gemini-3.7-flash",
-        verdict=RenderReviewVerdict.APPROVE,
-        summary="Approved",
-        approved_for_master=True,
-        confidence=0.95,
-        created_at=now,
-    )
-    await render_review_repo.save_render_review(review)
-
     # 7. Seed Studio Voice
     sv_result = StudioVoiceResult(
         production_id=production_id,
@@ -353,7 +324,6 @@ async def test_delete_production_success(test_setup, user_a: User):
     assert await editorial_repo.get_latest_editorial_run(production_id) is None
     assert await edl_repo.get_latest_edl(production_id) is None
     assert len(await render_repo.list_render_artifacts(production_id)) == 0
-    assert len(await render_review_repo.list_render_reviews(production_id)) == 0
     assert await studio_voice_repo.get_by_production_id(production_id) is None
     assert len(await broll_repo.list_by_production_id(production_id)) == 0
 

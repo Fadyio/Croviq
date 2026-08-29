@@ -102,7 +102,9 @@ def test_get_and_update_agent_settings(api_test_context):
     assert resp.status_code == 200
     data = resp.json()
     assert "leo_prompt" in data
-    assert "maya_prompt" in data
+    assert "alex_prompt" in data
+    assert "iris_prompt" in data
+    assert "maya_prompt" not in data
     assert data["alex_prompt"]["agent_id"] == "alex"
     assert "voice_settings" in data
     assert "voices" in data

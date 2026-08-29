@@ -1,7 +1,7 @@
-"""Iris — Quality Assurance (QA) Agent and Release Gatekeeper for YouTube Creators (Issue #33).
+"""Iris, Croviq's sole quality gate for the current rendered main video.
 
-Evaluates the actual finished Master video, Short video, transcript, captions, chapters,
-packaging proposal, and factual claims before Croviq approves a production for release.
+Iris decides whether the edited Preview or Master is ready by inspecting the
+actual render, audio, transcript, captions, and narrative pacing.
 """
 
 from datetime import datetime, timezone
@@ -15,6 +15,7 @@ from croviq_domain.channel_intelligence import ResearchFinding
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile
 from croviq_domain.packaging import CreatorPackageOverrides, PackagingProposal, PublishMetadata
 from croviq_domain.release_review import (
+    ReleaseChecklist,
     ReleaseIssue,
     ReleaseIssueSeverity,
     ReleaseIssueType,
@@ -22,7 +23,6 @@ from croviq_domain.release_review import (
     ReleaseVerdict,
 )
 from croviq_domain.render import RenderArtifact
-from croviq_domain.render_review import RenderReview
 from croviq_domain.transcript import Transcript
 from croviq_observability import log_ai_event, log_event
 from croviq_observability.events import EventType
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class IrisQAAgent:
-    """Iris — QA Agent and Final Release Gatekeeper evaluating video, audio, captions, chapters, and packaging."""
+    """Sole QA gate for the current rendered main video's readiness."""
 
     def __init__(
         self,
@@ -49,10 +49,8 @@ class IrisQAAgent:
         master_artifact: RenderArtifact,
         transcript: Transcript,
         proposal: PackagingProposal | None = None,
-        short_artifact: RenderArtifact | None = None,
         publish_metadata: PublishMetadata | None = None,
         overrides: CreatorPackageOverrides | None = None,
-        render_review: RenderReview | None = None,
         channel_profile: ChannelMemoryProfile | None = None,
         lessons: list[ChannelLesson] | None = None,
         research_findings: Sequence[ResearchFinding] | None = None,
@@ -60,7 +58,7 @@ class IrisQAAgent:
         prompt_version: int = 1,
         request_id: str = "unknown",
     ) -> tuple[ReleaseReview, AgentUsageMetadata]:
-        """Execute multimodal QA review across Master video, Short, packaging, and factual claims."""
+        """Answer whether the actual current rendered edited video is ready."""
         start_time = time.perf_counter()
 
         log_event(
@@ -69,7 +67,6 @@ class IrisQAAgent:
             request_id=request_id,
             data={
                 "master_artifact_id": master_artifact.artifact_id,
-                "short_artifact_id": short_artifact.artifact_id if short_artifact else None,
                 "proposal_id": proposal.proposal_id if proposal else None,
                 "model": self._model_id,
             },
@@ -108,13 +105,6 @@ class IrisQAAgent:
                 bucket = master_artifact.gcs_bucket or default_bucket
                 master_uri = f"gs://{bucket}/{master_artifact.gcs_object}"
 
-            short_uri: str | None = None
-            if short_artifact:
-                short_uri = short_artifact.gcs_object
-                if not short_uri.startswith("gs://"):
-                    default_bucket = os.getenv("MEDIA_BUCKET_NAME") or "croviq-506602-croviq-media-raw"
-                    bucket = short_artifact.gcs_bucket or default_bucket
-                    short_uri = f"gs://{bucket}/{short_artifact.gcs_object}"
             # 3. Multimodal Reasoning Pass via Gemini 3.7 Flash
             review, usage = await self._genai_client.generate_release_review(
                 master_video_uri=master_uri,
@@ -123,10 +113,7 @@ class IrisQAAgent:
                 proposal=proposal,
                 publish_metadata=publish_metadata,
                 production_id=production_id,
-                short_video_uri=short_uri,
-                short_mime_type="video/mp4",
                 overrides=overrides,
-                render_review=render_review,
                 channel_profile=channel_profile,
                 lessons=lessons,
                 research_findings=research_findings,
@@ -134,7 +121,6 @@ class IrisQAAgent:
                 custom_prompt=custom_prompt,
                 prompt_version=prompt_version,
                 master_artifact_id=master_artifact.artifact_id,
-                short_artifact_id=short_artifact.artifact_id if short_artifact else None,
                 master_duration_ms=master_duration,
                 request_id=request_id,
             )
@@ -166,14 +152,12 @@ class IrisQAAgent:
                     confidence=review.confidence,
                     created_at=review.created_at,
                     master_artifact_id=review.master_artifact_id,
-                    short_artifact_id=review.short_artifact_id,
                     packaging_proposal_id=review.packaging_proposal_id,
                     checklist=ReleaseChecklist(
                         master_video=review.checklist.master_video,
                         audio=review.checklist.audio and not any(i.issue_type in {ReleaseIssueType.AUDIO_LEVEL, ReleaseIssueType.AUDIO_ARTIFACT} for i in all_issues),
                         captions=review.checklist.captions and not any(i.issue_type in {ReleaseIssueType.CAPTION_TIMING, ReleaseIssueType.CAPTION_MISMATCH} for i in all_issues),
                         chapters=review.checklist.chapters and not any(i.issue_type in {ReleaseIssueType.CHAPTER_TIMING, ReleaseIssueType.CHAPTER_MISMATCH} for i in all_issues),
-                        short=review.checklist.short and not any(i.issue_type in {ReleaseIssueType.SHORT_QUALITY, ReleaseIssueType.SHORT_CROP} for i in all_issues),
                         packaging=review.checklist.packaging and not any(i.issue_type in {ReleaseIssueType.TITLE_MISMATCH, ReleaseIssueType.DESCRIPTION_MISMATCH, ReleaseIssueType.UNSUPPORTED_CLAIM} for i in all_issues),
                         claims=review.checklist.claims and not any(i.issue_type in {ReleaseIssueType.UNSUPPORTED_CLAIM, ReleaseIssueType.FACTUAL_INCONSISTENCY} for i in all_issues),
                     ),

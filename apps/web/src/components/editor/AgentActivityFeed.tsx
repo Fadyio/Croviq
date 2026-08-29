@@ -1,16 +1,13 @@
 import React, { useMemo } from "react";
-import { Clock, Loader2, Sparkles, AlertCircle } from "lucide-react";
+import { Clock, Loader2, Sparkles } from "lucide-react";
 import { formatTimecode } from "../../lib/edl-adapter";
-import type { AgentActivity, DirectorReview, EditorDecision } from "../../lib/edl-adapter";
+import type { AgentActivity, EditorDecision } from "../../lib/edl-adapter";
 import leoAvatar from "../../assets/agents/leo.webp";
-import mayaAvatar from "../../assets/agents/maya.webp";
 
 interface AgentActivityFeedProps {
   activities?: AgentActivity[];
   decisions?: EditorDecision[];
-  review?: DirectorReview | null;
   statusMessage?: string | null;
-  activeAgent?: "leo" | "maya" | null;
   onSeek?: (timeMs: number) => void;
   onSelectActivity?: (activity: AgentActivity) => void;
   className?: string;
@@ -18,10 +15,10 @@ interface AgentActivityFeedProps {
 
 interface ChatBubbleItem {
   id: string;
-  sender: "leo" | "maya" | "system";
+  sender: "leo" | "system";
   name: string;
   role: string;
-  avatar: string;
+  avatar?: string;
   text: string;
   timestampMs?: number;
   timeRangeText?: string;
@@ -33,9 +30,7 @@ interface ChatBubbleItem {
 export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
   activities = [],
   decisions = [],
-  review = null,
   statusMessage = null,
-  activeAgent = null,
   onSeek,
   onSelectActivity,
   className = "",
@@ -46,12 +41,13 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
 
     // Process raw activities
     for (const act of activities) {
-      const isLeo = act.agent.toLowerCase().includes("leo");
-      const isMaya = act.agent.toLowerCase().includes("maya");
-      const sender = isLeo ? "leo" : isMaya ? "maya" : "system";
-      const name = isLeo ? "Leo" : isMaya ? "Maya" : "Studio System";
-      const role = isLeo ? "Video Editor" : isMaya ? "Director" : "Automated Pipeline";
-      const avatar = isLeo ? leoAvatar : mayaAvatar;
+      const agent = act.agent.toLowerCase();
+      const isLeo = agent.includes("leo");
+      const isSystem = agent.includes("system") || agent.includes("croviq");
+      if (!isLeo && !isSystem) continue;
+      const sender = isLeo ? "leo" : "system";
+      const name = isLeo ? "Leo" : "Studio System";
+      const role = isLeo ? "Video Editor" : "Automated Pipeline";
 
       // Extract timecodes if present in the message
       let timestampMs: number | undefined;
@@ -81,7 +77,7 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
         sender,
         name,
         role,
-        avatar,
+        avatar: isLeo ? leoAvatar : undefined,
         text: cleanText,
         timestampMs,
         timeRangeText,
@@ -106,99 +102,78 @@ export const AgentActivityFeed: React.FC<AgentActivityFeedProps> = ({
         {chatMessages.length === 0 && !statusMessage && (
           <div className="flex flex-col items-center justify-center h-48 text-center p-4">
             <span className="text-xs text-text-muted">
-              Leo and Maya will discuss their editorial choices here during production.
+              Leo&apos;s editorial choices and production notices will appear here.
             </span>
           </div>
         )}
 
-        {chatMessages.map((item) => {
-          const isMaya = item.sender === "maya";
-
-          return (
-            <div
-              key={item.id}
-              className={`flex flex-col gap-1 transition-all duration-200 ease-out animate-in fade-in slide-in-from-bottom-2 ${
-                isMaya ? "items-end" : "items-start"
-              }`}
-              data-testid={`activity-message-${item.sender}`}
-            >
-              {/* Agent Header */}
-              <div
-                className={`flex items-center gap-2 px-1 ${
-                  isMaya ? "flex-row-reverse" : "flex-row"
-                }`}
-              >
+        {chatMessages.map((item) => (
+          <div
+            key={item.id}
+            className="flex flex-col items-start gap-1 transition-all duration-200 ease-out animate-in fade-in slide-in-from-bottom-2"
+            data-testid={`activity-message-${item.sender}`}
+          >
+            <div className="flex items-center gap-2 px-1">
+              {item.avatar ? (
                 <img
                   src={item.avatar}
                   alt={item.name}
                   className="size-5 rounded-full object-cover border border-border-subtle"
                 />
-                <span className="text-[11px] font-semibold text-text-primary">{item.name}</span>
-                <span className="text-[10px] text-text-muted">· {item.role}</span>
-              </div>
-
-              {/* Speech Bubble */}
-              <div
-                className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-xs cursor-pointer transition-all hover:ring-1 hover:ring-primary/40 ${
-                  isMaya
-                    ? "bg-purple-950/40 border border-purple-800/40 text-purple-100 rounded-tr-xs"
-                    : "bg-surface-2 border border-border-subtle text-text-primary rounded-tl-xs"
-                }`}
-                onClick={() => {
-                  if (item.timestampMs !== undefined) onSeek?.(item.timestampMs);
-                  onSelectActivity?.(item.rawActivity);
-                }}
-              >
-                <p className="whitespace-pre-wrap">{item.text}</p>
-
-                {/* Interactive Timecode Pill if available */}
-                {item.timestampMs !== undefined && (
-                  <div className={`mt-2 flex ${isMaya ? "justify-end" : "justify-start"}`}>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSeek?.(item.timestampMs!);
-                        onSelectActivity?.(item.rawActivity);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-3/80 hover:bg-primary/20 hover:text-primary border border-border-subtle text-[10px] font-mono text-text-secondary transition-colors cursor-pointer"
-                      title="Seek to video timestamp and inspect decision"
-                      data-testid="bubble-seek-btn"
-                    >
-                      <Clock className="size-2.5" />
-                      <span>{item.timeRangeText || formatTimecode(item.timestampMs)}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+              ) : (
+                <span className="flex size-5 items-center justify-center rounded-full border border-border-subtle bg-surface-3 text-primary">
+                  <Sparkles className="size-3" aria-hidden="true" />
+                </span>
+              )}
+              <span className="text-[11px] font-semibold text-text-primary">{item.name}</span>
+              <span className="text-[10px] text-text-muted">· {item.role}</span>
             </div>
-          );
-        })}
+
+            <div
+              className="max-w-[85%] rounded-2xl rounded-tl-xs bg-surface-2 border border-border-subtle px-3.5 py-2.5 text-xs leading-relaxed text-text-primary shadow-xs cursor-pointer transition-all hover:ring-1 hover:ring-primary/40"
+              onClick={() => {
+                if (item.timestampMs !== undefined) onSeek?.(item.timestampMs);
+                onSelectActivity?.(item.rawActivity);
+              }}
+            >
+              <p className="whitespace-pre-wrap">{item.text}</p>
+
+              {item.timestampMs !== undefined && (
+                <div className="mt-2 flex justify-start">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSeek?.(item.timestampMs!);
+                      onSelectActivity?.(item.rawActivity);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-3/80 hover:bg-primary/20 hover:text-primary border border-border-subtle text-[10px] font-mono text-text-secondary transition-colors cursor-pointer"
+                    title="Seek to video timestamp and inspect decision"
+                    data-testid="bubble-seek-btn"
+                  >
+                    <Clock className="size-2.5" />
+                    <span>{item.timeRangeText || formatTimecode(item.timestampMs)}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
 
         {/* Live Working Indicator */}
         {statusMessage && (
           <div
-            className={`flex flex-col gap-1 animate-in fade-in slide-in-from-bottom-2 ${
-              activeAgent === "maya" ? "items-end" : "items-start"
-            }`}
+            className="flex flex-col items-start gap-1 animate-in fade-in slide-in-from-bottom-2"
             data-testid="agent-live-working-indicator"
           >
-            <div
-              className={`flex items-center gap-2 px-1 ${
-                activeAgent === "maya" ? "flex-row-reverse" : "flex-row"
-              }`}
-            >
+            <div className="flex items-center gap-2 px-1">
               <img
-                src={activeAgent === "maya" ? mayaAvatar : leoAvatar}
-                alt="Working"
+                src={leoAvatar}
+                alt="Leo working"
                 className="size-5 rounded-full object-cover border border-border-subtle"
               />
-              <span className="text-[11px] font-semibold text-text-primary">
-                {activeAgent === "maya" ? "Maya" : "Leo"}
-              </span>
-              <span className="text-[10px] text-text-muted">
-                · {activeAgent === "maya" ? "Director" : "Video Editor"}
-              </span>
+              <span className="text-[11px] font-semibold text-text-primary">Leo</span>
+              <span className="text-[10px] text-text-muted">· Video Editor</span>
             </div>
 
             <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-surface-2/60 border border-primary/30 text-xs text-text-secondary">

@@ -9,7 +9,6 @@ import {
   Layers,
   RotateCcw,
   Sparkles,
-  Smartphone,
 } from "lucide-react";
 import {
   findExecutableSkipInterval,
@@ -19,7 +18,6 @@ import {
   editedToSourceTimeMs,
   type EditDecisionList,
   type CoverageMarker,
-  type ShortCandidate,
 } from "../../lib/edl-adapter";
 import type { PreviewMode } from "./PreviewToggle";
 
@@ -27,16 +25,13 @@ interface VideoStageProps {
   playbackUrl: string | null;
   renderedPreviewUrl?: string | null;
   studioVoicePreviewUrl?: string | null;
-  shortPlaybackUrl?: string | null;
   currentTimeMs: number;
   durationMs: number;
   editedDurationMs?: number;
   studioVoiceDurationMs?: number | null;
-  shortDurationMs?: number | null;
   isPlaying: boolean;
   previewMode: PreviewMode;
   edl: EditDecisionList | null;
-  shortCandidate?: ShortCandidate | null;
   activeCoverage: CoverageMarker | null;
   onPlayPause: () => void;
   onSeek: (targetMs: number) => void;
@@ -48,16 +43,13 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   playbackUrl,
   renderedPreviewUrl,
   studioVoicePreviewUrl,
-  shortPlaybackUrl,
   currentTimeMs,
   durationMs,
   editedDurationMs,
   studioVoiceDurationMs,
-  shortDurationMs,
   isPlaying,
   previewMode,
   edl,
-  shortCandidate,
   activeCoverage,
   onPlayPause,
   onSeek,
@@ -86,56 +78,42 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
   }, [isPlaying]);
 
-  const isUsingShortArtifact = previewMode === "short" && Boolean(shortPlaybackUrl);
   const isUsingStudioVoiceArtifact =
     previewMode === "studio_voice" && Boolean(studioVoicePreviewUrl);
   const isUsingRenderedArtifact = previewMode === "edited" && Boolean(renderedPreviewUrl);
 
-  const activeVideoUrl = isUsingShortArtifact
-    ? shortPlaybackUrl
-    : isUsingStudioVoiceArtifact
-      ? studioVoicePreviewUrl
-      : isUsingRenderedArtifact
-        ? renderedPreviewUrl
-        : playbackUrl;
+  const activeVideoUrl = isUsingStudioVoiceArtifact
+    ? studioVoicePreviewUrl
+    : isUsingRenderedArtifact
+      ? renderedPreviewUrl
+      : playbackUrl;
 
-  // Active duration and current time based on preview mode
   const activeDurationMs =
-    previewMode === "short"
-      ? shortDurationMs ||
-        (shortCandidate ? shortCandidate.end_ms - shortCandidate.start_ms : 30000)
-      : previewMode === "studio_voice"
-        ? studioVoiceDurationMs || editedDurationMs || durationMs
-        : previewMode === "edited"
-          ? editedDurationMs || durationMs
-          : durationMs;
+    previewMode === "studio_voice"
+      ? studioVoiceDurationMs || editedDurationMs || durationMs
+      : previewMode === "edited"
+        ? editedDurationMs || durationMs
+        : durationMs;
 
   const activeCurrentTimeMs =
-    previewMode === "short"
-      ? Math.max(0, Math.min(activeDurationMs, currentTimeMs - (shortCandidate?.start_ms ?? 0)))
-      : previewMode === "edited" && edl
-        ? sourceToEditedTimeMs(currentTimeMs, edl)
-        : previewMode === "studio_voice" && edl
-          ? sourceToEditedTimeMs(currentTimeMs, edl)
-          : currentTimeMs;
+    (previewMode === "edited" || previewMode === "studio_voice") && edl
+      ? sourceToEditedTimeMs(currentTimeMs, edl)
+      : currentTimeMs;
 
   // Sync external seek to video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video || isSeekingInternallyRef.current) return;
 
-    const shortStartMs = shortCandidate?.start_ms ?? 0;
     const targetSec =
-      previewMode === "short"
-        ? Math.max(0, currentTimeMs - shortStartMs) / 1000
-        : previewMode === "edited" && isUsingRenderedArtifact && edl
-          ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
-          : currentTimeMs / 1000;
+      previewMode === "edited" && isUsingRenderedArtifact && edl
+        ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
+        : currentTimeMs / 1000;
 
     if (Math.abs(video.currentTime - targetSec) > 0.1) {
       video.currentTime = targetSec;
     }
-  }, [currentTimeMs, edl, isUsingRenderedArtifact, previewMode, shortCandidate]);
+  }, [currentTimeMs, edl, isUsingRenderedArtifact, previewMode]);
 
   // Preserve playback position across source switches
   const prevActiveUrlRef = useRef<string | null>(null);
@@ -143,28 +121,17 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     const video = videoRef.current;
     if (!video || !activeVideoUrl) return;
     if (prevActiveUrlRef.current && prevActiveUrlRef.current !== activeVideoUrl) {
-      const shortStartMs = shortCandidate?.start_ms ?? 0;
       const targetSec =
-        previewMode === "short"
-          ? Math.max(0, currentTimeMs - shortStartMs) / 1000
-          : previewMode === "edited" && isUsingRenderedArtifact && edl
-            ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
-            : currentTimeMs / 1000;
+        previewMode === "edited" && isUsingRenderedArtifact && edl
+          ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
+          : currentTimeMs / 1000;
       video.currentTime = targetSec;
       if (isPlaying && video.paused) {
         video.play().catch(() => {});
       }
     }
     prevActiveUrlRef.current = activeVideoUrl;
-  }, [
-    activeVideoUrl,
-    currentTimeMs,
-    edl,
-    isPlaying,
-    isUsingRenderedArtifact,
-    previewMode,
-    shortCandidate,
-  ]);
+  }, [activeVideoUrl, currentTimeMs, edl, isPlaying, isUsingRenderedArtifact, previewMode]);
 
   // Handle time update from video element & execute cut skipping
   const handleTimeUpdate = useCallback(() => {
@@ -172,11 +139,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     if (!video) return;
 
     const currentMs = Math.round(video.currentTime * 1000);
-    if (previewMode === "short") {
-      const shortStartMs = shortCandidate?.start_ms ?? 0;
-      onSeek(shortStartMs + currentMs);
-      return;
-    }
 
     if (previewMode === "edited" && isUsingRenderedArtifact && edl) {
       const sourceMs = editedToSourceTimeMs(currentMs, edl);
@@ -208,7 +170,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
 
     onSeek(currentMs);
-  }, [edl, onSeek, previewMode, isUsingRenderedArtifact, shortCandidate]);
+  }, [edl, onSeek, previewMode, isUsingRenderedArtifact]);
 
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
@@ -273,12 +235,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   };
 
   const handleRestart = () => {
-    if (previewMode === "short") {
-      const shortStartMs = shortCandidate?.start_ms ?? 0;
-      onSeek(shortStartMs);
-    } else {
-      onSeek(0);
-    }
+    onSeek(0);
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
     }
@@ -291,10 +248,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const targetModeMs = Math.round(clickRatio * activeDurationMs);
 
-    if (previewMode === "short") {
-      const shortStartMs = shortCandidate?.start_ms ?? 0;
-      onSeek(shortStartMs + targetModeMs);
-    } else if (previewMode === "edited" && edl) {
+    if (previewMode === "edited" && edl) {
       const sourceMs = editedToSourceTimeMs(targetModeMs, edl);
       onSeek(sourceMs);
     } else {
@@ -310,32 +264,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     >
       {/* Video Viewport Container */}
       <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden p-2">
-        {previewMode === "short" ? (
-          <div className="relative h-full aspect-[9/16] max-h-full rounded-xl overflow-hidden shadow-2xl bg-black border border-border-strong flex items-center justify-center">
-            {activeVideoUrl ? (
-              <video
-                key={activeVideoUrl || "short"}
-                ref={videoRef}
-                src={activeVideoUrl}
-                playsInline
-                preload="auto"
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleLoadedMetadata}
-                onError={() => setVideoError("Playback stream could not be loaded")}
-                className="w-full h-full object-cover"
-                data-testid="video-element-short"
-              />
-            ) : (
-              <div className="text-center p-4 text-xs text-text-muted space-y-2">
-                <Smartphone className="w-8 h-8 mx-auto text-primary animate-pulse" />
-                <p className="font-semibold text-text-primary">Short rendering candidate</p>
-                <p className="text-[11px] text-text-muted">
-                  {shortCandidate ? shortCandidate.hook_title : "Selecting highlight…"}
-                </p>
-              </div>
-            )}
-          </div>
-        ) : activeVideoUrl ? (
+        {activeVideoUrl ? (
           <video
             key={activeVideoUrl || "preview"}
             ref={videoRef}
@@ -365,17 +294,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({
                 ? "B-Roll Coverage"
                 : "Source Screen Coverage"}
             </span>
-          </div>
-        )}
-
-        {/* Short 9:16 Aspect Indicator */}
-        {isUsingShortArtifact && (
-          <div
-            className="absolute top-4 left-4 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-600/90 text-white text-xs font-semibold backdrop-blur-md shadow-lg"
-            data-testid="short-mode-badge"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-white shrink-0" />
-            <span>Short (9:16)</span>
           </div>
         )}
 

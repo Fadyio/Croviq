@@ -1,14 +1,13 @@
 import React from "react";
-import { Scissors, Film, Smartphone } from "lucide-react";
+import { Scissors, Film } from "lucide-react";
 
-export type PreviewMode = "original" | "edited" | "studio_voice" | "short";
+export type PreviewMode = "original" | "edited" | "studio_voice";
 
 interface PreviewToggleProps {
   mode: PreviewMode;
   onModeChange: (mode: PreviewMode) => void;
   activeCutCount: number;
   hasStudioVoice?: boolean;
-  hasShort?: boolean;
   className?: string;
 }
 
@@ -17,7 +16,6 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
   onModeChange,
   activeCutCount,
   hasStudioVoice = false,
-  hasShort = false,
   className = "",
 }) => {
   return (
@@ -83,25 +81,6 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
             className={`w-3.5 h-3.5 ${mode === "studio_voice" ? "text-white" : "text-primary"}`}
           />
           <span>Studio Voice</span>
-        </button>
-      )}
-
-      {hasShort && (
-        <button
-          type="button"
-          onClick={() => onModeChange("short")}
-          className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-            mode === "short"
-              ? "bg-primary text-white shadow-sm font-semibold"
-              : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
-          }`}
-          aria-pressed={mode === "short"}
-          title="Play 9:16 vertical Short with synchronized captions"
-        >
-          <Smartphone
-            className={`w-3.5 h-3.5 ${mode === "short" ? "text-white" : "text-primary"}`}
-          />
-          <span>Short</span>
         </button>
       )}
     </div>

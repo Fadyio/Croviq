@@ -1,14 +1,10 @@
 """Deterministic Cut Safety Analyzer and Canonical EDL assembly engine."""
 
 from datetime import datetime, timezone
-import logging
 import uuid
 from typing import Sequence
 
 from croviq_domain.editorial import (
-    DirectorDecision,
-    DirectorReview,
-    DirectorVerdict,
     EditorDecision,
     EditorDecisionType,
     EditorProposal,
@@ -20,14 +16,13 @@ from croviq_domain.edl import (
     CutSafetyStatus,
     EditDecisionList,
 )
-from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.transcript import Transcript
 
-logger = logging.getLogger(__name__)
 
 # Canonical safety parameters
 MAX_BOUNDARY_ADJUSTMENT_MS = 100
 DEFAULT_TRANSITION_MS = 20
+MIN_CUT_DURATION_MS = 120
 DEFAULT_NATURAL_PAUSE_BREATH_MS = 200
 
 DESTRUCTIVE_DECISION_TYPES = frozenset({
@@ -51,43 +46,22 @@ class CutSafetyAnalyzer:
         max_boundary_adjustment_ms: int = MAX_BOUNDARY_ADJUSTMENT_MS,
         default_transition_ms: int = DEFAULT_TRANSITION_MS,
         natural_pause_breath_ms: int = DEFAULT_NATURAL_PAUSE_BREATH_MS,
+        min_cut_duration_ms: int = MIN_CUT_DURATION_MS,
     ) -> None:
         self.max_boundary_adjustment_ms = max_boundary_adjustment_ms
         self.default_transition_ms = default_transition_ms
         self.natural_pause_breath_ms = natural_pause_breath_ms
+        self.min_cut_duration_ms = min_cut_duration_ms
 
     def analyze_cut(
         self,
         decision: EditorDecision,
-        verdict: DirectorVerdict,
-        director_decision: DirectorDecision | None,
         transcript: Transcript,
-        media_metadata: MediaMetadata,
         protected_decisions: Sequence[EditorDecision] | None = None,
     ) -> CutInstruction:
-        """Evaluate a single editorial decision and derive deterministic safe cut boundaries."""
+        """Evaluate one proposal decision against transcript word boundaries and speech padding."""
         cut_id = f"cut_{uuid.uuid4().hex[:12]}"
 
-        # 1. Check Director Verdict
-        if verdict == DirectorVerdict.REJECT:
-            return CutInstruction(
-                cut_id=cut_id,
-                decision_id=decision.decision_id,
-                decision_type=decision.decision_type,
-                transcript_start_word=decision.transcript_start_word,
-                transcript_end_word=decision.transcript_end_word,
-                requested_start_ms=decision.source_start_ms,
-                requested_end_ms=decision.source_end_ms,
-                safe_start_ms=decision.source_start_ms,
-                safe_end_ms=decision.source_end_ms,
-                removed_duration_ms=0,
-                left_anchor="[REJECTED]",
-                right_anchor="[REJECTED]",
-                transition_ms=self.default_transition_ms,
-                safety_status=CutSafetyStatus.REJECTED_UNSAFE,
-                safety_reason="Director rejected editorial decision.",
-                confidence=decision.confidence,
-            )
 
         # 2. Check destructive action applicability
         if decision.decision_type not in DESTRUCTIVE_DECISION_TYPES:
@@ -110,14 +84,8 @@ class CutSafetyAnalyzer:
                 confidence=decision.confidence,
             )
 
-        # 3. Handle Director Modification
         start_word_idx = decision.transcript_start_word
         end_word_idx = decision.transcript_end_word
-        if verdict == DirectorVerdict.MODIFY and director_decision is not None:
-            if director_decision.modified_transcript_start_word is not None:
-                start_word_idx = director_decision.modified_transcript_start_word
-            if director_decision.modified_transcript_end_word is not None:
-                end_word_idx = director_decision.modified_transcript_end_word
 
         # 4. Validate word indexes
         if not transcript.words:
@@ -174,8 +142,8 @@ class CutSafetyAnalyzer:
             left_anchor = transcript.words[start_word_idx - 1].text if start_word_idx > 0 else "[START]"
             right_anchor = transcript.words[end_word_idx + 1].text if end_word_idx + 1 < len(transcript.words) else "[END]"
 
-        # 6. Validate bounds against Media Duration
-        if req_start_ms >= media_metadata.duration_ms or req_end_ms > media_metadata.duration_ms + 2000:
+        # Validate bounds against canonical transcript duration.
+        if req_start_ms >= transcript.duration_ms or req_end_ms > transcript.duration_ms:
             return CutInstruction(
                 cut_id=cut_id,
                 decision_id=decision.decision_id,
@@ -191,7 +159,7 @@ class CutSafetyAnalyzer:
                 right_anchor=right_anchor,
                 transition_ms=self.default_transition_ms,
                 safety_status=CutSafetyStatus.REJECTED_UNSAFE,
-                safety_reason=f"Cut timestamps [{req_start_ms}, {req_end_ms}] exceed source media duration {media_metadata.duration_ms} ms.",
+                safety_reason=f"Cut timestamps [{req_start_ms}, {req_end_ms}] exceed transcript duration {transcript.duration_ms} ms.",
                 confidence=decision.confidence,
             )
 
@@ -258,9 +226,9 @@ class CutSafetyAnalyzer:
             # Right boundary calculation
             right_gap = 0
             if end_word_idx + 1 >= len(transcript.words):
-                right_gap = max(0, media_metadata.duration_ms - end_word.end_ms)
+                right_gap = max(0, transcript.duration_ms - end_word.end_ms)
                 adjustment = min(self.max_boundary_adjustment_ms, right_gap)
-                safe_end_ms = min(media_metadata.duration_ms, end_word.end_ms + adjustment)
+                safe_end_ms = min(transcript.duration_ms, end_word.end_ms + adjustment)
             else:
                 next_word = transcript.words[end_word_idx + 1]
                 right_gap = next_word.start_ms - end_word.end_ms
@@ -307,10 +275,15 @@ class CutSafetyAnalyzer:
                 safety_status = CutSafetyStatus.SAFE
                 safety_reason = "Clean inter-word silence boundaries verified."
 
-        # Ensure bounds are strictly clamped within media duration
-        safe_start_ms = max(0, min(safe_start_ms, media_metadata.duration_ms))
-        safe_end_ms = max(safe_start_ms, min(safe_end_ms, media_metadata.duration_ms))
+        safe_start_ms = max(0, min(safe_start_ms, transcript.duration_ms))
+        safe_end_ms = max(safe_start_ms, min(safe_end_ms, transcript.duration_ms))
         removed_duration_ms = safe_end_ms - safe_start_ms
+        if removed_duration_ms < self.min_cut_duration_ms:
+            safety_status = CutSafetyStatus.REJECTED_UNSAFE
+            safety_reason = (
+                f"Cut duration {removed_duration_ms} ms is below the deterministic "
+                f"minimum of {self.min_cut_duration_ms} ms."
+            )
 
         return CutInstruction(
             cut_id=cut_id,
@@ -334,14 +307,8 @@ class CutSafetyAnalyzer:
     def extract_coverage_marker(
         self,
         decision: EditorDecision,
-        verdict: DirectorVerdict,
-        director_decision: DirectorDecision | None,
-        transcript: Transcript,
     ) -> CoverageMarker | None:
-        """Extract a visual coverage marker if the decision represents B-roll or screen insert footage."""
-        if verdict == DirectorVerdict.REJECT:
-            return None
-
+        """Extract a visual coverage marker for B-roll insert footage."""
         if decision.decision_type == EditorDecisionType.BROLL_COVER_CANDIDATE:
             return CoverageMarker(
                 marker_id=f"cov_{uuid.uuid4().hex[:12]}",
@@ -355,61 +322,40 @@ class CutSafetyAnalyzer:
         return None
 
 
-def assemble_edl_from_review(
-    production_id: str,
+def assemble_edl_from_proposal(
     proposal: EditorProposal,
-    review: DirectorReview,
     transcript: Transcript,
-    media_metadata: MediaMetadata,
     version: int = 1,
     analyzer: CutSafetyAnalyzer | None = None,
     editor_proposal_id: str | None = None,
-    director_review_id: str | None = None,
+    edl_id: str | None = None,
 ) -> EditDecisionList:
-    """Assemble a canonical Edit Decision List (EDL) deterministically from Director-approved review state."""
+    """Assemble a canonical EDL directly from Leo's proposal using deterministic safety rules."""
     if analyzer is None:
         analyzer = CutSafetyAnalyzer()
 
-    # Map director decisions by editor_decision_id
-    director_decisions_by_id = {d.editor_decision_id: d for d in review.decisions}
-
-    # Identify protected decisions (KEEP, KEEP_FOR_CLARITY)
     protected_decisions = [
-        d for d in proposal.decisions
-        if d.decision_type in (EditorDecisionType.KEEP, EditorDecisionType.KEEP_FOR_CLARITY)
-        and getattr(director_decisions_by_id.get(d.decision_id), "verdict", DirectorVerdict.APPROVE) != DirectorVerdict.REJECT
+        decision
+        for decision in proposal.decisions
+        if decision.decision_type in (EditorDecisionType.KEEP, EditorDecisionType.KEEP_FOR_CLARITY)
     ]
 
     cuts: list[CutInstruction] = []
     coverage_markers: list[CoverageMarker] = []
 
     for decision in proposal.decisions:
-        director_dec = director_decisions_by_id.get(decision.decision_id)
-        verdict = director_dec.verdict if director_dec else DirectorVerdict.APPROVE
-
-        # Extract standalone coverage markers (e.g. BROLL_COVER_CANDIDATE)
-        marker = analyzer.extract_coverage_marker(
-            decision=decision,
-            verdict=verdict,
-            director_decision=director_dec,
-            transcript=transcript,
-        )
+        marker = analyzer.extract_coverage_marker(decision)
         if marker is not None:
             coverage_markers.append(marker)
 
-        # Destructive decisions produce cut instructions
         if decision.decision_type in DESTRUCTIVE_DECISION_TYPES:
             cut = analyzer.analyze_cut(
                 decision=decision,
-                verdict=verdict,
-                director_decision=director_dec,
                 transcript=transcript,
-                media_metadata=media_metadata,
                 protected_decisions=protected_decisions,
             )
-            # If cut needs coverage, create an associated coverage marker
             if cut.safety_status == CutSafetyStatus.NEEDS_COVERAGE:
-                cov_marker = CoverageMarker(
+                coverage_marker = CoverageMarker(
                     marker_id=f"cov_{uuid.uuid4().hex[:12]}",
                     decision_id=decision.decision_id,
                     source_start_ms=cut.safe_start_ms,
@@ -417,25 +363,20 @@ def assemble_edl_from_review(
                     coverage_type=CoverageType.SOURCE_SCREEN,
                     reason=f"Cover jump cut: {cut.safety_reason}",
                 )
-                coverage_markers.append(cov_marker)
-                cut.coverage_marker_id = cov_marker.marker_id
+                coverage_markers.append(coverage_marker)
+                cut.coverage_marker_id = coverage_marker.marker_id
 
             cuts.append(cut)
 
-    # Sort active cuts by safe_start_ms
-    cuts.sort(key=lambda c: (c.safe_start_ms, c.safe_end_ms))
-
-    now = datetime.now(timezone.utc)
-    edl_id = f"edl_{uuid.uuid4().hex[:12]}"
+    cuts.sort(key=lambda cut: (cut.safe_start_ms, cut.safe_end_ms))
 
     return EditDecisionList(
-        edl_id=edl_id,
-        production_id=production_id,
-        source_duration_ms=media_metadata.duration_ms,
-        editor_proposal_id=editor_proposal_id or proposal.production_id,
-        director_review_id=director_review_id or review.production_id,
+        edl_id=edl_id or f"edl_{uuid.uuid4().hex[:12]}",
+        production_id=proposal.production_id,
+        source_duration_ms=transcript.duration_ms,
+        editor_proposal_id=editor_proposal_id,
         version=version,
         cuts=cuts,
         coverage_markers=coverage_markers,
-        created_at=now,
+        created_at=datetime.now(timezone.utc),
     )

@@ -73,6 +73,7 @@ export interface paths {
     get: {
       responses: {
         200: components["schemas"]["AgentMemorySummaryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
     };
   };
@@ -93,6 +94,20 @@ export interface paths {
     post: {
       responses: {
         200: components["schemas"]["VoiceSampleResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/workspace/agents/{agent_id}/chat": {
+    get: {
+      responses: {
+        200: components["schemas"]["AgentConversationHistoryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+    post: {
+      responses: {
+        200: components["schemas"]["AgentChatMessageResponse"];
         422: components["schemas"]["HTTPValidationError"];
       };
     };
@@ -221,42 +236,10 @@ export interface paths {
       };
     };
   };
-  "/api/productions/{production_id}/renders/short": {
-    post: {
-      responses: {
-        200: components["schemas"]["RenderArtifactResponse"];
-        422: components["schemas"]["HTTPValidationError"];
-      };
-    };
-  };
   "/api/productions/{production_id}/renders": {
     get: {
       responses: {
         200: components["schemas"]["RenderListResponse"];
-        422: components["schemas"]["HTTPValidationError"];
-      };
-    };
-  };
-  "/api/productions/{production_id}/review-preview": {
-    post: {
-      responses: {
-        200: components["schemas"]["ReviewPreviewResponse"];
-        422: components["schemas"]["HTTPValidationError"];
-      };
-    };
-  };
-  "/api/productions/{production_id}/render-review": {
-    get: {
-      responses: {
-        200: components["schemas"]["RenderReviewDetailResponse"];
-        422: components["schemas"]["HTTPValidationError"];
-      };
-    };
-  };
-  "/api/productions/{production_id}/render-reviews": {
-    get: {
-      responses: {
-        200: components["schemas"]["RenderReviewDetailResponse"];
         422: components["schemas"]["HTTPValidationError"];
       };
     };
@@ -457,9 +440,9 @@ export interface components {
       production_id: string;
       /** Associated editorial run identifier */
       run_id: string;
-      /** Agent name (e.g. Leo, Maya) */
+      /** Agent name (e.g. Leo, Alex, Iris) */
       agent: string;
-      /** Agent role (e.g. Video Editor, Director) */
+      /** Agent role (e.g. Video Editor, Data Scientist, Quality Assurance) */
       role: string;
       /** Activity category (e.g. proposal, review, note, decision) */
       activity_type: string;
@@ -470,7 +453,25 @@ export interface components {
       /** Timestamp when the activity occurred */
       created_at?: string;
     };
-    AgentId: "leo" | "maya" | "alex" | "iris";
+    AgentChatMessageRequest: {
+      /** Message text sent by creator */
+      message: string;
+      /** Optional production or channel context */
+      context?: Record<string, unknown> | null;
+    };
+    AgentChatMessageResponse: {
+      message_id: string;
+      role?: string;
+      content: string;
+      tool_executions?: Record<string, unknown>[];
+      structured_artifact?: Record<string, unknown> | null;
+      created_at: string;
+    };
+    AgentConversationHistoryResponse: {
+      agent_id: string;
+      messages?: components["schemas"]["AgentChatMessageResponse"][];
+    };
+    AgentId: "leo" | "alex" | "iris";
     AgentMemorySummaryResponse: {
       channel_title: string;
       style_guide: string;
@@ -478,7 +479,7 @@ export interface components {
       lessons?: components["schemas"]["MemoryItemResponse"][];
     };
     AgentPromptConfig: {
-      /** Target agent identifier (alex, leo, maya, or iris) */
+      /** Target agent identifier (alex, leo, or iris) */
       agent_id: components["schemas"]["AgentId"];
       /** Complete agent working prompt text */
       prompt_text: string;
@@ -491,7 +492,6 @@ export interface components {
     };
     AgentSettingsResponse: {
       leo_prompt: components["schemas"]["AgentPromptConfig"];
-      maya_prompt: components["schemas"]["AgentPromptConfig"];
       alex_prompt: components["schemas"]["AgentPromptConfig"];
       iris_prompt: components["schemas"]["AgentPromptConfig"];
       voice_settings: components["schemas"]["VoiceSettingsConfig"];
@@ -506,8 +506,10 @@ export interface components {
       status: components["schemas"]["EditorialRunStatus"];
       /** Identifier of the generated EditorProposal record */
       editor_proposal_id?: string | null;
-      /** Identifier of the generated DirectorReview record */
-      director_review_id?: string | null;
+      /** Identifier of the assembled canonical EDL */
+      edl_id: string;
+      /** Identifier of the rendered Preview artifact */
+      preview_artifact_id: string;
       /** Run start timestamp in UTC */
       started_at: string;
       /** Run completion timestamp in UTC */
@@ -772,7 +774,7 @@ export interface components {
     ClaimVerification: {
       /** Specific factual claim examined */
       claim_text: string;
-      /** Where the claim appears (title, description, video, chapter, short) */
+      /** Where the claim appears (title, description, video, or chapter) */
       location?: string;
       /** Claim support status */
       status: components["schemas"]["ClaimSupportStatus"];
@@ -839,10 +841,6 @@ export interface components {
       custom_description?: string | null;
       /** Creator-edited chapter titles */
       custom_chapters?: components["schemas"]["PackagingChapter"][] | null;
-      /** Creator-edited Short title */
-      custom_short_title?: string | null;
-      /** Creator-edited Short description */
-      custom_short_description?: string | null;
       /** ID of creator-selected thumbnail concept */
       selected_thumbnail_concept_id?: string | null;
       /** Timestamp of last creator edit (UTC) */
@@ -851,7 +849,7 @@ export interface components {
     CutInstruction: {
       /** Unique identifier for the cut instruction */
       cut_id: string;
-      /** Originating Editor/Director decision identifier */
+      /** Originating Editor decision identifier */
       decision_id: string;
       /** Semantic decision type (e.g. REMOVE_FILLER, REMOVE_FALSE_START, etc.) */
       decision_type: components["schemas"]["EditorDecisionType"];
@@ -921,51 +919,6 @@ export interface components {
       /** UTC timestamp of the deletion */
       deleted_at: string;
     };
-    DirectorDecision: {
-      /** ID of the EditorDecision being reviewed */
-      editor_decision_id: string;
-      /** Verdict: APPROVE, REJECT, or MODIFY */
-      verdict: components["schemas"]["DirectorVerdict"];
-      /** Short editorial reason for the verdict */
-      concise_reason: string;
-      /** Corrected action if verdict is MODIFY */
-      modified_action?: string | null;
-      /** Corrected start word index if verdict is MODIFY */
-      modified_transcript_start_word?: number | null;
-      /** Corrected end word index if verdict is MODIFY */
-      modified_transcript_end_word?: number | null;
-      /** Corrected start time in ms if verdict is MODIFY */
-      modified_source_start_ms?: number | null;
-      /** Corrected end time in ms if verdict is MODIFY */
-      modified_source_end_ms?: number | null;
-    };
-    DirectorReview: {
-      /** Associated Production entity identifier */
-      production_id: string;
-      /** Agent identifier */
-      agent?: string;
-      /** Model identifier used for review */
-      model: string;
-      /** Director's overall assessment of Leo's proposal */
-      overall_assessment: string;
-      /** Per-decision review verdicts */
-      decisions?: components["schemas"]["DirectorDecision"][];
-      /** Review verdicts on Leo's full-timeline section plan */
-      section_decisions?: components["schemas"]["DirectorSectionDecision"][];
-      /** Direct feedback to Leo for adjustments or approval */
-      editor_feedback: string;
-      /** Whether the proposal is approved to proceed to EDL assembly */
-      approved_for_edl: boolean;
-      /** Director's confidence in the review */
-      confidence: number;
-    };
-    DirectorSectionDecision: {
-      section_id: string;
-      /** Verdict: APPROVE, REJECT, or MODIFY */
-      verdict: components["schemas"]["DirectorVerdict"];
-      reason: string;
-    };
-    DirectorVerdict: "APPROVE" | "REJECT" | "MODIFY";
     DistillFindingResponse: {
       lesson_id: string | null;
       directive: string | null;
@@ -987,8 +940,6 @@ export interface components {
       source_duration_ms: number;
       /** Reference to the originating EditorProposal */
       editor_proposal_id?: string | null;
-      /** Reference to the originating DirectorReview */
-      director_review_id?: string | null;
       /** Monotonically increasing version number for this production's EDL */
       version?: number;
       /** Ordered list of deterministic cut instructions */
@@ -1015,7 +966,7 @@ export interface components {
       original_text: string;
       /** Semantic action (e.g. remove, keep, trim, cover) */
       action: string;
-      /** Short editorial rationale for the suggested action */
+      /** Concise editorial rationale for the suggested action */
       concise_reason: string;
       /** Confidence score for this decision */
       confidence: number;
@@ -1041,7 +992,6 @@ export interface components {
       | "BROLL_COVER_CANDIDATE"
       | "SOURCE_COVER"
       | "CHAPTER_MARKER"
-      | "SHORT_CANDIDATE"
       | "NARRATION_REWRITE"
       | "CAPTION_EMPHASIS";
     EditorProposal: {
@@ -1055,8 +1005,6 @@ export interface components {
       summary: string;
       /** List of proposed editorial decisions */
       decisions?: components["schemas"]["EditorDecision"][];
-      /** Optional Short candidate excerpt identified during analysis */
-      short_candidate?: components["schemas"]["ShortCandidate"] | null;
       /** Full-timeline editorial section plan covering the whole production */
       section_plan?: components["schemas"]["VideoSectionDecision"][];
       /** Multimodal semantic chapter markers across the video timeline */
@@ -1064,43 +1012,6 @@ export interface components {
       /** Overall confidence in the proposal */
       overall_confidence: number;
     };
-    EditorSelfReview: {
-      /** Unique identifier for the self-review record */
-      review_id: string;
-      /** Associated Production entity identifier */
-      production_id: string;
-      /** Originating Edit Decision List identifier */
-      edl_id: string;
-      /** Associated RenderArtifact identifier of the rendered preview video */
-      preview_artifact_id: string;
-      /** Agent identifier (Leo) */
-      agent?: string;
-      /** Model identifier used for the multimodal video self-review */
-      model: string;
-      /** Self-review verdict: APPROVE_UNCHANGED or NEEDS_REVISION */
-      verdict: components["schemas"]["EditorSelfReviewVerdict"];
-      /** Concise editorial summary of the rendered preview inspection findings */
-      summary: string;
-      /** Assessment of narrative pacing and energy across the edit */
-      narrative_pacing_assessment: string;
-      /** Evaluation of whether each removal improved the overall edit */
-      removals_assessment: string;
-      /** Evaluation of visual continuity, jump cuts, and screen flow */
-      visual_continuity_assessment: string;
-      /** Evaluation of audio joins, room tone, and speech tails */
-      audio_joins_assessment: string;
-      /** Whether additional B-roll visual coverage is recommended */
-      coverage_needed?: boolean;
-      /** Evaluation of whether the vertical Short still works after editing */
-      short_assessment: string;
-      /** Concise findings without chain-of-thought */
-      findings?: string[];
-      /** Leo's confidence in the self-review assessment */
-      confidence: number;
-      /** Creation timestamp in UTC */
-      created_at?: string;
-    };
-    EditorSelfReviewVerdict: "APPROVE_UNCHANGED" | "NEEDS_REVISION";
     EditorialRun: {
       /** Unique identifier for the editorial run */
       run_id: string;
@@ -1110,8 +1021,6 @@ export interface components {
       status?: components["schemas"]["EditorialRunStatus"];
       /** Identifier of the generated EditorProposal record */
       editor_proposal_id?: string | null;
-      /** Identifier of the generated DirectorReview record */
-      director_review_id?: string | null;
       /** Run start timestamp in UTC */
       started_at?: string;
       /** Run completion timestamp in UTC */
@@ -1124,8 +1033,6 @@ export interface components {
       run: components["schemas"]["EditorialRun"];
       /** Leo's structured dialogue proposal */
       proposal?: components["schemas"]["EditorProposal"] | null;
-      /** Maya's structured director review */
-      review?: components["schemas"]["DirectorReview"] | null;
       /** Product-facing agent activities generated during the run */
       activities?: components["schemas"]["AgentActivity"][];
     };
@@ -1250,22 +1157,14 @@ export interface components {
       effective_description?: string;
       /** Active canonical video chapters */
       effective_chapters?: components["schemas"]["PackagingChapter"][];
-      /** Active vertical Short packaging */
-      effective_short_package?: components["schemas"]["ShortPackage"] | null;
       /** Active selected thumbnail concept ID */
       effective_thumbnail_concept_id?: string | null;
       /** Master video artifact details */
       master_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
-      /** Short video artifact details */
-      short_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
       /** Signed playback URL for master video */
       master_url?: string | null;
-      /** Signed playback URL for short video */
-      short_url?: string | null;
       /** Whether an approved master video artifact exists */
       has_master?: boolean;
-      /** Whether a vertical Short video artifact exists */
-      has_short?: boolean;
       /** Packaging readiness status ('completed' or 'needs_master') */
       status?: string;
       /** UTC timestamp of last proposal generation */
@@ -1278,10 +1177,6 @@ export interface components {
       production_id: string;
       /** Version number of packaging proposal for release locking */
       version?: number;
-      /** Agent identifier ('nina') */
-      agent?: string;
-      /** Model identifier used for packaging generation */
-      model?: string;
       /** Recommended primary title */
       primary_title: string;
       /** List of distinct title candidates across strategic angles */
@@ -1294,8 +1189,6 @@ export interface components {
       keywords?: string[];
       /** Top thumbnail concepts with supporting frame references */
       thumbnail_concepts: components["schemas"]["ThumbnailConcept"][];
-      /** Vertical Short packaging if Short exists */
-      short_package?: components["schemas"]["ShortPackage"] | null;
       /** Concise product-facing packaging rationale */
       packaging_summary: string;
       /** Product-facing channel evidence supporting primary recommendation */
@@ -1306,8 +1199,6 @@ export interface components {
       created_at?: string;
       /** Referenced Master RenderArtifact identifier */
       master_artifact_id?: string | null;
-      /** Nina prompt version used for this generation */
-      prompt_version?: number;
     };
     Production: {
       /** Unique production identifier */
@@ -1346,8 +1237,6 @@ export interface components {
       master_url?: string | null;
       /** Studio Voice video playback URL */
       studio_voice_preview_url?: string | null;
-      /** Social Short video playback URL */
-      short_playback_url?: string | null;
     };
     ProductionStatus: "pending" | "uploading" | "uploaded" | "deleting" | "failed";
     PublishJobDetailResponse: {
@@ -1401,12 +1290,6 @@ export interface components {
       suggested_synthetic_media?: boolean;
       /** Verified thumbnail frame candidates */
       verified_thumbnail_frames?: Record<string, unknown>[];
-      /** Whether an approved vertical Short artifact exists */
-      has_short?: boolean;
-      /** Short title candidate */
-      short_title?: string | null;
-      /** Short description candidate */
-      short_description?: string | null;
       /** Whether Iris has approved the release (verdict PASS) */
       release_ready?: boolean;
       /** SHA-256 release fingerprint locking release inputs */
@@ -1429,8 +1312,6 @@ export interface components {
       category_id?: string;
       /** Selected timeline millisecond offset for extracting thumbnail still image */
       thumbnail_frame_ms?: number | null;
-      /** Whether to also upload the approved vertical Short as a separate video */
-      upload_short?: boolean;
     };
     ReleaseChecklist: {
       /** Master video continuity and encoding status */
@@ -1441,8 +1322,6 @@ export interface components {
       captions?: boolean;
       /** Chapter timestamp ordering and topic accuracy */
       chapters?: boolean;
-      /** Short framing, captions, and context status */
-      short?: boolean;
       /** Packaging title, description, and thumbnail status */
       packaging?: boolean;
       /** Factual and packaging claims validity status */
@@ -1459,7 +1338,7 @@ export interface components {
       source_start_ms?: number | null;
       /** End timestamp in video ms if time-bound */
       source_end_ms?: number | null;
-      /** Affected artifact type (master, short, packaging, caption, chapter) */
+      /** Affected artifact type (master, packaging, caption, or chapter) */
       artifact_type?: string | null;
       /** Related editorial or packaging decision ID if applicable */
       related_decision_id?: string | null;
@@ -1491,9 +1370,6 @@ export interface components {
       | "DESCRIPTION_MISMATCH"
       | "THUMBNAIL_MISMATCH"
       | "PACKAGING_INCONSISTENCY"
-      | "SHORT_QUALITY"
-      | "SHORT_CAPTION_QUALITY"
-      | "SHORT_CROP"
       | "MISSING_CONTENT"
       | "CONTEXT_LOSS";
     ReleaseReview: {
@@ -1523,10 +1399,6 @@ export interface components {
       master_artifact_id?: string | null;
       /** SHA-256 hash of evaluated Master RenderArtifact */
       master_hash?: string | null;
-      /** Evaluated Short RenderArtifact ID */
-      short_artifact_id?: string | null;
-      /** SHA-256 hash of evaluated Short RenderArtifact */
-      short_hash?: string | null;
       /** Evaluated PackagingProposal ID */
       packaging_proposal_id?: string | null;
       /** Evaluated PackagingProposal version number */
@@ -1553,16 +1425,10 @@ export interface components {
       checklist?: components["schemas"]["ReleaseChecklist"] | null;
       /** Master video artifact details */
       master_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
-      /** Short video artifact details */
-      short_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
       /** Signed playback URL for master video */
       master_url?: string | null;
-      /** Signed playback URL for short video */
-      short_url?: string | null;
       /** Whether approved Master video artifact exists */
       has_master?: boolean;
-      /** Whether vertical Short video artifact exists */
-      has_short?: boolean;
       /** Whether packaging proposal exists */
       has_packaging?: boolean;
       /** UTC timestamp of review generation */
@@ -1615,70 +1481,6 @@ export interface components {
       /** List of all render artifacts associated with the production */
       renders: components["schemas"]["RenderArtifactResponse"][];
     };
-    RenderReview: {
-      /** Unique identifier for the post-render review record */
-      review_id: string;
-      /** Associated Production entity identifier */
-      production_id: string;
-      /** Associated EDL identifier that produced the preview */
-      edl_id: string;
-      /** Associated RenderArtifact identifier of the rendered preview */
-      preview_artifact_id: string;
-      /** Agent identifier (Maya) */
-      agent?: string;
-      /** Model identifier used for the post-render evaluation */
-      model: string;
-      /** Post-render verdict: APPROVE or CORRECT */
-      verdict: components["schemas"]["RenderReviewVerdict"];
-      /** Concise product-facing summary of the post-render review */
-      summary: string;
-      /** List of specific issues identified in the rendered preview */
-      issues?: components["schemas"]["RenderReviewIssue"][];
-      /** Whether the preview is approved to proceed to deterministic Master render */
-      approved_for_master: boolean;
-      /** Director's confidence in the review */
-      confidence: number;
-      /** Creation timestamp in UTC */
-      created_at?: string;
-    };
-    RenderReviewDetailResponse: {
-      /** Canonical unique production identifier */
-      production_id: string;
-      /** Most recent post-render review record */
-      review?: components["schemas"]["RenderReview"] | null;
-      /** All post-render review records for this production */
-      reviews?: components["schemas"]["RenderReview"][];
-      /** Whether production requires manual human review after exhausted bounded correction */
-      needs_manual_review?: boolean;
-    };
-    RenderReviewIssue: {
-      /** Unique identifier for the review issue */
-      issue_id: string;
-      /** Categorized issue type */
-      issue_type: components["schemas"]["RenderReviewIssueType"];
-      /** Start time of the affected region in source media milliseconds */
-      source_start_ms: number;
-      /** End time of the affected region in source media milliseconds */
-      source_end_ms: number;
-      /** Referenced EditorDecision ID if directly tied to an existing decision */
-      related_decision_id?: string | null;
-      /** Severity level of the issue (LOW, MEDIUM, HIGH) */
-      severity: components["schemas"]["RenderReviewSeverity"];
-      /** Concise product-facing explanation of the issue (no raw chain-of-thought) */
-      message: string;
-      /** Suggested editorial correction to resolve the issue */
-      suggested_action: string;
-    };
-    RenderReviewIssueType:
-      | "UNNATURAL_AUDIO_JOIN"
-      | "VISUAL_JUMP"
-      | "OVER_AGGRESSIVE_CUT"
-      | "MISSED_EDIT"
-      | "CONTEXT_LOSS"
-      | "PACING"
-      | "COVERAGE_NEEDED";
-    RenderReviewSeverity: "LOW" | "MEDIUM" | "HIGH";
-    RenderReviewVerdict: "APPROVE" | "CORRECT";
     ResearchCadence:
       | "EVERY_HOUR"
       | "EVERY_6_HOURS"
@@ -1724,22 +1526,6 @@ export interface components {
       use_broad_web_search?: boolean;
       preferred_sources?: string[];
     };
-    ReviewPreviewResponse: {
-      /** Canonical unique production identifier */
-      production_id: string;
-      /** Maya's post-render review record */
-      review: components["schemas"]["RenderReview"];
-      /** Leo's post-render self-review record */
-      self_review?: components["schemas"]["EditorSelfReview"] | null;
-      /** Master render artifact if approved and rendered */
-      master_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
-      /** Second post-render review if bounded correction was performed */
-      second_review?: components["schemas"]["RenderReview"] | null;
-      /** Current workflow status (complete, needs_manual_review, correcting, approved) */
-      status: string;
-      /** Product-facing agent activity messages emitted during review and correction */
-      activities?: components["schemas"]["AgentActivity"][];
-    };
     SchedulerTickResponse: {
       runs_evaluated: number;
       runs_executed: number;
@@ -1747,56 +1533,6 @@ export interface components {
       status: string;
     };
     SectionAction: "KEEP" | "TIGHTEN" | "REMOVE" | "COVERAGE";
-    ShortCandidate: {
-      /** Start timestamp in source video milliseconds */
-      start_ms: number;
-      /** End timestamp in source video milliseconds */
-      end_ms: number;
-      /** Canonical 0-indexed transcript word start boundary */
-      transcript_start_word: number;
-      /** Canonical 0-indexed transcript word end boundary */
-      transcript_end_word: number;
-      /** Short hook / title proposition */
-      hook_title: string;
-      /** Editorial justification for why this segment works as a standalone Short */
-      concise_reason: string;
-      /** Model confidence score for the candidate excerpt */
-      confidence: number;
-      /** Optional visual focus regions for 9:16 reframe */
-      visual_plan?: components["schemas"]["ShortVisualPlan"] | null;
-    };
-    ShortPackage: {
-      /** Vertical Short title */
-      title: string;
-      /** Short description / caption */
-      description: string;
-      /** Opening spoken / visual hook framing */
-      hook: string;
-      /** Useful hashtags (e.g. #shorts, #tech) */
-      hashtags?: string[];
-    };
-    ShortVisualPlan: {
-      /** List of chronological visual focus regions for the Short */
-      regions?: components["schemas"]["ShortVisualRegion"][];
-    };
-    ShortVisualRegion: {
-      /** Start timestamp in ms relative to Short timeline */
-      start_ms: number;
-      /** End timestamp in ms relative to Short timeline */
-      end_ms: number;
-      /** Normalized x coordinate (0.0 to 1.0) of crop top-left in source frame */
-      x: number;
-      /** Normalized y coordinate (0.0 to 1.0) of crop top-left in source frame */
-      y: number;
-      /** Normalized width (0.0 to 1.0) of focus region */
-      width: number;
-      /** Normalized height (0.0 to 1.0) of focus region */
-      height: number;
-      /** Optional zoom factor */
-      zoom?: number;
-      /** Visual description of focus area (e.g. YAML editor, status) */
-      focus_label: string;
-    };
     SilenceInterval: {
       /** Silence interval start offset in milliseconds */
       start_ms: number;
@@ -1869,11 +1605,11 @@ export interface components {
       created_at: string;
       updated_at: string;
     };
-    TargetAgent: "director" | "editor" | "packaging" | "qa";
+    TargetAgent: "alex" | "leo" | "iris";
     ThumbnailConcept: {
       /** Unique concept identifier */
       concept_id: string;
-      /** Optional short thumbnail overlay headline / text (2-4 words) */
+      /** Optional concise thumbnail overlay headline / text (2-4 words) */
       headline: string;
       /** Description of the primary visual subject in the frame */
       visual_subject: string;
@@ -2009,10 +1745,6 @@ export interface components {
       custom_description?: string | null;
       /** Creator custom chapters override */
       custom_chapters?: components["schemas"]["PackagingChapter"][] | null;
-      /** Creator custom Short title override */
-      custom_short_title?: string | null;
-      /** Creator custom Short description override */
-      custom_short_description?: string | null;
       /** Selected thumbnail concept ID */
       selected_thumbnail_concept_id?: string | null;
     };
@@ -2256,16 +1988,6 @@ export interface components {
       tags?: string[];
       /** True if YouTube restricted upload to private due to unverified API project audit status */
       audit_restriction_detected?: boolean;
-      /** True if separate Short upload was also selected */
-      short_requested?: boolean;
-      /** Short RenderArtifact ID if short upload requested */
-      short_artifact_id?: string | null;
-      /** Child publish job ID for Short upload */
-      short_publish_job_id?: string | null;
-      /** Remote YouTube video ID of uploaded Short */
-      short_youtube_video_id?: string | null;
-      /** Canonical watch URL for Short */
-      short_youtube_url?: string | null;
       /** Deterministic idempotency key preventing duplicate uploads */
       idempotency_key: string;
       /** UTC timestamp when remote upload started */

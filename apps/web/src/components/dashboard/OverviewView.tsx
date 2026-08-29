@@ -8,7 +8,7 @@ type DashboardKpi = components["schemas"]["DashboardKpi"];
 
 interface OverviewViewProps {
   dashboard: ChannelDashboard;
-  onNavigateToExperiments: () => void;
+  onNavigateToExperiments?: () => void;
 }
 
 const compactNumber = new Intl.NumberFormat("en", {
@@ -59,86 +59,87 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       </div>
 
       {/* Since Your Last Upload: Contextual Summary */}
-      <section
-        className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm"
-        aria-labelledby="latest-upload-title"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle pb-3">
-          <span className="text-xs font-semibold text-text-primary flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-primary" />
-            Since your last upload
-          </span>
-          <span className="text-[11px] text-text-muted">
-            Published{" "}
-            {new Date(dashboard.latest_video.published_at).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
-          </span>
-        </div>
+      {dashboard.latest_video ? (
+        <section
+          className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm"
+          aria-labelledby="latest-upload-title"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle pb-3">
+            <span className="text-xs font-semibold text-text-primary flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-primary" />
+              Since your last upload
+            </span>
+            <span className="text-[11px] text-text-muted">
+              Published{" "}
+              {new Date(dashboard.latest_video.published_at).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </span>
+          </div>
 
-        <div className="mt-3.5 grid gap-4 lg:grid-cols-[1.2fr_1fr] items-center">
-          <div>
-            <h2
-              id="latest-upload-title"
-              className="text-sm font-semibold text-text-primary line-clamp-1"
-            >
-              {dashboard.latest_video.title}
-            </h2>
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-              <span className="font-mono font-semibold text-text-primary">
-                {compactNumber.format(dashboard.latest_video.views)}{" "}
-                <span className="font-sans font-normal text-text-muted">views</span>
+          <div className="mt-3.5 grid gap-4 lg:grid-cols-[1.2fr_1fr] items-center">
+            <div>
+              <h2
+                id="latest-upload-title"
+                className="text-sm font-semibold text-text-primary line-clamp-1"
+              >
+                {dashboard.latest_video.title}
+              </h2>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                <span className="font-mono font-semibold text-text-primary">
+                  {compactNumber.format(dashboard.latest_video.views)}{" "}
+                  <span className="font-sans font-normal text-text-muted">views</span>
+                </span>
+                <span className="text-border-strong">·</span>
+                <span className="font-mono font-semibold text-text-primary">
+                  {dashboard.latest_video.net_subscribers >= 0 ? "+" : ""}
+                  {dashboard.latest_video.net_subscribers}{" "}
+                  <span className="font-sans font-normal text-text-muted">subscribers</span>
+                </span>
+                <span className="text-border-strong">·</span>
+                <span className="font-mono font-semibold text-text-primary">
+                  {(dashboard.latest_video.retention_percentage ?? 0).toFixed(1)}%{" "}
+                  <span className="font-sans font-normal text-text-muted">retention</span>
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end text-xs">
+              <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary">
+                <span
+                  className={
+                    dashboard.latest_video.view_delta_percentage >= 0
+                      ? "text-success font-semibold"
+                      : "text-danger font-semibold"
+                  }
+                >
+                  {dashboard.latest_video.view_delta_percentage >= 0 ? "+" : ""}
+                  {dashboard.latest_video.view_delta_percentage.toFixed(1)}%
+                </span>{" "}
+                views vs channel median
               </span>
-              <span className="text-border-strong">·</span>
-              <span className="font-mono font-semibold text-text-primary">
-                {dashboard.latest_video.net_subscribers >= 0 ? "+" : ""}
-                {dashboard.latest_video.net_subscribers}{" "}
-                <span className="font-sans font-normal text-text-muted">subscribers</span>
-              </span>
-              <span className="text-border-strong">·</span>
-              <span className="font-mono font-semibold text-text-primary">
-                {(dashboard.latest_video.retention_percentage ?? 0).toFixed(1)}%{" "}
-                <span className="font-sans font-normal text-text-muted">retention</span>
+              <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary">
+                <span
+                  className={
+                    dashboard.latest_video.subscriber_conversion_delta_percentage >= 0
+                      ? "text-success font-semibold"
+                      : "text-danger font-semibold"
+                  }
+                >
+                  {dashboard.latest_video.subscriber_conversion_delta_percentage >= 0 ? "+" : ""}
+                  {dashboard.latest_video.subscriber_conversion_delta_percentage.toFixed(1)}%
+                </span>{" "}
+                conversion
               </span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end text-xs">
-            <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary">
-              <span
-                className={
-                  dashboard.latest_video.view_delta_percentage >= 0
-                    ? "text-success font-semibold"
-                    : "text-danger font-semibold"
-                }
-              >
-                {dashboard.latest_video.view_delta_percentage >= 0 ? "+" : ""}
-                {dashboard.latest_video.view_delta_percentage.toFixed(1)}%
-              </span>{" "}
-              views vs channel median
-            </span>
-            <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary">
-              <span
-                className={
-                  dashboard.latest_video.subscriber_conversion_delta_percentage >= 0
-                    ? "text-success font-semibold"
-                    : "text-danger font-semibold"
-                }
-              >
-                {dashboard.latest_video.subscriber_conversion_delta_percentage >= 0 ? "+" : ""}
-                {dashboard.latest_video.subscriber_conversion_delta_percentage.toFixed(1)}%
-              </span>{" "}
-              conversion
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* Dominant Primary Chart */}
-      <ChannelTrendChart data={dashboard.trend} title="Channel Performance" />
-
-      {/* Compact Experiment Teaser */}
+        </section>
+      ) : null}
+      {/* Dominant Trend Chart */}
+      {dashboard.trend && dashboard.trend.length > 0 && (
+        <ChannelTrendChart data={dashboard.trend} title="Channel Performance" compact={true} />
+      )}
       {dashboard.proposed_experiment && (
         <section
           className="rounded-xl border border-border-subtle bg-surface-1 p-4 sm:p-5 shadow-sm space-y-3"
@@ -179,14 +180,16 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 </span>
               </span>
             </div>
-            <button
-              type="button"
-              onClick={onNavigateToExperiments}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-            >
-              <span>Open Experiments</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
+            {onNavigateToExperiments && (
+              <button
+                type="button"
+                onClick={onNavigateToExperiments}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              >
+                <span>Open Experiments</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </section>
       )}

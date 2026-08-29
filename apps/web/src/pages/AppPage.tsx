@@ -1,29 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import {
-  BarChart3,
-  Beaker,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  LayoutDashboard,
-  LogOut,
-  Plus,
-  RefreshCw,
-  TrendingUp,
-  X,
-} from "lucide-react";
+import { Check, ChevronDown, LogOut, Plus, RefreshCw, TrendingUp, X } from "lucide-react";
 import type { components } from "../api/generated";
 import alexAvatar from "../assets/agents/alex.webp";
-import leoAvatar from "../assets/agents/leo.webp";
-import irisAvatar from "../assets/agents/Iris.png";
 import { useAuth } from "../auth/AuthContext";
 import { CroviqLogo } from "../components/CroviqLogo";
+import { AgentTeamSelector } from "../components/AgentTeamSelector";
 import { AlexSettingsDrawer } from "../components/dashboard/AlexSettingsDrawer";
 import { AlexRail } from "../components/dashboard/AlexRail";
 import { OverviewView } from "../components/dashboard/OverviewView";
-import { PerformanceView } from "../components/dashboard/PerformanceView";
-import { ExperimentsView } from "../components/dashboard/ExperimentsView";
 import { WorthWatchingFindingsDrawer } from "../components/dashboard/WorthWatchingFindingsDrawer";
 
 type ChannelDashboard = components["schemas"]["ChannelDashboard"];
@@ -31,19 +16,12 @@ type ResearchFinding = components["schemas"]["ResearchFinding"];
 type YouTubeConnection = components["schemas"]["YouTubeConnectionPublicSummary"];
 type Insight = components["schemas"]["ChannelInsight"];
 type ChannelMode = "sample" | "youtube";
-export type DashboardTab = "overview" | "performance" | "experiments";
-
 interface AppPageProps {
-  currentRoute?: "/app" | "/app/performance" | "/app/experiments";
   onNavigateRoute?: (route: string) => void;
   onNavigateNewProject: () => void;
 }
 
-export const AppPage: React.FC<AppPageProps> = ({
-  currentRoute = "/app",
-  onNavigateRoute,
-  onNavigateNewProject,
-}) => {
+export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNewProject }) => {
   const { user, firebaseUser, logout } = useAuth();
   const [period, setPeriod] = useState<28 | 90 | 365>(28);
   const [channelMode, setChannelMode] = useState<ChannelMode>("sample");
@@ -59,45 +37,8 @@ export const AppPage: React.FC<AppPageProps> = ({
   const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
   const [evidenceModalInsight, setEvidenceModalInsight] = useState<Insight | null>(null);
   const [allFindingsDrawerOpen, setAllFindingsDrawerOpen] = useState(false);
-  const [teamSelectorOpen, setTeamSelectorOpen] = useState(false);
-
   const selectorRef = useRef<HTMLDivElement>(null);
-  const teamSelectorRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
-  // Derive active tab directly from URL route
-  const activeTab: DashboardTab =
-    currentRoute === "/app/performance"
-      ? "performance"
-      : currentRoute === "/app/experiments"
-        ? "experiments"
-        : "overview";
-
-  const handleTabClick = (tab: DashboardTab) => {
-    if (!onNavigateRoute) return;
-    if (tab === "performance") {
-      onNavigateRoute("/app/performance");
-    } else if (tab === "experiments") {
-      onNavigateRoute("/app/experiments");
-    } else {
-      onNavigateRoute("/app");
-    }
-  };
-
-  const loadConnectionStatus = useCallback(async () => {
-    if (!firebaseUser) return;
-    try {
-      const token = await firebaseUser.getIdToken();
-      const response = await fetch("/api/channels/youtube/connection", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const data = (await response.json()) as YouTubeConnection;
-        setYoutubeConnection(data);
-      }
-    } catch {
-      // Non-blocking connection check
-    }
-  }, [firebaseUser]);
 
   const loadFindings = useCallback(async () => {
     if (!firebaseUser) return;
@@ -114,74 +55,28 @@ export const AppPage: React.FC<AppPageProps> = ({
     }
   }, [firebaseUser]);
 
-  const loadDashboard = useCallback(async () => {
+  // Unified deterministic connection & dashboard loading
+  useEffect(() => {
     if (!firebaseUser) return;
+    let cancelled = false;
     setIsLoading(true);
     setError(null);
-    try {
-      const token = await firebaseUser.getIdToken();
-      const endpoint =
-        channelMode === "youtube"
-          ? `/api/channels/youtube/dashboard?days=${period}`
-          : `/api/channels/sample/dashboard?days=${period}`;
-      const response = await fetch(endpoint, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          (errorData as { detail?: string }).detail || "Channel intelligence could not be loaded",
-        );
-      }
-      setDashboard((await response.json()) as ChannelDashboard);
-    } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Channel intelligence could not be loaded",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [firebaseUser, period, channelMode]);
 
-  useEffect(() => {
-    void loadConnectionStatus();
-    void loadFindings();
-  }, [loadConnectionStatus, loadFindings]);
+    const load = async () => {
+      try {
+        const token = await firebaseUser.getIdToken();
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        const state = params.get("state");
+        const errorParam = params.get("error");
 
-  useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard, refreshKey]);
+        let activeMode: ChannelMode = channelMode;
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
-        setChannelSelectorOpen(false);
-      }
-      if (teamSelectorRef.current && !teamSelectorRef.current.contains(event.target as Node)) {
-        setTeamSelectorOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const state = params.get("state");
-    const errorParam = params.get("error");
-
-    if (errorParam) {
-      setError(`YouTube OAuth authorization was cancelled or denied: ${errorParam}`);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-
-    if (code && state && firebaseUser) {
-      setIsConnectingYt(true);
-      void (async () => {
-        try {
-          const token = await firebaseUser.getIdToken();
+        if (errorParam) {
+          setError(`YouTube OAuth authorization was cancelled or denied: ${errorParam}`);
+          window.history.replaceState({}, document.title, "/app");
+        } else if (code && state) {
+          setIsConnectingYt(true);
           const callbackResp = await fetch("/api/channels/youtube/callback", {
             method: "POST",
             headers: {
@@ -194,25 +89,76 @@ export const AppPage: React.FC<AppPageProps> = ({
               redirect_uri: window.location.origin + "/app",
             }),
           });
-          if (!callbackResp.ok) {
-            const errData = await callbackResp.json().catch(() => ({}));
+          window.history.replaceState({}, document.title, "/app");
+          if (callbackResp.ok && !cancelled) {
+            const connSummary = (await callbackResp.json()) as YouTubeConnection;
+            setYoutubeConnection(connSummary);
+            if (connSummary.connected) {
+              activeMode = "youtube";
+              if (channelMode !== "youtube") {
+                setChannelMode("youtube");
+              }
+            }
+          }
+        } else {
+          const connResp = await fetch("/api/channels/youtube/connection", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (connResp.ok && !cancelled) {
+            const connData = (await connResp.json()) as YouTubeConnection;
+            setYoutubeConnection(connData);
+            if (connData.connected) {
+              activeMode = "youtube";
+              if (channelMode !== "youtube") {
+                setChannelMode("youtube");
+              }
+            }
+          }
+        }
+
+        const endpoint =
+          activeMode === "youtube"
+            ? `/api/channels/youtube/dashboard?days=${period}`
+            : `/api/channels/sample/dashboard?days=${period}`;
+        const dashResp = await fetch(endpoint, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!dashResp.ok) {
+          if (!cancelled) {
+            setDashboard(null);
+            const errData = await dashResp.json().catch(() => ({}));
             throw new Error(
-              (errData as { detail?: string }).detail || "Could not authorize YouTube channel",
+              (errData as { detail?: string }).detail || "Channel intelligence could not be loaded",
             );
           }
-          const connSummary = (await callbackResp.json()) as YouTubeConnection;
-          setYoutubeConnection(connSummary);
-          setChannelMode("youtube");
-          setRefreshKey((k) => k + 1);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "YouTube connection failed");
-        } finally {
-          setIsConnectingYt(false);
-          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
         }
-      })();
-    }
-  }, [firebaseUser]);
+        const dashData = (await dashResp.json()) as ChannelDashboard;
+        if (!cancelled) {
+          setDashboard(dashData);
+        }
+      } catch (reason) {
+        if (!cancelled) {
+          setDashboard(null);
+          setError(
+            reason instanceof Error ? reason.message : "Channel intelligence could not be loaded",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsConnectingYt(false);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void load();
+    void loadFindings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser, period, channelMode, refreshKey, loadFindings]);
 
   const startYouTubeConnect = async () => {
     if (!firebaseUser) return;
@@ -251,13 +197,13 @@ export const AppPage: React.FC<AppPageProps> = ({
       });
       setYoutubeConnection(null);
       setChannelMode("sample");
+      setDashboard(null);
       setChannelSelectorOpen(false);
       setRefreshKey((k) => k + 1);
     } catch {
       // Disconnect non-blocking
     }
   };
-
   return (
     <div className="min-h-screen bg-background text-text-primary">
       {/* 1. Top Navigation Navbar: Consistent h-14, logo, channel selector, new project, Alex chip */}
@@ -265,13 +211,7 @@ export const AppPage: React.FC<AppPageProps> = ({
         <div className="flex min-w-0 items-center gap-5">
           <button
             type="button"
-            onClick={() => {
-              if (onNavigateRoute) {
-                onNavigateRoute("/app");
-              } else {
-                handleTabClick("overview");
-              }
-            }}
+            onClick={() => onNavigateRoute?.("/app")}
             className="flex items-center hover:opacity-80 transition-opacity cursor-pointer shrink-0"
             aria-label="Croviq Home"
             title="Croviq Home"
@@ -302,7 +242,7 @@ export const AppPage: React.FC<AppPageProps> = ({
               <span className="max-w-[140px] sm:max-w-[200px] truncate font-medium">
                 {channelMode === "youtube" && youtubeConnection?.channel_title
                   ? youtubeConnection.channel_title
-                  : "Croviq Sample Channel"}
+                  : "Croviq"}
               </span>
               <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[9px] text-text-muted">
                 {channelMode === "youtube"
@@ -334,8 +274,10 @@ export const AppPage: React.FC<AppPageProps> = ({
                       C
                     </span>
                     <span>
-                      <span className="block font-medium">Croviq Sample Channel</span>
-                      <span className="text-[10px] text-text-muted">Synthetic YouTube model</span>
+                      <span className="block font-medium">Croviq</span>
+                      <span className="text-[10px] text-text-muted">
+                        Deterministic sample dataset
+                      </span>
                     </span>
                   </span>
                   {channelMode === "sample" && <Check className="h-3.5 w-3.5 text-primary" />}
@@ -410,143 +352,7 @@ export const AppPage: React.FC<AppPageProps> = ({
             <span>New Project</span>
           </button>
 
-          {/* Alex Team Member Chip */}
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-left transition-colors hover:border-border-strong hover:bg-surface-2 cursor-pointer"
-            aria-label="Open Alex settings"
-            title="Alex · Data Scientist"
-            data-testid="btn-alex-settings-chip"
-          >
-            <img
-              src={alexAvatar}
-              alt="Alex"
-              className="h-6 w-6 rounded-full object-cover ring-1 ring-primary/40"
-            />
-            <div className="hidden sm:block">
-              <span className="block text-xs font-semibold leading-tight text-text-primary">
-                Alex
-              </span>
-              <span className="block text-[10px] leading-tight text-text-muted">
-                Data Scientist
-              </span>
-            </div>
-          </button>
-
-          {/* Global Agent Team Selector Dropdown */}
-          <div className="relative" ref={teamSelectorRef}>
-            <button
-              type="button"
-              onClick={() => setTeamSelectorOpen((prev) => !prev)}
-              className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-left transition-colors hover:border-border-strong hover:bg-surface-2 cursor-pointer"
-              aria-label="Select production agent"
-              aria-expanded={teamSelectorOpen}
-              title="Production Team: Alex, Leo, Iris"
-              data-testid="btn-team-selector"
-            >
-              <div className="flex -space-x-1.5 overflow-hidden">
-                <img
-                  src={alexAvatar}
-                  alt="Alex"
-                  className="inline-block h-5 w-5 rounded-full ring-1 ring-surface-1 object-cover"
-                />
-                <img
-                  src={leoAvatar}
-                  alt="Leo"
-                  className="inline-block h-5 w-5 rounded-full ring-1 ring-surface-1 object-cover"
-                />
-                <img
-                  src={irisAvatar}
-                  alt="Iris"
-                  className="inline-block h-5 w-5 rounded-full ring-1 ring-surface-1 object-cover"
-                />
-              </div>
-              <div className="hidden sm:block">
-                <span className="block text-xs font-semibold leading-tight text-text-primary">
-                  Team
-                </span>
-              </div>
-              <ChevronDown className="h-3 w-3 text-text-muted" />
-            </button>
-
-            {teamSelectorOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border-strong bg-surface-2 p-1.5 shadow-2xl backdrop-blur-md">
-                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                  Autonomous Production Team
-                </p>
-
-                {/* Alex */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTeamSelectorOpen(false);
-                    setSettingsOpen(true);
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer"
-                >
-                  <img
-                    src={alexAvatar}
-                    alt="Alex"
-                    className="h-6 w-6 rounded-full object-cover ring-1 ring-primary/40"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <span className="block font-semibold text-text-primary">Alex</span>
-                    <span className="block text-[10px] text-text-muted truncate">
-                      Data Scientist · Channel intelligence
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-mono text-primary font-semibold">Active</span>
-                </button>
-
-                {/* Leo */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTeamSelectorOpen(false);
-                    onNavigateNewProject();
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer"
-                >
-                  <img
-                    src={leoAvatar}
-                    alt="Leo"
-                    className="h-6 w-6 rounded-full object-cover ring-1 ring-border-subtle"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <span className="block font-semibold text-text-primary">Leo</span>
-                    <span className="block text-[10px] text-text-muted truncate">
-                      Video Editor · Timeline editing
-                    </span>
-                  </div>
-                  <ChevronRight className="h-3.5 w-3.5 text-text-muted" />
-                </button>
-
-                {/* Iris */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTeamSelectorOpen(false);
-                    setSettingsOpen(true);
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer"
-                >
-                  <img
-                    src={irisAvatar}
-                    alt="Iris"
-                    className="h-6 w-6 rounded-full object-cover ring-1 ring-emerald-500/40"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <span className="block font-semibold text-text-primary">Iris</span>
-                    <span className="block text-[10px] text-text-muted truncate">
-                      Quality Control · Release gatekeeper
-                    </span>
-                  </div>
-                  <ChevronRight className="h-3.5 w-3.5 text-text-muted" />
-                </button>
-              </div>
-            )}
-          </div>
+          <AgentTeamSelector onSelect={(agentId) => onNavigateRoute?.(`/app/agents/${agentId}`)} />
 
           <div className="hidden md:flex items-center gap-3 border-l border-border-subtle pl-3">
             <span className="max-w-[130px] truncate text-xs text-text-secondary">
@@ -566,7 +372,7 @@ export const AppPage: React.FC<AppPageProps> = ({
       </header>
 
       {/* 2. Desktop Layout: Full available width without dead right gap */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
+      <div className="w-full px-4 sm:px-6 py-6">
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
           {/* Main Intelligence Workspace */}
           <main className="min-w-0 space-y-6">
@@ -613,7 +419,11 @@ export const AppPage: React.FC<AppPageProps> = ({
                 <div>
                   <div className="flex items-center gap-2.5">
                     <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-                      {dashboard?.channel.title ?? "Modern AI Engineering"}
+                      {channelMode === "youtube"
+                        ? youtubeConnection?.channel_title ||
+                          dashboard?.channel.title ||
+                          "Connected YouTube"
+                        : (dashboard?.channel.title ?? "Croviq")}
                     </h1>
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
@@ -652,49 +462,13 @@ export const AppPage: React.FC<AppPageProps> = ({
                   </select>
                 </div>
               </div>
-
-              {/* URL-Backed Navigation Tabs */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle pb-3">
-                <nav className="flex items-center gap-1" aria-label="Dashboard sections">
-                  {[
-                    { id: "overview", label: "Overview", icon: LayoutDashboard },
-                    { id: "performance", label: "Performance", icon: BarChart3 },
-                    { id: "experiments", label: "Experiments", icon: Beaker },
-                  ].map((tab) => {
-                    const Icon = tab.icon;
-                    const isActive = activeTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => handleTabClick(tab.id as DashboardTab)}
-                        className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                          isActive
-                            ? "bg-surface-2 text-text-primary font-semibold shadow-sm"
-                            : "text-text-muted hover:bg-surface-2/50 hover:text-text-secondary"
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </nav>
-              </div>
             </header>
 
-            {/* Dynamic View Rendering */}
+            {/* Single Unified Channel Intelligence Dashboard */}
             {isLoading || !dashboard ? (
               <DashboardSkeleton />
-            ) : activeTab === "overview" ? (
-              <OverviewView
-                dashboard={dashboard}
-                onNavigateToExperiments={() => handleTabClick("experiments")}
-              />
-            ) : activeTab === "performance" ? (
-              <PerformanceView dashboard={dashboard} />
             ) : (
-              <ExperimentsView dashboard={dashboard} />
+              <OverviewView dashboard={dashboard} />
             )}
           </main>
 
@@ -702,6 +476,7 @@ export const AppPage: React.FC<AppPageProps> = ({
           <AlexRail
             insights={dashboard?.insights || []}
             findings={findings}
+            onOpenChat={() => onNavigateRoute?.("/app/agents/alex")}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenEvidence={(insight) => setEvidenceModalInsight(insight)}
             onOpenAllFindings={() => setAllFindingsDrawerOpen(true)}
@@ -842,13 +617,12 @@ export const AppPage: React.FC<AppPageProps> = ({
         </div>
       )}
 
-      {/* Worth Watching All Findings Drawer */}
+      {/* Worth Watching Topic Radar Drawer */}
       <WorthWatchingFindingsDrawer
         open={allFindingsDrawerOpen}
         findings={findings}
         onClose={() => setAllFindingsDrawerOpen(false)}
       />
-
       {/* Alex Settings Drawer */}
       <AlexSettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
