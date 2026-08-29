@@ -149,10 +149,10 @@ const MOCK_FINDINGS = [
 const MOCK_DASHBOARD = {
   channel: {
     channel_id: "croviq_syn_ai_eng_01",
-    title: "Modern AI Engineering",
-    custom_url: "@modernaiengineering",
-    subscriber_count: 148200,
-    video_count: 86,
+    title: "Croviq",
+    custom_url: "@croviq",
+    subscriber_count: 51317,
+    video_count: 100,
     view_count: 12450000,
     thumbnail_url: "https://placehold.co/128x128/1e293b/f8fafc?text=AI",
   },
@@ -457,7 +457,7 @@ async function main() {
 
   // 1. Live Overview (1440)
   console.log("Waiting for Overview heading...");
-  await page.getByRole("heading", { name: "Modern AI Engineering" }).waitFor({ state: "visible" });
+  await page.getByRole("heading", { name: "Croviq" }).waitFor({ state: "visible" });
   await page.waitForTimeout(1000);
   console.log("Capturing live overview screenshot...");
   await page.screenshot({ path: path.join(outDir, "live-overview-1440.png"), fullPage: false });

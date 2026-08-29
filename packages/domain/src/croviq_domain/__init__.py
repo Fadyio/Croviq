@@ -141,8 +141,26 @@ from croviq_domain.publish import (
     build_thumbnail_artifact_gcs_path,
     derive_synthetic_media_status,
 )
+from croviq_domain.channel_dashboard import (
+    ChannelDashboard,
+    DashboardChannel,
+    DashboardKpi,
+    DashboardTrendPoint,
+    LatestVideoAnalysis,
+    TopicClusterPerformance,
+    VideoPerformancePoint,
+    compute_latest_video_analysis,
+)
 
 __all__ = [
+    "ChannelDashboard",
+    "DashboardChannel",
+    "DashboardKpi",
+    "DashboardTrendPoint",
+    "LatestVideoAnalysis",
+    "TopicClusterPerformance",
+    "VideoPerformancePoint",
+    "compute_latest_video_analysis",
     "AgentActivity",
     "ChapterMarker",
     "VideoSectionDecision",

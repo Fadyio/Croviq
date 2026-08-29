@@ -14,16 +14,12 @@ import { useAuth } from "../auth/AuthContext";
 import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
 import { AGENT_IDENTITIES, AgentTeamSelector, type AgentId } from "../components/AgentTeamSelector";
 import { CroviqLogo } from "../components/CroviqLogo";
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
+import type { ToolExecution } from "../components/ToolDisclosure";
 
 interface AgentWorkspacePageProps {
   agentId: AgentId;
   onNavigate: (route: string) => void;
-}
-
-interface ToolExecution {
-  tool_name: string;
-  goal?: string;
-  [key: string]: unknown;
 }
 
 interface ChatMessage {
@@ -185,9 +181,7 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({ agentId,
               />
               <div>
                 <h1 className="text-lg font-bold tracking-tight text-text-primary">{agent.name}</h1>
-                <p className="text-xs text-text-muted">
-                  {agent.role} · Autonomous Production Partner
-                </p>
+                <p className="text-xs text-text-muted">{agent.role}</p>
               </div>
             </div>
             <div
@@ -281,7 +275,11 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({ agentId,
                           : "bg-surface-2 text-text-primary border border-border-subtle shadow-sm"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      {msg.role === "assistant" ? (
+                        <MarkdownRenderer content={msg.content} />
+                      ) : (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      )}
                     </div>
 
                     {/* Internal Tool Telemetry Badge */}

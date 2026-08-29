@@ -5572,6 +5572,11 @@
       },
       "LatestVideoAnalysis": {
         "properties": {
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id",
+            "default": "croviq_syn_ai_eng_01"
+          },
           "video_id": {
             "type": "string",
             "title": "Video Id"
@@ -5599,7 +5604,8 @@
           },
           "subscribers_lost": {
             "type": "integer",
-            "title": "Subscribers Lost"
+            "title": "Subscribers Lost",
+            "default": 0
           },
           "net_subscribers": {
             "type": "integer",
@@ -5651,9 +5657,68 @@
             "type": "string",
             "title": "Comparison Window",
             "default": "lifetime catalog baseline"
+          },
+          "baseline_sample_size": {
+            "type": "integer",
+            "title": "Baseline Sample Size",
+            "default": 0
+          },
+          "median_views": {
+            "type": "number",
+            "title": "Median Views",
+            "default": 0.0
+          },
+          "median_retention": {
+            "type": "number",
+            "title": "Median Retention",
+            "default": 0.0
+          },
+          "median_ctr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Ctr"
+          },
+          "ctr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ctr"
+          },
+          "retention": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention"
+          },
+          "subscriber_gain": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscriber Gain"
           }
         },
-        "additionalProperties": false,
+        "additionalProperties": true,
         "type": "object",
         "required": [
           "video_id",
@@ -5662,7 +5727,6 @@
           "views",
           "watch_time_hours",
           "subscribers_gained",
-          "subscribers_lost",
           "net_subscribers",
           "view_delta_percentage",
           "subscriber_conversion_delta_percentage",

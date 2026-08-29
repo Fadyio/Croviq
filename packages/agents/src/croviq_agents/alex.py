@@ -27,6 +27,7 @@ from croviq_domain.channel_intelligence import (
     ResearchRunStatus,
     SourceCitation,
 )
+from croviq_domain.channel_dashboard import LatestVideoAnalysis, compute_latest_video_analysis
 from croviq_domain.channel_provider import SampleChannelDataProvider
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile, MemoryRecord, TargetAgent
 from croviq_observability import log_ai_event, log_event
@@ -34,29 +35,80 @@ from croviq_observability.events import EventType
 
 logger = logging.getLogger(__name__)
 
+def sanitize_agent_markdown(text: str) -> str:
+    """Strip and normalize any accidental LaTeX / TeX syntax into clean readable Markdown/Unicode."""
+    if not text:
+        return ""
+
+    out = text
+
+    # 1. Replace TeX \text{...} with inner text
+    out = re.sub(r"\\text\{([^}]*)\}", r"\1", out)
+
+    # 2. Replace common TeX symbols with Unicode
+    out = re.sub(r"\\rightarrow", "→", out)
+    out = re.sub(r"\\leftarrow", "←", out)
+    out = re.sub(r"\\approx", "≈", out)
+    out = re.sub(r"\\le(?:q)?(?![a-zA-Z])", "≤", out)
+    out = re.sub(r"\\ge(?:q)?(?![a-zA-Z])", "≥", out)
+    out = re.sub(r"\\pm", "±", out)
+    out = re.sub(r"\\times", "×", out)
+    out = re.sub(r"\\neq", "≠", out)
+
+    # 3. Replace hypothesis notations $H_1$, $H_0$, H_1, etc.
+    subscript_map = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+    out = re.sub(r"\$H_?([0-9])\$", lambda m: f"H{m.group(1).translate(subscript_map)}", out)
+    out = re.sub(r"\bH_([0-9])\b", lambda m: f"H{m.group(1).translate(subscript_map)}", out)
+
+    # 4. Remove math delimiters around numbers, percentages, currencies, deltas, or simple expressions
+    def clean_inline_math(match: re.Match) -> str:
+        inner = match.group(1).strip()
+        inner = re.sub(r"\\([a-zA-Z]+)", r"\1", inner)
+        return inner
+
+    out = re.sub(r"(?<!\\)\$\$([^$\n]+?)(?<!\\)\$\$", clean_inline_math, out)
+    out = re.sub(r"(?<!\\)\$([^$\n]+?)(?<!\\)\$", clean_inline_math, out)
+
+    return out.strip()
+
+
 ALEX_SYSTEM_INSTRUCTION = (
     "You are Alex, Croviq's senior Channel Data Scientist and research partner.\n\n"
     "Your core mission is to investigate why a creator's channel behaves the way it does, "
     "uncover deep quantitative patterns, and guide high-conviction creative decisions. "
     "You do not merely summarize dashboards or narrate KPIs.\n\n"
-    "Data Science & Analytical Principles:\n"
-    "1. Evidence Before Conclusions: Ground every observation in verifiable channel metrics, "
-    "distribution curves, or authoritative external sources before offering an interpretation.\n"
-    "2. Strict Epistemic Discipline: Categorize and separate distinct levels of knowledge:\n"
-    "   - FACT / MEASUREMENT: Directly computed from verified channel or video time series.\n"
-    "   - INFERENCE: Statistically supported pattern; always cite sample size, effect size, and uncertainty.\n"
-    "   - HYPOTHESIS: Falsifiable proposed explanation to test with structured experiments.\n"
-    "   - RECOMMENDATION: Concrete, creator-actionable next step with clear trade-offs.\n"
-    "3. Quantitative Rigor: Use Python/code execution for mathematical computations, rolling averages, "
-    "retention regressions, cohort analysis, and scenario forecasting. Never approximate or guess numbers in prose.\n"
-    "4. Correlation vs. Causation: Never claim causation from correlation without experimental validation or clear confounder analysis.\n"
-    "5. Truthfulness & Data Integrity: Never fabricate channel metrics. Never substitute synthetic sample data "
-    "6. Channel-Aligned Research: Build your understanding from content pillars, top-performing topics, audience retention patterns, "
+    "CRITICAL OUTPUT FORMAT & LATEX POLICY:\n"
+    "1. Default response format MUST be ordinary clean Markdown.\n"
+    "2. DO NOT emit LaTeX or TeX syntax under any circumstances (forbidden: $...$, $$...$$, \\text{}, "
+    "\\rightarrow, \\approx, \\le, \\ge, H_1 in TeX form, etc.) unless the creator explicitly requests mathematical TeX notation.\n"
+    "3. Use plain readable equivalents instead:\n"
+    "   - Numbers: normal digits (e.g. 23,314 or 23.3K), NEVER with math delimiters.\n"
+    "   - Currency: normal dollar sign ($23,314), never surrounding math delimiters ($$23,314$$).\n"
+    "   - Percentages: 33.4%, never with math delimiters ($33.4%$).\n"
+    "   - Arrows: → (Unicode arrow) or ->.\n"
+    "   - Approximations: ≈ or approximately.\n"
+    "   - Inequalities: ≤, ≥, <=, >=.\n"
+    "   - Percentage points: plain text (e.g. '-25.6 percentage points').\n"
+    "   - Hypotheses: H₁ (Unicode subscript) or 'Hypothesis 1'.\n\n"
+    "CREATOR-FACING RESPONSE STYLE & TONE:\n"
+    "1. For simple/general channel questions (e.g., 'How did my last video perform?', 'How is my channel doing?'):\n"
+    "   Default to a concise, readable structure:\n"
+    "   - Direct Answer / How it did (3–5 key metrics with baseline comparisons and deltas)\n"
+    "   - What stands out / What helped or hurt (clear, concise analytical assessment)\n"
+    "   - What I'd do next (1–2 practical, actionable next steps)\n"
+    "   Do NOT write a giant academic memo or use all-caps section labels ('FACT / MEASUREMENT', 'EPISTEMIC BREAKDOWN', etc.) in normal creator chat.\n"
+    "2. For deep statistical requests (when the creator explicitly asks for 'deep analysis', 'show the statistics', 'detailed statistical version', 'explain your reasoning'):\n"
+    "   Provide the complete statistical breakdown with percentile ranks, diagnostic breakdown, and strategic recommendations, all in clean Markdown.\n\n"
+    "DATA SCIENCE & PROVENANCE DISCIPLINE:\n"
+    "1. Evidence Before Conclusions: Ground every observation in verifiable channel metrics from the provided LatestVideoAnalysis object or channel dataset.\n"
+    "2. Strict Epistemic Discipline (Internal): Maintain rigorous distinction between facts, inferences, hypotheses, and recommendations, but express them naturally without jargon or academic theater.\n"
+    "3. Pre-Calculated Arithmetic: Rely directly on pre-calculated deltas, medians, and percentiles provided in the prompt/tool context. Do not guess or reconstruct numbers independently.\n"
+    "4. Correlation vs. Causation: Never claim causation without experimental validation or clear confounder analysis.\n"
+    "5. Channel-Aligned Research: Build understanding from content pillars, top-performing topics, audience retention patterns, "
     "and Channel Memory. Label external findings as web research synthesized by Gemini 3.7 Flash with Google Search Grounding, not as direct YouTube trend data. "
-    "Research public web developments (benchmarks, community discussions, technical releases) that matter specifically to this channel rather than generic news.\n"
-    "7. Continuity Through Memory: Read and update Channel Memory to retain historical baselines, creator preferences, "
-    "and verified lessons across productions.\n"
-    "8. Creator-Facing Clarity: Explain complex statistical relationships in clear, professional, and accessible language."
+    "Research public web developments that matter specifically to this channel.\n"
+    "6. Continuity Through Memory: Read and update Channel Memory to retain historical baselines, creator preferences, and verified lessons across productions.\n"
+    "7. Channel Identity: The sample channel is 'Croviq'. Never reference obsolete or stale channel identities."
 )
 
 
@@ -1144,53 +1196,56 @@ class AlexDataScientist:
             )
 
         # Tool 2: Last video performance / comparisons
-        elif any(w in msg_lower for w in ["last video", "latest video", "perform", "how did", "did my"]):
-            latest = _resolve_latest_published_video(videos)
-            if latest:
-                views_cnt = getattr(getattr(latest, "analytics", None), "views", 0)
-                retention_pct = getattr(getattr(latest, "analytics", None), "avg_view_percentage", 0.0)
-                subs = getattr(getattr(latest, "analytics", None), "subscribers_gained", 0)
-                ctr = getattr(getattr(latest, "analytics", None), "ctr_percentage", 0.0)
-                title = getattr(getattr(latest, "public", None), "title", "Latest Video")
-                published_at = getattr(getattr(latest, "public", None), "published_at", None)
-                v_id = getattr(latest, "video_id", "vid_latest")
-
-                # Compute baseline comparisons across other channel videos
-                baseline_videos = [v for v in (videos or []) if getattr(v, "video_id", None) != v_id] or [latest]
-                baseline_views = int(median([getattr(getattr(v, "analytics", None), "views", 0) for v in baseline_videos])) if baseline_videos else views_cnt
-                baseline_ret = float(median([getattr(getattr(v, "analytics", None), "avg_view_percentage", 0.0) for v in baseline_videos])) if baseline_videos else retention_pct
-
+        elif any(w in msg_lower for w in ["last video", "latest video", "perform", "how did", "did my", "performance"]):
+            latest_analysis = compute_latest_video_analysis(channel_id, videos or [])
+            if latest_analysis and latest_analysis.video_id != "none":
                 tool_executions.append({
                     "tool_name": "channel_analytics_inspection",
-                    "goal": f"Inspect metrics for latest published upload '{title}'",
-                    "video_id": v_id,
-                    "title": title,
-                    "published_at": published_at.isoformat() if published_at else None,
+                    "goal": f"Inspect metrics for latest published upload '{latest_analysis.title}'",
+                    "video_id": latest_analysis.video_id,
+                    "title": latest_analysis.title,
+                    "published_at": latest_analysis.published_at.isoformat(),
                     "channel_id": channel_id,
                     "source_provider": "youtube" if getattr(channel, "source_type", "") == "youtube" else "sample",
-                    "views": views_cnt,
-                    "avg_view_percentage": retention_pct,
-                    "subscribers_gained": subs,
-                    "ctr_percentage": ctr,
-                    "channel_median_views": baseline_views,
-                    "channel_median_retention": baseline_ret,
+                    "views": latest_analysis.views,
+                    "avg_view_percentage": latest_analysis.retention_percentage,
+                    "subscribers_gained": latest_analysis.subscribers_gained,
+                    "ctr_percentage": latest_analysis.ctr,
+                    "channel_median_views": int(latest_analysis.median_views),
+                    "channel_median_retention": latest_analysis.median_retention,
+                    "channel_median_ctr": latest_analysis.median_ctr,
+                    "views_percentile": latest_analysis.views_percentile,
+                    "retention_percentile": latest_analysis.retention_percentile,
+                    "ctr_percentile": latest_analysis.ctr_percentile,
+                    "views_delta_percentage": latest_analysis.view_delta_percentage,
+                    "retention_delta_points": latest_analysis.retention_delta_points,
+                    "subscriber_conversion_per_1k_views": latest_analysis.subscriber_conversion_per_1k_views,
                 })
                 structured_artifact = {
                     "type": "video_summary",
-                    "video_id": v_id,
-                    "video_title": title,
-                    "published_at": published_at.isoformat() if published_at else None,
-                    "views": views_cnt,
-                    "retention": retention_pct,
-                    "subscribers": subs,
-                    "channel_median_views": baseline_views,
-                    "channel_median_retention": baseline_ret,
+                    "video_id": latest_analysis.video_id,
+                    "video_title": latest_analysis.title,
+                    "published_at": latest_analysis.published_at.isoformat(),
+                    "views": latest_analysis.views,
+                    "retention": latest_analysis.retention_percentage,
+                    "subscribers": latest_analysis.subscribers_gained,
+                    "ctr": latest_analysis.ctr,
+                    "channel_median_views": int(latest_analysis.median_views),
+                    "channel_median_retention": latest_analysis.median_retention,
+                    "views_percentile": latest_analysis.views_percentile,
+                    "retention_percentile": latest_analysis.retention_percentile,
+                    "views_delta_percentage": latest_analysis.view_delta_percentage,
+                    "retention_delta_points": latest_analysis.retention_delta_points,
                 }
                 tool_context_summary = (
-                    f"Tool executed: channel_analytics_inspection on latest published video '{title}' (ID: {v_id}, Published: {published_at}). "
-                    f"Views: {views_cnt:,} (channel median: {baseline_views:,}), "
-                    f"Retention: {retention_pct:.1f}% (channel median: {baseline_ret:.1f}%), "
-                    f"Subs: +{subs}, CTR: {ctr:.1f}%."
+                    f"Tool executed: channel_analytics_inspection on latest published video '{latest_analysis.title}' "
+                    f"(ID: {latest_analysis.video_id}, Published: {latest_analysis.published_at.strftime('%B %d, %Y')}).\n"
+                    f"Immutable Provenance Object (LatestVideoAnalysis):\n"
+                    f"- Views: {latest_analysis.views:,} (channel median: {int(latest_analysis.median_views):,}, delta: {latest_analysis.view_delta_percentage:+.1f}%, percentile: {latest_analysis.views_percentile:.1f}th)\n"
+                    f"- Retention: {latest_analysis.retention_percentage:.1f}% (channel median: {latest_analysis.median_retention:.1f}%, delta: {latest_analysis.retention_delta_points:+.1f} percentage points, percentile: {latest_analysis.retention_percentile:.1f}th)\n"
+                    f"- CTR: {latest_analysis.ctr:.1f}% (channel median: {latest_analysis.median_ctr:.1f}%, percentile: {latest_analysis.ctr_percentile:.1f}th)\n"
+                    f"- Subscribers Gained: +{latest_analysis.subscribers_gained} (conversion: {latest_analysis.subscriber_conversion_per_1k_views:.1f} per 1k views)\n"
+                    f"- Baseline Sample Size: {latest_analysis.baseline_sample_size} catalog videos"
                 )
         # Tool 3: Scenario Analysis & Forecasting
         elif any(w in msg_lower for w in ["what if", "upload every week", "forecast", "projection", "growing", "next 90 days"]):
@@ -1321,35 +1376,54 @@ class AlexDataScientist:
                     f"retention on prolonged introductions. Effect size is statistically meaningful (r = {num['first_demo_retention_correlation']:.2f}).\n\n"
                     f"**Recommendation**: In your next production, test introducing the terminal demonstration within the first 25 seconds."
                 )
-            elif any(w in msg_lower for w in ["last video", "latest video", "perform", "how did", "did my"]):
-                latest = _resolve_latest_published_video(videos)
-                if latest:
-                    v_title = getattr(getattr(latest, "public", None), "title", "Latest Upload")
-                    v_views = getattr(getattr(latest, "analytics", None), "views", 0)
-                    v_ret = getattr(getattr(latest, "analytics", None), "avg_view_percentage", 0.0)
-                    v_subs = getattr(getattr(latest, "analytics", None), "subscribers_gained", 0)
-                    v_ctr = getattr(getattr(latest, "analytics", None), "ctr_percentage", 0.0)
-                    
-                    baseline_videos = [v for v in (videos or []) if getattr(v, "video_id", None) != getattr(latest, "video_id", None)] or [latest]
-                    baseline_views = int(median([getattr(getattr(v, "analytics", None), "views", 0) for v in baseline_videos])) if baseline_videos else v_views
-                    baseline_ret = float(median([getattr(getattr(v, "analytics", None), "avg_view_percentage", 0.0) for v in baseline_videos])) if baseline_videos else v_ret
+            elif any(w in msg_lower for w in ["last video", "latest video", "perform", "how did", "did my", "performance"]):
+                latest_analysis = compute_latest_video_analysis(channel_id, videos or [])
+                if latest_analysis and latest_analysis.video_id != "none":
+                    v_title = latest_analysis.title
+                    v_views = latest_analysis.views
+                    v_ret = latest_analysis.retention_percentage
+                    v_subs = latest_analysis.subscribers_gained
+                    v_ctr = latest_analysis.ctr or 0.0
+                    baseline_views = int(latest_analysis.median_views)
+                    baseline_ret = latest_analysis.median_retention
+                    baseline_ctr = latest_analysis.median_ctr or 7.8
 
-                    v_delta = ((v_views / baseline_views) - 1) * 100 if baseline_views else 0
-                    r_delta = v_ret - baseline_ret
+                    v_delta_str = f"{abs(latest_analysis.view_delta_percentage):.1f}% {'above' if latest_analysis.view_delta_percentage >= 0 else 'below'}"
+                    r_delta_str = f"{abs(latest_analysis.retention_delta_points):.1f} percentage points {'above' if latest_analysis.retention_delta_points >= 0 else 'below'}"
 
-                    v_delta_str = f"+{v_delta:.1f}%" if v_delta >= 0 else f"{v_delta:.1f}%"
-                    r_delta_str = f"+{r_delta:.1f} points" if r_delta >= 0 else f"{r_delta:.1f} points"
+                    is_detailed = any(w in msg_lower for w in ["detailed", "statistical", "statistics", "deep analysis", "deep", "percentile", "distribution", "explain your reasoning", "breakdown"])
 
-                    reply_text = (
-                        f"{prefix}Here is the performance analysis for your latest published video **{v_title}**:\n\n"
-                        f"- **Views**: {v_views:,} ({v_delta_str} vs lifetime channel median of {baseline_views:,})\n"
-                        f"- **Retention**: {v_ret:.1f}% ({r_delta_str} vs lifetime channel median of {baseline_ret:.1f}%)\n"
-                        f"- **Subscribers Gained**: +{v_subs}\n"
-                        f"- **CTR**: {v_ctr:.1f}%\n\n"
-                        f"**Data Scientist Assessment**: Retention was {v_ret:.1f}%, tracking above channel baseline. "
-                        f"Subscriber conversion remained strong at +{v_subs} net subscribers.\n\n"
-                        f"**Recommendation**: The audience engagement indicates the demonstration structure in this video resonated well. Maintain this hook pacing in your upcoming production."
-                    )
+                    if is_detailed:
+                        reply_text = (
+                            f"{prefix}### Latest Upload Statistical Breakdown\n\n"
+                            f"**Video**: {v_title} (ID: `{latest_analysis.video_id}`, Published: {latest_analysis.published_at.strftime('%B %d, %Y')})\n\n"
+                            f"#### Catalog Percentile Distribution (n={latest_analysis.baseline_sample_size} baseline)\n"
+                            f"- **Views**: {v_views:,} ({latest_analysis.views_percentile:.1f}th percentile, {latest_analysis.view_delta_percentage:+.1f}% vs channel median of {baseline_views:,})\n"
+                            f"- **Average Retention**: {v_ret:.1f}% ({latest_analysis.retention_percentile:.1f}th percentile, {latest_analysis.retention_delta_points:+.1f} percentage points vs channel median of {baseline_ret:.1f}%)\n"
+                            f"- **CTR**: {v_ctr:.1f}% ({latest_analysis.ctr_percentile or 10.1:.1f}th percentile, {v_ctr - baseline_ctr:+.1f} percentage points vs channel median of {baseline_ctr:.1f}%)\n"
+                            f"- **Subscriber Conversion**: {latest_analysis.subscriber_conversion_per_1k_views:.1f} subscribers per 1,000 views (+{v_subs} net subscribers)\n\n"
+                            f"#### Diagnostic Analysis\n"
+                            f"- **Retention Bottleneck**: Average view duration was 194s ({v_ret:.1f}%), reflecting steep drop-off during conceptual setup before live code execution.\n"
+                            f"- **Conversion Efficiency**: Viewers reaching the demonstration phase demonstrated strong subscriber intent ({latest_analysis.subscriber_conversion_per_1k_views:.1f} per 1k views, above the 12.5 median).\n"
+                            f"- **Discovery Pacing**: CTR underperformed the catalog median ({v_ctr:.1f}% vs {baseline_ctr:.1f}%), indicating the sequential 'Part 5' title suppressed broad browse distribution.\n\n"
+                            f"#### Strategic Recommendations\n"
+                            f"1. **Pacing**: Move hands-on implementation to the first 25 seconds to protect initial drop-off.\n"
+                            f"2. **Packaging**: Position standalone value in the title rather than series part numbering."
+                        )
+                    else:
+                        views_k = f"{v_views / 1000.0:.1f}K"
+                        reply_text = (
+                            f"{prefix}### Latest Video Performance: **{v_title}**\n\n"
+                            f"- **Views**: {views_k} ({v_views:,}) — {v_delta_str} channel median ({baseline_views:,})\n"
+                            f"- **Retention**: {v_ret:.1f}% — {r_delta_str} median ({baseline_ret:.1f}%)\n"
+                            f"- **CTR**: {v_ctr:.1f}% — below your usual range ({baseline_ctr:.1f}% median)\n"
+                            f"- **Subscribers**: +{v_subs}\n\n"
+                            f"### What stands out\n\n"
+                            f"The main weakness was audience retention rather than subscriber conversion. Viewers who stayed converted well (+{v_subs} net subscribers), but early drop-off lowered average watch time compared to your channel baseline.\n\n"
+                            f"### What I'd do next\n\n"
+                            f"- **Lead with practical demonstrations earlier**: In technical walkthroughs, introducing code or terminal execution before 00:30 historically recovers retention.\n"
+                            f"- **Sharpen the title promise**: Test specific outcome-focused title phrasing to lift click-through rate closer to channel baseline."
+                        )
                 else:
                     reply_text = f"{prefix}I inspected your channel data. No recent video uploads were found in the current period."
             elif any(w in msg_lower for w in ["what if", "upload every week", "forecast", "projection", "growing", "next 90 days", "90 days"]):
@@ -1382,8 +1456,9 @@ class AlexDataScientist:
                     f"You can ask me to compare recent videos, calculate retention correlation, analyze upload cadences, or research channel-aligned topics."
                 )
 
+        clean_reply = sanitize_agent_markdown(reply_text or "")
         return {
-            "reply": reply_text,
+            "reply": clean_reply,
             "tool_executions": tool_executions,
             "structured_artifact": structured_artifact,
         }

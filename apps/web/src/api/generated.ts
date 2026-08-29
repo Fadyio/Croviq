@@ -1098,13 +1098,14 @@ export interface components {
     };
     InsightType: "PERFORMANCE" | "RETENTION" | "AUDIENCE" | "TRAFFIC" | "TOPIC" | "EXPERIMENT";
     LatestVideoAnalysis: {
+      channel_id?: string;
       video_id: string;
       title: string;
       published_at: string;
       views: number;
       watch_time_hours: number;
       subscribers_gained: number;
-      subscribers_lost: number;
+      subscribers_lost?: number;
       net_subscribers: number;
       view_delta_percentage: number;
       subscriber_conversion_delta_percentage: number;
@@ -1115,6 +1116,13 @@ export interface components {
       ctr_percentile?: number | null;
       subscriber_conversion_per_1k_views?: number;
       comparison_window?: string;
+      baseline_sample_size?: number;
+      median_views?: number;
+      median_retention?: number;
+      median_ctr?: number | null;
+      ctr?: number | null;
+      retention?: number | null;
+      subscriber_gain?: number | null;
     };
     MediaMetadata: {
       /** Duration of the media in milliseconds */

@@ -269,6 +269,7 @@ DEFAULT_IRIS_PROMPT = (
     "3. Audio Quality: Speech clarity, loudness target (~ -16 LUFS, -1 dBTP), clipping, pops/clicks, and audio/video sync.\n"
     "4. Captions & Transcript: Timing alignment, dropped/mismatched words, and caption overflow.\n"
     "5. Factual Consistency: Audit explicit on-screen or spoken factual claims and metadata consistency.\n"
+    "6. Output Format & Markdown Policy: Format responses in standard clean Markdown without raw LaTeX ($...$, \\text{}, etc.).\n"
     "Output Verdict: PASS (approved_for_release=True) if the edited video is ready, or FIX_REQUIRED with an actionable defect and exact timestamp if it is not."
 )
 

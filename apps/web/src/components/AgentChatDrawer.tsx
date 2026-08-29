@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Loader2, Send, Settings, Trash2, User, Wrench, X } from "lucide-react";
+import {
+  AlertCircle,
+  LineChart,
+  Loader2,
+  Send,
+  Settings,
+  Trash2,
+  User,
+  Wrench,
+  X,
+} from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { AGENT_IDENTITIES, type AgentId } from "./AgentTeamSelector";
 import { MarkdownRenderer } from "./MarkdownRenderer";
-
-interface ToolExecution {
-  tool_name: string;
-  goal?: string;
-  result?: unknown;
-  explanation?: string;
-  [key: string]: unknown;
-}
+import type { ToolExecution } from "./ToolDisclosure";
 
 interface ChatMessage {
   message_id: string;
@@ -198,7 +201,7 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
               <h2 id="agent-chat-title" className="text-base font-semibold text-text-primary">
                 Chat with {agent.name}
               </h2>
-              <p className="text-xs text-text-muted">{agent.role} · Autonomous Partner</p>
+              <p className="text-xs text-text-muted">{agent.role}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -340,39 +343,27 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
                       {msg.tool_executions.map((tool, idx) => (
                         <div
                           key={idx}
-                          className="flex items-center gap-1.5 rounded-lg bg-surface-3/80 px-2.5 py-1 text-[11px] font-mono text-text-secondary"
+                          className="flex items-center gap-1.5 rounded-md bg-surface-3/80 px-2 py-1 text-[11px] font-mono text-text-secondary"
                         >
                           <Wrench className="h-3 w-3 text-primary shrink-0" />
-                          <span className="font-semibold text-text-primary">{tool.tool_name}</span>
+                          <span className="font-semibold">{tool.tool_name}</span>
                           {tool.goal && (
-                            <span className="truncate text-text-muted">· {tool.goal}</span>
+                            <span className="text-text-muted truncate">· {tool.goal}</span>
                           )}
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {/* Structured Artifact Metric display */}
+                  {/* Structured Analytical Artifact (if present) */}
                   {msg.structured_artifact && (
-                    <div className="mt-2 rounded-lg bg-surface-3/60 p-2.5 text-[11px] space-y-1 border border-border-subtle/30">
-                      <span className="font-semibold uppercase tracking-wider text-[10px] text-primary">
-                        Artifact: {String(msg.structured_artifact.type || "Analysis")}
-                      </span>
-                      {Boolean(msg.structured_artifact.metrics) &&
-                        typeof msg.structured_artifact.metrics === "object" && (
-                          <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-text-secondary">
-                            {Object.entries(
-                              msg.structured_artifact.metrics as Record<string, unknown>,
-                            ).map(([k, v]) => (
-                              <div key={k}>
-                                <span className="text-text-muted">{k}: </span>
-                                <span className="text-text-primary font-semibold">
-                                  {String(v ?? "")}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                        <LineChart className="h-3 w-3" />
+                        <span>
+                          Analytical Artifact: {String(msg.structured_artifact.type || "Analysis")}
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>

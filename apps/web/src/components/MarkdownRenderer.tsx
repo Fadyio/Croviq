@@ -1,6 +1,51 @@
-import React from "react";
+import React, { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+export function normalizeMarkdownContent(text: string): string {
+  if (!text) return "";
+
+  let out = text;
+
+  // 1. Replace TeX \text{...} with inner text
+  out = out.replace(/\\text\{([^}]*)\}/g, "$1");
+
+  // 2. Replace common TeX symbols with Unicode
+  out = out.replace(/\\rightarrow/g, "→");
+  out = out.replace(/\\leftarrow/g, "←");
+  out = out.replace(/\\approx/g, "≈");
+  out = out.replace(/\\le(?:q)?(?![a-zA-Z])/g, "≤");
+  out = out.replace(/\\ge(?:q)?(?![a-zA-Z])/g, "≥");
+  out = out.replace(/\\pm/g, "±");
+  out = out.replace(/\\times/g, "×");
+  out = out.replace(/\\neq/g, "≠");
+
+  // 3. Replace hypothesis notations $H_1$, $H_0$, H_1, etc.
+  const subscriptMap: Record<string, string> = {
+    "0": "₀",
+    "1": "₁",
+    "2": "₂",
+    "3": "₃",
+    "4": "₄",
+    "5": "₅",
+    "6": "₆",
+    "7": "₇",
+    "8": "₈",
+    "9": "₉",
+  };
+  out = out.replace(/\$H_?([0-9])\$/g, (_, d) => `H${subscriptMap[d] || d}`);
+  out = out.replace(/\bH_([0-9])\b/g, (_, d) => `H${subscriptMap[d] || d}`);
+
+  // 4. Remove math delimiters around numbers, percentages, currencies, deltas, or simple expressions
+  out = out.replace(/(?<!\\)\$\$([^$\n]+?)(?<!\\)\$\$/g, (_, inner) => {
+    return inner.replace(/\\([a-zA-Z]+)/g, "$1").trim();
+  });
+  out = out.replace(/(?<!\\)\$([^$\n]+?)(?<!\\)\$/g, (_, inner) => {
+    return inner.replace(/\\([a-zA-Z]+)/g, "$1").trim();
+  });
+
+  return out;
+}
 
 interface MarkdownRendererProps {
   content: string;
@@ -8,6 +53,8 @@ interface MarkdownRendererProps {
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className = "" }) => {
+  const normalizedContent = useMemo(() => normalizeMarkdownContent(content), [content]);
+
   return (
     <div className={`prose-chat text-xs leading-relaxed text-text-primary ${className}`}>
       <ReactMarkdown
@@ -95,7 +142,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
           hr: () => <hr className="my-3 border-border-subtle" />,
         }}
       >
-        {content}
+        {normalizedContent}
       </ReactMarkdown>
     </div>
   );

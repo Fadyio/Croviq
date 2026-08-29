@@ -28,7 +28,6 @@ async def inspect_prod(pid):
         d = pr.to_dict()
         print(f"\nPROPOSAL: {pr.id}")
         print(f"  Summary: {d.get('summary')}")
-        print(f"  Short Candidate: {d.get('short_candidate')}")
         print(f"  Chapters: {json.dumps(d.get('chapters'), indent=2)}")
         print(f"  Decisions ({len(d.get('decisions', []))}):")
         for dec in d.get("decisions", []):

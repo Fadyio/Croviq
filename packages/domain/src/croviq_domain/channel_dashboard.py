@@ -53,15 +53,16 @@ class DashboardTrendPoint(BaseModel):
 
 
 class LatestVideoAnalysis(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
+    channel_id: str = "croviq_syn_ai_eng_01"
     video_id: str
     title: str
     published_at: datetime
     views: int
     watch_time_hours: float
     subscribers_gained: int
-    subscribers_lost: int
+    subscribers_lost: int = 0
     net_subscribers: int
     view_delta_percentage: float
     subscriber_conversion_delta_percentage: float
@@ -72,7 +73,13 @@ class LatestVideoAnalysis(BaseModel):
     ctr_percentile: float | None = None
     subscriber_conversion_per_1k_views: float = 0.0
     comparison_window: str = "lifetime catalog baseline"
-
+    baseline_sample_size: int = 0
+    median_views: float = 0.0
+    median_retention: float = 0.0
+    median_ctr: float | None = None
+    ctr: float | None = None
+    retention: float | None = None
+    subscriber_gain: int | None = None
 class VideoPerformancePoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -138,6 +145,131 @@ def _pearson(xs: list[float], ys: list[float]) -> float:
         sum((x - x_mean) ** 2 for x in xs) * sum((y - y_mean) ** 2 for y in ys)
     )
     return numerator / denominator if denominator else 0
+
+def compute_latest_video_analysis(
+    channel_id: str,
+    videos: list[Any],
+) -> LatestVideoAnalysis:
+    """Compute deterministic provenance object for the latest published video against catalog baselines."""
+    if not videos:
+        now = datetime.now(UTC)
+        return LatestVideoAnalysis(
+            channel_id=channel_id,
+            video_id="none",
+            title="No Published Videos",
+            published_at=now,
+            views=0,
+            watch_time_hours=0.0,
+            subscribers_gained=0,
+            subscribers_lost=0,
+            net_subscribers=0,
+            view_delta_percentage=0.0,
+            subscriber_conversion_delta_percentage=0.0,
+            retention_percentage=0.0,
+            retention_delta_points=0.0,
+            views_percentile=50.0,
+            retention_percentile=50.0,
+            ctr_percentile=None,
+            subscriber_conversion_per_1k_views=0.0,
+            comparison_window="lifetime catalog baseline",
+            baseline_sample_size=0,
+            median_views=0.0,
+            median_retention=0.0,
+            median_ctr=None,
+            ctr=None,
+            retention=0.0,
+            subscriber_gain=0,
+        )
+
+    def _get_pub_date(v: Any) -> datetime:
+        pub = getattr(getattr(v, "public", None), "published_at", None) or getattr(v, "published_at", None)
+        if isinstance(pub, str):
+            return datetime.fromisoformat(pub.replace("Z", "+00:00"))
+        if isinstance(pub, datetime):
+            return pub
+        return datetime.min.replace(tzinfo=UTC)
+
+    videos_by_publish_date = sorted(videos, key=_get_pub_date)
+    latest = videos_by_publish_date[-1]
+    latest_v_id = getattr(latest, "video_id", "vid_latest")
+    baseline_videos = [v for v in videos_by_publish_date if getattr(v, "video_id", None) != latest_v_id] or [latest]
+
+    latest_views = int(getattr(getattr(latest, "analytics", None), "views", 0))
+    latest_retention = float(getattr(getattr(latest, "analytics", None), "avg_view_percentage", 0.0))
+    latest_ctr = getattr(getattr(latest, "analytics", None), "ctr_percentage", None)
+    latest_ctr_float = float(latest_ctr) if latest_ctr is not None else None
+    latest_subs_gained = int(getattr(getattr(latest, "analytics", None), "subscribers_gained", 0))
+    latest_subs_lost = int(getattr(getattr(latest, "analytics", None), "subscribers_lost", 0))
+    latest_net = latest_subs_gained - latest_subs_lost
+    latest_watch_time_mins = float(getattr(getattr(latest, "analytics", None), "watch_time_minutes", 0.0))
+    latest_title = getattr(getattr(latest, "public", None), "title", "Latest Video")
+    latest_pub = _get_pub_date(latest)
+
+    baseline_views_list = [int(getattr(getattr(v, "analytics", None), "views", 0)) for v in baseline_videos]
+    baseline_ret_list = [float(getattr(getattr(v, "analytics", None), "avg_view_percentage", 0.0)) for v in baseline_videos]
+    baseline_ctr_videos = [v for v in baseline_videos if getattr(getattr(v, "analytics", None), "ctr_percentage", None) is not None]
+    baseline_ctr_list = [float(getattr(getattr(v, "analytics", None), "ctr_percentage", 0.0)) for v in baseline_ctr_videos]
+
+    baseline_views = float(median(baseline_views_list)) if baseline_views_list else float(latest_views)
+    baseline_retention = float(median(baseline_ret_list)) if baseline_ret_list else latest_retention
+    baseline_ctr = float(median(baseline_ctr_list)) if baseline_ctr_list else latest_ctr_float
+
+    conversion_rates = [
+        1000.0 * (int(getattr(getattr(v, "analytics", None), "subscribers_gained", 0)) - int(getattr(getattr(v, "analytics", None), "subscribers_lost", 0)))
+        / int(getattr(getattr(v, "analytics", None), "views", 1))
+        for v in baseline_videos
+        if int(getattr(getattr(v, "analytics", None), "views", 0)) > 0
+    ]
+    baseline_conversion = float(median(conversion_rates)) if conversion_rates else 0.0
+    latest_conversion = (1000.0 * latest_net / latest_views) if latest_views > 0 else 0.0
+
+    total_baseline_count = len(baseline_videos)
+    views_percentile = (
+        (sum(1 for v in baseline_videos if int(getattr(getattr(v, "analytics", None), "views", 0)) <= latest_views) / total_baseline_count) * 100.0
+        if total_baseline_count > 0
+        else 50.0
+    )
+    retention_percentile = (
+        (sum(1 for v in baseline_videos if float(getattr(getattr(v, "analytics", None), "avg_view_percentage", 0.0)) <= latest_retention) / total_baseline_count) * 100.0
+        if total_baseline_count > 0
+        else 50.0
+    )
+    ctr_percentile = (
+        (sum(1 for v in baseline_ctr_videos if float(getattr(getattr(v, "analytics", None), "ctr_percentage", 0.0)) <= (latest_ctr_float or 0.0)) / len(baseline_ctr_videos)) * 100.0
+        if (latest_ctr_float is not None and baseline_ctr_videos)
+        else None
+    )
+    sub_conv_per_1k = (1000.0 * latest_subs_gained / latest_views) if latest_views > 0 else 0.0
+
+    return LatestVideoAnalysis(
+        channel_id=channel_id,
+        video_id=latest_v_id,
+        title=latest_title,
+        published_at=latest_pub,
+        views=latest_views,
+        watch_time_hours=latest_watch_time_mins / 60.0,
+        subscribers_gained=latest_subs_gained,
+        subscribers_lost=latest_subs_lost,
+        net_subscribers=latest_net,
+        view_delta_percentage=_percent_change(latest_views, baseline_views),
+        subscriber_conversion_delta_percentage=_percent_change(
+            latest_conversion, baseline_conversion
+        ),
+        retention_percentage=latest_retention,
+        retention_delta_points=latest_retention - baseline_retention,
+        views_percentile=views_percentile,
+        retention_percentile=retention_percentile,
+        ctr_percentile=ctr_percentile,
+        subscriber_conversion_per_1k_views=sub_conv_per_1k,
+        comparison_window="lifetime catalog baseline",
+        baseline_sample_size=total_baseline_count,
+        median_views=baseline_views,
+        median_retention=baseline_retention,
+        median_ctr=baseline_ctr,
+        ctr=latest_ctr_float,
+        retention=latest_retention,
+        subscriber_gain=latest_subs_gained,
+    )
 
 
 async def build_channel_dashboard(
@@ -228,71 +360,7 @@ async def build_channel_dashboard(
             )
         )
 
-    videos_by_publish_date = sorted(videos, key=lambda video: video.public.published_at)
-    latest = videos_by_publish_date[-1]
-    baseline_videos = videos_by_publish_date[:-1] or videos_by_publish_date
-    baseline_views = median(video.analytics.views for video in baseline_videos)
-    baseline_retention = median(
-        video.analytics.avg_view_percentage for video in baseline_videos
-    )
-    conversion_rates = [
-        1000
-        * (video.analytics.subscribers_gained - video.analytics.subscribers_lost)
-        / video.analytics.views
-        for video in baseline_videos
-        if video.analytics.views
-    ]
-    baseline_conversion = median(conversion_rates) if conversion_rates else 0
-    latest_net = latest.analytics.subscribers_gained - latest.analytics.subscribers_lost
-    latest_conversion = (
-        1000 * latest_net / latest.analytics.views if latest.analytics.views else 0
-    )
-    total_baseline_count = len(baseline_videos)
-    views_percentile = (
-        (sum(1 for v in baseline_videos if v.analytics.views <= latest.analytics.views) / total_baseline_count) * 100
-        if total_baseline_count > 0
-        else 50.0
-    )
-    retention_percentile = (
-        (sum(1 for v in baseline_videos if v.analytics.avg_view_percentage <= latest.analytics.avg_view_percentage) / total_baseline_count) * 100
-        if total_baseline_count > 0
-        else 50.0
-    )
-    ctr_baseline_videos = [v for v in baseline_videos if v.analytics.ctr_percentage is not None]
-    ctr_percentile = (
-        (sum(1 for v in ctr_baseline_videos if v.analytics.ctr_percentage <= (latest.analytics.ctr_percentage or 0.0)) / len(ctr_baseline_videos)) * 100
-        if (latest.analytics.ctr_percentage is not None and ctr_baseline_videos)
-        else None
-    )
-    sub_conv_per_1k = (
-        1000 * latest.analytics.subscribers_gained / latest.analytics.views
-        if latest.analytics.views > 0
-        else 0.0
-    )
-
-    latest_analysis = LatestVideoAnalysis(
-        video_id=latest.video_id,
-        title=latest.public.title,
-        published_at=latest.public.published_at,
-        views=latest.analytics.views,
-        watch_time_hours=latest.analytics.watch_time_minutes / 60,
-        subscribers_gained=latest.analytics.subscribers_gained,
-        subscribers_lost=latest.analytics.subscribers_lost,
-        net_subscribers=latest_net,
-        view_delta_percentage=_percent_change(latest.analytics.views, baseline_views) or 0,
-        subscriber_conversion_delta_percentage=(
-            _percent_change(latest_conversion, baseline_conversion) or 0
-        ),
-        retention_percentage=latest.analytics.avg_view_percentage,
-        retention_delta_points=(
-            latest.analytics.avg_view_percentage - baseline_retention
-        ),
-        views_percentile=round(views_percentile, 1),
-        retention_percentile=round(retention_percentile, 1),
-        ctr_percentile=round(ctr_percentile, 1) if ctr_percentile is not None else None,
-        subscriber_conversion_per_1k_views=round(sub_conv_per_1k, 1),
-        comparison_window="lifetime catalog baseline",
-    )
+    latest_analysis = compute_latest_video_analysis(channel.channel_id, videos)
 
     video_performance = [
         VideoPerformancePoint(
@@ -405,7 +473,7 @@ async def build_channel_dashboard(
             "Showing the first practical demonstration before 00:30 improves average retention."
         ),
         primary_metric="averageViewPercentage",
-        baseline_value=baseline_retention,
+        baseline_value=latest_analysis.median_retention,
         expected_direction="INCREASE",
         status=ExperimentStatus.PROPOSED,
         started_at=None,
