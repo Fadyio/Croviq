@@ -10,10 +10,8 @@ from typing import Any
 from croviq_api.config import get_settings
 from croviq_domain.editorial import (
     AgentActivity,
-    DirectorReview,
     EditorProposal,
     EditorialRun,
-    EditorialRunStatus,
 )
 from croviq_observability import log_firestore_event
 
@@ -42,7 +40,7 @@ def parse_datetime(raw: Any) -> datetime:
 
 
 class EditorialRepository(ABC):
-    """Abstract repository for EditorialRun, EditorProposal, DirectorReview, and AgentActivity persistence."""
+    """Abstract repository for editorial runs, Leo proposals, and agent activities."""
 
     @abstractmethod
     async def get_latest_editorial_run(self, production_id: str) -> EditorialRun | None:
@@ -69,15 +67,6 @@ class EditorialRepository(ABC):
         """Persist an EditorProposal and return its unique identifier."""
         pass
 
-    @abstractmethod
-    async def get_director_review(self, production_id: str, review_id: str) -> DirectorReview | None:
-        """Retrieve a DirectorReview by ID."""
-        pass
-
-    @abstractmethod
-    async def save_director_review(self, review: DirectorReview, review_id: str | None = None) -> str:
-        """Persist a DirectorReview and return its unique identifier."""
-        pass
 
     @abstractmethod
     async def list_activities(
@@ -93,7 +82,7 @@ class EditorialRepository(ABC):
 
     @abstractmethod
     async def delete_by_production_id(self, production_id: str) -> bool:
-        """Delete all editorial runs, proposals, reviews, and activities for a production."""
+        """Delete active editorial runs, proposals, and activities for a production."""
         pass
 
 
@@ -103,7 +92,6 @@ class InMemoryEditorialRepository(EditorialRepository):
     def __init__(self) -> None:
         self._runs: dict[str, dict[str, EditorialRun]] = {}  # prod_id -> {run_id: EditorialRun}
         self._proposals: dict[str, dict[str, EditorProposal]] = {}  # prod_id -> {proposal_id: EditorProposal}
-        self._reviews: dict[str, dict[str, DirectorReview]] = {}  # prod_id -> {review_id: DirectorReview}
         self._activities: dict[str, list[AgentActivity]] = {}  # prod_id -> [AgentActivity]
 
     async def get_latest_editorial_run(self, production_id: str) -> EditorialRun | None:
@@ -134,16 +122,6 @@ class InMemoryEditorialRepository(EditorialRepository):
         self._proposals[proposal.production_id][pid] = deepcopy(proposal)
         return pid
 
-    async def get_director_review(self, production_id: str, review_id: str) -> DirectorReview | None:
-        rev = self._reviews.get(production_id, {}).get(review_id)
-        return deepcopy(rev) if rev else None
-
-    async def save_director_review(self, review: DirectorReview, review_id: str | None = None) -> str:
-        rid = review_id or f"rev_{len(self._reviews.get(review.production_id, {})) + 1}"
-        if review.production_id not in self._reviews:
-            self._reviews[review.production_id] = {}
-        self._reviews[review.production_id][rid] = deepcopy(review)
-        return rid
 
     async def list_activities(
         self, production_id: str, run_id: str | None = None
@@ -164,18 +142,16 @@ class InMemoryEditorialRepository(EditorialRepository):
         existed = (
             production_id in self._runs
             or production_id in self._proposals
-            or production_id in self._reviews
             or production_id in self._activities
         )
         self._runs.pop(production_id, None)
         self._proposals.pop(production_id, None)
-        self._reviews.pop(production_id, None)
         self._activities.pop(production_id, None)
         return existed
+
     def clear(self) -> None:
         self._runs.clear()
         self._proposals.clear()
-        self._reviews.clear()
         self._activities.clear()
 
 
@@ -299,40 +275,6 @@ class FirestoreEditorialRepository(EditorialRepository):
             log_firestore_event("firestore.error", "editor_proposals", "create", document_id=pid, status=500, latency_ms=latency_ms, error_code=str(exc))
             raise
 
-    async def get_director_review(self, production_id: str, review_id: str) -> DirectorReview | None:
-        start_time = time.perf_counter()
-        db = self._get_client()
-        doc_ref = db.collection("productions").document(production_id).collection("director_reviews").document(review_id)
-        try:
-            doc = doc_ref.get()
-            latency_ms = (time.perf_counter() - start_time) * 1000
-            if not doc.exists:
-                log_firestore_event("firestore.read", "director_reviews", "get", document_id=review_id, status=404, latency_ms=latency_ms)
-                return None
-            data = doc.to_dict() or {}
-            log_firestore_event("firestore.read", "director_reviews", "get", document_id=review_id, status=200, latency_ms=latency_ms)
-            return DirectorReview.model_validate(data)
-        except Exception as exc:
-            latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("firestore.error", "director_reviews", "get", document_id=review_id, status=500, latency_ms=latency_ms, error_code=str(exc))
-            raise
-
-    async def save_director_review(self, review: DirectorReview, review_id: str | None = None) -> str:
-        start_time = time.perf_counter()
-        db = self._get_client()
-        coll_ref = db.collection("productions").document(review.production_id).collection("director_reviews")
-        rid = review_id or coll_ref.document().id
-        doc_ref = coll_ref.document(rid)
-        payload = review.model_dump(mode="json")
-        try:
-            doc_ref.set(payload)
-            latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("firestore.write", "director_reviews", "create", document_id=rid, status=201, latency_ms=latency_ms)
-            return rid
-        except Exception as exc:
-            latency_ms = (time.perf_counter() - start_time) * 1000
-            log_firestore_event("firestore.error", "director_reviews", "create", document_id=rid, status=500, latency_ms=latency_ms, error_code=str(exc))
-            raise
 
     async def list_activities(
         self, production_id: str, run_id: str | None = None
@@ -387,7 +329,7 @@ class FirestoreEditorialRepository(EditorialRepository):
 
     async def delete_by_production_id(self, production_id: str) -> bool:
         db = self._get_client()
-        subcollections = ["editorial_runs", "editor_proposals", "director_reviews", "agent_activities"]
+        subcollections = ["editorial_runs", "editor_proposals", "agent_activities"]
         deleted_any = False
         for sub in subcollections:
             coll_ref = db.collection("productions").document(production_id).collection(sub)

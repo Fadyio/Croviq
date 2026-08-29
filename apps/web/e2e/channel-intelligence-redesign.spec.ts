@@ -286,7 +286,10 @@ const mockBackendApis = async (page: Page) => {
     let artifact: Record<string, unknown> | null = null;
 
     if (agent === "alex") {
-      if (userText.toLowerCase().includes("correlation") || userText.toLowerCase().includes("calculate")) {
+      if (
+        userText.toLowerCase().includes("correlation") ||
+        userText.toLowerCase().includes("calculate")
+      ) {
         toolExecutions = [
           {
             tool_name: "python_code_execution",
@@ -329,7 +332,7 @@ const mockBackendApis = async (page: Page) => {
         },
       ];
       assistantReply =
-        "I analyzed the timeline dialogue cuts. We can tighten the introduction at 00:18 and extract a high-energy vertical Short from 01:12 to 01:45.";
+        "I analyzed the timeline dialogue cuts. We can tighten the introduction at 00:18 and preserve the strongest explanation from 01:12 to 01:45.";
     } else {
       toolExecutions = [
         {
@@ -358,14 +361,12 @@ const mockBackendApis = async (page: Page) => {
     });
   });
 
-  let alexPromptText =
-    "You are Alex, Croviq's senior Channel Data Scientist and research partner.";
+  let alexPromptText = "You are Alex, Croviq's senior Channel Data Scientist and research partner.";
 
   await page.route("**/api/workspace/agent-settings/prompt/*", async (route) => {
     const url = route.request().url();
     if (url.endsWith("/reset")) {
-      alexPromptText =
-        "You are Alex, Croviq's senior Channel Data Scientist and research partner.";
+      alexPromptText = "You are Alex, Croviq's senior Channel Data Scientist and research partner.";
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -420,13 +421,6 @@ const mockBackendApis = async (page: Page) => {
           updated_at: "2026-08-28T00:00:00Z",
           is_custom: false,
         },
-        maya_prompt: {
-          agent_id: "maya",
-          prompt_text: "You are Maya, Director overseeing quality.",
-          version: 1,
-          updated_at: "2026-08-28T00:00:00Z",
-          is_custom: false,
-        },
         voice_settings: {
           narration_mode: "original",
           selected_voice: "Puck",
@@ -452,12 +446,14 @@ const mockBackendApis = async (page: Page) => {
         lessons: [
           {
             topic: "Early demonstration timing tracks viewer retention",
-            content: "Videos with technical demonstrations in the first 30 seconds average 58.4% retention.",
+            content:
+              "Videos with technical demonstrations in the first 30 seconds average 58.4% retention.",
             learned_from: "100-video historical channel dataset",
           },
           {
             topic: "DevOps & Tooling tutorial subscriber conversion",
-            content: "Hands-on workflow architectures drive +43% higher conversion than theoretical explanations.",
+            content:
+              "Hands-on workflow architectures drive +43% higher conversion than theoretical explanations.",
             learned_from: "Audience analytics audit",
           },
         ],

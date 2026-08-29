@@ -1,7 +1,6 @@
-"""Canonical Editorial domain models for Leo (Video Editor) and Maya (Director) agents."""
+"""Canonical Editorial domain models for Leo (Video Editor)."""
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from croviq_domain.validators import validate_timezone_aware
@@ -23,7 +22,6 @@ class EditorDecisionType(StrEnum):
     BROLL_COVER_CANDIDATE = "BROLL_COVER_CANDIDATE"
     SOURCE_COVER = "SOURCE_COVER"
     CHAPTER_MARKER = "CHAPTER_MARKER"
-    SHORT_CANDIDATE = "SHORT_CANDIDATE"
     NARRATION_REWRITE = "NARRATION_REWRITE"
     CAPTION_EMPHASIS = "CAPTION_EMPHASIS"
 
@@ -161,55 +159,6 @@ class ChapterMarker(BaseModel):
         return self
 
 
-class ShortVisualRegion(BaseModel):
-    """Normalized focus rectangle identifying the readable screen region for a Short scene."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-    )
-
-    start_ms: int = Field(..., ge=0, description="Start timestamp in ms relative to Short timeline")
-    end_ms: int = Field(..., ge=0, description="End timestamp in ms relative to Short timeline")
-    x: float = Field(..., ge=0.0, le=1.0, description="Normalized x coordinate (0.0 to 1.0) of crop top-left in source frame")
-    y: float = Field(..., ge=0.0, le=1.0, description="Normalized y coordinate (0.0 to 1.0) of crop top-left in source frame")
-    width: float = Field(..., ge=0.01, le=1.0, description="Normalized width (0.0 to 1.0) of focus region")
-    height: float = Field(..., ge=0.01, le=1.0, description="Normalized height (0.0 to 1.0) of focus region")
-    zoom: float = Field(default=1.0, ge=1.0, le=3.0, description="Optional zoom factor")
-    focus_label: str = Field(..., min_length=1, max_length=100, description="Visual description of focus area (e.g. YAML editor, status)")
-
-    @model_validator(mode="after")
-    def validate_bounds(self) -> "ShortVisualRegion":
-        if self.end_ms <= self.start_ms:
-            raise ValueError(f"end_ms ({self.end_ms}) must be > start_ms ({self.start_ms})")
-        if self.x + self.width > 1.001:
-            raise ValueError(f"x + width ({self.x + self.width}) exceeds normalized frame width 1.0")
-        if self.y + self.height > 1.001:
-            raise ValueError(f"y + height ({self.y + self.height}) exceeds normalized frame height 1.0")
-        return self
-
-
-class ShortVisualPlan(BaseModel):
-    """Visual reframe plan for social Short rendering."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-    )
-
-    regions: list[ShortVisualRegion] = Field(
-        default_factory=list,
-        description="List of chronological visual focus regions for the Short",
-    )
-
-class DirectorVerdict(StrEnum):
-    """Review verdicts issued by Director (Maya)."""
-
-    APPROVE = "APPROVE"
-    REJECT = "REJECT"
-    MODIFY = "MODIFY"
 
 
 class EditorialRunStatus(StrEnum):
@@ -222,67 +171,6 @@ class EditorialRunStatus(StrEnum):
     FAILED = "failed"
 
 
-class ShortCandidate(BaseModel):
-    """Identified 20-60s candidate segment suitable for vertical Short extraction."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-    )
-
-    start_ms: int = Field(
-        ...,
-        ge=0,
-        description="Start timestamp in source video milliseconds",
-    )
-    end_ms: int = Field(
-        ...,
-        ge=0,
-        description="End timestamp in source video milliseconds",
-    )
-    transcript_start_word: int = Field(
-        ...,
-        ge=0,
-        description="Canonical 0-indexed transcript word start boundary",
-    )
-    transcript_end_word: int = Field(
-        ...,
-        ge=0,
-        description="Canonical 0-indexed transcript word end boundary",
-    )
-    hook_title: str = Field(
-        ...,
-        min_length=1,
-        max_length=200,
-        description="Short hook / title proposition",
-    )
-    concise_reason: str = Field(
-        ...,
-        min_length=1,
-        max_length=500,
-        description="Editorial justification for why this segment works as a standalone Short",
-    )
-    confidence: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Model confidence score for the candidate excerpt",
-    )
-    visual_plan: ShortVisualPlan | None = Field(
-        default=None,
-        description="Optional visual focus regions for 9:16 reframe",
-    )
-
-    @model_validator(mode="after")
-    def validate_bounds(self) -> "ShortCandidate":
-        if self.end_ms <= self.start_ms:
-            raise ValueError(f"end_ms ({self.end_ms}) must be greater than start_ms ({self.start_ms})")
-        if self.transcript_end_word < self.transcript_start_word:
-            raise ValueError(
-                f"transcript_end_word ({self.transcript_end_word}) must be >= transcript_start_word ({self.transcript_start_word})"
-            )
-        return self
 
 
 class EditorDecision(BaseModel):
@@ -339,7 +227,7 @@ class EditorDecision(BaseModel):
         ...,
         min_length=1,
         max_length=500,
-        description="Short editorial rationale for the suggested action",
+        description="Concise editorial rationale for the suggested action",
     )
     confidence: float = Field(
         ...,
@@ -410,10 +298,6 @@ class EditorProposal(BaseModel):
         default_factory=list,
         description="List of proposed editorial decisions",
     )
-    short_candidate: ShortCandidate | None = Field(
-        default=None,
-        description="Optional Short candidate excerpt identified during analysis",
-    )
     section_plan: list[VideoSectionDecision] = Field(
         default_factory=list,
         description="Full-timeline editorial section plan covering the whole production",
@@ -430,148 +314,10 @@ class EditorProposal(BaseModel):
     )
 
 
-class DirectorDecision(BaseModel):
-    """Director (Maya) review verdict for an individual EditorDecision."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-    )
-
-    editor_decision_id: str = Field(
-        ...,
-        min_length=1,
-        description="ID of the EditorDecision being reviewed",
-    )
-    verdict: DirectorVerdict = Field(
-        ...,
-        description="Verdict: APPROVE, REJECT, or MODIFY",
-    )
-    concise_reason: str = Field(
-        ...,
-        min_length=1,
-        max_length=500,
-        description="Short editorial reason for the verdict",
-    )
-    modified_action: str | None = Field(
-        default=None,
-        max_length=50,
-        description="Corrected action if verdict is MODIFY",
-    )
-    modified_transcript_start_word: int | None = Field(
-        default=None,
-        ge=0,
-        description="Corrected start word index if verdict is MODIFY",
-    )
-    modified_transcript_end_word: int | None = Field(
-        default=None,
-        ge=0,
-        description="Corrected end word index if verdict is MODIFY",
-    )
-    modified_source_start_ms: int | None = Field(
-        default=None,
-        ge=0,
-        description="Corrected start time in ms if verdict is MODIFY",
-    )
-    modified_source_end_ms: int | None = Field(
-        default=None,
-        ge=0,
-        description="Corrected end time in ms if verdict is MODIFY",
-    )
-
-    @model_validator(mode="after")
-    def validate_modification_fields(self) -> "DirectorDecision":
-        if self.verdict == DirectorVerdict.MODIFY:
-            if (
-                self.modified_transcript_start_word is not None
-                and self.modified_transcript_end_word is not None
-                and self.modified_transcript_end_word < self.modified_transcript_start_word
-            ):
-                raise ValueError(
-                    f"modified_transcript_end_word ({self.modified_transcript_end_word}) must be >= "
-                    f"modified_transcript_start_word ({self.modified_transcript_start_word})"
-                )
-            if (
-                self.modified_source_start_ms is not None
-                and self.modified_source_end_ms is not None
-                and self.modified_source_end_ms < self.modified_source_start_ms
-            ):
-                raise ValueError(
-                    f"modified_source_end_ms ({self.modified_source_end_ms}) must be >= "
-                    f"modified_source_start_ms ({self.modified_source_start_ms})"
-                )
-        return self
-
-
-class DirectorSectionDecision(BaseModel):
-    """Director review verdict for a full-timeline VideoSectionDecision."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-    )
-
-    section_id: str = Field(..., min_length=1, max_length=64)
-    verdict: DirectorVerdict = Field(..., description="Verdict: APPROVE, REJECT, or MODIFY")
-    reason: str = Field(..., min_length=1, max_length=500)
-
-class DirectorReview(BaseModel):
-    """Complete review output emitted by Director (Maya)."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-    )
-
-    production_id: str = Field(
-        ...,
-        min_length=1,
-        description="Associated Production entity identifier",
-    )
-    agent: str = Field(
-        default="maya",
-        description="Agent identifier",
-    )
-    model: str = Field(
-        ...,
-        min_length=1,
-        description="Model identifier used for review",
-    )
-    overall_assessment: str = Field(
-        ...,
-        min_length=1,
-        description="Director's overall assessment of Leo's proposal",
-    )
-    decisions: list[DirectorDecision] = Field(
-        default_factory=list,
-        description="Per-decision review verdicts",
-    )
-    section_decisions: list[DirectorSectionDecision] = Field(
-        default_factory=list,
-        description="Review verdicts on Leo's full-timeline section plan",
-    )
-    editor_feedback: str = Field(
-        ...,
-        min_length=1,
-        description="Direct feedback to Leo for adjustments or approval",
-    )
-    approved_for_edl: bool = Field(
-        ...,
-        description="Whether the proposal is approved to proceed to EDL assembly",
-    )
-    confidence: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Director's confidence in the review",
-    )
 
 
 class AgentActivity(BaseModel):
-    """Product-facing persisted activity message from Maya or Leo."""
+    """Product-facing persisted activity message from an active agent."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -597,11 +343,11 @@ class AgentActivity(BaseModel):
     agent: str = Field(
         ...,
         min_length=1,
-        description="Agent name (e.g. Leo, Maya)",
+        description="Agent name (e.g. Leo, Alex, Iris)",
     )
     role: str = Field(
         ...,
-        description="Agent role (e.g. Video Editor, Director)",
+        description="Agent role (e.g. Video Editor, Data Scientist, Quality Assurance)",
     )
     activity_type: str = Field(
         ...,
@@ -654,10 +400,6 @@ class EditorialRun(BaseModel):
     editor_proposal_id: str | None = Field(
         default=None,
         description="Identifier of the generated EditorProposal record",
-    )
-    director_review_id: str | None = Field(
-        default=None,
-        description="Identifier of the generated DirectorReview record",
     )
     started_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

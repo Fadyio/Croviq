@@ -1,7 +1,5 @@
-"""EDL assembly application service converting approved editorial decisions to deterministic EDL."""
+"""Deterministic EDL assembly from Leo's editorial proposal."""
 
-from datetime import datetime, timezone
-import logging
 import time
 
 from fastapi import HTTPException, status
@@ -12,18 +10,15 @@ from croviq_api.productions.repository import ProductionRepository
 from croviq_api.productions.transcript_repository import TranscriptRepository
 from croviq_domain.editorial import EditorialRunStatus
 from croviq_domain.edl import EditDecisionList, derive_keep_segments
-from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.production import SourceMediaStatus
 from croviq_domain.user import User
-from croviq_media.cut_safety import CutSafetyAnalyzer, assemble_edl_from_review
-from croviq_media.inspector import MediaInspector
+from croviq_media.cut_safety import CutSafetyAnalyzer, assemble_edl_from_proposal
 from croviq_observability import (
     EventType,
     log_cut_safety_event,
     log_edl_event,
 )
 
-logger = logging.getLogger(__name__)
 
 
 class EDLService:
@@ -35,14 +30,12 @@ class EDLService:
         transcript_repo: TranscriptRepository,
         editorial_repo: EditorialRepository,
         edl_repo: EDLRepository,
-        media_inspector: MediaInspector,
         cut_safety_analyzer: CutSafetyAnalyzer | None = None,
     ) -> None:
         self._production_repo = production_repo
         self._transcript_repo = transcript_repo
         self._editorial_repo = editorial_repo
         self._edl_repo = edl_repo
-        self._media_inspector = media_inspector
         self._cut_safety_analyzer = cut_safety_analyzer or CutSafetyAnalyzer()
 
     async def assemble_edl(
@@ -51,7 +44,7 @@ class EDLService:
         current_user: User,
         request_id: str = "unknown",
     ) -> EditDecisionList:
-        """Deterministically assemble an EditDecisionList from Maya-approved editorial review."""
+        """Deterministically assemble an EditDecisionList from Leo's proposal."""
         start_time = time.monotonic()
         log_edl_event(
             event_type=EventType.EDL_ASSEMBLY_STARTED,
@@ -87,38 +80,7 @@ class EDLService:
                     detail=f"Production '{production_id}' must be transcribed before assembling EDL",
                 )
 
-            # 4. Resolve MediaMetadata
-            try:
-                metadata = self._media_inspector.inspect_media(prod.source_media.original_filename)
-            except Exception:
-                metadata = MediaMetadata(
-                    duration_ms=transcript.duration_ms,
-                    width=1920,
-                    height=1080,
-                    frame_rate=30.0,
-                    video_codec="h264",
-                    audio_codec="aac",
-                    audio_sample_rate=48000,
-                    audio_channels=2,
-                    rotation=0,
-                    size_bytes=prod.source_media.size_bytes,
-                )
-            else:
-                if metadata.duration_ms <= 0:
-                    metadata = MediaMetadata(
-                        duration_ms=transcript.duration_ms,
-                        width=metadata.width or 1920,
-                        height=metadata.height or 1080,
-                        frame_rate=metadata.frame_rate or 30.0,
-                        video_codec=metadata.video_codec if metadata.video_codec != "none" else "h264",
-                        audio_codec=metadata.audio_codec or "aac",
-                        audio_sample_rate=metadata.audio_sample_rate or 48000,
-                        audio_channels=metadata.audio_channels or 2,
-                        rotation=metadata.rotation,
-                        size_bytes=prod.source_media.size_bytes,
-                    )
-
-            # 5. Fetch Latest Completed EditorialRun
+            # 4. Fetch the completed editorial run.
             run = await self._editorial_repo.get_latest_editorial_run(production_id)
             if not run:
                 raise HTTPException(
@@ -131,64 +93,48 @@ class EDLService:
                     detail=f"Editorial run '{run.run_id}' for production '{production_id}' is in status '{run.status}'. Must be completed before assembling EDL",
                 )
 
-            # 6. Fetch EditorProposal and DirectorReview
+            # 6. Fetch Leo's canonical proposal.
             proposal = None
             if run.editor_proposal_id:
-                proposal = await self._editorial_repo.get_editor_proposal(production_id, run.editor_proposal_id)
-
-            review = None
-            if run.director_review_id:
-                review = await self._editorial_repo.get_director_review(production_id, run.director_review_id)
-
-            if not proposal or not review:
+                proposal = await self._editorial_repo.get_editor_proposal(
+                    production_id, run.editor_proposal_id
+                )
+            if proposal is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Missing editor proposal or director review for completed editorial run '{run.run_id}'",
+                    detail=f"Missing editor proposal for completed editorial run '{run.run_id}'",
                 )
-
-            # 7. Validate Director Approval
-            if not review.approved_for_edl:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Editorial review has not been approved for EDL assembly by the Director (approved_for_edl is false)",
-                )
-
-            # 8. Idempotency Check (Check if current run's proposal and review already have an EDL)
+            # 7. Idempotency check for this proposal.
             existing_edl = await self._edl_repo.get_latest_edl(production_id)
-            if existing_edl is not None:
-                if (
-                    existing_edl.editor_proposal_id == run.editor_proposal_id
-                    and existing_edl.director_review_id == run.director_review_id
-                ):
-                    latency_ms = (time.monotonic() - start_time) * 1000
-                    log_edl_event(
-                        event_type=EventType.EDL_ASSEMBLY_COMPLETED,
-                        production_id=production_id,
-                        edl_id=existing_edl.edl_id,
-                        run_id=run.run_id,
-                        status="cached",
-                        request_id=request_id,
-                        cut_count=existing_edl.active_cuts_count,
-                        coverage_marker_count=len(existing_edl.coverage_markers),
-                        removed_duration_ms=existing_edl.total_removed_duration_ms,
-                        latency_ms=latency_ms,
-                        message="Returned existing active EDL (idempotent)",
-                    )
-                    return existing_edl
+            if (
+                existing_edl is not None
+                and existing_edl.editor_proposal_id == run.editor_proposal_id
+            ):
+                latency_ms = (time.monotonic() - start_time) * 1000
+                log_edl_event(
+                    event_type=EventType.EDL_ASSEMBLY_COMPLETED,
+                    production_id=production_id,
+                    edl_id=existing_edl.edl_id,
+                    run_id=run.run_id,
+                    status="cached",
+                    request_id=request_id,
+                    cut_count=existing_edl.active_cuts_count,
+                    coverage_marker_count=len(existing_edl.coverage_markers),
+                    removed_duration_ms=existing_edl.total_removed_duration_ms,
+                    latency_ms=latency_ms,
+                    message="Returned existing active EDL (idempotent)",
+                )
+                return existing_edl
 
             next_version = (existing_edl.version + 1) if existing_edl else 1
 
-            # 9. Assemble Canonical EDL (Zero Model Calls)
-            edl = assemble_edl_from_review(
-                production_id=production_id,
+            # 8. Assemble the canonical EDL without additional model calls.
+            edl = assemble_edl_from_proposal(
                 proposal=proposal,
-                review=review,
                 transcript=transcript,
-                media_metadata=metadata,
                 version=next_version,
                 analyzer=self._cut_safety_analyzer,
                 editor_proposal_id=run.editor_proposal_id,
-                director_review_id=run.director_review_id,
             )
 
             # 10. Persist EDL in Firestore

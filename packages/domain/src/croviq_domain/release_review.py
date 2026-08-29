@@ -60,10 +60,6 @@ class ReleaseIssueType(StrEnum):
     THUMBNAIL_MISMATCH = "THUMBNAIL_MISMATCH"
     PACKAGING_INCONSISTENCY = "PACKAGING_INCONSISTENCY"
 
-    # Short issues
-    SHORT_QUALITY = "SHORT_QUALITY"
-    SHORT_CAPTION_QUALITY = "SHORT_CAPTION_QUALITY"
-    SHORT_CROP = "SHORT_CROP"
 
     # Editorial continuity
     MISSING_CONTENT = "MISSING_CONTENT"
@@ -90,9 +86,6 @@ ISSUE_TYPE_FRIENDLY_NAMES: dict[ReleaseIssueType, str] = {
     ReleaseIssueType.DESCRIPTION_MISMATCH: "Description Mismatch",
     ReleaseIssueType.THUMBNAIL_MISMATCH: "Thumbnail Concept Mismatch",
     ReleaseIssueType.PACKAGING_INCONSISTENCY: "Packaging Inconsistency",
-    ReleaseIssueType.SHORT_QUALITY: "Short Quality Issue",
-    ReleaseIssueType.SHORT_CAPTION_QUALITY: "Short Caption Quality",
-    ReleaseIssueType.SHORT_CROP: "Short Vertical Framing Issue",
     ReleaseIssueType.MISSING_CONTENT: "Missing Content / Demo",
     ReleaseIssueType.CONTEXT_LOSS: "Context Loss",
 }
@@ -130,14 +123,14 @@ class ClaimVerification(BaseModel):
     )
 
     claim_text: str = Field(..., min_length=2, max_length=500, description="Specific factual claim examined")
-    location: str = Field(default="description", description="Where the claim appears (title, description, video, chapter, short)")
+    location: str = Field(default="description", description="Where the claim appears (title, description, video, or chapter)")
     status: ClaimSupportStatus = Field(..., description="Claim support status")
     evidence: str = Field(..., min_length=2, max_length=1000, description="Evidence or rationale supporting status")
     source_url: str | None = Field(default=None, description="External reference URL if verified externally")
 
 
 class ThumbnailEvaluation(BaseModel):
-    """Evaluation of a specific Nina ThumbnailConcept."""
+    """Evaluation of a specific creator thumbnail concept."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -163,7 +156,6 @@ class ReleaseChecklist(BaseModel):
     audio: bool = Field(default=True, description="Audio level, peak, and sync status")
     captions: bool = Field(default=True, description="Caption accuracy, timing, and bounds status")
     chapters: bool = Field(default=True, description="Chapter timestamp ordering and topic accuracy")
-    short: bool = Field(default=True, description="Short framing, captions, and context status")
     packaging: bool = Field(default=True, description="Packaging title, description, and thumbnail status")
     claims: bool = Field(default=True, description="Factual and packaging claims validity status")
 
@@ -174,7 +166,6 @@ class ReleaseChecklist(BaseModel):
             and self.audio
             and self.captions
             and self.chapters
-            and self.short
             and self.packaging
             and self.claims
         )
@@ -222,7 +213,7 @@ class ReleaseIssue(BaseModel):
     severity: ReleaseIssueSeverity = Field(..., description="Severity level")
     source_start_ms: int | None = Field(default=None, ge=0, description="Start timestamp in video ms if time-bound")
     source_end_ms: int | None = Field(default=None, ge=0, description="End timestamp in video ms if time-bound")
-    artifact_type: str | None = Field(default=None, description="Affected artifact type (master, short, packaging, caption, chapter)")
+    artifact_type: str | None = Field(default=None, description="Affected artifact type (master, packaging, caption, or chapter)")
     related_decision_id: str | None = Field(default=None, description="Related editorial or packaging decision ID if applicable")
     message: str = Field(..., min_length=5, max_length=1000, description="Concise creator-facing description of defect")
     suggested_action: str = Field(..., min_length=5, max_length=1000, description="Concrete suggested fix or routing")
@@ -266,8 +257,6 @@ class ReleaseReview(BaseModel):
     edl_id: str | None = Field(default=None, description="Evaluated EditDecisionList ID")
     master_artifact_id: str | None = Field(default=None, description="Evaluated Master RenderArtifact ID")
     master_hash: str | None = Field(default=None, description="SHA-256 hash of evaluated Master RenderArtifact")
-    short_artifact_id: str | None = Field(default=None, description="Evaluated Short RenderArtifact ID")
-    short_hash: str | None = Field(default=None, description="SHA-256 hash of evaluated Short RenderArtifact")
     packaging_proposal_id: str | None = Field(default=None, description="Evaluated PackagingProposal ID")
     package_version: int = Field(default=1, ge=1, description="Evaluated PackagingProposal version number")
     release_fingerprint: str | None = Field(
@@ -322,8 +311,6 @@ class ReleaseReview(BaseModel):
             packaging_proposal_id=self.packaging_proposal_id or "unknown_pkg",
             package_version=self.package_version,
             release_review_id=self.review_id,
-            short_artifact_id=self.short_artifact_id,
-            short_hash=self.short_hash,
         )
 
 
@@ -335,13 +322,10 @@ def build_release_fingerprint(
     packaging_proposal_id: str,
     package_version: int = 1,
     release_review_id: str | None = None,
-    short_artifact_id: str | None = None,
-    short_hash: str | None = None,
 ) -> str:
     """Build canonical SHA-256 release fingerprint binding immutable release inputs."""
     payload = (
         f"{production_id}:{edl_id}:{master_artifact_id}:{master_hash}:"
-        f"{short_artifact_id or 'none'}:{short_hash or 'none'}:"
         f"{packaging_proposal_id}:{package_version}:{release_review_id or 'pending'}"
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -356,8 +340,6 @@ def verify_release_fingerprint(
     packaging_proposal_id: str,
     package_version: int = 1,
     release_review_id: str | None = None,
-    short_artifact_id: str | None = None,
-    short_hash: str | None = None,
 ) -> bool:
     """Verify that current production state matches the locked release fingerprint."""
     computed = build_release_fingerprint(
@@ -368,7 +350,5 @@ def verify_release_fingerprint(
         packaging_proposal_id=packaging_proposal_id,
         package_version=package_version,
         release_review_id=release_review_id,
-        short_artifact_id=short_artifact_id,
-        short_hash=short_hash,
     )
     return computed == expected_fingerprint

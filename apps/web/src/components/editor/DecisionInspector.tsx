@@ -1,15 +1,9 @@
 import React from "react";
 import { Play, X } from "lucide-react";
-import {
-  formatTimecode,
-  type DirectorDecision,
-  type EditorDecision,
-  type TimelineBlock,
-} from "../../lib/edl-adapter";
+import { formatTimecode, type EditorDecision, type TimelineBlock } from "../../lib/edl-adapter";
 
 interface DecisionInspectorProps {
   decision: EditorDecision | null;
-  directorDecision?: DirectorDecision | null;
   selectedBlock?: TimelineBlock | null;
   onClose: () => void;
   onSeek: (targetMs: number) => void;
@@ -28,16 +22,8 @@ const decisionLabel = (decisionType: string): string => {
     .replace(/^./u, (character) => character.toUpperCase());
 };
 
-const verdictLabel = (verdict: string): string => {
-  if (verdict === "APPROVE") return "Approved";
-  if (verdict === "REJECT") return "Original kept";
-  if (verdict === "MODIFY") return "Adjusted";
-  return verdict;
-};
-
 export const DecisionInspector: React.FC<DecisionInspectorProps> = ({
   decision,
-  directorDecision,
   selectedBlock,
   onClose,
   onSeek,
@@ -50,8 +36,7 @@ export const DecisionInspector: React.FC<DecisionInspectorProps> = ({
   const endMs = decision?.source_end_ms ?? selectedBlock?.endMs ?? 0;
   const originalText = decision?.original_text || selectedBlock?.details?.originalText;
   const leoReason = decision?.concise_reason || selectedBlock?.details?.conciseReason;
-  const mayaVerdict = directorDecision?.verdict || selectedBlock?.details?.mayaVerdict || "APPROVE";
-  const mayaReason = directorDecision?.concise_reason || selectedBlock?.details?.mayaReason;
+  const confidence = decision?.confidence ?? selectedBlock?.details?.confidence;
 
   return (
     <div
@@ -93,20 +78,14 @@ export const DecisionInspector: React.FC<DecisionInspectorProps> = ({
 
       <dl className="mt-3 space-y-3 border-t border-border-subtle pt-3">
         <div>
-          <dt className="text-[10px] font-semibold text-text-primary">Leo · Video Editor</dt>
+          <dt className="flex items-center justify-between gap-2 text-[10px] font-semibold text-text-primary">
+            <span>Leo · Video Editor</span>
+            {confidence !== undefined && (
+              <span className="text-primary">{Math.round(confidence * 100)}% confidence</span>
+            )}
+          </dt>
           {leoReason && (
             <dd className="mt-1 text-[11px] leading-4 text-text-secondary">{leoReason}</dd>
-          )}
-        </div>
-        <div>
-          <dt className="flex items-center justify-between gap-2 text-[10px] font-semibold text-text-primary">
-            <span>Maya · Director</span>
-            <span className={mayaVerdict === "APPROVE" ? "text-success" : "text-warning"}>
-              {verdictLabel(mayaVerdict)}
-            </span>
-          </dt>
-          {mayaReason && (
-            <dd className="mt-1 text-[11px] leading-4 text-text-secondary">{mayaReason}</dd>
           )}
         </div>
       </dl>

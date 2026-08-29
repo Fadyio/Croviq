@@ -45,93 +45,94 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
   const [includeForecast, setIncludeForecast] = useState<boolean>(true);
 
   // Statistical 7-day projection derived from recent moving trend + variance
-  const { extendedDates, currentSeries, previousSeries, forecastLow, forecastBand } = useMemo(() => {
-    const dateLabels = data.map((p) => {
-      try {
-        return new Intl.DateTimeFormat("en", {
-          month: "short",
-          day: "numeric",
-          timeZone: "UTC",
-        }).format(new Date(`${p.date}T00:00:00Z`));
-      } catch {
-        return p.date;
-      }
-    });
-
-    const curr = data.map((point) => point[metric] ?? null);
-    const prev = data.map(
-      (point) => (point[`previous_${metric}` as keyof TrendPoint] as number | undefined) ?? null,
-    );
-
-    if (!includeForecast || data.length < 7) {
-      return {
-        extendedDates: dateLabels,
-        currentSeries: curr,
-        previousSeries: prev,
-        forecastLow: [] as (number | null)[],
-        forecastBand: [] as (number | null)[],
-      };
-    }
-
-    const validVals = curr.filter((v): v is number => typeof v === "number" && !isNaN(v));
-    const n = validVals.length;
-    if (n < 7) {
-      return {
-        extendedDates: dateLabels,
-        currentSeries: curr,
-        previousSeries: prev,
-        forecastLow: [],
-        forecastBand: [],
-      };
-    }
-
-    const recent = validVals.slice(-7);
-    const recentAvg = recent.reduce((sum, v) => sum + v, 0) / 7;
-    const lastVal = validVals[n - 1];
-    const stepSlope = (lastVal - recent[0]) / 6;
-    const variance = recent.reduce((sum, v) => sum + Math.pow(v - recentAvg, 2), 0) / 7;
-    const stdDev = Math.sqrt(variance);
-
-    const lastDate = new Date(`${data[data.length - 1].date}T00:00:00Z`);
-    const forecastDates: string[] = [];
-    const forecastLowVals: (number | null)[] = new Array(data.length - 1).fill(null);
-    const forecastBandVals: (number | null)[] = new Array(data.length - 1).fill(null);
-
-    forecastLowVals.push(lastVal);
-    forecastBandVals.push(0);
-
-    for (let day = 1; day <= 7; day++) {
-      const projDate = new Date(lastDate);
-      projDate.setUTCDate(lastDate.getUTCDate() + day);
-      try {
-        forecastDates.push(
-          new Intl.DateTimeFormat("en", {
+  const { extendedDates, currentSeries, previousSeries, forecastLow, forecastBand } =
+    useMemo(() => {
+      const dateLabels = data.map((p) => {
+        try {
+          return new Intl.DateTimeFormat("en", {
             month: "short",
             day: "numeric",
             timeZone: "UTC",
-          }).format(projDate),
-        );
-      } catch {
-        forecastDates.push(`+${day}d`);
+          }).format(new Date(`${p.date}T00:00:00Z`));
+        } catch {
+          return p.date;
+        }
+      });
+
+      const curr = data.map((point) => point[metric] ?? null);
+      const prev = data.map(
+        (point) => (point[`previous_${metric}` as keyof TrendPoint] as number | undefined) ?? null,
+      );
+
+      if (!includeForecast || data.length < 7) {
+        return {
+          extendedDates: dateLabels,
+          currentSeries: curr,
+          previousSeries: prev,
+          forecastLow: [] as (number | null)[],
+          forecastBand: [] as (number | null)[],
+        };
       }
 
-      const centerProj = Math.max(0, lastVal + stepSlope * day);
-      const spread = stdDev * (1 + 0.15 * day);
-      const low = Math.max(0, centerProj - spread);
-      const high = centerProj + spread;
+      const validVals = curr.filter((v): v is number => typeof v === "number" && !isNaN(v));
+      const n = validVals.length;
+      if (n < 7) {
+        return {
+          extendedDates: dateLabels,
+          currentSeries: curr,
+          previousSeries: prev,
+          forecastLow: [],
+          forecastBand: [],
+        };
+      }
 
-      forecastLowVals.push(Math.round(low * 10) / 10);
-      forecastBandVals.push(Math.round((high - low) * 10) / 10);
-    }
+      const recent = validVals.slice(-7);
+      const recentAvg = recent.reduce((sum, v) => sum + v, 0) / 7;
+      const lastVal = validVals[n - 1];
+      const stepSlope = (lastVal - recent[0]) / 6;
+      const variance = recent.reduce((sum, v) => sum + Math.pow(v - recentAvg, 2), 0) / 7;
+      const stdDev = Math.sqrt(variance);
 
-    return {
-      extendedDates: [...dateLabels, ...forecastDates],
-      currentSeries: [...curr, ...new Array(7).fill(null)],
-      previousSeries: [...prev, ...new Array(7).fill(null)],
-      forecastLow: forecastLowVals,
-      forecastBand: forecastBandVals,
-    };
-  }, [data, metric, includeForecast]);
+      const lastDate = new Date(`${data[data.length - 1].date}T00:00:00Z`);
+      const forecastDates: string[] = [];
+      const forecastLowVals: (number | null)[] = new Array(data.length - 1).fill(null);
+      const forecastBandVals: (number | null)[] = new Array(data.length - 1).fill(null);
+
+      forecastLowVals.push(lastVal);
+      forecastBandVals.push(0);
+
+      for (let day = 1; day <= 7; day++) {
+        const projDate = new Date(lastDate);
+        projDate.setUTCDate(lastDate.getUTCDate() + day);
+        try {
+          forecastDates.push(
+            new Intl.DateTimeFormat("en", {
+              month: "short",
+              day: "numeric",
+              timeZone: "UTC",
+            }).format(projDate),
+          );
+        } catch {
+          forecastDates.push(`+${day}d`);
+        }
+
+        const centerProj = Math.max(0, lastVal + stepSlope * day);
+        const spread = stdDev * (1 + 0.15 * day);
+        const low = Math.max(0, centerProj - spread);
+        const high = centerProj + spread;
+
+        forecastLowVals.push(Math.round(low * 10) / 10);
+        forecastBandVals.push(Math.round((high - low) * 10) / 10);
+      }
+
+      return {
+        extendedDates: [...dateLabels, ...forecastDates],
+        currentSeries: [...curr, ...new Array(7).fill(null)],
+        previousSeries: [...prev, ...new Array(7).fill(null)],
+        forecastLow: forecastLowVals,
+        forecastBand: forecastBandVals,
+      };
+    }, [data, metric, includeForecast]);
 
   const chartOption = useMemo<EChartsOption>(() => {
     return {
@@ -325,7 +326,16 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
           : []),
       ],
     };
-  }, [extendedDates, currentSeries, previousSeries, forecastLow, forecastBand, metric, compact, data.length]);
+  }, [
+    extendedDates,
+    currentSeries,
+    previousSeries,
+    forecastLow,
+    forecastBand,
+    metric,
+    compact,
+    data.length,
+  ]);
 
   return (
     <section

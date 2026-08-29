@@ -13,14 +13,11 @@ export type EditDecisionList = components["schemas"]["EditDecisionList"];
 export type CutInstruction = components["schemas"]["CutInstruction"];
 export type CoverageMarker = components["schemas"]["CoverageMarker"];
 export type EditorProposal = components["schemas"]["EditorProposal"];
-export type DirectorReview = components["schemas"]["DirectorReview"];
 export type EditorDecision = components["schemas"]["EditorDecision"];
-export type DirectorDecision = components["schemas"]["DirectorDecision"];
 export type AgentActivity = components["schemas"]["AgentActivity"];
 export type Transcript = components["schemas"]["Transcript"];
 export type TranscriptWord = components["schemas"]["TranscriptWord"];
 export type TranscriptSegment = components["schemas"]["TranscriptSegment"];
-export type ShortCandidate = components["schemas"]["ShortCandidate"];
 export type ChapterMarker = components["schemas"]["ChapterMarker"];
 
 export type TimelineTrackId =
@@ -31,7 +28,6 @@ export type TimelineTrackId =
   | "narration"
   | "captions"
   | "chapters"
-  | "short"
   | "source-video"
   | "dialogue-edits"
   | "coverage";
@@ -53,7 +49,6 @@ export interface TimelineBlock {
     | "narration"
     | "caption"
     | "chapter"
-    | "short"
     | "keep";
   decisionId?: string;
   cutId?: string;
@@ -61,8 +56,6 @@ export interface TimelineBlock {
   details?: {
     originalText?: string;
     conciseReason?: string;
-    mayaVerdict?: string;
-    mayaReason?: string;
     confidence?: number;
     safetyStatus?: string;
     coverageType?: string;
@@ -86,7 +79,6 @@ export interface TwickTimelineRepresentation {
   keepSegments: Array<[number, number]>;
   audioRegions: AudioTrackRegion[];
   chapters: ChapterMarker[];
-  shortCandidate?: ShortCandidate | null;
 }
 
 /**
@@ -309,12 +301,11 @@ export function findExecutableSkipInterval(
 }
 
 /**
- * Convert canonical Croviq EDL and editorial records into Twick Tracks and TimelineBlocks.
+ * Convert canonical Croviq EDL and Leo's editorial proposal into Twick tracks and timeline blocks.
  */
 export function edlToTwickTimeline(
   edl: EditDecisionList,
   proposal?: EditorProposal | null,
-  review?: DirectorReview | null,
   transcript?: Transcript | null,
 ): TwickTimelineRepresentation {
   const sourceDurationMs = edl.source_duration_ms || 113824;
@@ -334,7 +325,7 @@ export function edlToTwickTimeline(
     },
   });
 
-  // Index Leo decisions and Maya reviews by decision_id / editor_decision_id
+  // Index Leo decisions by decision_id.
   const leoDecisionMap: Record<string, EditorDecision> = {};
   if (proposal?.decisions) {
     for (const d of proposal.decisions) {
@@ -342,18 +333,10 @@ export function edlToTwickTimeline(
     }
   }
 
-  const mayaDecisionMap: Record<string, DirectorDecision> = {};
-  if (review?.decisions) {
-    for (const d of review.decisions) {
-      mayaDecisionMap[d.editor_decision_id] = d;
-    }
-  }
-
   // 2. EDITS track (cut instructions or proposed cuts)
   const cuts = edl.cuts || [];
   for (const cut of cuts) {
     const leoDec = leoDecisionMap[cut.decision_id];
-    const mayaDec = mayaDecisionMap[cut.decision_id];
 
     let blockType: TimelineBlock["type"] = "cut-safe";
     if (cut.safety_status === "NEEDS_COVERAGE") {
@@ -378,8 +361,6 @@ export function edlToTwickTimeline(
       details: {
         originalText: leoDec?.original_text,
         conciseReason: leoDec?.concise_reason,
-        mayaVerdict: mayaDec?.verdict,
-        mayaReason: mayaDec?.concise_reason,
         confidence: leoDec?.confidence,
         safetyStatus: cut.safety_status,
       },
@@ -390,7 +371,6 @@ export function edlToTwickTimeline(
   const coverageMarkers = edl.coverage_markers || [];
   for (const marker of coverageMarkers) {
     const leoDec = leoDecisionMap[marker.decision_id];
-    const mayaDec = mayaDecisionMap[marker.decision_id];
 
     const duration = marker.source_end_ms - marker.source_start_ms;
     blocks.push({
@@ -406,8 +386,6 @@ export function edlToTwickTimeline(
       details: {
         originalText: leoDec?.original_text,
         conciseReason: marker.reason || leoDec?.concise_reason,
-        mayaVerdict: mayaDec?.verdict,
-        mayaReason: mayaDec?.concise_reason,
         confidence: leoDec?.confidence,
         coverageType: marker.coverage_type,
       },
@@ -430,25 +408,6 @@ export function edlToTwickTimeline(
       details: {
         summary: chap.summary,
         confidence: chap.confidence,
-      },
-    });
-  }
-
-  // 5. SHORT CANDIDATE track
-  if (proposal?.short_candidate) {
-    const sc = proposal.short_candidate;
-    const duration = sc.end_ms - sc.start_ms;
-    blocks.push({
-      id: "block-short-candidate",
-      trackId: "short",
-      label: `Short: ${sc.hook_title}`,
-      startMs: sc.start_ms,
-      endMs: sc.end_ms,
-      durationMs: duration,
-      type: "short",
-      details: {
-        conciseReason: sc.concise_reason,
-        confidence: sc.confidence,
       },
     });
   }
@@ -480,7 +439,6 @@ export function edlToTwickTimeline(
     new Track("Narration", "ELEMENT", "track-narration"),
     new Track("Captions", "ELEMENT", "track-captions"),
     new Track("Chapters", "ELEMENT", "track-chapters"),
-    new Track("Short", "ELEMENT", "track-short"),
   ];
 
   const keepSegments = deriveKeepSegments(edl);
@@ -495,7 +453,6 @@ export function edlToTwickTimeline(
     keepSegments,
     audioRegions,
     chapters: rawChapters,
-    shortCandidate: proposal?.short_candidate,
   };
 }
 

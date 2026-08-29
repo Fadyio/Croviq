@@ -142,7 +142,6 @@ def test_edit_decision_list_zero_cut_valid():
         production_id="prod_f0b41bfd429e",
         source_duration_ms=97180,
         editor_proposal_id="prop_01",
-        director_review_id="rev_01",
         version=1,
         cuts=[],
         coverage_markers=[

@@ -16,7 +16,6 @@ import {
   Scissors,
   ShieldAlert,
   ShieldCheck,
-  Smartphone,
   Sparkles,
   UploadCloud,
   X,
@@ -55,7 +54,6 @@ interface PublishConfirmationModalProps {
     selected_tags: string[];
     category_id: string;
     thumbnail_frame_ms?: number;
-    upload_short: boolean;
   }) => Promise<void>;
   isPublishing: boolean;
   onGrantUploadAccess: () => void;
@@ -80,7 +78,6 @@ export const PublishConfirmationModal: React.FC<PublishConfirmationModalProps> =
   const [descInput, setDescInput] = useState<string>("");
   const [categoryId, setCategoryId] = useState<string>("28");
   const [selectedFrameIndex, setSelectedFrameIndex] = useState<number>(0);
-  const [uploadShort, setUploadShort] = useState<boolean>(false);
 
   // Initialize values when prepData loads
   useEffect(() => {
@@ -91,7 +88,6 @@ export const PublishConfirmationModal: React.FC<PublishConfirmationModalProps> =
       setContainsSyntheticMedia(Boolean(prepData.suggested_synthetic_media));
       setPrivacy("private"); // Privacy ALWAYS defaults to private as required
       setSelectedFrameIndex(0);
-      setUploadShort(false);
     }
   }, [prepData]);
 
@@ -585,37 +581,6 @@ export const PublishConfirmationModal: React.FC<PublishConfirmationModalProps> =
                   </div>
                 </div>
               </div>
-
-              {/* 6. Vertical Short Option */}
-              {prepData?.has_short && (
-                <div
-                  className="p-4 rounded-xl bg-surface-2/70 border border-border-subtle flex items-center justify-between gap-3 pt-3"
-                  data-testid="section-upload-short"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="size-8 rounded-lg bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400">
-                      <Smartphone className="size-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-text-primary">Also upload Short</span>
-                      <p className="text-[11px] text-text-muted">
-                        Publish approved 9:16 vertical Short ({prepData.short_title || "Short"}) as
-                        a separate video.
-                      </p>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={uploadShort}
-                      onChange={(e) => setUploadShort(e.target.checked)}
-                      className="sr-only peer"
-                      data-testid="checkbox-upload-short"
-                    />
-                    <div className="w-9 h-5 bg-surface-3 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-              )}
             </>
           )}
         </div>
@@ -645,7 +610,6 @@ export const PublishConfirmationModal: React.FC<PublishConfirmationModalProps> =
                 selected_tags: prepData?.suggested_tags || [],
                 category_id: categoryId,
                 thumbnail_frame_ms: selectedThumbnail?.frame_timestamp_ms,
-                upload_short: uploadShort,
               })
             }
             className={`px-5 py-2 text-xs font-bold rounded-lg flex items-center gap-2 transition-all shadow-md ${

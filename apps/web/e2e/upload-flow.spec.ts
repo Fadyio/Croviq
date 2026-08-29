@@ -292,9 +292,9 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
           updated_at: "2026-08-28T00:00:00Z",
           is_custom: false,
         },
-        maya_prompt: {
-          agent_id: "maya",
-          prompt_text: "Maya",
+        iris_prompt: {
+          agent_id: "iris",
+          prompt_text: "Iris",
           version: 1,
           updated_at: "2026-08-28T00:00:00Z",
           is_custom: false,

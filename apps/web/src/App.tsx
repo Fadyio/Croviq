@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useLayoutEffect, useState, useCallback } from "react";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { AuthGuard } from "./components/AuthGuard";
 import { LoginPage } from "./pages/LoginPage";
@@ -27,7 +27,11 @@ const parseAgentRoute = (pathname: string): AgentId | null => {
 const normalizePath = (pathname: string): string => {
   if (pathname === "" || pathname === "/") return "/";
   if (pathname === "/app" || pathname === "/app/") return "/app";
-  if (pathname.startsWith("/app/performance") || pathname.startsWith("/app/experiments")) {
+  if (
+    pathname.startsWith("/app/performance") ||
+    pathname.startsWith("/app/experiments") ||
+    pathname.startsWith("/app/overview")
+  ) {
     if (typeof window !== "undefined" && window.location.pathname !== "/app") {
       window.history.replaceState(null, "", "/app");
     }
@@ -55,16 +59,28 @@ const AppRoutes: React.FC = () => {
     setCurrentPath(normalizePath(to));
   }, []);
 
+  // Immediate layout redirect for legacy tab URLs
+  useLayoutEffect(() => {
+    if (
+      window.location.pathname.startsWith("/app/performance") ||
+      window.location.pathname.startsWith("/app/experiments") ||
+      window.location.pathname.startsWith("/app/overview")
+    ) {
+      window.history.replaceState(null, "", "/app");
+      setCurrentPath("/app");
+    }
+  }, []);
+
   // Listen to browser navigation (back/forward)
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentPath(normalizePath(window.location.pathname));
+      const normalized = normalizePath(window.location.pathname);
+      setCurrentPath(normalized);
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
-
   // Auto-redirect logic for authenticated users navigating to / or /login
   useEffect(() => {
     if (!isLoading) {

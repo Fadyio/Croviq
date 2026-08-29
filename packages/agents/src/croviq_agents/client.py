@@ -10,35 +10,15 @@ import time
 from typing import Any, Sequence
 
 from croviq_agents.prompts import (
-    DEFAULT_IRIS_PROMPT,
-    build_director_prompt,
-    build_director_render_review_prompt,
-    build_editor_correction_prompt,
     build_editor_prompt,
     build_editor_self_review_prompt,
     build_narration_rewrite_prompt,
     build_release_qa_prompt,
 )
 from croviq_domain.channel_intelligence import ResearchFinding
-from croviq_domain.packaging import (
-    PackagingChapter,
-    PackagingProposal,
-    ShortPackage,
-    ThumbnailConcept,
-    TitleAngle,
-    TitleCandidate,
-    format_ms_as_timestamp,
-)
-from croviq_domain.edl import EditDecisionList, map_source_time_to_edited
-from croviq_domain.render_review import (
-    EditorSelfReview,
-    EditorSelfReviewVerdict,
-    RenderReview,
-    RenderReviewIssue,
-    RenderReviewIssueType,
-    RenderReviewSeverity,
-    RenderReviewVerdict,
-)
+from croviq_domain.packaging import CreatorPackageOverrides, PackagingProposal
+from croviq_domain.edl import EditDecisionList
+from croviq_domain.render_review import EditorSelfReview, EditorSelfReviewVerdict
 from croviq_domain.release_review import (
     ClaimSupportStatus,
     ClaimVerification,
@@ -50,17 +30,12 @@ from croviq_domain.release_review import (
     ReleaseVerdict,
     ThumbnailEvaluation,
 )
-from croviq_domain.packaging import CreatorPackageOverrides
 from croviq_domain.editorial import (
     ChapterMarker,
-    DirectorDecision,
-    DirectorReview,
-    DirectorVerdict,
     EditorDecision,
     EditorDecisionType,
     EditorProposal,
     SectionAction,
-    ShortCandidate,
     VideoSectionDecision,
 )
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile
@@ -129,7 +104,7 @@ def reconcile_editor_proposal_with_transcript(
     proposal: EditorProposal,
     transcript: Transcript,
 ) -> EditorProposal:
-    """Ensure Leo's decisions and short candidate strictly anchor to transcript words and timing truth."""
+    """Anchor Leo's editorial decisions and chapters to canonical transcript timing."""
     if not transcript.words:
         return proposal
 
@@ -168,23 +143,6 @@ def reconcile_editor_proposal_with_transcript(
             )
         )
 
-    reconciled_short: ShortCandidate | None = None
-    if proposal.short_candidate:
-        sc = proposal.short_candidate
-        sc_start_idx = max(0, min(sc.transcript_start_word, max_word_idx))
-        sc_end_idx = max(sc_start_idx, min(sc.transcript_end_word, max_word_idx))
-        sc_start_ms = transcript.words[sc_start_idx].start_ms
-        sc_end_ms = max(transcript.words[sc_end_idx].end_ms, sc_start_ms + 1000)
-
-        reconciled_short = ShortCandidate(
-            start_ms=sc_start_ms,
-            end_ms=sc_end_ms,
-            transcript_start_word=sc_start_idx,
-            transcript_end_word=sc_end_idx,
-            hook_title=sc.hook_title,
-            concise_reason=sc.concise_reason,
-            confidence=sc.confidence,
-        )
 
     reconciled_chapters: list[ChapterMarker] = []
     total_dur_ms = transcript.duration_ms or (transcript.words[-1].end_ms if transcript.words else 0)
@@ -207,233 +165,9 @@ def reconcile_editor_proposal_with_transcript(
         model=proposal.model,
         summary=proposal.summary,
         decisions=reconciled_decisions,
-        short_candidate=reconciled_short,
         section_plan=proposal.section_plan,
         chapters=reconciled_chapters,
         overall_confidence=proposal.overall_confidence,
-    )
-
-def reconcile_director_review_with_transcript(
-    review: DirectorReview,
-    proposal: EditorProposal,
-    transcript: Transcript,
-) -> DirectorReview:
-    """Ensure Maya's modified decisions have valid boundary references."""
-    if not transcript.words:
-        return review
-
-    max_word_idx = len(transcript.words) - 1
-    reconciled_decisions: list[DirectorDecision] = []
-
-    proposal_decision_map = {d.decision_id: d for d in proposal.decisions}
-
-    for d in review.decisions:
-        if d.verdict == DirectorVerdict.MODIFY and d.modified_transcript_start_word is not None:
-            mod_start = max(0, min(d.modified_transcript_start_word, max_word_idx))
-            mod_end = max(
-                mod_start,
-                min(
-                    d.modified_transcript_end_word
-                    if d.modified_transcript_end_word is not None
-                    else mod_start,
-                    max_word_idx,
-                ),
-            )
-            mod_start_ms = transcript.words[mod_start].start_ms
-            mod_end_ms = max(transcript.words[mod_end].end_ms, mod_start_ms + 10)
-
-            reconciled_decisions.append(
-                DirectorDecision(
-                    editor_decision_id=d.editor_decision_id,
-                    verdict=d.verdict,
-                    concise_reason=d.concise_reason,
-                    modified_action=d.modified_action,
-                    modified_transcript_start_word=mod_start,
-                    modified_transcript_end_word=mod_end,
-                    modified_source_start_ms=mod_start_ms,
-                    modified_source_end_ms=mod_end_ms,
-                )
-            )
-        else:
-            reconciled_decisions.append(d)
-
-    return DirectorReview(
-        production_id=review.production_id,
-        agent="maya",
-        model=review.model,
-        overall_assessment=review.overall_assessment,
-        decisions=reconciled_decisions,
-        editor_feedback=review.editor_feedback,
-        approved_for_edl=review.approved_for_edl,
-        confidence=review.confidence,
-    )
-
-
-def reconcile_render_review_with_transcript(
-    review: RenderReview,
-    transcript: Transcript,
-) -> RenderReview:
-    """Ensure Maya's post-render review issues have valid bounded timestamps and consistent verdict states."""
-    max_duration = transcript.duration_ms if transcript.duration_ms > 0 else 3600000
-    reconciled_issues: list[RenderReviewIssue] = []
-
-    for idx, issue in enumerate(review.issues):
-        start_ms = max(0, min(issue.source_start_ms, max_duration))
-        end_ms = max(start_ms, min(issue.source_end_ms, max_duration))
-        issue_id = issue.issue_id or f"issue_{idx + 1:02d}"
-        reconciled_issues.append(
-            RenderReviewIssue(
-                issue_id=issue_id,
-                issue_type=issue.issue_type,
-                source_start_ms=start_ms,
-                source_end_ms=end_ms,
-                related_decision_id=issue.related_decision_id,
-                severity=issue.severity,
-                message=issue.message,
-                suggested_action=issue.suggested_action,
-            )
-        )
-
-    is_approved = review.verdict == RenderReviewVerdict.APPROVE
-    final_issues = [] if is_approved else reconciled_issues
-
-    return RenderReview(
-        review_id=review.review_id,
-        production_id=review.production_id,
-        edl_id=review.edl_id,
-        preview_artifact_id=review.preview_artifact_id,
-        agent="maya",
-        model=review.model,
-        verdict=review.verdict,
-        summary=review.summary,
-        issues=final_issues,
-        approved_for_master=is_approved,
-        confidence=review.confidence,
-        created_at=review.created_at,
-    )
-
-
-def reconcile_packaging_proposal(
-    proposal: PackagingProposal,
-    master_duration_ms: int | None = None,
-    chapters: Sequence[ChapterMarker] | None = None,
-    edl_keep_segments: list[tuple[int, int]] | None = None,
-) -> PackagingProposal:
-    """Ensure packaging proposal adheres strictly to canonical timestamps, valid candidates, and bounds."""
-    candidates = list(proposal.title_candidates) if proposal.title_candidates else []
-    primary = proposal.primary_title.strip() if proposal.primary_title else ""
-    if not candidates and primary:
-        candidates = [
-            TitleCandidate(
-                text=primary,
-                angle=TitleAngle.DIRECT_VALUE,
-                why_it_works="Primary recommended title",
-                confidence=proposal.confidence or 0.9,
-            )
-        ]
-    elif candidates and not primary:
-        primary = candidates[0].text
-
-    if primary and not any(c.text.strip().lower() == primary.strip().lower() for c in candidates):
-        candidates.insert(
-            0,
-            TitleCandidate(
-                text=primary,
-                angle=TitleAngle.DIRECT_VALUE,
-                why_it_works="Primary recommended title",
-                confidence=proposal.confidence or 0.9,
-            ),
-        )
-    reconciled_chapters: list[PackagingChapter] = []
-    if chapters:
-        for idx, ch in enumerate(chapters):
-            if edl_keep_segments:
-                start = map_source_time_to_edited(ch.source_start_ms, edl_keep_segments)
-                end = map_source_time_to_edited(ch.source_end_ms, edl_keep_segments)
-            else:
-                start = ch.source_start_ms
-                end = ch.source_end_ms
-
-            if master_duration_ms and (end > master_duration_ms or start > master_duration_ms):
-                start = min(max(0, start), master_duration_ms)
-                end = min(max(start, end), master_duration_ms)
-            if idx == 0:
-                start = 0
-            formatted = "0:00" if start == 0 else format_ms_as_timestamp(start)
-            reconciled_chapters.append(
-                PackagingChapter(
-                    title=ch.title.strip(),
-                    start_ms=start,
-                    end_ms=end,
-                    formatted_time=formatted,
-                    summary=ch.summary,
-                )
-            )
-    elif proposal.chapters:
-        for idx, ch in enumerate(proposal.chapters):
-            start = max(0, ch.start_ms)
-            end = max(start, ch.end_ms)
-            if master_duration_ms:
-                start = min(start, master_duration_ms)
-                end = min(max(start, end), master_duration_ms)
-            if idx == 0:
-                start = 0
-            formatted = "0:00" if start == 0 else format_ms_as_timestamp(start)
-            reconciled_chapters.append(
-                PackagingChapter(
-                    title=ch.title.strip(),
-                    start_ms=start,
-                    end_ms=end,
-                    formatted_time=formatted,
-                    summary=ch.summary,
-                )
-            )
-    if reconciled_chapters and reconciled_chapters[0].start_ms > 0:
-        reconciled_chapters[0] = PackagingChapter(
-            title=reconciled_chapters[0].title,
-            start_ms=0,
-            end_ms=reconciled_chapters[0].end_ms,
-            formatted_time="0:00",
-            summary=reconciled_chapters[0].summary,
-        )
-    reconciled_thumbnails: list[ThumbnailConcept] = []
-    for idx, th in enumerate(proposal.thumbnail_concepts):
-        frame_ms = max(0, th.supporting_frame_ms)
-        if master_duration_ms and frame_ms > master_duration_ms:
-            frame_ms = max(0, min(frame_ms, master_duration_ms - 1000))
-        reconciled_thumbnails.append(
-            ThumbnailConcept(
-                concept_id=th.concept_id or f"th_{idx + 1:02d}",
-                headline=th.headline.strip(),
-                visual_subject=th.visual_subject.strip(),
-                composition=th.composition.strip(),
-                emotion=th.emotion.strip(),
-                supporting_frame_ms=frame_ms,
-                reason=th.reason.strip(),
-                confidence=th.confidence,
-                frame_verified=True,
-                frame_artifact_uri=th.frame_artifact_uri,
-            )
-        )
-
-    return PackagingProposal(
-        proposal_id=proposal.proposal_id,
-        production_id=proposal.production_id,
-        agent="nina",
-        model="gemini-3.7-flash",
-        primary_title=primary or "Technical Production Walkthrough",
-        title_candidates=candidates,
-        description=proposal.description,
-        chapters=reconciled_chapters,
-        keywords=proposal.keywords,
-        thumbnail_concepts=reconciled_thumbnails,
-        short_package=proposal.short_package,
-        packaging_summary=proposal.packaging_summary,
-        channel_evidence=proposal.channel_evidence or "No strong historical packaging signal; recommendation is based primarily on video content.",
-        confidence=proposal.confidence,
-        created_at=proposal.created_at,
-        master_artifact_id=proposal.master_artifact_id,
-        prompt_version=proposal.prompt_version,
     )
 
 
@@ -479,10 +213,6 @@ def reconcile_release_review(
         i.issue_type in {ReleaseIssueType.CHAPTER_MISMATCH, ReleaseIssueType.CHAPTER_TIMING}
         for i in reconciled_issues
     )
-    has_short_defect = any(
-        i.issue_type in {ReleaseIssueType.SHORT_QUALITY, ReleaseIssueType.SHORT_CAPTION_QUALITY, ReleaseIssueType.SHORT_CROP}
-        for i in reconciled_issues
-    )
     has_claims_defect = any(
         i.issue_type in {ReleaseIssueType.UNSUPPORTED_CLAIM, ReleaseIssueType.FACTUAL_INCONSISTENCY}
         for i in reconciled_issues
@@ -501,7 +231,6 @@ def reconcile_release_review(
         audio=not has_audio_defect,
         captions=not has_caption_defect,
         chapters=not has_chapter_defect,
-        short=not has_short_defect,
         packaging=not has_packaging_defect,
         claims=not has_claims_defect,
     )
@@ -539,7 +268,6 @@ def reconcile_release_review(
         confidence=review.confidence,
         created_at=review.created_at,
         master_artifact_id=review.master_artifact_id,
-        short_artifact_id=review.short_artifact_id,
         packaging_proposal_id=review.packaging_proposal_id,
         checklist=checklist,
         claim_verifications=review.claim_verifications,
@@ -568,41 +296,6 @@ class GenAIClient(ABC):
         pass
 
     @abstractmethod
-    async def generate_director_review(
-        self,
-        video_uri: str,
-        mime_type: str,
-        transcript: Transcript,
-        channel_profile: ChannelMemoryProfile | None,
-        lessons: list[ChannelLesson] | None,
-        proposal: EditorProposal,
-        production_id: str,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[DirectorReview, AgentUsageMetadata]:
-        """Invoke Maya (Director) to review Leo's editorial proposal."""
-        pass
-
-    @abstractmethod
-    async def generate_render_review(
-        self,
-        preview_video_uri: str,
-        preview_mime_type: str,
-        transcript: Transcript,
-        proposal: EditorProposal,
-        director_review: DirectorReview | None,
-        edl: EditDecisionList,
-        production_id: str,
-        preview_artifact_id: str,
-        channel_profile: ChannelMemoryProfile | None = None,
-        lessons: list[ChannelLesson] | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[RenderReview, AgentUsageMetadata]:
-        """Invoke Maya (Director) to review rendered preview video output."""
-        pass
-
-    @abstractmethod
     async def generate_editor_self_review(
         self,
         preview_video_uri: str,
@@ -620,22 +313,6 @@ class GenAIClient(ABC):
         """Invoke Leo (Video Editor) to perform multimodal self-review by watching the rendered preview MP4."""
         pass
 
-    @abstractmethod
-    async def generate_editor_correction(
-        self,
-        video_uri: str,
-        mime_type: str,
-        transcript: Transcript,
-        proposal: EditorProposal,
-        render_review: RenderReview,
-        production_id: str,
-        channel_profile: ChannelMemoryProfile | None = None,
-        lessons: list[ChannelLesson] | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[EditorProposal, AgentUsageMetadata]:
-        """Invoke Leo (Dialogue Editor) to perform a targeted correction pass based on Maya's post-render review."""
-        pass
 
     @abstractmethod
     async def generate_narration_rewrite(
@@ -669,10 +346,7 @@ class GenAIClient(ABC):
         production_id: str,
         proposal: PackagingProposal | None = None,
         publish_metadata: Any = None,
-        short_video_uri: str | None = None,
-        short_mime_type: str = "video/mp4",
         overrides: CreatorPackageOverrides | None = None,
-        render_review: RenderReview | None = None,
         channel_profile: ChannelMemoryProfile | None = None,
         lessons: list[ChannelLesson] | None = None,
         research_findings: Sequence[ResearchFinding] | None = None,
@@ -680,11 +354,10 @@ class GenAIClient(ABC):
         custom_prompt: str | None = None,
         prompt_version: int = 1,
         master_artifact_id: str | None = None,
-        short_artifact_id: str | None = None,
         master_duration_ms: int | None = None,
         request_id: str = "unknown",
     ) -> tuple[ReleaseReview, AgentUsageMetadata]:
-        """Invoke Iris (QA Agent) to evaluate Master, Short, Packaging, and Claims before release."""
+        """Invoke Iris, the sole QA gate, to inspect the current rendered main video."""
         pass
 
     @abstractmethod
@@ -856,252 +529,6 @@ class GoogleGenAIClient(GenAIClient):
             cause=last_error,
         )
 
-    async def generate_director_review(
-        self,
-        video_uri: str,
-        mime_type: str,
-        transcript: Transcript,
-        channel_profile: ChannelMemoryProfile | None,
-        lessons: list[ChannelLesson] | None,
-        proposal: EditorProposal,
-        production_id: str,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[DirectorReview, AgentUsageMetadata]:
-        from google.genai import types
-
-        client = self._get_client()
-        prompt = build_director_prompt(
-            transcript=transcript,
-            channel_profile=channel_profile,
-            lessons=lessons,
-            proposal=proposal,
-            production_id=production_id,
-        )
-
-        video_part = types.Part.from_uri(file_uri=video_uri, mime_type=mime_type)
-
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=DirectorReview,
-            temperature=0.2,
-            max_output_tokens=8192,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        )
-
-        log_ai_event(
-            event_type=EventType.AI_CALL_STARTED,
-            agent="maya",
-            model=self._model_id,
-            status="started",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-        )
-
-        start_time = time.perf_counter()
-        last_error: Exception | None = None
-
-        for attempt in range(2):
-            try:
-                response = await client.aio.models.generate_content(
-                    model=self._model_id,
-                    contents=[video_part, prompt],
-                    config=config,
-                )
-
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                input_tokens = 0
-                output_tokens = 0
-                if hasattr(response, "usage_metadata") and response.usage_metadata:
-                    input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
-                    output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
-
-                raw_review: DirectorReview
-                if hasattr(response, "parsed") and response.parsed is not None and isinstance(response.parsed, DirectorReview):
-                    raw_review = response.parsed
-                elif hasattr(response, "text") and response.text:
-                    raw_review = DirectorReview.model_validate_json(response.text)
-                else:
-                    raise GenAIError("Gemini response did not include parsed DirectorReview or text payload")
-
-                reconciled = reconcile_director_review_with_transcript(raw_review, proposal, transcript)
-
-                usage = AgentUsageMetadata(
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    latency_ms=latency_ms,
-                )
-
-                log_ai_event(
-                    event_type=EventType.AI_CALL_COMPLETED,
-                    agent="maya",
-                    model=self._model_id,
-                    status="success",
-                    production_id=production_id,
-                    run_id=run_id,
-                    request_id=request_id,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    latency_ms=latency_ms,
-                )
-
-                return reconciled, usage
-
-            except Exception as exc:
-                last_error = exc
-                logger.warning(
-                    "Maya director review generation attempt %d failed: %s",
-                    attempt + 1,
-                    str(exc),
-                )
-                if attempt == 0:
-                    time.sleep(1.0)
-
-        latency_ms = int((time.perf_counter() - start_time) * 1000)
-        log_ai_event(
-            event_type=EventType.AI_CALL_FAILED,
-            agent="maya",
-            model=self._model_id,
-            status="failed",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-            latency_ms=latency_ms,
-            error_code="DIRECTOR_MODEL_FAILURE",
-        )
-        raise GenAIError(
-            f"Maya director review generation failed after retry: {last_error}",
-            error_code="DIRECTOR_MODEL_FAILURE",
-            cause=last_error,
-        )
-
-    async def generate_render_review(
-        self,
-        preview_video_uri: str,
-        preview_mime_type: str,
-        transcript: Transcript,
-        proposal: EditorProposal,
-        director_review: DirectorReview | None,
-        edl: EditDecisionList,
-        production_id: str,
-        preview_artifact_id: str,
-        channel_profile: ChannelMemoryProfile | None = None,
-        lessons: list[ChannelLesson] | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[RenderReview, AgentUsageMetadata]:
-        from google.genai import types
-
-        client = self._get_client()
-        prompt = build_director_render_review_prompt(
-            transcript=transcript,
-            proposal=proposal,
-            director_review=director_review,
-            edl=edl,
-            production_id=production_id,
-            preview_artifact_id=preview_artifact_id,
-            channel_profile=channel_profile,
-            lessons=lessons,
-        )
-
-        video_part = types.Part.from_uri(file_uri=preview_video_uri, mime_type=preview_mime_type)
-
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=RenderReview,
-            temperature=0.2,
-            max_output_tokens=8192,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        )
-
-        log_ai_event(
-            event_type=EventType.DIRECTOR_RENDER_REVIEW_STARTED,
-            agent="maya",
-            model=self._model_id,
-            status="started",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-        )
-
-        start_time = time.perf_counter()
-        last_error: Exception | None = None
-
-        for attempt in range(2):
-            try:
-                response = await client.aio.models.generate_content(
-                    model=self._model_id,
-                    contents=[video_part, prompt],
-                    config=config,
-                )
-
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                input_tokens = 0
-                output_tokens = 0
-                if hasattr(response, "usage_metadata") and response.usage_metadata:
-                    input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
-                    output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
-
-                raw_review: RenderReview
-                if hasattr(response, "parsed") and response.parsed is not None and isinstance(response.parsed, RenderReview):
-                    raw_review = response.parsed
-                elif hasattr(response, "text") and response.text:
-                    raw_review = RenderReview.model_validate_json(response.text)
-                else:
-                    raise GenAIError("Gemini response did not include parsed RenderReview or text payload")
-
-                reconciled = reconcile_render_review_with_transcript(raw_review, transcript)
-
-                usage = AgentUsageMetadata(
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    latency_ms=latency_ms,
-                )
-
-                log_ai_event(
-                    event_type=EventType.DIRECTOR_RENDER_REVIEW_COMPLETED,
-                    agent="maya",
-                    model=self._model_id,
-                    status="success",
-                    production_id=production_id,
-                    run_id=run_id,
-                    request_id=request_id,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    latency_ms=latency_ms,
-                )
-
-                return reconciled, usage
-
-            except Exception as exc:
-                last_error = exc
-                logger.warning(
-                    "Maya director post-render review attempt %d failed: %s",
-                    attempt + 1,
-                    str(exc),
-                )
-                if attempt == 0:
-                    time.sleep(1.0)
-
-        latency_ms = int((time.perf_counter() - start_time) * 1000)
-        log_ai_event(
-            event_type=EventType.DIRECTOR_RENDER_REVIEW_FAILED,
-            agent="maya",
-            model=self._model_id,
-            status="failed",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-            latency_ms=latency_ms,
-            error_code="DIRECTOR_RENDER_REVIEW_FAILURE",
-        )
-        raise GenAIError(
-            f"Maya director post-render review generation failed after retry: {last_error}",
-            error_code="DIRECTOR_RENDER_REVIEW_FAILURE",
-            cause=last_error,
-        )
-
     async def generate_editor_self_review(
         self,
         preview_video_uri: str,
@@ -1224,128 +651,6 @@ class GoogleGenAIClient(GenAIClient):
             cause=last_error,
         )
 
-    async def generate_editor_correction(
-        self,
-        video_uri: str,
-        mime_type: str,
-        transcript: Transcript,
-        proposal: EditorProposal,
-        render_review: RenderReview,
-        production_id: str,
-        channel_profile: ChannelMemoryProfile | None = None,
-        lessons: list[ChannelLesson] | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[EditorProposal, AgentUsageMetadata]:
-        from google.genai import types
-
-        client = self._get_client()
-        prompt = build_editor_correction_prompt(
-            transcript=transcript,
-            proposal=proposal,
-            render_review=render_review,
-            production_id=production_id,
-            channel_profile=channel_profile,
-            lessons=lessons,
-        )
-
-        video_part = types.Part.from_uri(file_uri=video_uri, mime_type=mime_type)
-
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=EditorProposal,
-            temperature=0.2,
-            max_output_tokens=8192,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        )
-
-        log_ai_event(
-            event_type=EventType.EDITOR_CORRECTION_STARTED,
-            agent="leo",
-            model=self._model_id,
-            status="started",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-        )
-
-        start_time = time.perf_counter()
-        last_error: Exception | None = None
-
-        for attempt in range(2):
-            try:
-                response = await client.aio.models.generate_content(
-                    model=self._model_id,
-                    contents=[video_part, prompt],
-                    config=config,
-                )
-
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                input_tokens = 0
-                output_tokens = 0
-                if hasattr(response, "usage_metadata") and response.usage_metadata:
-                    input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
-                    output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
-
-                raw_proposal: EditorProposal
-                if hasattr(response, "parsed") and response.parsed is not None and isinstance(response.parsed, EditorProposal):
-                    raw_proposal = response.parsed
-                elif hasattr(response, "text") and response.text:
-                    raw_proposal = EditorProposal.model_validate_json(response.text)
-                else:
-                    raise GenAIError("Gemini response did not include parsed EditorProposal or text payload")
-
-                reconciled = reconcile_editor_proposal_with_transcript(raw_proposal, transcript)
-
-                usage = AgentUsageMetadata(
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    latency_ms=latency_ms,
-                )
-
-                log_ai_event(
-                    event_type=EventType.EDITOR_CORRECTION_COMPLETED,
-                    agent="leo",
-                    model=self._model_id,
-                    status="success",
-                    production_id=production_id,
-                    run_id=run_id,
-                    request_id=request_id,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    latency_ms=latency_ms,
-                )
-
-                return reconciled, usage
-
-            except Exception as exc:
-                last_error = exc
-                logger.warning(
-                    "Leo dialogue editor correction attempt %d failed: %s",
-                    attempt + 1,
-                    str(exc),
-                )
-                if attempt == 0:
-                    time.sleep(1.0)
-
-        latency_ms = int((time.perf_counter() - start_time) * 1000)
-        log_ai_event(
-            event_type=EventType.EDITOR_CORRECTION_FAILED,
-            agent="leo",
-            model=self._model_id,
-            status="failed",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-            latency_ms=latency_ms,
-            error_code="EDITOR_CORRECTION_FAILURE",
-        )
-        raise GenAIError(
-            f"Leo dialogue editor correction failed after retry: {last_error}",
-            error_code="EDITOR_CORRECTION_FAILURE",
-            cause=last_error,
-        )
-
     async def generate_narration_rewrite(
         self,
         original_text: str,
@@ -1414,10 +719,7 @@ class GoogleGenAIClient(GenAIClient):
         production_id: str,
         proposal: PackagingProposal | None = None,
         publish_metadata: Any = None,
-        short_video_uri: str | None = None,
-        short_mime_type: str = "video/mp4",
         overrides: CreatorPackageOverrides | None = None,
-        render_review: RenderReview | None = None,
         channel_profile: ChannelMemoryProfile | None = None,
         lessons: list[ChannelLesson] | None = None,
         research_findings: Sequence[ResearchFinding] | None = None,
@@ -1425,7 +727,6 @@ class GoogleGenAIClient(GenAIClient):
         custom_prompt: str | None = None,
         prompt_version: int = 1,
         master_artifact_id: str | None = None,
-        short_artifact_id: str | None = None,
         master_duration_ms: int | None = None,
         request_id: str = "unknown",
     ) -> tuple[ReleaseReview, AgentUsageMetadata]:
@@ -1436,10 +737,8 @@ class GoogleGenAIClient(GenAIClient):
             transcript=transcript,
             master_artifact=None,
             proposal=proposal,
-            short_artifact=None,
             publish_metadata=publish_metadata,
             overrides=overrides,
-            render_review=render_review,
             channel_profile=channel_profile,
             lessons=lessons,
             research_findings=research_findings,
@@ -1448,13 +747,9 @@ class GoogleGenAIClient(GenAIClient):
             production_id=production_id,
         )
         contents: list[Any] = [
-            types.Part.from_uri(file_uri=master_video_uri, mime_type=master_mime_type)
+            types.Part.from_uri(file_uri=master_video_uri, mime_type=master_mime_type),
+            prompt,
         ]
-        if short_video_uri:
-            contents.append(
-                types.Part.from_uri(file_uri=short_video_uri, mime_type=short_mime_type)
-            )
-        contents.append(prompt)
 
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -1504,8 +799,7 @@ class GoogleGenAIClient(GenAIClient):
                     master_duration_ms=master_duration_ms,
                 )
                 reconciled.master_artifact_id = master_artifact_id
-                reconciled.short_artifact_id = short_artifact_id
-                reconciled.packaging_proposal_id = proposal.proposal_id
+                reconciled.packaging_proposal_id = proposal.proposal_id if proposal else None
 
                 usage = AgentUsageMetadata(
                     input_tokens=input_tokens,
@@ -1847,32 +1141,14 @@ class FakeGenAIClient(GenAIClient):
     def __init__(
         self,
         canned_proposal: EditorProposal | None = None,
-        canned_review: DirectorReview | None = None,
         canned_self_review: EditorSelfReview | None = None,
-        canned_render_review: RenderReview | None = None,
-        canned_render_reviews: list[RenderReview] | None = None,
-        canned_correction: EditorProposal | None = None,
-        canned_packaging_proposal: PackagingProposal | None = None,
         fail_on_editor: bool = False,
-        fail_on_director: bool = False,
         fail_on_self_review: bool = False,
-        fail_on_render_review: bool = False,
-        fail_on_correction: bool = False,
-        fail_on_packaging: bool = False,
     ) -> None:
         self._canned_proposal = canned_proposal
-        self._canned_review = canned_review
         self._canned_self_review = canned_self_review
-        self._canned_render_review = canned_render_review
-        self._canned_render_reviews = list(canned_render_reviews) if canned_render_reviews else []
-        self._canned_correction = canned_correction
-        self._canned_packaging_proposal = canned_packaging_proposal
         self._fail_on_editor = fail_on_editor
-        self._fail_on_director = fail_on_director
         self._fail_on_self_review = fail_on_self_review
-        self._fail_on_render_review = fail_on_render_review
-        self._fail_on_correction = fail_on_correction
-        self._fail_on_packaging = fail_on_packaging
         self.call_history: list[dict[str, Any]] = []
     async def generate_editor_proposal(
         self,
@@ -1939,18 +1215,6 @@ class FakeGenAIClient(GenAIClient):
                     )
                 )
 
-            short_candidate: ShortCandidate | None = None
-            if len(words) >= 6:
-                end_idx = min(len(words) - 1, 20)
-                short_candidate = ShortCandidate(
-                    start_ms=words[0].start_ms,
-                    end_ms=words[end_idx].end_ms,
-                    transcript_start_word=0,
-                    transcript_end_word=end_idx,
-                    hook_title="Core Demonstration Highlight",
-                    concise_reason="High punchiness with direct technical payoff",
-                    confidence=0.90,
-                )
 
             total_dur = transcript.duration_ms or (words[-1].end_ms if words else 0)
             default_chapters = [
@@ -1976,7 +1240,6 @@ class FakeGenAIClient(GenAIClient):
                 model="fake-gemini-3.7-flash",
                 summary=f"Multimodal video analysis and dialogue pass completed with {len(decisions)} proposed edits.",
                 decisions=decisions,
-                short_candidate=short_candidate,
                 chapters=default_chapters,
                 overall_confidence=0.93,
             )
@@ -1984,118 +1247,6 @@ class FakeGenAIClient(GenAIClient):
         usage = AgentUsageMetadata(input_tokens=420, output_tokens=180, latency_ms=45)
         return reconciled, usage
 
-    async def generate_director_review(
-        self,
-        video_uri: str,
-        mime_type: str,
-        transcript: Transcript,
-        channel_profile: ChannelMemoryProfile | None,
-        lessons: list[ChannelLesson] | None,
-        proposal: EditorProposal,
-        production_id: str,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[DirectorReview, AgentUsageMetadata]:
-        self.call_history.append(
-            {
-                "agent": "maya",
-                "production_id": production_id,
-                "video_uri": video_uri,
-                "run_id": run_id,
-            }
-        )
-        if self._fail_on_director:
-            raise GenAIError("Simulated Maya director model failure", error_code="SIMULATED_DIRECTOR_FAILURE")
-
-        if self._canned_review is not None:
-            review = self._canned_review
-        else:
-            director_decisions: list[DirectorDecision] = []
-            for d in proposal.decisions:
-                if d.decision_type == EditorDecisionType.KEEP_FOR_CLARITY:
-                    director_decisions.append(
-                        DirectorDecision(
-                            editor_decision_id=d.decision_id,
-                            verdict=DirectorVerdict.APPROVE,
-                            concise_reason="Approved. Preserving this technical explanation is critical for viewer retention.",
-                        )
-                    )
-                else:
-                    director_decisions.append(
-                        DirectorDecision(
-                            editor_decision_id=d.decision_id,
-                            verdict=DirectorVerdict.APPROVE,
-                            concise_reason="Approved. Clean cut that enhances pacing without loss of meaning.",
-                        )
-                    )
-
-            review = DirectorReview(
-                production_id=production_id,
-                agent="maya",
-                model="fake-gemini-3.7-flash",
-                overall_assessment=f"Reviewed {len(proposal.decisions)} edits. Pacing is improved and clarity preserved.",
-                decisions=director_decisions,
-                editor_feedback="Approved for Edit Decision List (EDL) assembly.",
-                approved_for_edl=True,
-                confidence=0.96,
-            )
-
-        reconciled = reconcile_director_review_with_transcript(review, proposal, transcript)
-        usage = AgentUsageMetadata(input_tokens=510, output_tokens=150, latency_ms=40)
-        return reconciled, usage
-
-    async def generate_render_review(
-        self,
-        preview_video_uri: str,
-        preview_mime_type: str,
-        transcript: Transcript,
-        proposal: EditorProposal,
-        director_review: DirectorReview | None,
-        edl: EditDecisionList,
-        production_id: str,
-        preview_artifact_id: str,
-        channel_profile: ChannelMemoryProfile | None = None,
-        lessons: list[ChannelLesson] | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[RenderReview, AgentUsageMetadata]:
-        self.call_history.append(
-            {
-                "agent": "maya_render_review",
-                "production_id": production_id,
-                "preview_video_uri": preview_video_uri,
-                "preview_artifact_id": preview_artifact_id,
-                "edl_id": edl.edl_id,
-                "run_id": run_id,
-            }
-        )
-        if self._fail_on_render_review:
-            raise GenAIError("Simulated Maya post-render review failure", error_code="SIMULATED_RENDER_REVIEW_FAILURE")
-
-        if self._canned_render_reviews:
-            review = self._canned_render_reviews.pop(0)
-        elif self._canned_render_review is not None:
-            review = self._canned_render_review
-            self._canned_render_review = None
-        else:
-            review = RenderReview(
-                review_id=f"rrv_{production_id[:8]}",
-                production_id=production_id,
-                edl_id=edl.edl_id,
-                preview_artifact_id=preview_artifact_id,
-                agent="maya",
-                model="fake-gemini-3.7-flash",
-                verdict=RenderReviewVerdict.APPROVE,
-                summary="Dialogue flows naturally and pacing is crisp. Edit approved for Master render.",
-                issues=[],
-                approved_for_master=True,
-                confidence=0.97,
-                created_at=datetime.now(timezone.utc),
-            )
-
-        reconciled = reconcile_render_review_with_transcript(review, transcript)
-        usage = AgentUsageMetadata(input_tokens=550, output_tokens=120, latency_ms=42)
-        return reconciled, usage
     async def generate_editor_self_review(
         self,
         preview_video_uri: str,
@@ -2140,11 +1291,9 @@ class FakeGenAIClient(GenAIClient):
                 visual_continuity_assessment="Visual continuity across screen demonstrations remains clear with no jarring jump cuts.",
                 audio_joins_assessment="Micro-crossfades produce seamless audio joins with zero audible phoneme clipping.",
                 coverage_needed=False,
-                short_assessment="Vertical Short excerpt maintains punchy pacing and strong visual hook.",
                 findings=[
                     "Pacing is crisp with dead air removed",
                     "Audio joins decode cleanly across all cut boundaries",
-                    "Short candidate hook is effective",
                 ],
                 confidence=0.96,
                 created_at=datetime.now(timezone.utc),
@@ -2153,71 +1302,6 @@ class FakeGenAIClient(GenAIClient):
         usage = AgentUsageMetadata(input_tokens=520, output_tokens=140, latency_ms=40)
         return self_review, usage
 
-
-    async def generate_editor_correction(
-        self,
-        video_uri: str,
-        mime_type: str,
-        transcript: Transcript,
-        proposal: EditorProposal,
-        render_review: RenderReview,
-        production_id: str,
-        channel_profile: ChannelMemoryProfile | None = None,
-        lessons: list[ChannelLesson] | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[EditorProposal, AgentUsageMetadata]:
-        self.call_history.append(
-            {
-                "agent": "leo_correction",
-                "production_id": production_id,
-                "video_uri": video_uri,
-                "render_review_id": render_review.review_id,
-                "run_id": run_id,
-            }
-        )
-        if self._fail_on_correction:
-            raise GenAIError("Simulated Leo correction failure", error_code="SIMULATED_CORRECTION_FAILURE")
-
-        if self._canned_correction is not None:
-            corrected_proposal = self._canned_correction
-        else:
-            # Adjust decisions based on render_review issues
-            revised_decisions: list[EditorDecision] = []
-            issue_decision_ids = {iss.related_decision_id for iss in render_review.issues if iss.related_decision_id}
-            for d in proposal.decisions:
-                if d.decision_id in issue_decision_ids:
-                    # Revise decision to keep for clarity or adjust bounds
-                    revised_decisions.append(
-                        EditorDecision(
-                            decision_id=d.decision_id,
-                            decision_type=EditorDecisionType.KEEP_FOR_CLARITY,
-                            transcript_start_word=d.transcript_start_word,
-                            transcript_end_word=d.transcript_end_word,
-                            source_start_ms=d.source_start_ms,
-                            source_end_ms=d.source_end_ms,
-                            original_text=d.original_text,
-                            action="keep",
-                            concise_reason="Restored take per Maya post-render review feedback",
-                            confidence=0.95,
-                        )
-                    )
-                else:
-                    revised_decisions.append(d)
-
-            corrected_proposal = EditorProposal(
-                production_id=production_id,
-                agent="leo",
-                model="fake-gemini-3.7-flash",
-                summary="Revised dialogue pass addressing Maya's post-render review feedback.",
-                decisions=revised_decisions,
-                short_candidate=proposal.short_candidate,
-                overall_confidence=0.94,
-            )
-
-        reconciled = reconcile_editor_proposal_with_transcript(corrected_proposal, transcript)
-        usage = AgentUsageMetadata(input_tokens=460, output_tokens=160, latency_ms=40)
-        return reconciled, usage
 
     async def generate_narration_rewrite(
         self,
@@ -2247,10 +1331,7 @@ class FakeGenAIClient(GenAIClient):
         production_id: str,
         proposal: PackagingProposal | None = None,
         publish_metadata: Any = None,
-        short_video_uri: str | None = None,
-        short_mime_type: str = "video/mp4",
         overrides: CreatorPackageOverrides | None = None,
-        render_review: RenderReview | None = None,
         channel_profile: ChannelMemoryProfile | None = None,
         lessons: list[ChannelLesson] | None = None,
         research_findings: Sequence[ResearchFinding] | None = None,
@@ -2258,7 +1339,6 @@ class FakeGenAIClient(GenAIClient):
         custom_prompt: str | None = None,
         prompt_version: int = 1,
         master_artifact_id: str | None = None,
-        short_artifact_id: str | None = None,
         master_duration_ms: int | None = None,
         request_id: str = "unknown",
     ) -> tuple[ReleaseReview, AgentUsageMetadata]:
@@ -2266,7 +1346,6 @@ class FakeGenAIClient(GenAIClient):
             "agent": "iris_qa",
             "production_id": production_id,
             "master_uri": master_video_uri,
-            "short_uri": short_video_uri,
         })
         desc = proposal.description if proposal else ""
         has_unsupported_upcoming_review = "upcoming full" in desc.lower() or "stay tuned for the upcoming" in desc.lower()
@@ -2326,7 +1405,6 @@ class FakeGenAIClient(GenAIClient):
             audio=True,
             captions=True,
             chapters=True,
-            short=True,
             packaging=len(issues) == 0,
             claims=len(issues) == 0,
         )
@@ -2355,7 +1433,6 @@ class FakeGenAIClient(GenAIClient):
             confidence=0.98 if approved else 0.95,
             created_at=datetime.now(timezone.utc),
             master_artifact_id=master_artifact_id,
-            short_artifact_id=short_artifact_id,
             packaging_proposal_id=proposal.proposal_id if proposal else None,
             checklist=checklist,
             claim_verifications=claim_verifs,

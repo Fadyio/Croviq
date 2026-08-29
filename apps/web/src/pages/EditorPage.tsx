@@ -29,9 +29,7 @@ import {
   deriveKeepSegments,
   type EditDecisionList,
   type EditorProposal,
-  type DirectorReview,
   type EditorDecision,
-  type DirectorDecision,
   type AgentActivity,
   type Transcript,
   type TimelineBlock,
@@ -91,21 +89,13 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [masterArtifact, setMasterArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
   >(null);
-  const [shortArtifact, setShortArtifact] = useState<
-    components["schemas"]["RenderArtifactResponse"] | null
-  >(null);
   const [studioVoiceArtifact, setStudioVoiceArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
   >(null);
-  const [renderReview, setRenderReview] = useState<components["schemas"]["RenderReview"] | null>(
-    null,
-  );
   const [renderSubStatus, setRenderSubStatus] = useState<string | null>(null);
-  const [isManualReviewRequired, setIsManualReviewRequired] = useState<boolean>(false);
 
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [proposal, setProposal] = useState<EditorProposal | null>(null);
-  const [review, setReview] = useState<DirectorReview | null>(null);
   const [activities, setActivities] = useState<AgentActivity[]>([]);
   const [brollArtifacts, setBrollArtifacts] = useState<BRollArtifact[]>([]);
   const [editorialRun, setEditorialRun] = useState<EditorialRunDetail["run"] | null>(null);
@@ -130,7 +120,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
   // Agent settings drawer state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsAgentId, setSettingsAgentId] = useState<"leo" | "maya">("leo");
+  const [settingsAgentId, setSettingsAgentId] = useState<"leo">("leo");
 
   const runPromiseRef = useRef<Promise<void> | null>(null);
   const processingProductionIdRef = useRef<string | null>(null);
@@ -148,7 +138,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       runResponse,
       edlResponse,
       rendersResponse,
-      reviewResponse,
       brollResponse,
     ] = await Promise.all([
       fetch(`/api/productions/${productionId}`, { headers }),
@@ -157,7 +146,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       fetch(`/api/productions/${productionId}/editorial-run`, { headers }),
       fetch(`/api/productions/${productionId}/edl`, { headers }),
       fetch(`/api/productions/${productionId}/renders`, { headers }).catch(() => null),
-      fetch(`/api/productions/${productionId}/render-reviews`, { headers }).catch(() => null),
       fetch(`/api/productions/${productionId}/broll`, { headers }).catch(() => null),
     ]);
 
@@ -172,7 +160,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       runPayload,
       edlPayload,
       rendersPayload,
-      reviewPayload,
       brollPayload,
     ] = await Promise.all([
       productionResponse.json() as Promise<Production>,
@@ -187,12 +174,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       readOptionalJson<EditDecisionList>(edlResponse, "EDL"),
       rendersResponse
         ? readOptionalJson<components["schemas"]["RenderListResponse"]>(rendersResponse, "Renders")
-        : Promise.resolve(null),
-      reviewResponse
-        ? readOptionalJson<components["schemas"]["RenderReviewDetailResponse"]>(
-            reviewResponse,
-            "Render review",
-          )
         : Promise.resolve(null),
       brollResponse
         ? readOptionalJson<components["schemas"]["BRollListResponse"]>(brollResponse, "BRoll")
@@ -209,11 +190,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         (render: components["schemas"]["RenderArtifactResponse"]) =>
           render.artifact_type === "MASTER",
       ) ?? null;
-    const short =
-      rendersPayload?.renders?.find(
-        (render: components["schemas"]["RenderArtifactResponse"]) =>
-          render.artifact_type === "SHORT",
-      ) ?? null;
     const svPreview =
       rendersPayload?.renders?.find(
         (render: components["schemas"]["RenderArtifactResponse"]) =>
@@ -229,17 +205,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
     setPreviewArtifact(preview);
     setMasterArtifact(master);
-    setShortArtifact(short);
     setStudioVoiceArtifact(svPreview);
 
     if (brollPayload?.artifacts) {
       setBrollArtifacts(brollPayload.artifacts);
     }
 
-    if (reviewPayload) {
-      setRenderReview(reviewPayload.review ?? null);
-      setIsManualReviewRequired(Boolean(reviewPayload.needs_manual_review));
-    }
     const actualEdl: EditDecisionList | null = (edlPayload as any)?.edl
       ? (edlPayload as any).edl
       : edlPayload;
@@ -253,7 +224,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
     if (runPayload) {
       setProposal(runPayload.proposal as EditorProposal | null);
-      setReview(runPayload.review as DirectorReview | null);
       setActivities(runPayload.activities as AgentActivity[]);
       setEditorialRun(runPayload.run ?? null);
     }
@@ -270,12 +240,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         renderCompletedAt: preview?.completed_at,
         renderStatus: preview?.status,
         renderDurationMs: preview?.duration_ms,
-        renderReview: reviewPayload?.review ?? null,
         masterArtifact: master,
         masterStatus: master?.status,
-        shortStatus: short?.status,
-        shortCompletedAt: short?.completed_at,
-        needsManualReview: Boolean(reviewPayload?.needs_manual_review),
       },
       runDetail: runPayload,
     };
@@ -306,9 +272,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               (productionRun.editorialRun.status === "analyzing" ||
                 productionRun.editorialRun.status === "reviewing")
             ) {
-              setActiveProcessingStage(
-                productionRun.editorialRun.status === "reviewing" ? "maya-review" : "leo-edit",
-              );
+              setActiveProcessingStage("leo-edit");
               await waitForRunUpdate();
               const refreshed = await loadPersistedData();
               productionRun = refreshed.productionRun;
@@ -328,27 +292,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                 headers,
               });
               if (!resTranscribe.ok) throw new Error("Transcription failed");
-            } else if (
-              missingStage === ("leo-edit" as ProcessingStage) ||
-              missingStage === ("maya-review" as ProcessingStage)
-            ) {
+            } else if (missingStage === "leo-edit") {
               setActiveProcessingStage("leo-edit");
-              const analyzePromise = fetch(`/api/productions/${productionId}/analyze`, {
+              const resAnalyze = await fetch(`/api/productions/${productionId}/analyze`, {
                 method: "POST",
                 headers,
               });
-              const pollInterval = window.setInterval(async () => {
-                try {
-                  const curr = await loadPersistedData();
-                  if (curr.productionRun.editorialRun?.status === "reviewing") {
-                    setActiveProcessingStage("maya-review");
-                  }
-                } catch {
-                  // Ignore poll error while in flight
-                }
-              }, 200);
-              const resAnalyze = await analyzePromise;
-              window.clearInterval(pollInterval);
               if (!resAnalyze.ok) throw new Error("Editorial analysis failed");
             } else if (missingStage === "edit-plan") {
               const resAssemble = await fetch(`/api/productions/${productionId}/edl`, {
@@ -363,13 +312,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                 headers,
               });
               if (!resRender.ok) throw new Error("Preview rendering failed");
-
-              setRenderSubStatus("Director reviewing preview…");
-              const revRes = await fetch(`/api/productions/${productionId}/review-preview`, {
-                method: "POST",
-                headers,
-              });
-              if (!revRes.ok) throw new Error("Director post-render review failed");
             }
             const updated = await loadPersistedData();
             productionRun = updated.productionRun;
@@ -445,7 +387,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     },
     [handleSeek],
   );
-  const handleOpenSettings = useCallback((agent: "leo" | "maya") => {
+  const handleOpenSettings = useCallback((agent: "leo") => {
     setSettingsAgentId(agent);
     setIsSettingsOpen(true);
   }, []);
@@ -462,11 +404,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         keepSegments: [[0, durationMs]] as Array<[number, number]>,
         audioRegions: [{ type: "speech" as const, startMs: 0, endMs: durationMs }],
         chapters: proposal?.chapters || [],
-        shortCandidate: proposal?.short_candidate,
       };
     }
-    return edlToTwickTimeline(edl, proposal, review, transcript);
-  }, [edl, durationMs, proposal, review, transcript]);
+    return edlToTwickTimeline(edl, proposal, transcript);
+  }, [edl, durationMs, proposal, transcript]);
   // Compute actual or estimated edited duration
   const derivedEditedDurationMs = useMemo(() => {
     if (
@@ -498,16 +439,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     );
   }, [selectedDecisionId, proposal]);
 
-  const selectedDirectorDecision = useMemo<DirectorDecision | null>(() => {
-    if (!selectedDecisionId || !review || !review.decisions) return null;
-    return (
-      (review.decisions as any).find(
-        (d: any) =>
-          d.editor_decision_id === selectedDecisionId || d.decision_id === selectedDecisionId,
-      ) || null
-    );
-  }, [selectedDecisionId, review]);
-
   const activeCoverage = useMemo<CoverageMarker | null>(() => {
     if (!edl?.coverage_markers) return null;
     return (
@@ -533,7 +464,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const processingFailureMessage: Record<ProcessingStage, string> = {
     transcript: "Transcription failed",
     "leo-edit": "Leo analysis failed",
-    "maya-review": "Director review failed",
     "edit-plan": "Edit plan failed",
     render: "Preview render failed",
   };
@@ -543,13 +473,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     if (activeProcessingStage) {
       if (activeProcessingStage === "transcript") return "Preparing transcript…";
       if (activeProcessingStage === "leo-edit") return "Leo is reviewing the footage…";
-      if (activeProcessingStage === "maya-review") return "Maya is reviewing Leo's edit…";
       if (activeProcessingStage === "edit-plan") return "Preparing edit plan…";
       if (activeProcessingStage === "render") return renderSubStatus || "Rendering preview video…";
       return "Croviq is editing your video…";
     }
     if (editorialRun?.status === "analyzing") return "Leo is reviewing the footage…";
-    if (editorialRun?.status === "reviewing") return "Maya is reviewing Leo's edit…";
+    if (editorialRun?.status === "reviewing") return "Leo is finalizing the edit proposal…";
     if (failedProcessingStage) return "Editing pass encountered an issue";
     if (previewArtifact?.status === "completed") {
       return "Production complete";
@@ -566,16 +495,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
   const activeAgent = useMemo(() => {
     if (activeProcessingStage === "leo-edit") return "leo";
-    if (activeProcessingStage === "maya-review") return "maya";
-    if (editorialRun?.status === "analyzing") return "leo";
-    if (editorialRun?.status === "reviewing") return "maya";
+    if (editorialRun?.status === "analyzing" || editorialRun?.status === "reviewing") return "leo";
     return null;
   }, [activeProcessingStage, editorialRun?.status]);
 
   const activeStatusMessage = useMemo(() => {
     if (activeProcessingStage) return compactStatus;
     if (editorialRun?.status === "analyzing") return "Leo is reviewing the footage…";
-    if (editorialRun?.status === "reviewing") return "Maya is reviewing Leo's edit…";
+    if (editorialRun?.status === "reviewing") return "Leo is finalizing the edit proposal…";
     return null;
   }, [activeProcessingStage, compactStatus, editorialRun?.status]);
   const videoFilename = production?.source_media?.original_filename || "Recording.mp4";
@@ -659,15 +586,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             onModeChange={setPreviewMode}
             activeCutCount={twickData.activeCutCount}
             hasStudioVoice={Boolean(studioVoicePreviewUrl)}
-            hasShort={Boolean(shortArtifact?.playback_url)}
           />
-          {Boolean(
-            masterArtifact?.playback_url ||
-            masterUrl ||
-            (renderReview?.approved_for_master && masterArtifact?.status === "completed") ||
-            renderedPreviewUrl ||
-            proposal,
-          ) && (
+          {Boolean(masterArtifact?.playback_url || masterUrl || renderedPreviewUrl || proposal) && (
             <button
               type="button"
               onClick={
@@ -704,43 +624,28 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           editedDurationMs={derivedEditedDurationMs}
           studioVoiceDurationMs={studioVoiceArtifact?.duration_ms}
           masterDurationMs={masterArtifact?.duration_ms}
-          shortDurationMs={
-            shortArtifact?.duration_ms ||
-            (proposal?.short_candidate
-              ? proposal.short_candidate.end_ms - proposal.short_candidate.start_ms
-              : null)
-          }
           hasRenderedPreview={Boolean(renderedPreviewUrl)}
           hasMaster={Boolean(masterArtifact?.playback_url || masterUrl)}
           hasStudioVoice={Boolean(studioVoicePreviewUrl)}
-          hasShort={Boolean(shortArtifact?.playback_url || proposal?.short_candidate)}
           brollAssets={brollBinItems}
           onSelectMode={setPreviewMode}
           onSeek={handleSeek}
           className="w-[230px] shrink-0"
         />
 
-        {/* Center Column: Video Canvas (Flexible width, contained video, centered 9:16 Short) */}
+        {/* Center Column: Video Canvas */}
         <div className="flex-1 min-h-0 min-w-0 flex flex-col bg-black overflow-hidden relative">
           <VideoStage
             playbackUrl={playbackUrl}
             renderedPreviewUrl={renderedPreviewUrl}
             studioVoicePreviewUrl={studioVoicePreviewUrl}
-            shortPlaybackUrl={shortArtifact?.playback_url}
             currentTimeMs={currentTimeMs}
             durationMs={durationMs}
             editedDurationMs={derivedEditedDurationMs}
             studioVoiceDurationMs={studioVoiceArtifact?.duration_ms}
-            shortDurationMs={
-              shortArtifact?.duration_ms ||
-              (proposal?.short_candidate
-                ? proposal.short_candidate.end_ms - proposal.short_candidate.start_ms
-                : null)
-            }
             isPlaying={isPlaying}
             previewMode={previewMode}
             edl={edl}
-            shortCandidate={proposal?.short_candidate}
             activeCoverage={activeCoverage}
             onPlayPause={handlePlayPause}
             onSeek={handleSeek}
@@ -761,15 +666,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               onOpenSettings={handleOpenSettings}
             />
 
-            {(failedProcessingStage ||
-              (editorialRun?.status === "failed" ? "maya-review" : null)) && (
+            {(failedProcessingStage || editorialRun?.status === "failed") && (
               <div
                 className="mt-2 flex items-center justify-between gap-3 rounded-md bg-danger/10 px-2.5 py-1.5 border border-danger/20"
                 role="alert"
               >
                 <span className="flex items-center gap-1.5 text-[11px] font-medium text-danger">
                   <AlertCircle className="size-3.5 shrink-0" />
-                  {processingFailureMessage[failedProcessingStage || "maya-review"]}
+                  {processingFailureMessage[failedProcessingStage || "leo-edit"]}
                 </span>
                 <button
                   type="button"
@@ -833,15 +737,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               <AgentActivityFeed
                 activities={activities}
                 decisions={proposal?.decisions ?? []}
-                review={review}
                 statusMessage={activeProcessingStage ? compactStatus : null}
-                activeAgent={
-                  activeProcessingStage === "leo-edit"
-                    ? "leo"
-                    : activeProcessingStage === "maya-review"
-                      ? "maya"
-                      : null
-                }
                 onSeek={handleSeek}
                 onSelectActivity={(activity) => {
                   const matching = proposal?.decisions?.find(
@@ -865,7 +761,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               <div className="p-3 h-full overflow-y-auto">
                 <DecisionInspector
                   decision={selectedDecision}
-                  directorDecision={selectedDirectorDecision}
                   selectedBlock={selectedBlock}
                   onClose={() => {
                     setSelectedDecisionId(null);
@@ -894,7 +789,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         />
       </div>
 
-      {/* Agent Settings Drawer (Leo / Maya) */}
+      {/* Agent Settings Drawer */}
       <AgentSettingsDrawer
         isOpen={isSettingsOpen}
         agentId={settingsAgentId}

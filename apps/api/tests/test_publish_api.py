@@ -64,7 +64,6 @@ from croviq_api.workspaces.repository import (
 from croviq_domain.packaging import (
     PackagingChapter,
     PackagingProposal,
-    ShortPackage,
     ThumbnailConcept,
     TitleAngle,
     TitleCandidate,
@@ -313,7 +312,6 @@ def passed_review(real_production: Production, real_master_artifact: RenderArtif
             audio=True,
             captions=True,
             chapters=True,
-            short=True,
             packaging=True,
             claims=True,
         ),

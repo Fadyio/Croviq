@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 from croviq_api.config import get_settings
-from croviq_domain.packaging import CreatorPackageOverrides, PackagingChapter, PackagingProposal, ShortPackage, ThumbnailConcept, TitleAngle, TitleCandidate
+from croviq_domain.packaging import CreatorPackageOverrides, PackagingChapter, PackagingProposal, ThumbnailConcept, TitleAngle, TitleCandidate
 from croviq_observability import log_firestore_event
 
 

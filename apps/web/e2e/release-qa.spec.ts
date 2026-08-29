@@ -537,7 +537,7 @@ test.describe("Iris QA Agent & Release Gate Workflow", () => {
 
     // Verify Drawer opens with Iris details
     await expect(page.getByRole("heading", { name: "Iris's Settings" })).toBeVisible();
-    await expect(page.getByText("Quality Control · Croviq Core Agent")).toBeVisible();
+    await expect(page.getByText(/Quality (Assurance|Control) · Croviq Core Agent/)).toBeVisible();
     await expect(page.getByTestId("tab-prompt")).toBeVisible();
     await expect(page.getByTestId("tab-memory")).toBeVisible();
     await expect(page.getByTestId("tab-voice")).not.toBeVisible();

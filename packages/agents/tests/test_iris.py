@@ -7,24 +7,8 @@ from croviq_agents.client import FakeGenAIClient
 from croviq_agents.iris import IrisQAAgent
 from croviq_agents.prompts import DEFAULT_IRIS_PROMPT, build_release_qa_prompt
 from croviq_agents.tools import build_default_iris_tool_registry
-from croviq_domain.agent_config import AgentId
-from croviq_domain.channel_intelligence import ResearchFinding
-from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile
-from croviq_domain.packaging import (
-    PackagingChapter,
-    PackagingProposal,
-    ShortPackage,
-    ThumbnailConcept,
-    TitleAngle,
-    TitleCandidate,
-)
-from croviq_domain.release_review import (
-    ClaimSupportStatus,
-    ReleaseIssueSeverity,
-    ReleaseIssueType,
-    ReleaseVerdict,
-)
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
+from croviq_domain.release_review import ReleaseVerdict
 from croviq_domain.transcript import Transcript, TranscriptWord
 
 
@@ -68,136 +52,29 @@ def sample_master_artifact() -> RenderArtifact:
     )
 
 
-@pytest.fixture
-def sample_short_artifact() -> RenderArtifact:
-    return RenderArtifact(
-        artifact_id="art_short_01",
-        production_id="prod_0b7657f515ae",
-        edl_id="edl_01",
-        artifact_type=ArtifactType.SHORT,
-        status=ArtifactStatus.completed,
-        gcs_bucket="croviq-media-raw",
-        gcs_object="workspaces/ws_01/productions/prod_0b7657f515ae/renders/short.mp4",
-        duration_ms=39800,
-        created_at=datetime.now(timezone.utc),
-    )
-
-
-@pytest.fixture
-def sample_packaging_proposal_with_unsupported_claim() -> PackagingProposal:
-    now = datetime.now(timezone.utc)
-    return PackagingProposal(
-        proposal_id="pkg_fairphone6p_001",
-        production_id="prod_0b7657f515ae",
-        agent="nina",
-        model="gemini-3.7-flash",
-        primary_title="Fairphone 6 Plus: The Modular Smartphone That Actually Makes Sense",
-        title_candidates=[
-            TitleCandidate(
-                text="Fairphone 6 Plus: The Modular Smartphone That Actually Makes Sense",
-                angle=TitleAngle.PROBLEM_SOLUTION,
-                why_it_works="Highlights modularity and practical repair.",
-                confidence=0.96,
-            )
-        ],
-        description=(
-            "Here is our hands-on look at the Fairphone 6 Plus! Featuring upgraded Snapdragon internals, "
-            "12GB RAM, microSD card expansion, swappable modular backplates, and up to 12 user-replaceable parts.\n\n"
-            "Stay tuned for the upcoming full Fairphone 6+ review!\n\n"
-            "0:00 Introduction & Unboxing\n0:18 Modular Accessories"
-        ),
-        chapters=[
-            PackagingChapter(start_ms=0, end_ms=18000, formatted_time="0:00", title="Introduction & Unboxing"),
-            PackagingChapter(start_ms=18000, end_ms=51000, formatted_time="0:18", title="Modular Accessories & Swapping Backplates"),
-            PackagingChapter(start_ms=51000, end_ms=113824, formatted_time="0:51", title="Repairability & 12 Replaceable Parts"),
-        ],
-        keywords=["fairphone", "repairability", "modular tech", "hardware teardown"],
-        thumbnail_concepts=[
-            ThumbnailConcept(
-                concept_id="th_01",
-                headline="MODULAR PHONE!",
-                visual_subject="Fairphone 6 Plus cobalt blue backplate being removed",
-                composition="Close up hands holding screwdriver loosening Fairphone module",
-                emotion="Curiosity",
-                supporting_frame_ms=28000,
-                reason="Shows modular repairability clearly",
-                confidence=0.96,
-                frame_verified=True,
-            )
-        ],
-        short_package=ShortPackage(
-            title="A Modern Smartphone You Can Actually Repair! 📱 #Shorts",
-            description="The Fairphone 6 Plus lets you replace up to 12 parts yourself. #fairphone #tech #shorts",
-            hook="You can actually repair this smartphone yourself!",
-            hashtags=["#fairphone", "#tech", "#shorts"],
-        ),
-        packaging_summary="Modular phone teardown and repairability overview.",
-        channel_evidence="Channel baseline supports technical hardware teardowns.",
-        confidence=0.95,
-        created_at=now,
-        master_artifact_id="art_mast_01",
-    )
 
 
 def test_build_release_qa_prompt(
     sample_transcript,
     sample_master_artifact,
-    sample_short_artifact,
-    sample_packaging_proposal_with_unsupported_claim,
 ):
     prompt = build_release_qa_prompt(
         transcript=sample_transcript,
         master_artifact=sample_master_artifact,
-        short_artifact=sample_short_artifact,
-        proposal=sample_packaging_proposal_with_unsupported_claim,
         production_id="prod_0b7657f515ae",
     )
 
-    assert "IRIS — QUALITY CONTROL & RELEASE VERIFICATION" in prompt
-    assert "Fairphone 6 Plus" in prompt
-    assert "CLAIM AUDIT" in prompt
-
-@pytest.mark.asyncio
-async def test_iris_flags_unsupported_upcoming_review_claim(
-    sample_transcript,
-    sample_master_artifact,
-    sample_short_artifact,
-    sample_packaging_proposal_with_unsupported_claim,
-):
-    fake_client = FakeGenAIClient()
-    iris = IrisQAAgent(genai_client=fake_client, model_id="gemini-3.7-flash")
-
-    review, usage = await iris.review_production(
-        production_id="prod_0b7657f515ae",
-        master_artifact=sample_master_artifact,
-        short_artifact=sample_short_artifact,
-        transcript=sample_transcript,
-        proposal=sample_packaging_proposal_with_unsupported_claim,
-        request_id="test_qa_01",
-    )
-
-    assert review.agent == "iris"
-    assert review.verdict == ReleaseVerdict.FIX_REQUIRED
-    assert review.approved_for_release is False
-    assert len(review.issues) >= 1
-    assert any(
-        "upcoming full" in issue.message.lower() or "upcoming full" in issue.evidence.lower()
-        for issue in review.issues
-    )
-    assert any(
-        issue.issue_type == ReleaseIssueType.UNSUPPORTED_CLAIM
-        for issue in review.issues
-    )
-    # Check claim audit
-    claim_statuses = {c.claim_text: c.status for c in review.claim_verifications}
-    assert any("upcoming full" in k.lower() for k in claim_statuses)
-
+    assert "IRIS — EDITED VIDEO QUALITY GATE" in prompt
+    assert "Is this edited video ready?" in prompt
+    assert "CURRENT RENDERED MAIN VIDEO" in prompt
+    assert "NARRATIVE PACING" in prompt
+    assert "CAPTION TIMING" in prompt
+    assert "Short" not in prompt
 
 @pytest.mark.asyncio
 async def test_iris_pass_on_clean_production(
     sample_transcript,
     sample_master_artifact,
-    sample_short_artifact,
 ):
     fake_client = FakeGenAIClient()
     iris = IrisQAAgent(genai_client=fake_client, model_id="gemini-3.7-flash")
@@ -205,7 +82,6 @@ async def test_iris_pass_on_clean_production(
     review, _ = await iris.review_production(
         production_id="prod_0b7657f515ae",
         master_artifact=sample_master_artifact,
-        short_artifact=sample_short_artifact,
         transcript=sample_transcript,
         request_id="test_qa_clean",
     )
@@ -220,14 +96,11 @@ async def test_iris_pass_on_clean_production(
 def test_iris_tool_registry(
     sample_transcript,
     sample_master_artifact,
-    sample_short_artifact,
-    sample_packaging_proposal_with_unsupported_claim,
 ):
     registry = build_default_iris_tool_registry(
         master_artifact=sample_master_artifact,
-        short_artifact=sample_short_artifact,
         transcript=sample_transcript,
-        proposal=sample_packaging_proposal_with_unsupported_claim,
+        proposal=None,
     )
     assert registry.has_tool("inspect_media")
     assert registry.has_tool("probe_media")
@@ -240,14 +113,3 @@ def test_iris_tool_registry(
     assert registry.has_tool("inspect_packaging")
     assert registry.has_tool("verify_claim")
     assert registry.has_tool("compare_timeline")
-    assert registry.has_tool("inspect_short")
-    # Execute verify_claim tool on unsupported claim
-    res = registry.execute(
-        "verify_claim",
-        {
-            "claim_text": "Stay tuned for the upcoming full Fairphone 6+ review!",
-            "location": "description",
-        },
-    )
-    assert res.status == "success"
-    assert res.output["status"] == "UNSUPPORTED"

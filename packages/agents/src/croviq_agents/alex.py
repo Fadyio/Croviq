@@ -1045,7 +1045,7 @@ class AlexDataScientist:
                     lesson_id=f"lsn_{finding_or_analysis.topic_fingerprint[:12]}",
                     channel_id=channel_id,
                     directive=f"Highlight concrete capabilities from {finding_or_analysis.title} in the opening 30 seconds.",
-                    target_agent=TargetAgent.DIRECTOR,
+                    target_agent=TargetAgent.LEO,
                     evidence_summary=finding_or_analysis.why_it_matters,
                     confidence=finding_or_analysis.opportunity_score,
                     status="active",

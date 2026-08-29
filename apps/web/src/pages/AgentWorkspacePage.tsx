@@ -16,11 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
-import {
-  AGENT_IDENTITIES,
-  AgentTeamSelector,
-  type AgentId,
-} from "../components/AgentTeamSelector";
+import { AGENT_IDENTITIES, AgentTeamSelector, type AgentId } from "../components/AgentTeamSelector";
 import { CroviqLogo } from "../components/CroviqLogo";
 
 interface AgentWorkspacePageProps {
@@ -53,7 +49,6 @@ const STARTER_PROMPTS: Record<AgentId, string[]> = {
   leo: [
     "Where is the strongest hook in this footage?",
     "Can you make this dialogue tighter?",
-    "Can you find a vertical Short candidate?",
     "Why did you flag the cut at 00:42?",
   ],
   iris: [
@@ -64,10 +59,7 @@ const STARTER_PROMPTS: Record<AgentId, string[]> = {
   ],
 };
 
-export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({
-  agentId,
-  onNavigate,
-}) => {
+export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({ agentId, onNavigate }) => {
   const { firebaseUser } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -197,10 +189,16 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({
               />
               <div>
                 <h1 className="text-lg font-bold tracking-tight text-text-primary">{agent.name}</h1>
-                <p className="text-xs text-text-muted">{agent.role} · Autonomous Production Partner</p>
+                <p className="text-xs text-text-muted">
+                  {agent.role} · Autonomous Production Partner
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-1" role="tablist" aria-label={`${agent.name} workspace`}>
+            <div
+              className="flex items-center gap-1"
+              role="tablist"
+              aria-label={`${agent.name} workspace`}
+            >
               <button
                 type="button"
                 role="tab"
@@ -237,12 +235,14 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({
                   alt=""
                   className="h-16 w-16 rounded-full object-cover ring-2 ring-primary/30 mb-4"
                 />
-                <h2 className="text-base font-semibold text-text-primary">Chat with {agent.name}</h2>
+                <h2 className="text-base font-semibold text-text-primary">
+                  Chat with {agent.name}
+                </h2>
                 <p className="mt-1 text-xs text-text-secondary max-w-md">
                   {agentId === "alex"
                     ? "Alex analyzes your channel dataset, runs statistical Python calculations, and evaluates scenario projections."
                     : agentId === "leo"
-                      ? "Leo inspects your footage timeline, identifies filler words, and extracts punchy vertical Shorts."
+                      ? "Leo inspects your footage timeline, identifies filler words, and builds a precise edit proposal."
                       : "Iris audits caption alignment, audio loudness standards, and release gatekeeper verification."}
                 </p>
 
@@ -297,7 +297,9 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({
                             className="flex items-center gap-2 rounded-md bg-surface-3/60 px-2.5 py-1 text-[10px] font-mono text-text-muted border border-border-subtle/50"
                           >
                             <Wrench className="h-3 w-3 text-primary shrink-0" />
-                            <span className="font-semibold text-text-secondary">{tool.tool_name}</span>
+                            <span className="font-semibold text-text-secondary">
+                              {tool.tool_name}
+                            </span>
                             {tool.goal && <span className="truncate">· {tool.goal}</span>}
                           </div>
                         ))}
@@ -309,7 +311,10 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({
                       <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs space-y-1.5 pl-3">
                         <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
                           <LineChart className="h-3 w-3" />
-                          <span>Analytical Artifact: {String(msg.structured_artifact.type || "Analysis")}</span>
+                          <span>
+                            Analytical Artifact:{" "}
+                            {String(msg.structured_artifact.type || "Analysis")}
+                          </span>
                         </div>
                         {msg.structured_artifact.metrics &&
                         typeof msg.structured_artifact.metrics === "object" &&
@@ -318,7 +323,10 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({
                             {Object.entries(
                               msg.structured_artifact.metrics as Record<string, unknown>,
                             ).map(([key, val]) => (
-                              <div key={key} className="rounded bg-surface-1 p-1.5 border border-border-subtle">
+                              <div
+                                key={key}
+                                className="rounded bg-surface-1 p-1.5 border border-border-subtle"
+                              >
                                 <span className="block text-[9px] text-text-muted uppercase tracking-wider">
                                   {key.replace(/_/g, " ")}
                                 </span>

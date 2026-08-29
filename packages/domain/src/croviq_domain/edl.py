@@ -93,7 +93,7 @@ class CutInstruction(BaseModel):
         ...,
         min_length=1,
         max_length=64,
-        description="Originating Editor/Director decision identifier",
+        description="Originating Editor decision identifier",
     )
     decision_type: EditorDecisionType = Field(
         ...,
@@ -223,11 +223,6 @@ class EditDecisionList(BaseModel):
         default=None,
         max_length=64,
         description="Reference to the originating EditorProposal",
-    )
-    director_review_id: str | None = Field(
-        default=None,
-        max_length=64,
-        description="Reference to the originating DirectorReview",
     )
     version: int = Field(
         default=1,

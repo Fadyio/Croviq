@@ -4,27 +4,9 @@ import pytest
 from croviq_agents.client import (
     FakeGenAIClient,
     GenAIError,
-    reconcile_director_review_with_transcript,
     reconcile_editor_proposal_with_transcript,
-    reconcile_render_review_with_transcript,
 )
-from croviq_domain.edl import EditDecisionList
-from croviq_domain.render_review import (
-    RenderReview,
-    RenderReviewIssue,
-    RenderReviewIssueType,
-    RenderReviewSeverity,
-    RenderReviewVerdict,
-)
-from croviq_domain.editorial import (
-    DirectorDecision,
-    DirectorReview,
-    DirectorVerdict,
-    EditorDecision,
-    EditorDecisionType,
-    EditorProposal,
-    ShortCandidate,
-)
+from croviq_domain.editorial import EditorDecision, EditorDecisionType, EditorProposal
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
 
 
@@ -78,15 +60,6 @@ def test_reconcile_editor_proposal_with_transcript_anchors_timestamps_and_text()
                 confidence=0.9,
             )
         ],
-        short_candidate=ShortCandidate(
-            start_ms=0,
-            end_ms=1200,
-            transcript_start_word=0,
-            transcript_end_word=3,
-            hook_title="Test Hook",
-            concise_reason="Good hook",
-            confidence=0.85,
-        ),
         overall_confidence=0.9,
     )
 
@@ -97,6 +70,7 @@ def test_reconcile_editor_proposal_with_transcript_anchors_timestamps_and_text()
     assert d.source_start_ms == 310
     assert d.source_end_ms == 900
     assert d.original_text == "second third"
+    assert "short_candidate" not in reconciled.model_dump()
 
 
 def test_reconcile_editor_proposal_clamps_out_of_bounds_words() -> None:
@@ -144,22 +118,12 @@ async def test_fake_genai_client_deterministic_flow() -> None:
     )
     assert proposal.production_id == "prod_123"
     assert proposal.agent == "leo"
+    assert "short_candidate" not in proposal.model_dump()
     assert usage.input_tokens > 0
     assert usage.output_tokens > 0
-
-    review, rev_usage = await client.generate_director_review(
-        video_uri="gs://bucket/video.mp4",
-        mime_type="video/mp4",
-        transcript=tr,
-        channel_profile=None,
-        lessons=None,
-        proposal=proposal,
-        production_id="prod_123",
-    )
-    assert review.production_id == "prod_123"
-    assert review.agent == "maya"
-    assert review.approved_for_edl is True
-
+    assert not hasattr(client, "generate_director_review")
+    assert not hasattr(client, "generate_render_review")
+    assert not hasattr(client, "generate_editor_correction")
 
 @pytest.mark.asyncio
 async def test_fake_genai_client_handles_failures() -> None:
@@ -176,127 +140,3 @@ async def test_fake_genai_client_handles_failures() -> None:
         )
 
 
-def test_reconcile_render_review_clamps_and_normalizes() -> None:
-    tr = _sample_transcript()
-    raw_review = RenderReview(
-        review_id="rrv_test",
-        production_id="prod_test",
-        edl_id="edl_test",
-        preview_artifact_id="art_prev_1",
-        agent="maya",
-        model="gemini-3.7-flash",
-        verdict=RenderReviewVerdict.CORRECT,
-        summary="Identified audio join issue",
-        issues=[
-            RenderReviewIssue(
-                issue_id="issue_01",
-                issue_type=RenderReviewIssueType.UNNATURAL_AUDIO_JOIN,
-                source_start_ms=100,
-                source_end_ms=400,
-                severity=RenderReviewSeverity.HIGH,
-                message="Audio join clipped",
-                suggested_action="Restore context",
-            )
-        ],
-        approved_for_master=True,  # Inconsistent with CORRECT, reconcile should fix
-        confidence=0.88,
-        created_at=datetime.now(timezone.utc),
-    )
-    reconciled = reconcile_render_review_with_transcript(raw_review, tr)
-    assert reconciled.verdict == RenderReviewVerdict.CORRECT
-    assert reconciled.approved_for_master is False
-    assert len(reconciled.issues) == 1
-
-
-@pytest.mark.asyncio
-async def test_fake_genai_client_render_review_and_correction() -> None:
-    client = FakeGenAIClient()
-    tr = _sample_transcript()
-    proposal, _ = await client.generate_editor_proposal(
-        video_uri="gs://test/raw.mp4",
-        mime_type="video/mp4",
-        transcript=tr,
-        channel_profile=None,
-        lessons=None,
-        production_id="prod_test",
-    )
-    review, _ = await client.generate_director_review(
-        video_uri="gs://test/raw.mp4",
-        mime_type="video/mp4",
-        transcript=tr,
-        channel_profile=None,
-        lessons=None,
-        proposal=proposal,
-        production_id="prod_test",
-    )
-    edl = EditDecisionList(
-        edl_id="edl_test",
-        production_id="prod_test",
-        source_duration_ms=tr.duration_ms,
-        cuts=[],
-        coverage_markers=[],
-        created_at=datetime.now(timezone.utc),
-    )
-
-    render_review, usage = await client.generate_render_review(
-        preview_video_uri="gs://test/preview.mp4",
-        preview_mime_type="video/mp4",
-        transcript=tr,
-        proposal=proposal,
-        director_review=review,
-        edl=edl,
-        production_id="prod_test",
-        preview_artifact_id="art_prev_1",
-    )
-    assert render_review.verdict == RenderReviewVerdict.APPROVE
-    assert render_review.approved_for_master is True
-    assert usage.latency_ms > 0
-
-    # Test correction path
-    canned_correct_review = RenderReview(
-        review_id="rrv_correct",
-        production_id="prod_test",
-        edl_id="edl_test",
-        preview_artifact_id="art_prev_1",
-        agent="maya",
-        model="gemini-3.7-flash",
-        verdict=RenderReviewVerdict.CORRECT,
-        summary="One cut was too aggressive",
-        issues=[
-            RenderReviewIssue(
-                issue_id="iss_01",
-                issue_type=RenderReviewIssueType.OVER_AGGRESSIVE_CUT,
-                source_start_ms=200,
-                source_end_ms=400,
-                severity=RenderReviewSeverity.MEDIUM,
-                message="Context lost",
-                suggested_action="Restore take",
-            )
-        ],
-        approved_for_master=False,
-        confidence=0.9,
-        created_at=datetime.now(timezone.utc),
-    )
-    correct_client = FakeGenAIClient(canned_render_review=canned_correct_review)
-    correct_review, _ = await correct_client.generate_render_review(
-        preview_video_uri="gs://test/preview.mp4",
-        preview_mime_type="video/mp4",
-        transcript=tr,
-        proposal=proposal,
-        director_review=review,
-        edl=edl,
-        production_id="prod_test",
-        preview_artifact_id="art_prev_1",
-    )
-    assert correct_review.verdict == RenderReviewVerdict.CORRECT
-
-    revised_proposal, _ = await correct_client.generate_editor_correction(
-        video_uri="gs://test/raw.mp4",
-        mime_type="video/mp4",
-        transcript=tr,
-        proposal=proposal,
-        render_review=correct_review,
-        production_id="prod_test",
-    )
-    assert revised_proposal.production_id == "prod_test"
-    assert len(revised_proposal.decisions) >= 1

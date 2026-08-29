@@ -161,46 +161,6 @@ class DeterministicMediaQAService:
             issues=issues,
         )
 
-    def validate_short_metadata(
-        self,
-        metadata: MediaMetadata,
-    ) -> MediaQAResult:
-        """Validate vertical Short dimensions (9:16) and duration (20-60s)."""
-        issues: list[ReleaseIssue] = []
-
-        # Check aspect ratio 9:16 (height > width, width/height ~ 0.5625)
-        if metadata.height <= metadata.width:
-            issues.append(
-                ReleaseIssue(
-                    issue_id="iss_short_aspect",
-                    issue_type=ReleaseIssueType.SHORT_CROP,
-                    severity=ReleaseIssueSeverity.HIGH,
-                    artifact_type="short",
-                    message=f"Short is not formatted as vertical 9:16 video ({metadata.width}x{metadata.height}).",
-                    suggested_action="Re-render Short in vertical 9:16 format (e.g. 1080x1920).",
-                    evidence=f"Dimensions: {metadata.width}x{metadata.height} (Aspect ratio {metadata.width / max(metadata.height, 1):.2f})",
-                )
-            )
-
-        # Check duration (20s to 60s for YouTube Shorts standard)
-        if metadata.duration_ms > 60000 or metadata.duration_ms < 15000:
-            issues.append(
-                ReleaseIssue(
-                    issue_id="iss_short_dur",
-                    issue_type=ReleaseIssueType.SHORT_QUALITY,
-                    severity=ReleaseIssueSeverity.HIGH,
-                    artifact_type="short",
-                    message=f"Short duration ({(metadata.duration_ms / 1000.0):.1f}s) is outside optimal 15-60s range.",
-                    suggested_action="Trim Short candidate to between 20s and 60s.",
-                    evidence=f"Short duration: {metadata.duration_ms}ms",
-                )
-            )
-
-        return MediaQAResult(
-            is_valid=len(issues) == 0,
-            metadata=metadata,
-            issues=issues,
-        )
 
     def validate_audio_loudness(
         self,

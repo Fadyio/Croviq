@@ -82,44 +82,6 @@ def test_validate_captions_out_of_bounds():
     assert any(i.issue_type == ReleaseIssueType.CAPTION_TIMING for i in result.issues)
 
 
-def test_validate_short_media_metadata_valid():
-    short_meta = MediaMetadata(
-        duration_ms=45000,
-        width=1080,
-        height=1920,
-        frame_rate=30.0,
-        video_codec="h264",
-        audio_codec="aac",
-        audio_sample_rate=48000,
-        audio_channels=2,
-        size_bytes=5_000_000,
-    )
-    service = DeterministicMediaQAService()
-    result = service.validate_short_metadata(short_meta)
-
-    assert result.is_valid is True
-    assert len(result.issues) == 0
-
-
-def test_validate_short_media_metadata_invalid_aspect_and_duration():
-    short_meta = MediaMetadata(
-        duration_ms=95000,  # Too long (>60s)
-        width=1920,         # Landscape, not 9:16
-        height=1080,
-        frame_rate=30.0,
-        video_codec="h264",
-        audio_codec="aac",
-        audio_sample_rate=48000,
-        audio_channels=2,
-        size_bytes=10_000_000,
-    )
-    service = DeterministicMediaQAService()
-    result = service.validate_short_metadata(short_meta)
-
-    assert result.is_valid is False
-    assert any(i.issue_type == ReleaseIssueType.SHORT_CROP for i in result.issues)
-    assert any(i.issue_type == ReleaseIssueType.SHORT_QUALITY for i in result.issues)
-
 
 def test_validate_audio_levels():
     service = DeterministicMediaQAService()

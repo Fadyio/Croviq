@@ -363,26 +363,6 @@ class YouTubePublishJob(BaseModel):
         default=False,
         description="True if YouTube restricted upload to private due to unverified API project audit status",
     )
-    short_requested: bool = Field(
-        default=False,
-        description="True if separate Short upload was also selected",
-    )
-    short_artifact_id: str | None = Field(
-        default=None,
-        description="Short RenderArtifact ID if short upload requested",
-    )
-    short_publish_job_id: str | None = Field(
-        default=None,
-        description="Child publish job ID for Short upload",
-    )
-    short_youtube_video_id: str | None = Field(
-        default=None,
-        description="Remote YouTube video ID of uploaded Short",
-    )
-    short_youtube_url: str | None = Field(
-        default=None,
-        description="Canonical watch URL for Short",
-    )
     idempotency_key: str = Field(
         ...,
         min_length=1,
@@ -459,20 +439,17 @@ class YouTubePublishJob(BaseModel):
     def mark_completed(
         self,
         thumbnail_status: ThumbnailUploadStatus = ThumbnailUploadStatus.COMPLETED,
-        short_youtube_video_id: str | None = None,
     ) -> "YouTubePublishJob":
         now = datetime.now(timezone.utc)
-        updates: dict[str, Any] = {
-            "status": PublishJobStatus.COMPLETED,
-            "thumbnail_status": thumbnail_status,
-            "progress_percent": 100.0,
-            "completed_at": now,
-            "updated_at": now,
-        }
-        if short_youtube_video_id:
-            updates["short_youtube_video_id"] = short_youtube_video_id
-            updates["short_youtube_url"] = f"https://youtu.be/{short_youtube_video_id}"
-        return self.model_copy(update=updates)
+        return self.model_copy(
+            update={
+                "status": PublishJobStatus.COMPLETED,
+                "thumbnail_status": thumbnail_status,
+                "progress_percent": 100.0,
+                "completed_at": now,
+                "updated_at": now,
+            }
+        )
 
     def mark_failed(self, error_code: str, error_message: str) -> "YouTubePublishJob":
         now = datetime.now(timezone.utc)

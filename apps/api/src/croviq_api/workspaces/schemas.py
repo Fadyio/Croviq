@@ -43,7 +43,7 @@ class MemoryItemResponse(BaseModel):
 
 
 class AgentMemorySummaryResponse(BaseModel):
-    """Read-only summary of what Leo and Maya currently know."""
+    """Read-only summary of current channel memory."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -58,7 +58,6 @@ class AgentSettingsResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     leo_prompt: AgentPromptConfig
-    maya_prompt: AgentPromptConfig
     alex_prompt: AgentPromptConfig
     iris_prompt: AgentPromptConfig
     voice_settings: VoiceSettingsConfig

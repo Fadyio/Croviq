@@ -10,7 +10,6 @@ import {
   ExternalLink,
   Film,
   Image as ImageIcon,
-  Info,
   Layers,
   Loader2,
   Lock,
@@ -23,7 +22,6 @@ import {
   Save,
   ShieldAlert,
   ShieldCheck,
-  Smartphone,
   Sparkles,
   UploadCloud,
   Volume2,
@@ -78,9 +76,6 @@ const getIssueFriendlyName = (type: string): string => {
     DESCRIPTION_MISMATCH: "Description Mismatch",
     THUMBNAIL_MISMATCH: "Thumbnail Concept Mismatch",
     PACKAGING_INCONSISTENCY: "Packaging Inconsistency",
-    SHORT_QUALITY: "Short Quality Issue",
-    SHORT_CAPTION_QUALITY: "Short Caption Quality",
-    SHORT_CROP: "Short Vertical Framing Issue",
     MISSING_CONTENT: "Missing Content / Demo",
     CONTEXT_LOSS: "Context Loss",
   };
@@ -371,7 +366,6 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     selected_tags: string[];
     category_id: string;
     thumbnail_frame_ms?: number;
-    upload_short: boolean;
   }) => {
     setIsPublishing(true);
     setErrorMessage(null);
@@ -721,22 +715,6 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                     <Clock className="size-3.5" />
                   )}
                   {checklist?.captions ? "Passed" : "Checking"}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-surface-2/40 border border-border-subtle text-xs space-y-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block">
-                  Short 9:16 Crop
-                </span>
-                <span
-                  className={`font-semibold flex items-center gap-1.5 ${checklist?.short ? "text-emerald-400" : "text-text-muted"}`}
-                >
-                  {checklist?.short ? (
-                    <CheckCircle2 className="size-3.5" />
-                  ) : (
-                    <Info className="size-3.5" />
-                  )}
-                  {checklist?.short ? "Passed" : "N/A"}
                 </span>
               </div>
             </div>

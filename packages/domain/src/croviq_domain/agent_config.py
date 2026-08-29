@@ -11,7 +11,6 @@ class AgentId(StrEnum):
     """Supported Croviq agents."""
 
     LEO = "leo"
-    MAYA = "maya"
     ALEX = "alex"
     IRIS = "iris"
 class AgentPromptConfig(BaseModel):
@@ -24,7 +23,7 @@ class AgentPromptConfig(BaseModel):
     )
 
     agent_id: AgentId = Field(
-        ..., description="Target agent identifier (alex, leo, maya, or iris)"
+        ..., description="Target agent identifier (alex, leo, or iris)"
     )
     prompt_text: str = Field(
         ..., min_length=1, description="Complete agent working prompt text"

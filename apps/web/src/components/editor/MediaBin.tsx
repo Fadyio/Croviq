@@ -1,9 +1,9 @@
 import React from "react";
-import { Film, Video, Sparkles, Smartphone, CheckCircle2, Layers } from "lucide-react";
+import { Film, Video, Sparkles, CheckCircle2, Layers } from "lucide-react";
 import { formatTimecode, formatDuration } from "../../lib/edl-adapter";
 import type { PreviewMode } from "./PreviewToggle";
 
-export type MediaAssetId = "original" | "edited" | "studio_voice" | "master" | "short" | string;
+export type MediaAssetId = "original" | "edited" | "studio_voice" | "master" | string;
 
 export interface MediaBinItem {
   id: MediaAssetId;
@@ -31,11 +31,9 @@ interface MediaBinProps {
   editedDurationMs: number;
   studioVoiceDurationMs?: number | null;
   masterDurationMs?: number | null;
-  shortDurationMs?: number | null;
   hasRenderedPreview: boolean;
   hasMaster: boolean;
   hasStudioVoice: boolean;
-  hasShort: boolean;
   brollAssets?: BRollAssetItem[];
   onSelectMode: (mode: PreviewMode) => void;
   onSeek?: (timeMs: number) => void;
@@ -48,11 +46,9 @@ export const MediaBin: React.FC<MediaBinProps> = ({
   editedDurationMs,
   studioVoiceDurationMs,
   masterDurationMs,
-  shortDurationMs,
   hasRenderedPreview,
   hasMaster,
   hasStudioVoice,
-  hasShort,
   brollAssets = [],
   onSelectMode,
   onSeek,
@@ -104,25 +100,11 @@ export const MediaBin: React.FC<MediaBinProps> = ({
           },
         ]
       : []),
-    ...(hasShort
-      ? [
-          {
-            id: "short",
-            name: "Vertical Short",
-            category: "output" as const,
-            mode: "short" as PreviewMode,
-            durationMs: shortDurationMs || 0,
-            isAvailable: true,
-            typeLabel: "9:16",
-          },
-        ]
-      : []),
   ];
 
   const totalItemCount = 1 + outputItems.length + brollAssets.length;
 
   const getIcon = (item: MediaBinItem) => {
-    if (item.mode === "short") return Smartphone;
     if (item.id === "studio_voice") return Sparkles;
     if (item.id === "master") return CheckCircle2;
     if (item.mode === "edited") return Film;
@@ -191,9 +173,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
               const isSelected =
                 item.id === "studio_voice"
                   ? currentMode === "studio_voice"
-                  : item.id === "short"
-                    ? currentMode === "short"
-                    : currentMode === "edited";
+                  : currentMode === "edited";
 
               return (
                 <button

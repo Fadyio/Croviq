@@ -294,7 +294,7 @@ class AgentChatService:
         )
 
     async def handle_leo_message(self, message: str) -> dict[str, Any]:
-        """Leo (Video Editor) handles dialogue edits, cut pacing, and Short extraction."""
+        """Leo (Video Editor) handles dialogue edits, cut pacing, and cut safety."""
         prompt_config = await self.agent_config_repo.get_agent_prompt(
             self.workspace_id, AgentId.LEO
         )
@@ -307,9 +307,8 @@ class AgentChatService:
         ]
         reply = (
             "I'm Leo, your Video Editor.\n\n"
-            "I analyze spoken dialogue, eliminate filler words, enforce natural cut safety boundaries, "
-            "and identify punchy vertical Short opportunities. "
-            "Let me know if you want me to tighten a section or extract a high-energy clip."
+            "I analyze spoken dialogue, eliminate filler words, and enforce natural cut safety boundaries. "
+            "Let me know if you want me to tighten a section or preserve more context."
         )
         append_conversation_message(self.workspace_id, "leo", "user", message)
         return append_conversation_message(
@@ -335,7 +334,7 @@ class AgentChatService:
         reply = (
             "I'm Iris, your Quality Control gatekeeper.\n\n"
             "I verify factual consistency, caption accuracy, target audio loudness (-16 LUFS, -1 dBTP), "
-            "and visual continuity on rendered masters and Shorts before release."
+            "and visual continuity on rendered videos before release."
         )
         append_conversation_message(self.workspace_id, "iris", "user", message)
         return append_conversation_message(

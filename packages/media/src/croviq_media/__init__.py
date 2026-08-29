@@ -8,8 +8,9 @@ from croviq_media.audio import (
 from croviq_media.cut_safety import (
     DEFAULT_TRANSITION_MS,
     MAX_BOUNDARY_ADJUSTMENT_MS,
+    MIN_CUT_DURATION_MS,
     CutSafetyAnalyzer,
-    assemble_edl_from_review,
+    assemble_edl_from_proposal,
 )
 from croviq_media.inspector import (
     FakeMediaInspector,
@@ -63,8 +64,9 @@ __all__ = [
     "StudioVoiceAudioMixer",
     "DEFAULT_TRANSITION_MS",
     "MAX_BOUNDARY_ADJUSTMENT_MS",
+    "MIN_CUT_DURATION_MS",
     "CutSafetyAnalyzer",
-    "assemble_edl_from_review",
+    "assemble_edl_from_proposal",
     "FFprobeMediaInspector",
     "DEFAULT_CUSTOM_VOCABULARY",
     "DEFAULT_GEMINI_LOCATION",

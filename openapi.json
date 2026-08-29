@@ -185,7 +185,7 @@
       "get": {
         "tags": ["Workspaces"],
         "summary": "Get Agent Settings",
-        "description": "Retrieve creator-configured prompts for Alex, Leo, and Maya, narration voice settings, and official Google voice catalog.",
+        "description": "Retrieve creator-configured prompts for Alex, Leo, and Iris, narration voice settings, and official Google voice catalog.",
         "operationId": "get_agent_settings_api_workspace_agent_settings_get",
         "responses": {
           "200": {
@@ -210,7 +210,7 @@
       "put": {
         "tags": ["Workspaces"],
         "summary": "Update Agent Working Prompt",
-        "description": "Update the complete editorial working prompt for Leo, Maya, Alex, or Nina. Bumps version and timestamps.",
+        "description": "Update the complete working prompt for Alex, Leo, or Iris. Bumps version and timestamps.",
         "operationId": "update_agent_prompt_api_workspace_agent_settings_prompts__agent_id__put",
         "security": [
           {
@@ -266,7 +266,7 @@
       "post": {
         "tags": ["Workspaces"],
         "summary": "Reset Agent Working Prompt",
-        "description": "Reset Leo, Maya, Alex, or Nina working prompt back to the system default prompt.",
+        "description": "Reset Alex, Leo, or Iris working prompt back to the system default prompt.",
         "operationId": "reset_agent_prompt_api_workspace_agent_settings_prompts__agent_id__reset_post",
         "security": [
           {
@@ -1077,8 +1077,8 @@
     "/api/productions/{production_id}/analyze": {
       "post": {
         "tags": ["Productions & Uploads"],
-        "summary": "Run Director + Editor Editorial Analysis",
-        "description": "Execute Leo dialogue editing pass and Maya director review sequence using Gemini 3.7 Flash.",
+        "summary": "Run Leo Editorial Analysis and Render Preview",
+        "description": "Run Leo's dialogue edit, deterministic cut safety, EDL assembly, and Preview rendering.",
         "operationId": "analyze_production_api_productions__production_id__analyze_post",
         "security": [
           {
@@ -1134,7 +1134,7 @@
       "get": {
         "tags": ["Productions & Uploads"],
         "summary": "Get Latest Editorial Run Details",
-        "description": "Retrieve the latest EditorialRun, EditorProposal, DirectorReview, and AgentActivities.",
+        "description": "Retrieve the latest editorial run, Leo proposal, and agent activities.",
         "operationId": "get_editorial_run_api_productions__production_id__editorial_run_get",
         "security": [
           {
@@ -1180,7 +1180,7 @@
       "post": {
         "tags": ["Productions & Uploads"],
         "summary": "Assemble Canonical Edit Decision List (EDL)",
-        "description": "Deterministically derives audio-safe cut instructions and visual coverage markers from approved Director review.",
+        "description": "Deterministically derives audio-safe cut instructions and visual coverage markers from Leo's proposal.",
         "operationId": "assemble_edl_api_productions__production_id__edl_post",
         "security": [
           {
@@ -1358,52 +1358,6 @@
         }
       }
     },
-    "/api/productions/{production_id}/renders/short": {
-      "post": {
-        "tags": ["Productions & Uploads"],
-        "summary": "Render Vertical Short Video",
-        "description": "Deterministically render a 9:16 vertical Short MP4 with word-synced captions for an approved production.",
-        "operationId": "render_short_video_api_productions__production_id__renders_short_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "production_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Production Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RenderArtifactResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/productions/{production_id}/renders": {
       "get": {
         "tags": ["Productions & Uploads"],
@@ -1450,149 +1404,11 @@
         }
       }
     },
-    "/api/productions/{production_id}/review-preview": {
-      "post": {
-        "tags": ["Productions & Uploads"],
-        "summary": "Review Preview Render & Gate Master Render",
-        "description": "Maya (Director) inspects the rendered preview video, evaluates editorial quality, and either approves for Master render or executes a single bounded correction loop.",
-        "operationId": "review_preview_video_api_productions__production_id__review_preview_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "production_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Production Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewPreviewResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/productions/{production_id}/render-review": {
-      "get": {
-        "tags": ["Productions & Uploads"],
-        "summary": "Get Latest Render Review",
-        "description": "Retrieve latest post-render review for a production.",
-        "operationId": "get_render_reviews_api_productions__production_id__render_review_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "production_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Production Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RenderReviewDetailResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/productions/{production_id}/render-reviews": {
-      "get": {
-        "tags": ["Productions & Uploads"],
-        "summary": "Get Render Reviews",
-        "description": "Retrieve all post-render reviews for a production.",
-        "operationId": "get_render_reviews_api_productions__production_id__render_reviews_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "production_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Production Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RenderReviewDetailResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/productions/{production_id}/playback": {
       "get": {
         "tags": ["Productions & Uploads"],
         "summary": "Get Production Media Playback URLs",
-        "description": "Retrieve distinct signed URLs for Original source, Edited Preview, Master, Studio Voice, and Short.",
+        "description": "Retrieve distinct signed URLs for Original, Edited Preview, Master, and Studio Voice media.",
         "operationId": "get_production_playback_urls_api_productions__production_id__playback_get",
         "security": [
           {
@@ -1818,7 +1634,7 @@
       "patch": {
         "tags": ["Productions & Uploads"],
         "summary": "Update Creator Package Overrides",
-        "description": "Update creator overrides for title selection, custom title, description, chapter titles, Short title/description, or thumbnail concept selection.",
+        "description": "Update creator overrides for title, description, chapters, or thumbnail selection.",
         "operationId": "update_packaging_overrides_api_productions__production_id__packaging_patch",
         "security": [
           {
@@ -1874,7 +1690,7 @@
       "post": {
         "tags": ["Productions & Uploads"],
         "summary": "Generate Iris QA Release Review",
-        "description": "Invoke Iris (QA Agent) to evaluate Master video, Short, transcript, captions, chapters, and packaging truth before release.",
+        "description": "Invoke Iris (QA Agent) to evaluate the Master video, transcript, captions, chapters, and packaging truth before release.",
         "operationId": "generate_release_review_api_productions__production_id__release_review_post",
         "security": [
           {
@@ -2710,12 +2526,12 @@
             "type": "string",
             "minLength": 1,
             "title": "Agent",
-            "description": "Agent name (e.g. Leo, Maya)"
+            "description": "Agent name (e.g. Leo, Alex, Iris)"
           },
           "role": {
             "type": "string",
             "title": "Role",
-            "description": "Agent role (e.g. Video Editor, Director)"
+            "description": "Agent role (e.g. Video Editor, Data Scientist, Quality Assurance)"
           },
           "activity_type": {
             "type": "string",
@@ -2760,7 +2576,7 @@
           "message"
         ],
         "title": "AgentActivity",
-        "description": "Product-facing persisted activity message from Maya or Leo."
+        "description": "Product-facing persisted activity message from an active agent."
       },
       "AgentChatMessageRequest": {
         "properties": {
@@ -2860,7 +2676,7 @@
       },
       "AgentId": {
         "type": "string",
-        "enum": ["leo", "maya", "alex", "iris"],
+        "enum": ["leo", "alex", "iris"],
         "title": "AgentId",
         "description": "Supported Croviq agents."
       },
@@ -2893,13 +2709,13 @@
         "type": "object",
         "required": ["channel_title", "style_guide"],
         "title": "AgentMemorySummaryResponse",
-        "description": "Read-only summary of what Leo and Maya currently know."
+        "description": "Read-only summary of current channel memory."
       },
       "AgentPromptConfig": {
         "properties": {
           "agent_id": {
             "$ref": "#/components/schemas/AgentId",
-            "description": "Target agent identifier (alex, leo, maya, or iris)"
+            "description": "Target agent identifier (alex, leo, or iris)"
           },
           "prompt_text": {
             "type": "string",
@@ -2938,9 +2754,6 @@
           "leo_prompt": {
             "$ref": "#/components/schemas/AgentPromptConfig"
           },
-          "maya_prompt": {
-            "$ref": "#/components/schemas/AgentPromptConfig"
-          },
           "alex_prompt": {
             "$ref": "#/components/schemas/AgentPromptConfig"
           },
@@ -2960,14 +2773,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "leo_prompt",
-          "maya_prompt",
-          "alex_prompt",
-          "iris_prompt",
-          "voice_settings",
-          "voices"
-        ],
+        "required": ["leo_prompt", "alex_prompt", "iris_prompt", "voice_settings", "voices"],
         "title": "AgentSettingsResponse",
         "description": "Complete Agent Settings state returned to client."
       },
@@ -2999,17 +2805,15 @@
             "title": "Editor Proposal Id",
             "description": "Identifier of the generated EditorProposal record"
           },
-          "director_review_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Director Review Id",
-            "description": "Identifier of the generated DirectorReview record"
+          "edl_id": {
+            "type": "string",
+            "title": "Edl Id",
+            "description": "Identifier of the assembled canonical EDL"
+          },
+          "preview_artifact_id": {
+            "type": "string",
+            "title": "Preview Artifact Id",
+            "description": "Identifier of the rendered Preview artifact"
           },
           "started_at": {
             "type": "string",
@@ -3033,7 +2837,14 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["run_id", "production_id", "status", "started_at"],
+        "required": [
+          "run_id",
+          "production_id",
+          "status",
+          "edl_id",
+          "preview_artifact_id",
+          "started_at"
+        ],
         "title": "AnalyzeProductionResponse",
         "description": "Response returned when editorial analysis is completed."
       },
@@ -4311,7 +4122,7 @@
           "location": {
             "type": "string",
             "title": "Location",
-            "description": "Where the claim appears (title, description, video, chapter, short)",
+            "description": "Where the claim appears (title, description, video, or chapter)",
             "default": "description"
           },
           "status": {
@@ -4608,32 +4419,6 @@
             "title": "Custom Chapters",
             "description": "Creator-edited chapter titles"
           },
-          "custom_short_title": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 100
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Custom Short Title",
-            "description": "Creator-edited Short title"
-          },
-          "custom_short_description": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 1000
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Custom Short Description",
-            "description": "Creator-edited Short description"
-          },
           "selected_thumbnail_concept_id": {
             "anyOf": [
               {
@@ -4656,7 +4441,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "CreatorPackageOverrides",
-        "description": "Creator-defined overrides to Nina's packaging proposal."
+        "description": "Creator-defined overrides to a packaging proposal."
       },
       "CutInstruction": {
         "properties": {
@@ -4672,7 +4457,7 @@
             "maxLength": 64,
             "minLength": 1,
             "title": "Decision Id",
-            "description": "Originating Editor/Director decision identifier"
+            "description": "Originating Editor decision identifier"
           },
           "decision_type": {
             "$ref": "#/components/schemas/EditorDecisionType",
@@ -4963,202 +4748,6 @@
         "title": "DeleteProductionResponse",
         "description": "Response returned upon successful deletion of a production and all associated media storage objects."
       },
-      "DirectorDecision": {
-        "properties": {
-          "editor_decision_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Editor Decision Id",
-            "description": "ID of the EditorDecision being reviewed"
-          },
-          "verdict": {
-            "$ref": "#/components/schemas/DirectorVerdict",
-            "description": "Verdict: APPROVE, REJECT, or MODIFY"
-          },
-          "concise_reason": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Concise Reason",
-            "description": "Short editorial reason for the verdict"
-          },
-          "modified_action": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 50
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Modified Action",
-            "description": "Corrected action if verdict is MODIFY"
-          },
-          "modified_transcript_start_word": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Modified Transcript Start Word",
-            "description": "Corrected start word index if verdict is MODIFY"
-          },
-          "modified_transcript_end_word": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Modified Transcript End Word",
-            "description": "Corrected end word index if verdict is MODIFY"
-          },
-          "modified_source_start_ms": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Modified Source Start Ms",
-            "description": "Corrected start time in ms if verdict is MODIFY"
-          },
-          "modified_source_end_ms": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Modified Source End Ms",
-            "description": "Corrected end time in ms if verdict is MODIFY"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": ["editor_decision_id", "verdict", "concise_reason"],
-        "title": "DirectorDecision",
-        "description": "Director (Maya) review verdict for an individual EditorDecision."
-      },
-      "DirectorReview": {
-        "properties": {
-          "production_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Production Id",
-            "description": "Associated Production entity identifier"
-          },
-          "agent": {
-            "type": "string",
-            "title": "Agent",
-            "description": "Agent identifier",
-            "default": "maya"
-          },
-          "model": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Model",
-            "description": "Model identifier used for review"
-          },
-          "overall_assessment": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Overall Assessment",
-            "description": "Director's overall assessment of Leo's proposal"
-          },
-          "decisions": {
-            "items": {
-              "$ref": "#/components/schemas/DirectorDecision"
-            },
-            "type": "array",
-            "title": "Decisions",
-            "description": "Per-decision review verdicts"
-          },
-          "section_decisions": {
-            "items": {
-              "$ref": "#/components/schemas/DirectorSectionDecision"
-            },
-            "type": "array",
-            "title": "Section Decisions",
-            "description": "Review verdicts on Leo's full-timeline section plan"
-          },
-          "editor_feedback": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Editor Feedback",
-            "description": "Direct feedback to Leo for adjustments or approval"
-          },
-          "approved_for_edl": {
-            "type": "boolean",
-            "title": "Approved For Edl",
-            "description": "Whether the proposal is approved to proceed to EDL assembly"
-          },
-          "confidence": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence",
-            "description": "Director's confidence in the review"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "production_id",
-          "model",
-          "overall_assessment",
-          "editor_feedback",
-          "approved_for_edl",
-          "confidence"
-        ],
-        "title": "DirectorReview",
-        "description": "Complete review output emitted by Director (Maya)."
-      },
-      "DirectorSectionDecision": {
-        "properties": {
-          "section_id": {
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Section Id"
-          },
-          "verdict": {
-            "$ref": "#/components/schemas/DirectorVerdict",
-            "description": "Verdict: APPROVE, REJECT, or MODIFY"
-          },
-          "reason": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Reason"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": ["section_id", "verdict", "reason"],
-        "title": "DirectorSectionDecision",
-        "description": "Director review verdict for a full-timeline VideoSectionDecision."
-      },
-      "DirectorVerdict": {
-        "type": "string",
-        "enum": ["APPROVE", "REJECT", "MODIFY"],
-        "title": "DirectorVerdict",
-        "description": "Review verdicts issued by Director (Maya)."
-      },
       "DistillFindingResponse": {
         "properties": {
           "lesson_id": {
@@ -5270,19 +4859,6 @@
             "title": "Editor Proposal Id",
             "description": "Reference to the originating EditorProposal"
           },
-          "director_review_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 64
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Director Review Id",
-            "description": "Reference to the originating DirectorReview"
-          },
           "version": {
             "type": "integer",
             "minimum": 1.0,
@@ -5374,7 +4950,7 @@
             "maxLength": 500,
             "minLength": 1,
             "title": "Concise Reason",
-            "description": "Short editorial rationale for the suggested action"
+            "description": "Concise editorial rationale for the suggested action"
           },
           "confidence": {
             "type": "number",
@@ -5457,7 +5033,6 @@
           "BROLL_COVER_CANDIDATE",
           "SOURCE_COVER",
           "CHAPTER_MARKER",
-          "SHORT_CANDIDATE",
           "NARRATION_REWRITE",
           "CAPTION_EMPHASIS"
         ],
@@ -5498,17 +5073,6 @@
             "title": "Decisions",
             "description": "List of proposed editorial decisions"
           },
-          "short_candidate": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ShortCandidate"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional Short candidate excerpt identified during analysis"
-          },
           "section_plan": {
             "items": {
               "$ref": "#/components/schemas/VideoSectionDecision"
@@ -5538,148 +5102,6 @@
         "required": ["production_id", "model", "summary", "overall_confidence"],
         "title": "EditorProposal",
         "description": "Complete batch proposal emitted by Leo (Video Editor)."
-      },
-      "EditorSelfReview": {
-        "properties": {
-          "review_id": {
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Review Id",
-            "description": "Unique identifier for the self-review record"
-          },
-          "production_id": {
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Production Id",
-            "description": "Associated Production entity identifier"
-          },
-          "edl_id": {
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Edl Id",
-            "description": "Originating Edit Decision List identifier"
-          },
-          "preview_artifact_id": {
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Preview Artifact Id",
-            "description": "Associated RenderArtifact identifier of the rendered preview video"
-          },
-          "agent": {
-            "type": "string",
-            "title": "Agent",
-            "description": "Agent identifier (Leo)",
-            "default": "leo"
-          },
-          "model": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Model",
-            "description": "Model identifier used for the multimodal video self-review"
-          },
-          "verdict": {
-            "$ref": "#/components/schemas/EditorSelfReviewVerdict",
-            "description": "Self-review verdict: APPROVE_UNCHANGED or NEEDS_REVISION"
-          },
-          "summary": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Summary",
-            "description": "Concise editorial summary of the rendered preview inspection findings"
-          },
-          "narrative_pacing_assessment": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Narrative Pacing Assessment",
-            "description": "Assessment of narrative pacing and energy across the edit"
-          },
-          "removals_assessment": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Removals Assessment",
-            "description": "Evaluation of whether each removal improved the overall edit"
-          },
-          "visual_continuity_assessment": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Visual Continuity Assessment",
-            "description": "Evaluation of visual continuity, jump cuts, and screen flow"
-          },
-          "audio_joins_assessment": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Audio Joins Assessment",
-            "description": "Evaluation of audio joins, room tone, and speech tails"
-          },
-          "coverage_needed": {
-            "type": "boolean",
-            "title": "Coverage Needed",
-            "description": "Whether additional B-roll visual coverage is recommended",
-            "default": false
-          },
-          "short_assessment": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Short Assessment",
-            "description": "Evaluation of whether the vertical Short still works after editing"
-          },
-          "findings": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Findings",
-            "description": "Concise findings without chain-of-thought"
-          },
-          "confidence": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence",
-            "description": "Leo's confidence in the self-review assessment"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At",
-            "description": "Creation timestamp in UTC"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "review_id",
-          "production_id",
-          "edl_id",
-          "preview_artifact_id",
-          "model",
-          "verdict",
-          "summary",
-          "narrative_pacing_assessment",
-          "removals_assessment",
-          "visual_continuity_assessment",
-          "audio_joins_assessment",
-          "short_assessment",
-          "confidence"
-        ],
-        "title": "EditorSelfReview",
-        "description": "Complete multimodal self-review output emitted by Leo (Video Editor) after watching preview MP4."
-      },
-      "EditorSelfReviewVerdict": {
-        "type": "string",
-        "enum": ["APPROVE_UNCHANGED", "NEEDS_REVISION"],
-        "title": "EditorSelfReviewVerdict",
-        "description": "Verdicts emitted by Leo (Video Editor) during multimodal self-review of rendered preview video."
       },
       "EditorialRun": {
         "properties": {
@@ -5711,18 +5133,6 @@
             ],
             "title": "Editor Proposal Id",
             "description": "Identifier of the generated EditorProposal record"
-          },
-          "director_review_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Director Review Id",
-            "description": "Identifier of the generated DirectorReview record"
           },
           "started_at": {
             "type": "string",
@@ -5779,17 +5189,6 @@
             ],
             "description": "Leo's structured dialogue proposal"
           },
-          "review": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DirectorReview"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Maya's structured director review"
-          },
           "activities": {
             "items": {
               "$ref": "#/components/schemas/AgentActivity"
@@ -5803,7 +5202,7 @@
         "type": "object",
         "required": ["run"],
         "title": "EditorialRunDetailResponse",
-        "description": "Detailed response for inspecting an editorial run, including proposal, review, and activities."
+        "description": "Detailed response for inspecting an editorial run and Leo's proposal."
       },
       "EditorialRunStatus": {
         "type": "string",
@@ -6318,17 +5717,6 @@
             "title": "Effective Chapters",
             "description": "Active canonical video chapters"
           },
-          "effective_short_package": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ShortPackage"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Active vertical Short packaging"
-          },
           "effective_thumbnail_concept_id": {
             "anyOf": [
               {
@@ -6352,17 +5740,6 @@
             ],
             "description": "Master video artifact details"
           },
-          "short_artifact": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RenderArtifactResponse"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Short video artifact details"
-          },
           "master_url": {
             "anyOf": [
               {
@@ -6375,28 +5752,10 @@
             "title": "Master Url",
             "description": "Signed playback URL for master video"
           },
-          "short_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Url",
-            "description": "Signed playback URL for short video"
-          },
           "has_master": {
             "type": "boolean",
             "title": "Has Master",
             "description": "Whether an approved master video artifact exists",
-            "default": false
-          },
-          "has_short": {
-            "type": "boolean",
-            "title": "Has Short",
-            "description": "Whether a vertical Short video artifact exists",
             "default": false
           },
           "status": {
@@ -6448,19 +5807,6 @@
             "description": "Version number of packaging proposal for release locking",
             "default": 1
           },
-          "agent": {
-            "type": "string",
-            "title": "Agent",
-            "description": "Agent identifier ('nina')",
-            "default": "nina"
-          },
-          "model": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Model",
-            "description": "Model identifier used for packaging generation",
-            "default": "gemini-3.7-flash"
-          },
           "primary_title": {
             "type": "string",
             "maxLength": 150,
@@ -6510,17 +5856,6 @@
             "title": "Thumbnail Concepts",
             "description": "Top thumbnail concepts with supporting frame references"
           },
-          "short_package": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ShortPackage"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Vertical Short packaging if Short exists"
-          },
           "packaging_summary": {
             "type": "string",
             "maxLength": 1000,
@@ -6565,13 +5900,6 @@
             ],
             "title": "Master Artifact Id",
             "description": "Referenced Master RenderArtifact identifier"
-          },
-          "prompt_version": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Prompt Version",
-            "description": "Nina prompt version used for this generation",
-            "default": 1
           }
         },
         "additionalProperties": false,
@@ -6587,7 +5915,7 @@
           "confidence"
         ],
         "title": "PackagingProposal",
-        "description": "Canonical packaging proposal emitted by Nina (Packaging Agent)."
+        "description": "Canonical creator-owned packaging proposal."
       },
       "Production": {
         "properties": {
@@ -6746,18 +6074,6 @@
             ],
             "title": "Studio Voice Preview Url",
             "description": "Studio Voice video playback URL"
-          },
-          "short_playback_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Playback Url",
-            "description": "Social Short video playback URL"
           }
         },
         "additionalProperties": false,
@@ -6928,36 +6244,6 @@
             "title": "Verified Thumbnail Frames",
             "description": "Verified thumbnail frame candidates"
           },
-          "has_short": {
-            "type": "boolean",
-            "title": "Has Short",
-            "description": "Whether an approved vertical Short artifact exists",
-            "default": false
-          },
-          "short_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Title",
-            "description": "Short title candidate"
-          },
-          "short_description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Description",
-            "description": "Short description candidate"
-          },
           "release_ready": {
             "type": "boolean",
             "title": "Release Ready",
@@ -7069,12 +6355,6 @@
             ],
             "title": "Thumbnail Frame Ms",
             "description": "Selected timeline millisecond offset for extracting thumbnail still image"
-          },
-          "upload_short": {
-            "type": "boolean",
-            "title": "Upload Short",
-            "description": "Whether to also upload the approved vertical Short as a separate video",
-            "default": false
           }
         },
         "additionalProperties": false,
@@ -7106,12 +6386,6 @@
             "type": "boolean",
             "title": "Chapters",
             "description": "Chapter timestamp ordering and topic accuracy",
-            "default": true
-          },
-          "short": {
-            "type": "boolean",
-            "title": "Short",
-            "description": "Short framing, captions, and context status",
             "default": true
           },
           "packaging": {
@@ -7185,7 +6459,7 @@
               }
             ],
             "title": "Artifact Type",
-            "description": "Affected artifact type (master, short, packaging, caption, chapter)"
+            "description": "Affected artifact type (master, packaging, caption, or chapter)"
           },
           "related_decision_id": {
             "anyOf": [
@@ -7262,9 +6536,6 @@
           "DESCRIPTION_MISMATCH",
           "THUMBNAIL_MISMATCH",
           "PACKAGING_INCONSISTENCY",
-          "SHORT_QUALITY",
-          "SHORT_CAPTION_QUALITY",
-          "SHORT_CROP",
           "MISSING_CONTENT",
           "CONTEXT_LOSS"
         ],
@@ -7373,30 +6644,6 @@
             ],
             "title": "Master Hash",
             "description": "SHA-256 hash of evaluated Master RenderArtifact"
-          },
-          "short_artifact_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Artifact Id",
-            "description": "Evaluated Short RenderArtifact ID"
-          },
-          "short_hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Hash",
-            "description": "SHA-256 hash of evaluated Short RenderArtifact"
           },
           "packaging_proposal_id": {
             "anyOf": [
@@ -7507,17 +6754,6 @@
             ],
             "description": "Master video artifact details"
           },
-          "short_artifact": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RenderArtifactResponse"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Short video artifact details"
-          },
           "master_url": {
             "anyOf": [
               {
@@ -7530,28 +6766,10 @@
             "title": "Master Url",
             "description": "Signed playback URL for master video"
           },
-          "short_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Url",
-            "description": "Signed playback URL for short video"
-          },
           "has_master": {
             "type": "boolean",
             "title": "Has Master",
             "description": "Whether approved Master video artifact exists",
-            "default": false
-          },
-          "has_short": {
-            "type": "boolean",
-            "title": "Has Short",
-            "description": "Whether vertical Short video artifact exists",
             "default": false
           },
           "has_packaging": {
@@ -7804,231 +7022,6 @@
         "required": ["production_id", "renders"],
         "title": "RenderListResponse",
         "description": "Response returning all render artifacts for a production."
-      },
-      "RenderReview": {
-        "properties": {
-          "review_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Review Id",
-            "description": "Unique identifier for the post-render review record"
-          },
-          "production_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Production Id",
-            "description": "Associated Production entity identifier"
-          },
-          "edl_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Edl Id",
-            "description": "Associated EDL identifier that produced the preview"
-          },
-          "preview_artifact_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Preview Artifact Id",
-            "description": "Associated RenderArtifact identifier of the rendered preview"
-          },
-          "agent": {
-            "type": "string",
-            "title": "Agent",
-            "description": "Agent identifier (Maya)",
-            "default": "maya"
-          },
-          "model": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Model",
-            "description": "Model identifier used for the post-render evaluation"
-          },
-          "verdict": {
-            "$ref": "#/components/schemas/RenderReviewVerdict",
-            "description": "Post-render verdict: APPROVE or CORRECT"
-          },
-          "summary": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Summary",
-            "description": "Concise product-facing summary of the post-render review"
-          },
-          "issues": {
-            "items": {
-              "$ref": "#/components/schemas/RenderReviewIssue"
-            },
-            "type": "array",
-            "title": "Issues",
-            "description": "List of specific issues identified in the rendered preview"
-          },
-          "approved_for_master": {
-            "type": "boolean",
-            "title": "Approved For Master",
-            "description": "Whether the preview is approved to proceed to deterministic Master render"
-          },
-          "confidence": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence",
-            "description": "Director's confidence in the review"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At",
-            "description": "Creation timestamp in UTC"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "review_id",
-          "production_id",
-          "edl_id",
-          "preview_artifact_id",
-          "model",
-          "verdict",
-          "summary",
-          "approved_for_master",
-          "confidence"
-        ],
-        "title": "RenderReview",
-        "description": "Complete post-render review output emitted by Director (Maya) after watching preview MP4."
-      },
-      "RenderReviewDetailResponse": {
-        "properties": {
-          "production_id": {
-            "type": "string",
-            "title": "Production Id",
-            "description": "Canonical unique production identifier"
-          },
-          "review": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RenderReview"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Most recent post-render review record"
-          },
-          "reviews": {
-            "items": {
-              "$ref": "#/components/schemas/RenderReview"
-            },
-            "type": "array",
-            "title": "Reviews",
-            "description": "All post-render review records for this production"
-          },
-          "needs_manual_review": {
-            "type": "boolean",
-            "title": "Needs Manual Review",
-            "description": "Whether production requires manual human review after exhausted bounded correction",
-            "default": false
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": ["production_id"],
-        "title": "RenderReviewDetailResponse",
-        "description": "Response containing latest and historical post-render reviews for a production."
-      },
-      "RenderReviewIssue": {
-        "properties": {
-          "issue_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Issue Id",
-            "description": "Unique identifier for the review issue"
-          },
-          "issue_type": {
-            "$ref": "#/components/schemas/RenderReviewIssueType",
-            "description": "Categorized issue type"
-          },
-          "source_start_ms": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Source Start Ms",
-            "description": "Start time of the affected region in source media milliseconds"
-          },
-          "source_end_ms": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Source End Ms",
-            "description": "End time of the affected region in source media milliseconds"
-          },
-          "related_decision_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Related Decision Id",
-            "description": "Referenced EditorDecision ID if directly tied to an existing decision"
-          },
-          "severity": {
-            "$ref": "#/components/schemas/RenderReviewSeverity",
-            "description": "Severity level of the issue (LOW, MEDIUM, HIGH)"
-          },
-          "message": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Message",
-            "description": "Concise product-facing explanation of the issue (no raw chain-of-thought)"
-          },
-          "suggested_action": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Suggested Action",
-            "description": "Suggested editorial correction to resolve the issue"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "issue_id",
-          "issue_type",
-          "source_start_ms",
-          "source_end_ms",
-          "severity",
-          "message",
-          "suggested_action"
-        ],
-        "title": "RenderReviewIssue",
-        "description": "Specific editorial or media issue observed during rendered preview inspection."
-      },
-      "RenderReviewIssueType": {
-        "type": "string",
-        "enum": [
-          "UNNATURAL_AUDIO_JOIN",
-          "VISUAL_JUMP",
-          "OVER_AGGRESSIVE_CUT",
-          "MISSED_EDIT",
-          "CONTEXT_LOSS",
-          "PACING",
-          "COVERAGE_NEEDED"
-        ],
-        "title": "RenderReviewIssueType",
-        "description": "Categorized editorial issues identified in rendered preview video."
-      },
-      "RenderReviewSeverity": {
-        "type": "string",
-        "enum": ["LOW", "MEDIUM", "HIGH"],
-        "title": "RenderReviewSeverity",
-        "description": "Severity classification of identified post-render review issues."
-      },
-      "RenderReviewVerdict": {
-        "type": "string",
-        "enum": ["APPROVE", "CORRECT"],
-        "title": "RenderReviewVerdict",
-        "description": "Post-render review verdicts issued by Director (Maya)."
       },
       "ResearchCadence": {
         "type": "string",
@@ -8295,70 +7288,6 @@
         "required": ["prompt_id", "text"],
         "title": "ResearchPrompt"
       },
-      "ReviewPreviewResponse": {
-        "properties": {
-          "production_id": {
-            "type": "string",
-            "title": "Production Id",
-            "description": "Canonical unique production identifier"
-          },
-          "review": {
-            "$ref": "#/components/schemas/RenderReview",
-            "description": "Maya's post-render review record"
-          },
-          "self_review": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EditorSelfReview"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Leo's post-render self-review record"
-          },
-          "master_artifact": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RenderArtifactResponse"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Master render artifact if approved and rendered"
-          },
-          "second_review": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RenderReview"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Second post-render review if bounded correction was performed"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "Current workflow status (complete, needs_manual_review, correcting, approved)"
-          },
-          "activities": {
-            "items": {
-              "$ref": "#/components/schemas/AgentActivity"
-            },
-            "type": "array",
-            "title": "Activities",
-            "description": "Product-facing agent activity messages emitted during review and correction"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": ["production_id", "review", "status"],
-        "title": "ReviewPreviewResponse",
-        "description": "Response returned upon completing post-render preview review and Master render gating."
-      },
       "SchedulerTickResponse": {
         "properties": {
           "runs_evaluated": {
@@ -8388,197 +7317,6 @@
         "enum": ["KEEP", "TIGHTEN", "REMOVE", "COVERAGE"],
         "title": "SectionAction",
         "description": "Editorial action applied to a full-timeline production section."
-      },
-      "ShortCandidate": {
-        "properties": {
-          "start_ms": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Start Ms",
-            "description": "Start timestamp in source video milliseconds"
-          },
-          "end_ms": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "End Ms",
-            "description": "End timestamp in source video milliseconds"
-          },
-          "transcript_start_word": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Transcript Start Word",
-            "description": "Canonical 0-indexed transcript word start boundary"
-          },
-          "transcript_end_word": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Transcript End Word",
-            "description": "Canonical 0-indexed transcript word end boundary"
-          },
-          "hook_title": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Hook Title",
-            "description": "Short hook / title proposition"
-          },
-          "concise_reason": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Concise Reason",
-            "description": "Editorial justification for why this segment works as a standalone Short"
-          },
-          "confidence": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence",
-            "description": "Model confidence score for the candidate excerpt"
-          },
-          "visual_plan": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ShortVisualPlan"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional visual focus regions for 9:16 reframe"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "start_ms",
-          "end_ms",
-          "transcript_start_word",
-          "transcript_end_word",
-          "hook_title",
-          "concise_reason",
-          "confidence"
-        ],
-        "title": "ShortCandidate",
-        "description": "Identified 20-60s candidate segment suitable for vertical Short extraction."
-      },
-      "ShortPackage": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Title",
-            "description": "Vertical Short title"
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 1000,
-            "minLength": 1,
-            "title": "Description",
-            "description": "Short description / caption"
-          },
-          "hook": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Hook",
-            "description": "Opening spoken / visual hook framing"
-          },
-          "hashtags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Hashtags",
-            "description": "Useful hashtags (e.g. #shorts, #tech)"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": ["title", "description", "hook"],
-        "title": "ShortPackage",
-        "description": "Packaging metadata for vertical Short."
-      },
-      "ShortVisualPlan": {
-        "properties": {
-          "regions": {
-            "items": {
-              "$ref": "#/components/schemas/ShortVisualRegion"
-            },
-            "type": "array",
-            "title": "Regions",
-            "description": "List of chronological visual focus regions for the Short"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "ShortVisualPlan",
-        "description": "Visual reframe plan for social Short rendering."
-      },
-      "ShortVisualRegion": {
-        "properties": {
-          "start_ms": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Start Ms",
-            "description": "Start timestamp in ms relative to Short timeline"
-          },
-          "end_ms": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "End Ms",
-            "description": "End timestamp in ms relative to Short timeline"
-          },
-          "x": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "X",
-            "description": "Normalized x coordinate (0.0 to 1.0) of crop top-left in source frame"
-          },
-          "y": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Y",
-            "description": "Normalized y coordinate (0.0 to 1.0) of crop top-left in source frame"
-          },
-          "width": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.01,
-            "title": "Width",
-            "description": "Normalized width (0.0 to 1.0) of focus region"
-          },
-          "height": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.01,
-            "title": "Height",
-            "description": "Normalized height (0.0 to 1.0) of focus region"
-          },
-          "zoom": {
-            "type": "number",
-            "maximum": 3.0,
-            "minimum": 1.0,
-            "title": "Zoom",
-            "description": "Optional zoom factor",
-            "default": 1.0
-          },
-          "focus_label": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Focus Label",
-            "description": "Visual description of focus area (e.g. YAML editor, status)"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": ["start_ms", "end_ms", "x", "y", "width", "height", "focus_label"],
-        "title": "ShortVisualRegion",
-        "description": "Normalized focus rectangle identifying the readable screen region for a Short scene."
       },
       "SilenceInterval": {
         "properties": {
@@ -8909,7 +7647,7 @@
       },
       "TargetAgent": {
         "type": "string",
-        "enum": ["director", "editor", "packaging", "qa"],
+        "enum": ["alex", "leo", "iris"],
         "title": "TargetAgent"
       },
       "ThumbnailConcept": {
@@ -8926,7 +7664,7 @@
             "maxLength": 100,
             "minLength": 1,
             "title": "Headline",
-            "description": "Optional short thumbnail overlay headline / text (2-4 words)"
+            "description": "Optional concise thumbnail overlay headline / text (2-4 words)"
           },
           "visual_subject": {
             "type": "string",
@@ -9035,7 +7773,7 @@
         "type": "object",
         "required": ["concept_index", "headline", "verdict", "reason"],
         "title": "ThumbnailEvaluation",
-        "description": "Evaluation of a specific Nina ThumbnailConcept."
+        "description": "Evaluation of a specific creator thumbnail concept."
       },
       "ThumbnailUploadStatus": {
         "type": "string",
@@ -9451,30 +8189,6 @@
             ],
             "title": "Custom Chapters",
             "description": "Creator custom chapters override"
-          },
-          "custom_short_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Custom Short Title",
-            "description": "Creator custom Short title override"
-          },
-          "custom_short_description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Custom Short Description",
-            "description": "Creator custom Short description override"
           },
           "selected_thumbnail_concept_id": {
             "anyOf": [
@@ -10561,60 +9275,6 @@
             "title": "Audit Restriction Detected",
             "description": "True if YouTube restricted upload to private due to unverified API project audit status",
             "default": false
-          },
-          "short_requested": {
-            "type": "boolean",
-            "title": "Short Requested",
-            "description": "True if separate Short upload was also selected",
-            "default": false
-          },
-          "short_artifact_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Artifact Id",
-            "description": "Short RenderArtifact ID if short upload requested"
-          },
-          "short_publish_job_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Publish Job Id",
-            "description": "Child publish job ID for Short upload"
-          },
-          "short_youtube_video_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Youtube Video Id",
-            "description": "Remote YouTube video ID of uploaded Short"
-          },
-          "short_youtube_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Short Youtube Url",
-            "description": "Canonical watch URL for Short"
           },
           "idempotency_key": {
             "type": "string",

@@ -98,7 +98,7 @@ export const AgentTeamSelector: React.FC<AgentTeamSelectorProps> = ({ activeAgen
                   className="h-6 w-6 rounded-full object-cover ring-1 ring-border-subtle"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block font-semibold text-text-primary">{agent.name}</span>
+                  <span className="block font-semibold text-text-primary">{agent.name} </span>
                   <span className="block truncate text-[10px] text-text-muted">
                     {agent.role} · {agent.focus}
                   </span>

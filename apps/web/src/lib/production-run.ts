@@ -1,13 +1,11 @@
 import type { components } from "../api/generated";
 
-export type RunStageId =
-  "uploaded" | "transcript" | "leo-edit" | "maya-review" | "edit-plan" | "render";
+export type RunStageId = "uploaded" | "transcript" | "leo-edit" | "edit-plan" | "render";
 export type RunStageStatus = "completed" | "active" | "pending" | "failed";
-export type ProcessingStage = "transcript" | "leo-edit" | "maya-review" | "edit-plan" | "render";
+export type ProcessingStage = "transcript" | "leo-edit" | "edit-plan" | "render";
 
 type EditorialRun = components["schemas"]["EditorialRun"];
 type AgentActivity = components["schemas"]["AgentActivity"];
-type RenderReview = components["schemas"]["RenderReview"];
 type RenderArtifactResponse = components["schemas"]["RenderArtifactResponse"];
 
 export interface PersistedProductionRun {
@@ -21,13 +19,9 @@ export interface PersistedProductionRun {
   renderCompletedAt?: string | null;
   renderStatus?: "pending" | "rendering" | "completed" | "failed" | null;
   renderDurationMs?: number | null;
-  renderReview?: RenderReview | null;
   masterArtifact?: RenderArtifactResponse | null;
   masterStatus?: "pending" | "rendering" | "completed" | "failed" | null;
   masterCompletedAt?: string | null;
-  shortArtifact?: RenderArtifactResponse | null;
-  shortStatus?: "pending" | "rendering" | "completed" | "failed" | null;
-  shortCompletedAt?: string | null;
   needsManualReview?: boolean;
 }
 
@@ -58,14 +52,6 @@ const lastActivityAt = (activities: AgentActivity[], agent: string): string | un
     .sort()
     .at(-1);
 
-const firstActivityAt = (activities: AgentActivity[], agent: string): string | undefined =>
-  activities
-    .filter((activity) => activity.agent.toLowerCase() === agent)
-    .map((activity) => activity.created_at)
-    .filter((timestamp): timestamp is string => Boolean(timestamp))
-    .sort()
-    .at(0);
-
 export const deriveProductionRunStages = (
   run: PersistedProductionRun,
   overrides: RunStageOverrides = {},
@@ -75,15 +61,11 @@ export const deriveProductionRunStages = (
   const hasLeoOutput =
     Boolean((run as any).proposal) || Boolean(run.activities && run.activities.length > 0);
   const leoComplete =
-    editorialStatus === "reviewing" ||
-    editorialStatus === "completed" ||
-    (editorialStatus === "failed" && hasLeoOutput);
-  const mayaComplete = editorialStatus === "completed";
+    editorialStatus === "completed" || (editorialStatus === "failed" && hasLeoOutput);
   const activities = run.activities ?? [];
   const previewComplete = run.renderStatus === "completed" || Boolean(run.renderCompletedAt);
   const masterComplete = run.masterStatus === "completed" || Boolean(run.masterCompletedAt);
-  const hasApprovedReview = Boolean(run.renderReview?.approved_for_master);
-  const renderFullyComplete = masterComplete || (previewComplete && hasApprovedReview);
+  const renderFullyComplete = masterComplete || previewComplete;
   const renderStatus: RunStageStatus = run.needsManualReview
     ? "failed"
     : renderFullyComplete
@@ -106,22 +88,15 @@ export const deriveProductionRunStages = (
     {
       id: "leo-edit",
       label: "Leo Edit",
-      status: leoComplete ? "completed" : editorialStatus === "analyzing" ? "active" : "pending",
-      subStatus: "Leo is reviewing the footage…",
-      durationMs: elapsed(run.editorialRun?.started_at, lastActivityAt(activities, "leo")),
-    },
-    {
-      id: "maya-review",
-      label: "Maya Review",
-      status: mayaComplete
+      status: leoComplete
         ? "completed"
-        : editorialStatus === "reviewing"
+        : editorialStatus === "analyzing" || editorialStatus === "reviewing"
           ? "active"
-          : editorialStatus === "failed" && leoComplete
+          : editorialStatus === "failed"
             ? "failed"
             : "pending",
-      subStatus: "Maya is reviewing Leo's edit…",
-      durationMs: elapsed(firstActivityAt(activities, "maya"), run.editorialRun?.completed_at),
+      subStatus: "Leo is reviewing the footage…",
+      durationMs: elapsed(run.editorialRun?.started_at, lastActivityAt(activities, "leo")),
     },
     {
       id: "edit-plan",
@@ -159,9 +134,7 @@ export const deriveProductionRunStages = (
   return stages;
 };
 
-export const nextMissingProcessingStage = (
-  run: PersistedProductionRun,
-): Exclude<ProcessingStage, "maya-review"> | null => {
+export const nextMissingProcessingStage = (run: PersistedProductionRun): ProcessingStage | null => {
   if (!run.uploaded) return null;
   if (!run.transcriptCreatedAt) return "transcript";
   if (run.editorialRun?.status === "failed") return null;
@@ -169,8 +142,7 @@ export const nextMissingProcessingStage = (
   if (!run.edlCreatedAt) return "edit-plan";
   if (run.needsManualReview) return null;
   const previewComplete = run.renderStatus === "completed" || Boolean(run.renderCompletedAt);
-  const masterComplete = run.masterStatus === "completed" || Boolean(run.masterCompletedAt);
-  if (!previewComplete || (!run.renderReview && !masterComplete)) return "render";
+  if (!previewComplete) return "render";
   return null;
 };
 

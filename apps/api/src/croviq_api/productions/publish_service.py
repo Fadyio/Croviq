@@ -174,10 +174,9 @@ class YouTubePublishService:
         )
         can_publish = (not is_sample) and (connection is not None)
 
-        # Load active EDL & verified Master/Short artifacts for this production
+        # Load the active EDL and verified Master artifact.
         edl = await self.edl_repo.get_latest_edl(production_id)
         master_artifact: RenderArtifact | None = None
-        short_artifact: RenderArtifact | None = None
         if edl:
             master_artifact = await self.render_repo.get_render_artifact_by_type(
                 production_id, edl.edl_id, ArtifactType.MASTER
@@ -186,17 +185,11 @@ class YouTubePublishService:
                 master_artifact = await self.render_repo.get_render_artifact_by_type(
                     production_id, edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
                 )
-            short_artifact = await self.render_repo.get_render_artifact_by_type(
-                production_id, edl.edl_id, ArtifactType.SHORT
-            )
         else:
             renders = await self.render_repo.list_render_artifacts(production_id)
             master_artifact = next((r for r in renders if r.artifact_type in (ArtifactType.MASTER, ArtifactType.STUDIO_VOICE_MASTER) and r.status == ArtifactStatus.completed), None)
             if master_artifact:
                 edl = await self.edl_repo.get_edl(production_id, master_artifact.edl_id)
-                short_artifact = await self.render_repo.get_render_artifact_by_type(
-                    production_id, master_artifact.edl_id, ArtifactType.SHORT
-                )
         # Release Review & Gate Check
         release_review = await self.release_review_repo.get_latest_release_review(production_id)
 
@@ -216,35 +209,25 @@ class YouTubePublishService:
                 packaging_proposal_id=proposal.proposal_id,
                 package_version=package_ver,
                 release_review_id=release_review.review_id if release_review else None,
-                short_artifact_id=short_artifact.artifact_id if short_artifact else None,
-                short_hash=short_artifact.sha256 if short_artifact else None,
             )
             if (master_artifact and proposal)
             else None
         )
 
         has_master = bool(master_artifact and master_artifact.status == ArtifactStatus.completed)
-        has_short = bool(short_artifact and short_artifact.status == ArtifactStatus.completed)
         has_packaging = bool(proposal is not None)
 
         release_ready = False
         if release_review and release_review.verdict == ReleaseVerdict.PASS and release_review.approved_for_release:
             matching_master = bool(master_artifact and release_review.master_artifact_id == master_artifact.artifact_id)
-            matching_short = bool(
-                (not has_short and not release_review.short_artifact_id)
-                or (has_short and short_artifact and release_review.short_artifact_id == short_artifact.artifact_id)
-            )
             fingerprint_valid = bool(
                 release_review.release_fingerprint is None or calculated_fp is None or release_review.release_fingerprint == calculated_fp
             )
             release_ready = bool(
                 has_master
                 and matching_master
-                and matching_short
                 and fingerprint_valid
             )
-            if has_short and release_review.checklist and not release_review.checklist.short:
-                release_ready = False
 
         suggested_title = getattr(production, "title", None) or (production.source_media.original_filename if production.source_media and production.source_media.original_filename else "Master Video")
         suggested_description = ""
@@ -273,8 +256,6 @@ class YouTubePublishService:
         master_duration_ms = master_artifact.duration_ms if master_artifact else None
         master_title = suggested_title or "Master Video"
 
-        short_title = proposal.short_package.title if (proposal and proposal.short_package) else "Short"
-        short_description = proposal.short_package.description if (proposal and proposal.short_package) else ""
         contains_synthetic_media_suggested = derive_synthetic_media_status(
             master_artifact=master_artifact,
             edl=edl,
@@ -295,9 +276,6 @@ class YouTubePublishService:
             "suggested_category_id": "28",
             "suggested_synthetic_media": contains_synthetic_media_suggested,
             "verified_thumbnail_frames": verified_thumbnail_frames,
-            "has_short": has_short,
-            "short_title": short_title,
-            "short_description": short_description,
             "release_ready": release_ready,
         }
 
@@ -313,7 +291,6 @@ class YouTubePublishService:
         selected_tags: list[str] | None = None,
         category_id: str = "28",
         thumbnail_frame_ms: int | None = None,
-        upload_short: bool = False,
     ) -> YouTubePublishJob:
         """Create and queue a YouTubePublishJob, enforcing idempotency and strict release gates."""
         production = await self.production_repo.get_production(production_id)
@@ -343,7 +320,6 @@ class YouTubePublishService:
         # 4. Active EDL and Master Render Artifact Validation (Strict Lineage)
         edl = await self.edl_repo.get_latest_edl(production_id)
         master_artifact: RenderArtifact | None = None
-        short_art: RenderArtifact | None = None
         if edl:
             master_artifact = await self.render_repo.get_render_artifact_by_type(
                 production_id, edl.edl_id, ArtifactType.MASTER
@@ -352,17 +328,11 @@ class YouTubePublishService:
                 master_artifact = await self.render_repo.get_render_artifact_by_type(
                     production_id, edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
                 )
-            short_art = await self.render_repo.get_render_artifact_by_type(
-                production_id, edl.edl_id, ArtifactType.SHORT
-            )
         else:
             renders = await self.render_repo.list_render_artifacts(production_id)
             master_artifact = next((r for r in renders if r.artifact_type in (ArtifactType.MASTER, ArtifactType.STUDIO_VOICE_MASTER) and r.status == ArtifactStatus.completed), None)
             if master_artifact:
                 edl = await self.edl_repo.get_edl(production_id, master_artifact.edl_id)
-                short_art = await self.render_repo.get_render_artifact_by_type(
-                    production_id, master_artifact.edl_id, ArtifactType.SHORT
-                )
 
         if not master_artifact or master_artifact.status != ArtifactStatus.completed:
             raise ValueError("Approved Master render artifact not found or rendering incomplete.")
@@ -404,13 +374,6 @@ class YouTubePublishService:
         validate_youtube_metadata(meta_to_validate)
 
         # 6. Release Fingerprint & Idempotency Check (Requirements 8, 19, 21)
-        short_art = None
-        if upload_short:
-            short_art = await self.render_repo.get_render_artifact_by_type(
-                production_id, edl.edl_id, ArtifactType.SHORT
-            )
-            if not short_art or short_art.status != ArtifactStatus.completed:
-                raise ValueError(f"Approved Short render artifact for active EDL '{edl.edl_id}' not found.")
 
         package_ver = proposal.version if hasattr(proposal, "version") else 1
         if proposal.version > release_review.package_version:
@@ -433,8 +396,6 @@ class YouTubePublishService:
             packaging_proposal_id=proposal.proposal_id,
             package_version=package_ver,
             release_review_id=release_review.review_id,
-            short_artifact_id=short_art.artifact_id if short_art else None,
-            short_hash=short_art.sha256 if short_art else None,
         )
         if release_review.release_fingerprint and release_review.release_fingerprint != calculated_fp:
             raise ValueError(
@@ -484,8 +445,6 @@ class YouTubePublishService:
             category_id=category_id,
             made_for_kids=made_for_kids,
             is_synthetic_media=contains_synthetic_media,
-            short_requested=upload_short,
-            short_artifact_id=short_art.artifact_id if short_art else None,
             master_hash=master_artifact.sha256,
             master_duration_ms=master_artifact.duration_ms,
             master_size_bytes=master_artifact.size_bytes,
@@ -529,7 +488,7 @@ class YouTubePublishService:
         publish_job_id: str,
         thumbnail_frame_ms: int | None = None,
     ) -> None:
-        """Durable background worker executing resumable video upload, thumbnail set, and Short upload."""
+        """Durable background worker executing the Master upload and thumbnail set."""
         job = await self.publish_job_repo.get_by_id(publish_job_id)
         if not job or job.status in (PublishJobStatus.COMPLETED, PublishJobStatus.FAILED, PublishJobStatus.CANCELLED):
             return
@@ -583,7 +542,7 @@ class YouTubePublishService:
             if not job.master_hash:
                 job = job.model_copy(update={"master_hash": local_sha, "master_size_bytes": file_size, "master_duration_ms": master_art.duration_ms})
             await self.publish_job_repo.save(job)
-            # 2. Extract Thumbnail Frame if requested or available from Nina's proposal
+            # 2. Extract a thumbnail frame from the packaging proposal when available.
             thumbnail_artifact: ThumbnailArtifact | None = None
             if thumbnail_frame_ms is not None or thumbnail_frame_ms == 0:
                 target_frame_ms = thumbnail_frame_ms
@@ -707,47 +666,8 @@ class YouTubePublishService:
                     logger.warning("Thumbnail upload to YouTube failed: %s", thumb_err)
                     thumb_status = ThumbnailUploadStatus.FAILED
 
-            # 6. Upload Short if requested
-            short_video_id = None
-            if job.short_requested and job.short_artifact_id:
-                short_art = await self.render_repo.get_render_artifact(job.production_id, job.short_artifact_id)
-                if short_art and short_art.status == ArtifactStatus.completed:
-                    try:
-                        local_short_path = Path(temp_dir.name) / "short.mp4"
-                        await self.media_storage.download_object_to_path(
-                            bucket=short_art.gcs_bucket,
-                            object_name=short_art.gcs_object,
-                            target_path=local_short_path,
-                        )
-
-                        proposal = await self.packaging_repo.get_latest_packaging_proposal(job.production_id)
-                        short_title = proposal.short_package.title if (proposal and proposal.short_package) else f"{job.selected_title} #Shorts"
-                        short_desc = proposal.short_package.description if (proposal and proposal.short_package) else "#Shorts"
-
-                        short_meta = YouTubeVideoMetadata(
-                            title=short_title[:100],
-                            description=short_desc,
-                            tags=job.tags + ["Shorts"],
-                            category_id=job.category_id,
-                            privacy_status=job.requested_privacy,
-                            made_for_kids=job.made_for_kids,
-                            contains_synthetic_media=job.is_synthetic_media,
-                        )
-
-                        short_resource = await self.publish_client.upload_video(
-                            access_token=access_token,
-                            media_path=local_short_path,
-                            metadata=short_meta,
-                        )
-                        short_video_id = short_resource.video_id
-                    except Exception as short_err:
-                        logger.warning("Short upload failed: %s", short_err)
-
-            # 7. Complete Publish Job
-            job = job.mark_completed(
-                thumbnail_status=thumb_status,
-                short_youtube_video_id=short_video_id,
-            )
+            # 6. Complete the publish job.
+            job = job.mark_completed(thumbnail_status=thumb_status)
             await self.publish_job_repo.save(job)
 
             log_event(
@@ -759,7 +679,6 @@ class YouTubePublishService:
                 actual_privacy=video_resource.privacy_status,
                 audit_restriction_detected=video_resource.audit_restriction_detected,
                 thumbnail_status=thumb_status.value,
-                short_uploaded=bool(short_video_id),
             )
 
         except YouTubeAuthExpiredError as auth_err:

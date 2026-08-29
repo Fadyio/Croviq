@@ -14,7 +14,6 @@ import {
   Search,
 } from "lucide-react";
 import leoAvatar from "../../assets/agents/leo.webp";
-import mayaAvatar from "../../assets/agents/maya.webp";
 import irisAvatar from "../../assets/agents/Iris.png";
 import alexAvatar from "../../assets/agents/alex.webp";
 import type { components } from "../../api/generated";
@@ -28,7 +27,7 @@ type NarrationMode = "original" | "enhanced_original" | "studio_voice" | "my_voi
 
 interface AgentSettingsDrawerProps {
   isOpen: boolean;
-  agentId: "leo" | "maya" | "iris" | "alex";
+  agentId: "leo" | "iris" | "alex";
   onClose: () => void;
 }
 
@@ -72,18 +71,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   const [audioError, setAudioError] = useState<string | null>(null);
 
   const isLeo = agentId === "leo";
-  const isMaya = agentId === "maya";
   const isIris = agentId === "iris";
-  const isAlex = agentId === "alex";
-  const agentName = isLeo ? "Leo" : isMaya ? "Maya" : isIris ? "Iris" : "Alex";
-  const agentRole = isLeo
-    ? "Video Editor"
-    : isMaya
-      ? "Director"
-      : isIris
-        ? "Quality Control"
-        : "Data Scientist";
-  const avatarSrc = isLeo ? leoAvatar : isMaya ? mayaAvatar : isIris ? irisAvatar : alexAvatar;
+  const agentName = isLeo ? "Leo" : isIris ? "Iris" : "Alex";
+  const agentRole = isLeo ? "Video Editor" : isIris ? "Quality Assurance" : "Data Scientist";
+  const avatarSrc = isLeo ? leoAvatar : isIris ? irisAvatar : alexAvatar;
 
   // If non-Leo is selected and tab is voice, reset to prompt tab
   useEffect(() => {
@@ -102,13 +93,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
         const res = await fetch("/api/workspace/agent-settings", { headers });
         if (res.ok) {
           const data = await res.json();
-          const p = isLeo
-            ? data.leo_prompt
-            : isMaya
-              ? data.maya_prompt
-              : isIris
-                ? data.iris_prompt
-                : data.alex_prompt;
+          const p = isLeo ? data.leo_prompt : isIris ? data.iris_prompt : data.alex_prompt;
           if (p) {
             setPromptText(p.prompt_text || "");
             setPromptVersion(p.version ?? 1);
@@ -122,7 +107,9 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
             setVoices(data.voices);
           }
         }
-        const memRes = await fetch(`/api/workspace/agent-settings/memory?agent_id=${agentId}`, { headers });
+        const memRes = await fetch(`/api/workspace/agent-settings/memory?agent_id=${agentId}`, {
+          headers,
+        });
         if (memRes.ok) {
           const memData = await memRes.json();
           setMemorySummary(memData);
@@ -448,7 +435,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
               {memorySummary ? (
                 <div className="space-y-4">
                   {/* Style Guidelines */}
-                  {(!memoryQuery.trim() || memorySummary.style_guide.toLowerCase().includes(memoryQuery.toLowerCase())) && (
+                  {(!memoryQuery.trim() ||
+                    memorySummary.style_guide
+                      .toLowerCase()
+                      .includes(memoryQuery.toLowerCase())) && (
                     <div className="p-3 rounded-lg border border-border-subtle bg-surface-2/40 space-y-1">
                       <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block">
                         Style Guide
@@ -468,7 +458,11 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                         </span>
                         <ul className="space-y-1.5 text-xs text-text-secondary">
                           {memorySummary.creator_preferences
-                            .filter((pref) => !memoryQuery.trim() || pref.toLowerCase().includes(memoryQuery.toLowerCase()))
+                            .filter(
+                              (pref) =>
+                                !memoryQuery.trim() ||
+                                pref.toLowerCase().includes(memoryQuery.toLowerCase()),
+                            )
                             .map((pref, i) => (
                               <li key={i} className="flex items-start gap-2">
                                 <span className="size-1 rounded-full bg-primary mt-1.5 shrink-0" />
@@ -482,15 +476,18 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                   {/* Learned Lessons */}
                   <div className="space-y-2">
                     <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block">
-                      Learned Lessons ({
+                      Learned Lessons (
+                      {
                         (memorySummary.lessons || []).filter(
                           (l) =>
                             !memoryQuery.trim() ||
                             l.topic.toLowerCase().includes(memoryQuery.toLowerCase()) ||
                             l.content.toLowerCase().includes(memoryQuery.toLowerCase()) ||
-                            (l.learned_from && l.learned_from.toLowerCase().includes(memoryQuery.toLowerCase())),
+                            (l.learned_from &&
+                              l.learned_from.toLowerCase().includes(memoryQuery.toLowerCase())),
                         ).length
-                      })
+                      }
+                      )
                     </span>
                     <div className="space-y-2">
                       {(memorySummary.lessons || [])
@@ -499,7 +496,8 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                             !memoryQuery.trim() ||
                             item.topic.toLowerCase().includes(memoryQuery.toLowerCase()) ||
                             item.content.toLowerCase().includes(memoryQuery.toLowerCase()) ||
-                            (item.learned_from && item.learned_from.toLowerCase().includes(memoryQuery.toLowerCase())),
+                            (item.learned_from &&
+                              item.learned_from.toLowerCase().includes(memoryQuery.toLowerCase())),
                         )
                         .map((item, idx) => (
                           <div

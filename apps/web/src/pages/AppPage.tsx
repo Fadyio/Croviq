@@ -21,10 +21,7 @@ interface AppPageProps {
   onNavigateNewProject: () => void;
 }
 
-export const AppPage: React.FC<AppPageProps> = ({
-  onNavigateRoute,
-  onNavigateNewProject,
-}) => {
+export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNewProject }) => {
   const { user, firebaseUser, logout } = useAuth();
   const [period, setPeriod] = useState<28 | 90 | 365>(28);
   const [channelMode, setChannelMode] = useState<ChannelMode>("sample");
@@ -77,7 +74,7 @@ export const AppPage: React.FC<AppPageProps> = ({
 
         if (errorParam) {
           setError(`YouTube OAuth authorization was cancelled or denied: ${errorParam}`);
-          window.history.replaceState({}, document.title, window.location.pathname);
+          window.history.replaceState({}, document.title, "/app");
         } else if (code && state) {
           setIsConnectingYt(true);
           const callbackResp = await fetch("/api/channels/youtube/callback", {
@@ -92,7 +89,7 @@ export const AppPage: React.FC<AppPageProps> = ({
               redirect_uri: window.location.origin + "/app",
             }),
           });
-          window.history.replaceState({}, document.title, window.location.pathname);
+          window.history.replaceState({}, document.title, "/app");
           if (callbackResp.ok && !cancelled) {
             const connSummary = (await callbackResp.json()) as YouTubeConnection;
             setYoutubeConnection(connSummary);
@@ -355,30 +352,6 @@ export const AppPage: React.FC<AppPageProps> = ({
             <span>New Project</span>
           </button>
 
-          {/* Alex Team Member Chip */}
-          <button
-            type="button"
-            onClick={() => onNavigateRoute?.("/app/agents/alex")}
-            className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-left transition-colors hover:border-border-strong hover:bg-surface-2 cursor-pointer"
-            aria-label="Open Alex workspace"
-            title="Alex · Data Scientist"
-            data-testid="btn-alex-settings-chip"
-          >
-            <img
-              src={alexAvatar}
-              alt="Alex"
-              className="h-6 w-6 rounded-full object-cover ring-1 ring-primary/40"
-            />
-            <div className="hidden sm:block">
-              <span className="block text-xs font-semibold leading-tight text-text-primary">
-                Alex
-              </span>
-              <span className="block text-[10px] leading-tight text-text-muted">
-                Data Scientist
-              </span>
-            </div>
-          </button>
-
           <AgentTeamSelector onSelect={(agentId) => onNavigateRoute?.(`/app/agents/${agentId}`)} />
 
           <div className="hidden md:flex items-center gap-3 border-l border-border-subtle pl-3">
@@ -489,7 +462,6 @@ export const AppPage: React.FC<AppPageProps> = ({
                   </select>
                 </div>
               </div>
-
             </header>
 
             {/* Single Unified Channel Intelligence Dashboard */}

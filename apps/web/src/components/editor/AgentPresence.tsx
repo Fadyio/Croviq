@@ -1,24 +1,21 @@
 import React, { useState } from "react";
 import { Settings } from "lucide-react";
 import leoAvatar from "../../assets/agents/leo.webp";
-import mayaAvatar from "../../assets/agents/maya.webp";
 
-type AgentId = "leo" | "maya" | "system";
+type AgentId = "leo" | "system";
 
 interface AgentPresenceProps {
   activeAgent?: AgentId | null;
   statusMessage?: string | null;
-  onOpenSettings?: (agentId: "leo" | "maya") => void;
+  onOpenSettings?: (agentId: "leo") => void;
 }
 
-const avatarMap: Record<"leo" | "maya", string> = {
+const avatarMap: Record<"leo", string> = {
   leo: leoAvatar,
-  maya: mayaAvatar,
 };
 
-const agents: Array<{ id: "leo" | "maya"; name: string; role: string; initials: string }> = [
+const agents: Array<{ id: "leo"; name: string; role: string; initials: string }> = [
   { id: "leo", name: "Leo", role: "Video Editor", initials: "L" },
-  { id: "maya", name: "Maya", role: "Director", initials: "M" },
 ];
 
 const AgentAvatar: React.FC<(typeof agents)[number]> = ({ id, name, initials }) => {
@@ -50,7 +47,7 @@ export const AgentPresence: React.FC<AgentPresenceProps> = ({
   onOpenSettings,
 }) => (
   <div className="flex flex-col gap-2" data-testid="agent-presence">
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-1 gap-2">
       {agents.map((agent) => {
         const isActive = activeAgent === agent.id;
         return (

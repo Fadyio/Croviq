@@ -8,7 +8,6 @@ import {
   Video,
   Volume2,
   Bookmark,
-  Smartphone,
   Sparkles,
   FileText,
 } from "lucide-react";
@@ -163,7 +162,6 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
     (b) => b.trackId === "broll" || b.trackId === "coverage",
   );
   const chapterBlocks = twickData.blocks.filter((b) => b.trackId === "chapters");
-  const shortBlocks = twickData.blocks.filter((b) => b.trackId === "short");
   const narrationBlocks = twickData.blocks.filter((b) => b.trackId === "narration");
   const captionBlocks = twickData.blocks.filter((b) => b.trackId === "captions");
 
@@ -262,15 +260,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             </div>
           )}
 
-          {/* Track 6 Header: Short */}
-          {shortBlocks.length > 0 && (
-            <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-purple-400">
-              <Smartphone className="w-3 h-3 text-purple-400 shrink-0" />
-              <span className="truncate">Short</span>
-            </div>
-          )}
-
-          {/* Track 7 Header: Narration */}
+          {/* Track 6 Header: Narration */}
           {narrationBlocks.length > 0 && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-blue-400">
               <Sparkles className="w-3 h-3 text-blue-400 shrink-0" />
@@ -278,7 +268,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             </div>
           )}
 
-          {/* Track 8 Header: Captions */}
+          {/* Track 7 Header: Captions */}
           {captionBlocks.length > 0 && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-secondary">
               <FileText className="w-3 h-3 text-text-muted shrink-0" />
@@ -469,33 +459,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               </div>
             )}
 
-            {/* 7. Track 6 Content: SHORT CANDIDATE */}
-            {shortBlocks.length > 0 && (
-              <div className="h-6 relative flex items-center px-1 shrink-0 bg-purple-500/5">
-                {shortBlocks.map((sc) => {
-                  const leftPx = msToPixels(sc.startMs);
-                  const widthPx = Math.max(24, msToPixels(sc.endMs) - leftPx);
-
-                  return (
-                    <div
-                      key={sc.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSeek(sc.startMs);
-                        onSelectBlock(sc);
-                      }}
-                      className="absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-2 text-[9px] font-medium bg-purple-600/20 border border-purple-500/60 text-purple-200 hover:bg-purple-600/35 truncate"
-                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                      title={`${sc.label} (${formatTimecode(sc.startMs)} → ${formatTimecode(sc.endMs)})`}
-                    >
-                      <Smartphone className="w-2.5 h-2.5 shrink-0 text-purple-400" />
-                      <span className="truncate font-semibold">{sc.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {/* 8. Track 7 Content: NARRATION */}
+            {/* 7. Track 6 Content: NARRATION */}
             {narrationBlocks.length > 0 && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-blue-500/5">
                 {narrationBlocks.map((narr) => {
@@ -520,7 +484,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               </div>
             )}
 
-            {/* 9. Track 8 Content: CAPTIONS */}
+            {/* 8. Track 7 Content: CAPTIONS */}
             {captionBlocks.length > 0 && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-2/10">
                 {captionBlocks.map((cap) => {
