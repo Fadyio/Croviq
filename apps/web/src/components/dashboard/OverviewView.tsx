@@ -143,7 +143,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       {dashboard.trend && dashboard.trend.length > 0 && (
         <ChannelTrendChart data={dashboard.trend} title="Channel Performance" compact={true} />
       )}
-      {dashboard.proposed_experiment && (
+      {(dashboard.active_experiment || dashboard.proposed_experiment) && (
         <section
           className="rounded-xl border border-border-subtle bg-surface-1 p-4 sm:p-5 shadow-sm space-y-3"
           aria-labelledby="experiment-teaser-title"
@@ -155,17 +155,23 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 id="experiment-teaser-title"
                 className="text-xs font-semibold tracking-tight text-text-primary uppercase tracking-wider"
               >
-                Active Hypothesis & Experiment
+                {dashboard.active_experiment ? "Active Experiment" : "Proposed Hypothesis"}
               </h2>
             </div>
-            <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
-              {dashboard.proposed_experiment.status}
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                dashboard.active_experiment
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : "bg-primary/10 border-primary/20 text-primary"
+              }`}
+            >
+              {dashboard.active_experiment ? "ACTIVE" : dashboard.proposed_experiment.status}
             </span>
           </div>
 
           <p className="text-xs text-text-secondary leading-relaxed">
             <span className="font-semibold text-text-primary">Hypothesis: </span>
-            {dashboard.proposed_experiment.hypothesis}
+            {(dashboard.active_experiment || dashboard.proposed_experiment).hypothesis}
           </p>
 
           <div className="flex items-center justify-between pt-1 text-xs">
@@ -173,13 +179,19 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               <span>
                 Baseline:{" "}
                 <span className="font-mono font-medium text-text-primary">
-                  {dashboard.proposed_experiment.baseline_value.toFixed(1)}%
+                  {(
+                    dashboard.active_experiment || dashboard.proposed_experiment
+                  ).baseline_value.toFixed(1)}
+                  %
                 </span>
               </span>
               <span>
                 Target:{" "}
                 <span className="font-medium text-success">
-                  {dashboard.proposed_experiment.expected_direction}
+                  {
+                    (dashboard.active_experiment || dashboard.proposed_experiment)
+                      .expected_direction
+                  }
                 </span>
               </span>
             </div>

@@ -357,18 +357,27 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIncludeForecast((prev) => !prev)}
-            className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors border ${
-              includeForecast
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-border-subtle bg-surface-2 text-text-muted hover:text-text-secondary"
-            }`}
-            title="Statistical 7-day projection range"
-          >
-            <span>{includeForecast ? "Projection active" : "Add projection"}</span>
-          </button>
+          {data.length < 7 ? (
+            <span
+              className="rounded-lg border border-border-subtle bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-text-muted cursor-not-allowed"
+              title="Requires at least 7 historical data points"
+            >
+              Not enough history for a reliable projection
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIncludeForecast((prev) => !prev)}
+              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors border ${
+                includeForecast
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border-subtle bg-surface-2 text-text-muted hover:text-text-secondary"
+              }`}
+              title="Statistical 7-day projection derived from moving trend and residual variance"
+            >
+              <span>{includeForecast ? "Projection active" : "Add projection"}</span>
+            </button>
+          )}
 
           <div className="hidden sm:flex items-center gap-3 text-[11px] text-text-muted">
             <span className="inline-flex items-center gap-1.5 font-medium text-text-secondary">
@@ -414,6 +423,18 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
       <div className="h-64 sm:h-72 w-full">
         <EChartsWrapper option={chartOption} ariaLabel={`${title} chart showing ${metric}`} />
       </div>
+
+      {includeForecast && data.length >= 7 && (
+        <div className="pt-2 border-t border-border-subtle/50 flex flex-wrap items-center justify-between gap-2 text-[11px] text-text-muted">
+          <span>
+            <span className="font-semibold text-text-secondary">Projection method: </span>
+            Rolling 7-day trend slope with ±1σ to ±2σ residual uncertainty corridor
+          </span>
+          <span className="font-mono text-[10px]">
+            Assumptions: constant upload cadence · no exogenous traffic shocks
+          </span>
+        </div>
+      )}
     </section>
   );
 };
