@@ -267,6 +267,13 @@ resource "google_project_iam_member" "deployer_sa_admin" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
+# Allow deployment service account to administer BigQuery datasets for Terraform
+resource "google_project_iam_member" "deployer_bigquery_admin" {
+  project = var.project_id
+  role    = "roles/bigquery.admin"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 # YouTube OAuth application client secret metadata only. The owner creates secret versions outside Terraform.
 resource "google_secret_manager_secret" "youtube_oauth_client_secret" {
   project   = var.project_id
