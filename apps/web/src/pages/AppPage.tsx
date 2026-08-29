@@ -358,9 +358,9 @@ export const AppPage: React.FC<AppPageProps> = ({
           {/* Alex Team Member Chip */}
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => onNavigateRoute?.("/app/agents/alex")}
             className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-left transition-colors hover:border-border-strong hover:bg-surface-2 cursor-pointer"
-            aria-label="Open Alex settings"
+            aria-label="Open Alex workspace"
             title="Alex · Data Scientist"
             data-testid="btn-alex-settings-chip"
           >
@@ -504,6 +504,7 @@ export const AppPage: React.FC<AppPageProps> = ({
           <AlexRail
             insights={dashboard?.insights || []}
             findings={findings}
+            onOpenChat={() => onNavigateRoute?.("/app/agents/alex")}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenEvidence={(insight) => setEvidenceModalInsight(insight)}
             onOpenAllFindings={() => setAllFindingsDrawerOpen(true)}
@@ -644,13 +645,12 @@ export const AppPage: React.FC<AppPageProps> = ({
         </div>
       )}
 
-      {/* Worth Watching All Findings Drawer */}
+      {/* Worth Watching Topic Radar Drawer */}
       <WorthWatchingFindingsDrawer
         open={allFindingsDrawerOpen}
         findings={findings}
         onClose={() => setAllFindingsDrawerOpen(false)}
       />
-
       {/* Alex Settings Drawer */}
       <AlexSettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>

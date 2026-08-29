@@ -470,12 +470,15 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
     // 3. bug01-overview-1280x800.png
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.waitForTimeout(400);
+    await page.screenshot({ path: "e2e/screenshots/bug01-overview-1280x800.png" });
+
+    // 4. bug01-performance-1440x900.png
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/app/performance");
     await expect(page).toHaveURL(/\/app$/);
     await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
     await page.screenshot({ path: "e2e/screenshots/bug01-performance-1440x900.png" });
-
     // 5. bug01-experiments-1440x900.png
     await page.goto("/app/experiments");
     await expect(page).toHaveURL(/\/app$/);
