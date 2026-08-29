@@ -358,6 +358,113 @@ const mockBackendApis = async (page: Page) => {
     });
   });
 
+  let alexPromptText =
+    "You are Alex, Croviq's senior Channel Data Scientist and research partner.";
+
+  await page.route("**/api/workspace/agent-settings/prompt/*", async (route) => {
+    const url = route.request().url();
+    if (url.endsWith("/reset")) {
+      alexPromptText =
+        "You are Alex, Croviq's senior Channel Data Scientist and research partner.";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          agent_id: "alex",
+          prompt_text: alexPromptText,
+          version: 1,
+          updated_at: new Date().toISOString(),
+          is_custom: false,
+        }),
+      });
+      return;
+    }
+    const body = route.request().postDataJSON();
+    alexPromptText = body?.prompt_text || alexPromptText;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        agent_id: "alex",
+        prompt_text: alexPromptText,
+        version: 2,
+        updated_at: new Date().toISOString(),
+        is_custom: true,
+      }),
+    });
+  });
+
+  await page.route("**/api/workspace/agent-settings", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        alex_prompt: {
+          agent_id: "alex",
+          prompt_text: alexPromptText,
+          version: 1,
+          updated_at: "2026-08-28T00:00:00Z",
+          is_custom: false,
+        },
+        leo_prompt: {
+          agent_id: "leo",
+          prompt_text: "You are Leo, Croviq's Video Editor.",
+          version: 1,
+          updated_at: "2026-08-28T00:00:00Z",
+          is_custom: false,
+        },
+        iris_prompt: {
+          agent_id: "iris",
+          prompt_text: "You are Iris, Croviq's Quality Control gatekeeper.",
+          version: 1,
+          updated_at: "2026-08-28T00:00:00Z",
+          is_custom: false,
+        },
+        maya_prompt: {
+          agent_id: "maya",
+          prompt_text: "You are Maya, Director overseeing quality.",
+          version: 1,
+          updated_at: "2026-08-28T00:00:00Z",
+          is_custom: false,
+        },
+        voice_settings: {
+          narration_mode: "original",
+          selected_voice: "Puck",
+          language: "en-US",
+          updated_at: "2026-08-28T00:00:00Z",
+        },
+        voices: [],
+      }),
+    });
+  });
+
+  await page.route("**/api/workspace/agent-settings/memory*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        channel_title: "Croviq",
+        style_guide: "Evidence-first quantitative statistical analysis.",
+        creator_preferences: [
+          "Prefers early demonstrations in the first 30 seconds.",
+          "Track subscriber conversion per 1,000 views.",
+        ],
+        lessons: [
+          {
+            topic: "Early demonstration timing tracks viewer retention",
+            content: "Videos with technical demonstrations in the first 30 seconds average 58.4% retention.",
+            learned_from: "100-video historical channel dataset",
+          },
+          {
+            topic: "DevOps & Tooling tutorial subscriber conversion",
+            content: "Hands-on workflow architectures drive +43% higher conversion than theoretical explanations.",
+            learned_from: "Audience analytics audit",
+          },
+        ],
+      }),
+    });
+  });
+
   await page.route("**/api/channels/youtube/connection", async (route) => {
     await route.fulfill({
       status: 200,
@@ -745,6 +852,37 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await irisInput.fill("Is this video ready for release?");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByText("quality_control_verifier")).toBeVisible();
+  });
+
+  test("agent workspace settings provides memory search, custom prompt propagation, and reset", async ({
+    page,
+  }) => {
+    await signInAndGoTo(page, "/app/agents/alex");
+    await expect(page.getByRole("heading", { name: "Alex", exact: true })).toBeVisible();
+
+    // 1. Open Settings & Memory tab
+    await page.getByRole("tab", { name: "Settings & Memory" }).click();
+    await expect(page.getByTestId("agent-settings-drawer")).toBeVisible();
+
+    // 2. Switch to Memory view and test search
+    await page.getByTestId("tab-memory").click();
+    await expect(page.getByTestId("settings-memory-view")).toBeVisible();
+    await expect(page.getByTestId("input-memory-search")).toBeVisible();
+
+    // Search for demonstration lessons
+    await page.getByTestId("input-memory-search").fill("demonstration");
+    await expect(page.getByText(/demonstration/i).first()).toBeVisible();
+
+    // 3. Switch to Prompt view, update prompt, save, and reset
+    await page.getByTestId("tab-prompt").click();
+    const promptInput = page.getByTestId("agent-prompt-textarea");
+    await promptInput.fill("Focus specifically on edge computing and small vision models.");
+    await page.getByTestId("btn-save-prompt").click();
+    await expect(page.getByText("Saved")).toBeVisible();
+
+    // Reset prompt to default
+    await page.getByTestId("btn-reset-prompt").click();
+    await expect(page.getByText(/Data Scientist/i).first()).toBeVisible();
   });
 
   test("transitions cleanly from sample mode to connected YouTube and isolates live metrics", async ({

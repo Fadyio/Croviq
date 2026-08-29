@@ -197,16 +197,18 @@ async def reset_agent_prompt(
 @router.get(
     "/workspace/agent-settings/memory",
     response_model=AgentMemorySummaryResponse,
-    summary="View Agent Memory (Read-Only)",
-    description="Retrieve what Leo currently knows from the Channel Memory Bank.",
+    summary="View Agent Memory with Search",
+    description="Retrieve agent-scoped lessons and preferences from Channel Memory Bank with search filtering.",
 )
 async def get_agent_memory(
     current_user: Annotated[User, Depends(get_current_user)],
     memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
+    agent_id: str | None = None,
+    query: str | None = None,
 ) -> AgentMemorySummaryResponse:
     channel_id = "croviq_syn_ai_eng_01"
-    formatted_lessons = []
-    channel_title = "AI Engineering & Agent Systems"
+    channel_title = "Croviq"
+    aid = (agent_id or "alex").lower()
 
     try:
         await initialize_sample_channel_memory(memory_store)
@@ -217,8 +219,8 @@ async def get_agent_memory(
         formatted_lessons = [
             MemoryItemResponse(
                 topic=getattr(lesson, "directive", str(lesson)),
-                content=getattr(lesson, "evidence_summary", getattr(lesson, "directive", "Editorial lesson")),
-                learned_from=getattr(lesson, "learned_from_production_id", "github.mp4"),
+                content=getattr(lesson, "evidence_summary", getattr(lesson, "directive", "Memory lesson")),
+                learned_from=getattr(lesson, "learned_from_production_id", "historical_analysis.mp4"),
             )
             for lesson in lessons
         ]
@@ -231,18 +233,64 @@ async def get_agent_memory(
         formatted_lessons = [
             MemoryItemResponse(
                 topic=getattr(lesson, "directive", str(lesson)),
-                content=getattr(lesson, "evidence_summary", getattr(lesson, "directive", "Editorial lesson")),
-                learned_from=getattr(lesson, "learned_from_production_id", "github.mp4"),
+                content=getattr(lesson, "evidence_summary", getattr(lesson, "directive", "Memory lesson")),
+                learned_from=getattr(lesson, "learned_from_production_id", "historical_analysis.mp4"),
             )
             for lesson in lessons
         ]
 
-    style_guide = "Concise, highly technical, high-momentum tutorials without fluff."
-    prefs = [
-        "Prefers direct jump to terminal commands without conversational preambles.",
-        "Maintain clean audio balance with crisp consonant transitions.",
-        "Highlight key terminal outputs and GitHub config steps.",
-    ]
+    # Agent-specific knowledge enrichment
+    if aid == "alex":
+        style_guide = "Evidence-first quantitative statistical analysis with falsifiable hypotheses and regression baselines."
+        prefs = [
+            "Prefers 30-second early demonstrations to maximize viewer retention.",
+            "Track net subscriber conversion per 1,000 views across all content pillars.",
+            "Deduplicate external research semantically and prioritize high-signal developer releases.",
+        ]
+        if not any("demonstration" in l.topic.lower() for l in formatted_lessons):
+            formatted_lessons.insert(
+                0,
+                MemoryItemResponse(
+                    topic="Early demonstration timing tracks viewer retention",
+                    content="Videos with technical terminal demonstrations in the first 30 seconds average 58.4% retention.",
+                    learned_from="100-video historical channel dataset",
+                ),
+            )
+    elif aid == "iris":
+        style_guide = "Broadcast-grade quality verification adhering to strict audio loudness and caption timing standards."
+        prefs = [
+            "Target dialogue loudness at -16 LUFS (±1 LUFS) with -1 dBTP ceiling.",
+            "Zero tolerance for caption drift exceeding 100ms from speech onset.",
+            "Enforce strict human confirmation before external YouTube publishing.",
+        ]
+        formatted_lessons = [
+            MemoryItemResponse(
+                topic="Audio Loudness & Ceiling Compliance",
+                content="Master renders must meet EBU R128 / ITU-R BS.1770 standards at -16.0 LUFS.",
+                learned_from="Broadcast QA specification",
+            ),
+            MemoryItemResponse(
+                topic="Caption Boundary Synchronization",
+                content="Word-level timestamps must match speech start times within 50ms to prevent perceptual lag.",
+                learned_from="Viewer accessibility benchmarks",
+            ),
+        ]
+    else:
+        style_guide = "Concise, high-momentum narrative pacing eliminating filler speech and dead air."
+        prefs = [
+            "Remove conversational preambles ('So basically', 'Um') while keeping natural rhythm.",
+            "Apply room-tone bridges and visual B-roll coverage across dialogue cuts.",
+            "Extract high-energy standalone excerpts for vertical 9:16 Shorts.",
+        ]
+
+    # Filter by query if provided
+    if query and query.strip():
+        q = query.strip().lower()
+        formatted_lessons = [
+            item for item in formatted_lessons
+            if q in item.topic.lower() or q in item.content.lower() or (item.learned_from and q in item.learned_from.lower())
+        ]
+        prefs = [p for p in prefs if q in p.lower()]
 
     return AgentMemorySummaryResponse(
         channel_title=channel_title,
@@ -250,6 +298,7 @@ async def get_agent_memory(
         creator_preferences=prefs,
         lessons=formatted_lessons,
     )
+
 
 @router.get(
     "/workspace/agent-settings/voice",
@@ -264,7 +313,6 @@ async def get_voice_settings_endpoint(
 ) -> VoiceSettingsConfig:
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     return await agent_config_repo.get_voice_settings(workspace.workspace_id)
-
 
 @router.put(
     "/workspace/agent-settings/voice",
