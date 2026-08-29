@@ -16,6 +16,8 @@ type ResearchFinding = components["schemas"]["ResearchFinding"];
 interface AlexRailProps {
   insights: ChannelInsight[];
   findings: ResearchFinding[];
+  lastResearchedAt?: string | null;
+  cadence?: string | null;
   onOpenChat: () => void;
   onOpenSettings: () => void;
   onOpenEvidence: (insight: ChannelInsight) => void;
@@ -31,10 +33,21 @@ const formatDiscoveredAgo = (isoDate: string): string => {
   const diffDays = Math.floor(diffHours / 24);
   return `Discovered ${diffDays}d ago`;
 };
+const formatLastResearched = (isoDate: string): string => {
+  const researched = new Date(isoDate);
+  const diffMinutes = Math.max(1, Math.floor((Date.now() - researched.getTime()) / 60000));
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+};
 
 export const AlexRail: React.FC<AlexRailProps> = ({
   insights,
   findings,
+  lastResearchedAt,
+  cadence,
   onOpenChat,
   onOpenSettings,
   onOpenEvidence,
@@ -119,20 +132,28 @@ export const AlexRail: React.FC<AlexRailProps> = ({
           </div>
         )}
 
-        {/* Ideas Worth Making (Renamed from Worth Watching) */}
+        {/* Ideas Worth Making */}
         <div className="border-t border-border-subtle pt-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <h3 className="text-xs font-semibold text-text-primary">Ideas Worth Making</h3>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles className="h-4 w-4 text-primary shrink-0" />
+              <h3 className="text-xs font-semibold text-text-primary truncate">
+                Ideas Worth Making
+              </h3>
             </div>
-            {findings.length > 0 && (
-              <span className="text-[11px] text-text-muted font-mono">
+            {lastResearchedAt ? (
+              <span
+                className="text-[10px] text-text-muted font-mono shrink-0"
+                title={`Cadence: ${cadence || "Hourly"}`}
+              >
+                Last researched: {formatLastResearched(lastResearchedAt)}
+              </span>
+            ) : findings.length > 0 ? (
+              <span className="text-[11px] text-text-muted font-mono shrink-0">
                 {findings.length} opportunities
               </span>
-            )}
+            ) : null}
           </div>
-
           {findings.length > 0 ? (
             <div className="space-y-3">
               {visibleFindings.map((finding) => (
@@ -207,9 +228,14 @@ export const AlexRail: React.FC<AlexRailProps> = ({
               )}
             </div>
           ) : (
-            <div className="rounded-lg bg-surface-2/30 p-4 text-center border border-border-subtle/40">
-              <p className="text-xs text-text-muted">
-                No strong new ideas found in the latest research run.
+            <div className="rounded-lg bg-surface-2/30 p-4 text-center border border-border-subtle/40 space-y-1">
+              <p className="text-xs font-medium text-text-secondary">
+                {lastResearchedAt
+                  ? `Alex checked ${formatLastResearched(lastResearchedAt)}.`
+                  : "Alex checked recently."}
+              </p>
+              <p className="text-[11px] text-text-muted">
+                No strong new opportunities since the previous research run.
               </p>
             </div>
           )}

@@ -11,12 +11,13 @@ import { AgentChatDrawer } from "../components/AgentChatDrawer";
 import { AlexRail } from "../components/dashboard/AlexRail";
 import { OverviewView } from "../components/dashboard/OverviewView";
 import { WorthWatchingFindingsDrawer } from "../components/dashboard/WorthWatchingFindingsDrawer";
-
 type ChannelDashboard = components["schemas"]["ChannelDashboard"];
 type ResearchFinding = components["schemas"]["ResearchFinding"];
-type YouTubeConnection = components["schemas"]["YouTubeConnectionPublicSummary"];
+type ResearchConfig = components["schemas"]["ResearchConfig"];
 type Insight = components["schemas"]["ChannelInsight"];
+type YouTubeConnection = components["schemas"]["YouTubeConnectionPublicSummary"];
 type ChannelMode = "sample" | "youtube";
+
 interface AppPageProps {
   onNavigateRoute?: (route: string) => void;
   onNavigateNewProject: () => void;
@@ -28,6 +29,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
   const [channelMode, setChannelMode] = useState<ChannelMode>("sample");
   const [dashboard, setDashboard] = useState<ChannelDashboard | null>(null);
   const [findings, setFindings] = useState<ResearchFinding[]>([]);
+  const [researchConfig, setResearchConfig] = useState<ResearchConfig | null>(null);
   const [youtubeConnection, setYoutubeConnection] = useState<YouTubeConnection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnectingYt, setIsConnectingYt] = useState(false);
@@ -46,11 +48,19 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
     if (!firebaseUser) return;
     try {
       const token = await firebaseUser.getIdToken();
-      const response = await fetch("/api/channels/research/findings?limit=10", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        setFindings((await response.json()) as ResearchFinding[]);
+      const [findingsRes, configRes] = await Promise.all([
+        fetch("/api/channels/research/findings?limit=10", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch("/api/channels/research/config", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+      if (findingsRes.ok) {
+        setFindings((await findingsRes.json()) as ResearchFinding[]);
+      }
+      if (configRes.ok) {
+        setResearchConfig((await configRes.json()) as ResearchConfig);
       }
     } catch {
       // Non-blocking research findings load
@@ -482,6 +492,11 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
           <AlexRail
             insights={dashboard?.insights || []}
             findings={findings}
+            lastResearchedAt={
+              researchConfig?.last_run_at ||
+              (findings.length > 0 ? findings[0].discovered_at : null)
+            }
+            cadence={researchConfig?.cadence}
             onOpenChat={() => setChatAgentId("alex")}
             onOpenSettings={() => setSettingsAgentId("alex")}
             onOpenEvidence={(insight) => setEvidenceModalInsight(insight)}
@@ -646,6 +661,10 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
         isOpen={Boolean(settingsAgentId)}
         agentId={settingsAgentId || "alex"}
         onClose={() => setSettingsAgentId(null)}
+        onSaved={() => {
+          void loadFindings();
+          setRefreshKey((k) => k + 1);
+        }}
       />
     </div>
   );

@@ -71,7 +71,8 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
                     <span className="rounded bg-surface-3 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
                       {finding.primary_entity || finding.category}
                     </span>
-                    <span className="text-[11px] text-text-muted">
+                    <span className="text-[10px] text-text-muted font-mono">
+                      Signal: {Math.round((finding.opportunity_score ?? 0.9) * 100)}% ·{" "}
                       {formatDiscoveredAgo(finding.discovered_at)}
                     </span>
                   </div>

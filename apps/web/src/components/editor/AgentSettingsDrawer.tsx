@@ -45,6 +45,7 @@ interface AgentSettingsDrawerProps {
   isOpen: boolean;
   agentId: AgentId;
   onClose: () => void;
+  onSaved?: () => void;
 }
 
 const CADENCES: Array<{ value: ResearchCadence; label: string }> = [
@@ -60,6 +61,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   isOpen,
   agentId,
   onClose,
+  onSaved,
 }) => {
   const { firebaseUser } = useAuth();
   const agent = AGENT_IDENTITIES[agentId];
@@ -319,6 +321,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
       const updated: ResearchConfig = await res.json();
       setResearch(updated);
       setResearchNotice("Research settings saved");
+      onSaved?.();
       setTimeout(() => setResearchNotice(null), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save research settings");
