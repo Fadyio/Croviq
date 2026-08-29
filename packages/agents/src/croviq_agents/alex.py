@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import hashlib
+import ipaddress
 import os
 import json
 import logging
 import re
 from typing import Any, Sequence
-from urllib.parse import urlparse
+from urllib.parse import urlsplit
 
 from croviq_domain.channel_intelligence import (
     EvidenceKind,
@@ -41,6 +42,7 @@ ALEX_SYSTEM_INSTRUCTION = (
     "- RESEARCH: Externally grounded web information backed by verifiable source citations.\n"
     "- RECOMMENDATION: Concrete, bounded creative or technical action for the creator.\n\n"
     "Research Grounding Rules:\n"
+    "- Label external findings as web research synthesized by Gemini 3.7 Flash with Google Search Grounding, not as direct YouTube trend or category data.\n"
     "- When researching emerging topics, search public documentation, announcements, and releases.\n"
     "- Every research finding MUST have at least one valid public source citation (URL and domain).\n"
     "- Synthesize why the topic matters specifically to this channel's audience and content pillars.\n"
@@ -115,11 +117,172 @@ def derive_primary_entity(title: str, category: str = "") -> str:
 def extract_domain(url: str) -> str:
     """Extract clean domain name from URL."""
     try:
-        parsed = urlparse(url)
-        domain = parsed.netloc or parsed.path.split("/")[0]
+        parsed = urlsplit(url)
+        domain = parsed.hostname or parsed.path.split("/")[0]
         return domain.lower().removeprefix("www.")
-    except Exception:
+    except (TypeError, ValueError):
         return "web"
+
+
+def _normalize_source_domain(source: str) -> str | None:
+    """Normalize a preferred-source entry to a hostname suitable for exact matching."""
+    if not isinstance(source, str):
+        return None
+    if any(ord(character) < 32 or ord(character) == 127 for character in source):
+        return None
+    raw_source = source.strip()
+    if not raw_source or "\\" in raw_source:
+        return None
+
+    try:
+        parsed = urlsplit(raw_source if "://" in raw_source else f"//{raw_source}")
+        hostname = parsed.hostname
+        # Accessing port raises for malformed and out-of-range values.
+        _ = parsed.port
+    except (TypeError, ValueError):
+        return None
+    if not hostname:
+        return None
+
+    hostname = hostname.lower().rstrip(".")
+    try:
+        ipaddress.ip_address(hostname)
+        return hostname
+    except ValueError:
+        pass
+
+    try:
+        hostname = hostname.encode("idna").decode("ascii")
+    except UnicodeError:
+        return None
+    if len(hostname) > 253:
+        return None
+    labels = hostname.split(".")
+    if any(
+        not label
+        or len(label) > 63
+        or re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label) is None
+        for label in labels
+    ):
+        return None
+    return hostname
+
+
+def _hostname_matches_allowed_domain(hostname: str, allowed_domain: str) -> bool:
+    if hostname == allowed_domain:
+        return True
+    try:
+        ipaddress.ip_address(allowed_domain)
+    except ValueError:
+        return hostname.endswith(f".{allowed_domain}")
+    return False
+
+
+def is_url_allowed_by_sources(
+    url: str,
+    allowed_sources: Sequence[str] | None,
+    allow_broad_web: bool,
+) -> bool:
+    """Validate a public citation URL and enforce preferred-source host boundaries."""
+    if not isinstance(url, str):
+        return False
+    if any(ord(character) < 32 or ord(character) == 127 for character in url):
+        return False
+    raw_url = url.strip()
+    if not raw_url or "\\" in raw_url:
+        return False
+
+    try:
+        parsed = urlsplit(raw_url)
+        if parsed.scheme.lower() not in {"http", "https"}:
+            return False
+        if not parsed.netloc or not parsed.hostname:
+            return False
+        if parsed.username is not None or parsed.password is not None:
+            return False
+        # Accessing port raises for malformed and out-of-range values.
+        _ = parsed.port
+    except (TypeError, ValueError):
+        return False
+
+    hostname = parsed.hostname.lower().rstrip(".")
+    blocked_hostnames = {
+        "localhost",
+        "localhost.localdomain",
+        "metadata.google.internal",
+        "instance-data",
+        "instance-data.ec2.internal",
+    }
+    if (
+        hostname in blocked_hostnames
+        or hostname.endswith(".localhost")
+        or hostname.endswith(".local")
+        or hostname.endswith(".internal")
+    ):
+        return False
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        # Reject alternate all-numeric/hex IPv4 spellings such as 2130706433
+        # and 0x7f000001, which some URL clients interpret as loopback.
+        if re.fullmatch(r"(?:(?:0x[0-9a-f]+|[0-9]+)\.)*(?:0x[0-9a-f]+|[0-9]+)", hostname):
+            return False
+        hostname = _normalize_source_domain(hostname) or ""
+        if not hostname:
+            return False
+    else:
+        if (
+            not ip.is_global
+            or ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+            or getattr(ip, "is_site_local", False)
+        ):
+            return False
+
+    if not allow_broad_web and allowed_sources:
+        normalized_sources = {
+            domain
+            for source in allowed_sources
+            if (domain := _normalize_source_domain(source)) is not None
+        }
+        if not normalized_sources:
+            return False
+        return any(
+            _hostname_matches_allowed_domain(hostname, allowed_domain)
+            for allowed_domain in normalized_sources
+        )
+
+    return True
+
+
+def _filter_citations_by_source_policy(
+    citations: Sequence[SourceCitation],
+    allowed_sources: Sequence[str] | None,
+    allow_broad_web: bool,
+) -> list[SourceCitation]:
+    return [
+        citation
+        for citation in citations
+        if is_url_allowed_by_sources(citation.url, allowed_sources, allow_broad_web)
+    ]
+
+
+def _source_policy_for_prompts(
+    prompts: Sequence[ResearchPrompt],
+) -> tuple[tuple[str, ...] | None, bool]:
+    has_strict_prompt = any(not prompt.use_broad_web_search for prompt in prompts)
+    strict_sources = tuple(
+        source
+        for prompt in prompts
+        if not prompt.use_broad_web_search
+        for source in prompt.preferred_sources
+    )
+    return strict_sources or None, not has_strict_prompt
 
 
 def apply_research_diversity_and_dedup(
@@ -127,8 +290,10 @@ def apply_research_diversity_and_dedup(
     existing_by_fp: dict[str, ResearchFinding],
     max_per_cluster: int = 2,
     max_total: int = 6,
+    allowed_sources: Sequence[str] | None = None,
+    allow_broad_web: bool = True,
 ) -> list[ResearchFinding]:
-    """Apply deterministic deduplication, grounding validation, and primary_entity/topic cluster diversity constraints."""
+    """Apply source validation, deduplication, and topic diversity constraints."""
     seen_fps: set[str] = set()
     seen_urls: set[str] = set()
     seen_entities: set[str] = set()
@@ -136,9 +301,22 @@ def apply_research_diversity_and_dedup(
     deduped: list[ResearchFinding] = []
     deferred_same_entity: list[ResearchFinding] = []
 
-    # Sort candidates by opportunity score and freshness score
+    sanitized_candidates: list[ResearchFinding] = []
+    for finding in candidates:
+        valid_citations = _filter_citations_by_source_policy(
+            finding.source_citations,
+            allowed_sources,
+            allow_broad_web,
+        )
+        if not valid_citations:
+            continue
+        sanitized_candidates.append(
+            finding.model_copy(update={"source_citations": valid_citations})
+        )
+
+    # Sort candidates by opportunity score and freshness score.
     sorted_candidates = sorted(
-        candidates,
+        sanitized_candidates,
         key=lambda x: (x.opportunity_score, x.freshness_score),
         reverse=True,
     )
@@ -151,8 +329,6 @@ def apply_research_diversity_and_dedup(
 
     # Pass 1: Strict diversity — at most 1 finding per primary_entity and max_per_cluster
     for finding in sorted_candidates:
-        if not finding.source_citations or not finding.source_citations[0].url.startswith("http"):
-            continue
 
         primary_url = finding.source_citations[0].url
         cluster = finding.topic_cluster or derive_topic_cluster(finding.title, finding.category)
@@ -262,7 +438,11 @@ class AlexDataScientist:
 
             self._client = genai.Client(
                 vertexai=True,
-                project=self._project_id,
+                project=(
+                    self._project_id
+                    or os.environ.get("VERTEX_PROJECT_ID")
+                    or os.environ.get("GCP_PROJECT_ID")
+                ),
                 location=self._location,
             )
         return self._client
@@ -281,6 +461,20 @@ class AlexDataScientist:
         force_mock: bool = False,
     ) -> tuple[ResearchRun, list[ResearchFinding]]:
         """Execute a grounded search research run using Gemini 3.7 Flash with Google Search grounding."""
+        is_production = (
+            os.environ.get("ENVIRONMENT") == "production"
+            or os.environ.get("CROVIQ_ENVIRONMENT") == "production"
+        )
+        configured_project_id = (
+            self._project_id
+            or os.environ.get("VERTEX_PROJECT_ID")
+            or os.environ.get("GCP_PROJECT_ID")
+        )
+        if is_production and not configured_project_id:
+            raise RuntimeError(
+                "Alex grounded research cannot use mock/deterministic provider in production "
+                "without GCP/Vertex configuration"
+            )
         scheduled_at = scheduled_at or datetime.now(UTC)
         run = ResearchRun.for_schedule(
             workspace_id=workspace_id,
@@ -314,7 +508,7 @@ class AlexDataScientist:
             return run, []
 
         try:
-            if not force_mock and (self._project_id or "VERTEX_PROJECT_ID" in os.environ):
+            if not force_mock and configured_project_id:
                 findings, search_queries, input_toks, output_toks = await self._execute_gemini_grounded_search(
                     enabled_prompts=enabled_prompts,
                     channel_profile=channel_profile,
@@ -382,6 +576,7 @@ class AlexDataScientist:
         from google.genai import types
 
         client = self._get_client()
+        allowed_sources, allow_broad_web = _source_policy_for_prompts(enabled_prompts)
         pillars = channel_profile.content_pillars if channel_profile else ["AI Engineering", "LLM Systems", "Agent Workflows"]
         prompt_lines: list[str] = []
         for p in enabled_prompts:
@@ -403,12 +598,12 @@ class AlexDataScientist:
             f"Active Research Prompts and Constraints:\n{prompt_texts}\n\n"
             f"{history_context}\n\n"
             "Research Directives:\n"
-            "1. Explore multi-lane topics across distinct technical domains: Foundation Models & Reasoning, Agent Workflows & Tooling, Developer Tooling & SDKs, Open-Source Releases & Benchmarks, Cloud Infrastructure, Multimodal & Video Systems, Evaluation & Observability, and YouTube Creator Ecosystem Signals.\n"
+            "1. Explore multi-lane topics across distinct technical domains: Foundation Models & Reasoning, Agent Workflows & Tooling, Developer Tooling & SDKs, Open-Source Releases & Benchmarks, Cloud Infrastructure, Multimodal & Video Systems, Evaluation & Observability, and Creator Content Ecosystem Patterns.\n"
             "2. For prompts marked 'Strictly Restrict to Preferred Sources', only query and cite those exact domains using site: constraints.\n"
             "3. Identify 2-4 high-value topic opportunities from distinct categories with unique primary entities and topic clusters.\n"
             "4. For each finding, provide:\n"
             "   - title (clear, factual, and informative)\n"
-            "   - category (e.g. Foundation Models, Agent Workflows, Multimodal Systems, Developer Tooling, Evaluation & Observability, YouTube Signals)\n"
+            "   - category (e.g. Foundation Models, Agent Workflows, Multimodal Systems, Developer Tooling, Evaluation & Observability, Video Pacing & Engineering Patterns)\n"
             "   - topic_cluster (e.g. foundation-models, agent-workflows, multimodal-systems, developer-tooling, evaluation-observability, cloud-infrastructure)\n"
             "   - primary_entity (e.g. Gemini 3.7, OpenTelemetry, WebCodecs, FastAPI, LangGraph, Vertex AI)\n"
             "   - summary (concise technical breakdown)\n"
@@ -448,6 +643,12 @@ class AlexDataScientist:
                 for chunk in gm.grounding_chunks:
                     if chunk.web and chunk.web.uri:
                         uri = str(chunk.web.uri)
+                        if not is_url_allowed_by_sources(
+                            uri,
+                            allowed_sources,
+                            allow_broad_web,
+                        ):
+                            continue
                         title = str(chunk.web.title or uri)
                         citations_pool.append(
                             SourceCitation(
@@ -486,16 +687,21 @@ class AlexDataScientist:
             finding_citations = list(citations_pool)
             if item.get("primary_url"):
                 p_url = str(item["primary_url"])
-                p_title = str(item.get("primary_title", p_url))
-                finding_citations.insert(
-                    0,
-                    SourceCitation(
-                        url=p_url,
-                        title=p_title,
-                        domain=extract_domain(p_url),
-                        published_at=None,
-                    ),
-                )
+                if is_url_allowed_by_sources(
+                    p_url,
+                    allowed_sources,
+                    allow_broad_web,
+                ):
+                    p_title = str(item.get("primary_title", p_url))
+                    finding_citations.insert(
+                        0,
+                        SourceCitation(
+                            url=p_url,
+                            title=p_title,
+                            domain=extract_domain(p_url),
+                            published_at=None,
+                        ),
+                    )
 
             if not finding_citations:
                 continue
@@ -522,7 +728,12 @@ class AlexDataScientist:
             )
             candidates.append(candidate)
 
-        findings = apply_research_diversity_and_dedup(candidates, existing_by_fp)
+        findings = apply_research_diversity_and_dedup(
+            candidates,
+            existing_by_fp,
+            allowed_sources=allowed_sources,
+            allow_broad_web=allow_broad_web,
+        )
 
         input_toks = 0
         output_toks = 0
@@ -541,6 +752,7 @@ class AlexDataScientist:
         channel_id: str,
     ) -> tuple[list[ResearchFinding], list[str]]:
         now = datetime.now(UTC)
+        allowed_sources, allow_broad_web = _source_policy_for_prompts(enabled_prompts)
         search_queries = [
             f"site:{p.preferred_sources[0]} {p.text}" if p.preferred_sources else f"AI engineering {p.text}"
             for p in enabled_prompts
@@ -654,12 +866,12 @@ class AlexDataScientist:
                 ],
             },
             {
-                "title": "YouTube Tech Video Audience Retention & Pacing Dynamics",
-                "category": "YouTube Signals",
-                "topic_cluster": "youtube-signals",
-                "primary_entity": "YouTube Analytics",
-                "summary": "Analysis of technical education content across Category 28 (Science & Technology) highlights that demonstrations introduced before 00:30 elevate audience retention by 22%.",
-                "why_it_matters": "Applying verified retention pacing curves directly informs Editor and Director agent decisions for your upcoming releases.",
+                "title": "Video Pacing & Audience Retention Dynamics",
+                "category": "Creator Ecosystem & Video Engineering",
+                "topic_cluster": "video-pacing-audience-retention",
+                "primary_entity": "Video Pacing & Audience Retention Dynamics",
+                "summary": "YouTube's official audience-retention reporting guidance explains how to inspect viewer attention across moments in a video and compare a video's segments against typical retention.",
+                "why_it_matters": "Combining that reporting methodology with the channel's own analytics can guide evidence-based pacing and demonstration-placement decisions.",
                 "relevance_score": 0.91,
                 "freshness_score": 0.93,
                 "opportunity_score": 0.92,
@@ -677,7 +889,14 @@ class AlexDataScientist:
 
         candidates: list[ResearchFinding] = []
         for idx, item in enumerate(candidate_items):
-            fp = normalize_topic_fingerprint(item["title"], item["citations"][0].domain)
+            valid_citations = _filter_citations_by_source_policy(
+                item["citations"],
+                allowed_sources,
+                allow_broad_web,
+            )
+            if not valid_citations:
+                continue
+            fp = normalize_topic_fingerprint(item["title"], valid_citations[0].domain)
             candidate = ResearchFinding(
                 finding_id=f"fnd_{fp[:12]}_{idx}",
                 run_id=run_id,
@@ -689,7 +908,7 @@ class AlexDataScientist:
                 relevance_score=item["relevance_score"],
                 freshness_score=item["freshness_score"],
                 opportunity_score=item["opportunity_score"],
-                source_citations=item["citations"],
+                source_citations=valid_citations,
                 topic_fingerprint=fp,
                 topic_cluster=item["topic_cluster"],
                 primary_entity=item["primary_entity"],
@@ -699,7 +918,12 @@ class AlexDataScientist:
             )
             candidates.append(candidate)
 
-        findings = apply_research_diversity_and_dedup(candidates, existing_by_fp)
+        findings = apply_research_diversity_and_dedup(
+            candidates,
+            existing_by_fp,
+            allowed_sources=allowed_sources,
+            allow_broad_web=allow_broad_web,
+        )
 
         return findings, search_queries
 

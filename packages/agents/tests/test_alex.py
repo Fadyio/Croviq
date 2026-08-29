@@ -1,6 +1,11 @@
 import pytest
 from datetime import UTC, datetime
-from croviq_agents.alex import AlexDataScientist, normalize_topic_fingerprint
+from croviq_agents.alex import (
+    ALEX_SYSTEM_INSTRUCTION,
+    AlexDataScientist,
+    is_url_allowed_by_sources,
+    normalize_topic_fingerprint,
+)
 from croviq_domain.channel_intelligence import (
     FindingLifecycle,
     ResearchCadence,
@@ -11,6 +16,13 @@ from croviq_domain.channel_intelligence import (
     SourceCitation,
 )
 from croviq_domain.memory import ChannelLesson, TargetAgent
+
+
+def test_alex_labels_grounded_web_research_provenance_truthfully() -> None:
+    assert (
+        "web research synthesized by Gemini 3.7 Flash with Google Search Grounding"
+        in ALEX_SYSTEM_INSTRUCTION
+    )
 
 
 @pytest.mark.asyncio
@@ -248,11 +260,11 @@ async def test_alex_research_recency_truth_does_not_fabricate_published_at() -> 
 
 
 @pytest.mark.asyncio
-async def test_alex_research_multi_lane_and_youtube_signals() -> None:
+async def test_alex_research_multi_lane_and_creator_ecosystem_patterns() -> None:
     alex = AlexDataScientist()
     prompt = ResearchPrompt(
         prompt_id="p_multi",
-        text="Comprehensive channel intelligence and YouTube signals",
+        text="Comprehensive channel intelligence and creator content ecosystem patterns",
         enabled=True,
         preferred_sources=["support.google.com", "ai.google.dev", "developer.mozilla.org"],
         use_broad_web_search=True,
@@ -266,4 +278,135 @@ async def test_alex_research_multi_lane_and_youtube_signals() -> None:
     clusters = {f.topic_cluster for f in findings}
     assert "foundation-models" in clusters
     assert "multimodal-systems" in clusters or "agent-workflows" in clusters
-    assert any("youtube" in (f.topic_cluster or "") or f.primary_entity == "YouTube Analytics" for f in findings)
+    assert "video-pacing-audience-retention" in clusters
+
+
+@pytest.mark.parametrize(
+    ("url", "allowed_sources"),
+    [
+        ("https://google.com/search?q=gemini", ["google.com"]),
+        ("https://docs.python.org/3/library/urllib.parse.html", ["docs.python.org"]),
+        ("https://sub.domain.com/research", ["domain.com"]),
+        ("https://sub.domain.com/research", ["HTTPS://DOMAIN.COM:443/preferred/path"]),
+    ],
+)
+def test_url_validator_allows_exact_and_subdomain_sources(
+    url: str,
+    allowed_sources: list[str],
+) -> None:
+    assert is_url_allowed_by_sources(url, allowed_sources, allow_broad_web=False) is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://unrelated.example/research",
+        "https://fake-google.com/research",
+        "https://google.com.evil.com/research",
+        "https://evil.com/research?source=google.com",
+        "https://evil.com/research#google.com",
+    ],
+)
+def test_url_validator_rejects_domains_outside_preferred_sources(url: str) -> None:
+    assert is_url_allowed_by_sources(url, ["google.com"], allow_broad_web=False) is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "httpx://google.com/research",
+        "javascript:alert('research')",
+        "not a url",
+        "https://[invalid",
+        "https://google.com\n/research",
+    ],
+)
+def test_url_validator_rejects_invalid_urls(url: str) -> None:
+    assert is_url_allowed_by_sources(url, ["google.com"], allow_broad_web=False) is False
+
+
+def test_url_validator_does_not_treat_ip_allowlist_entries_as_parent_domains() -> None:
+    assert (
+        is_url_allowed_by_sources(
+            "https://evil.8.8.8.8/research",
+            ["8.8.8.8"],
+            allow_broad_web=False,
+        )
+        is False
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1/research",
+        "http://localhost/research",
+        "http://169.254.169.254/latest/meta-data",
+        "http://metadata.google.internal/computeMetadata/v1",
+        "http://10.0.0.1/research",
+        "http://0.0.0.0/research",
+        "http://172.16.0.1/research",
+        "http://192.168.0.1/research",
+        "http://instance-data/latest/meta-data",
+        "http://[::1]/research",
+        "http://[fc00::1]/research",
+        "http://[fe80::1]/research",
+        "http://0x7f.0x0.0x0.0x1/research",
+        "http://224.0.0.1/research",
+        "http://240.0.0.1/research",
+        "http://[ff02::1]/research",
+    ],
+)
+def test_url_validator_rejects_ssrf_hosts(url: str) -> None:
+    assert is_url_allowed_by_sources(url, None, allow_broad_web=True) is False
+
+
+@pytest.mark.asyncio
+async def test_alex_research_restricts_citations_to_preferred_sources() -> None:
+    alex = AlexDataScientist()
+    prompt = ResearchPrompt(
+        prompt_id="strict-google-ai",
+        text="Research Gemini model capabilities",
+        enabled=True,
+        preferred_sources=["https://ai.google.dev/gemini-api/docs"],
+        use_broad_web_search=False,
+    )
+
+    run, findings = await alex.run_grounded_research(
+        prompts=[prompt],
+        force_mock=True,
+    )
+
+    assert run.status == ResearchRunStatus.COMPLETED
+    assert [finding.title for finding in findings] == [
+        "Gemini 3.7 Flash Hybrid Reasoning and Multimodal Agent Capabilities"
+    ]
+    assert [
+        citation.url
+        for finding in findings
+        for citation in finding.source_citations
+    ] == ["https://ai.google.dev/gemini-api/docs/models/gemini"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("environment_variable", ["ENVIRONMENT", "CROVIQ_ENVIRONMENT"])
+async def test_alex_research_fails_closed_without_gcp_configuration_in_production(
+    environment_variable: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("CROVIQ_ENVIRONMENT", raising=False)
+    monkeypatch.delenv("VERTEX_PROJECT_ID", raising=False)
+    monkeypatch.delenv("GCP_PROJECT_ID", raising=False)
+    monkeypatch.setenv(environment_variable, "production")
+    alex = AlexDataScientist()
+    prompt = ResearchPrompt(prompt_id="production", text="Research AI systems", enabled=True)
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            "^Alex grounded research cannot use mock/deterministic provider in production "
+            "without GCP/Vertex configuration$"
+        ),
+    ):
+        await alex.run_grounded_research(prompts=[prompt], force_mock=True)

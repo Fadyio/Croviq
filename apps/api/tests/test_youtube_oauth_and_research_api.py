@@ -1,7 +1,10 @@
 """Comprehensive integration tests for YouTube OAuth, Alex Grounded Research, Scheduler Tick, and Code Execution."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from unittest.mock import AsyncMock, patch
+
+import httpx
 
 import pytest
 from fastapi import FastAPI
@@ -20,6 +23,10 @@ from croviq_api.channels.youtube_repository import (
     InMemoryYouTubeConnectionRepository,
     YouTubeConnection,
     get_youtube_connection_repository,
+)
+from croviq_api.channels.token_refresh import (
+    YouTubeReauthRequiredError,
+    refresh_youtube_access_token_if_needed,
 )
 from croviq_api.config import get_settings
 from croviq_api.main import create_app
@@ -89,6 +96,35 @@ def app(user: User, repos: tuple) -> FastAPI:
 @pytest.fixture
 def client(app: FastAPI) -> TestClient:
     return TestClient(app)
+
+def _youtube_connection(
+    *,
+    token_expiry: datetime,
+    refresh_token: str | None = "refresh-token",
+    status: str = "connected",
+    error_message: str | None = None,
+) -> YouTubeConnection:
+    now = datetime.now(UTC)
+    return YouTubeConnection(
+        workspace_id="ws_usr_creator_01",
+        user_id="usr_creator_01",
+        channel_id="UC_test_channel",
+        channel_title="Test Channel",
+        subscriber_count=100,
+        access_token="access-token",
+        refresh_token=refresh_token,
+        status=status,
+        error_message=error_message,
+        token_expiry=token_expiry,
+        scopes=[
+            "https://www.googleapis.com/auth/youtube.readonly",
+            "https://www.googleapis.com/auth/yt-analytics.readonly",
+        ],
+        connected_at=now - timedelta(days=1),
+        last_sync_at=now - timedelta(hours=1),
+    )
+
+
 
 
 # -----------------------------------------------------------------------------
@@ -225,6 +261,211 @@ def test_handle_youtube_callback_stores_connection(client: TestClient, repos: tu
     # 7. Disconnect is idempotent
     disconnect_again = client.post("/api/channels/youtube/disconnect")
     assert disconnect_again.status_code == 204
+
+def test_reauth_required_persists_across_status_requests_and_reconnects(
+    client: TestClient,
+    repos: tuple,
+) -> None:
+    import asyncio
+
+    _, _, youtube_repo, _ = repos
+    expired_connection = _youtube_connection(
+        token_expiry=datetime.now(UTC) - timedelta(minutes=1),
+        refresh_token=None,
+    )
+    asyncio.run(youtube_repo.save_connection(expired_connection))
+
+    dashboard_response = client.get("/api/channels/youtube/dashboard")
+    assert dashboard_response.status_code == 401
+    expected_error = (
+        "YouTube access token has expired and no refresh token is stored. "
+        "Please reconnect your YouTube channel."
+    )
+    assert dashboard_response.json() == {
+        "detail": f"YouTube authorization expired or invalid: {expected_error}"
+    }
+
+    for _ in range(2):
+        status_response = client.get("/api/channels/youtube/connection")
+        assert status_response.status_code == 200
+        status_payload = status_response.json()
+        assert status_payload["connected"] is True
+        assert status_payload["status"] == "reauth_required"
+        assert status_payload["error_message"] == expected_error
+
+    persisted_reauth = asyncio.run(
+        youtube_repo.get_connection("ws_usr_creator_01")
+    )
+    assert persisted_reauth is not None
+    assert persisted_reauth.status == "reauth_required"
+    assert persisted_reauth.error_message == expected_error
+    raw_reauth = youtube_repo.get_raw_record("ws_usr_creator_01")
+    assert raw_reauth is not None
+    assert raw_reauth.status == "reauth_required"
+    assert raw_reauth.error_message == expected_error
+
+    auth_response = client.post(
+        "/api/channels/youtube/auth-url",
+        json={"redirect_uri": "http://localhost:5173/app"},
+    )
+    reconnect_response = client.post(
+        "/api/channels/youtube/callback",
+        json={
+            "code": "mock-reconnect-code",
+            "state": auth_response.json()["state_token"],
+            "redirect_uri": "http://localhost:5173/app",
+        },
+    )
+    assert reconnect_response.status_code == 200
+    assert reconnect_response.json()["status"] == "connected"
+    assert reconnect_response.json()["error_message"] is None
+
+    reconnected = asyncio.run(youtube_repo.get_connection("ws_usr_creator_01"))
+    assert reconnected is not None
+    assert reconnected.status == "connected"
+    assert reconnected.error_message is None
+
+
+@pytest.mark.parametrize(
+    ("provider_error", "expected_status", "expected_detail"),
+    [
+        (
+            "YouTube API request failed with status 403",
+            403,
+            "YouTube API permissions required (e.g. Analytics scope): "
+            "YouTube API request failed with status 403",
+        ),
+        (
+            "YouTube API request failed with status 429",
+            429,
+            "YouTube API quota limit exceeded: "
+            "YouTube API request failed with status 429",
+        ),
+        (
+            "YouTube API request failed with status 502",
+            502,
+            "Failed to fetch YouTube analytics: "
+            "YouTube API request failed with status 502",
+        ),
+    ],
+)
+def test_youtube_dashboard_maps_provider_errors_without_corrupting_connection(
+    client: TestClient,
+    repos: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+    provider_error: str,
+    expected_status: int,
+    expected_detail: str,
+) -> None:
+    import asyncio
+
+    _, _, youtube_repo, _ = repos
+    connection = _youtube_connection(
+        token_expiry=datetime.now(UTC) + timedelta(hours=1),
+    )
+    asyncio.run(youtube_repo.save_connection(connection))
+
+    async def fail_dashboard(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError(provider_error)
+
+    monkeypatch.setattr(
+        "croviq_api.channels.routes.build_channel_dashboard",
+        fail_dashboard,
+    )
+
+    response = client.get("/api/channels/youtube/dashboard")
+    assert response.status_code == expected_status
+    assert response.json() == {"detail": expected_detail}
+
+    persisted = asyncio.run(youtube_repo.get_connection("ws_usr_creator_01"))
+    assert persisted is not None
+    assert persisted.status == "connected"
+    assert persisted.error_message is None
+
+@pytest.mark.asyncio
+async def test_invalid_grant_persists_reauth_required_before_access_token_expiry(
+    repos: tuple,
+) -> None:
+    _, _, youtube_repo, _ = repos
+    connection = _youtube_connection(
+        token_expiry=datetime.now(UTC) + timedelta(minutes=1),
+        refresh_token="revoked-refresh-token",
+    )
+    await youtube_repo.save_connection(connection)
+    google_response = httpx.Response(
+        status_code=400,
+        json={
+            "error": "invalid_grant",
+            "error_description": "Token has been expired or revoked.",
+        },
+        request=httpx.Request("POST", "https://oauth2.googleapis.com/token"),
+    )
+
+    with patch("croviq_api.channels.token_refresh.get_settings") as settings:
+        settings.return_value.google_oauth_client_id = "client-id"
+        settings.return_value.google_oauth_client_secret = "client-secret"
+        with patch(
+            "croviq_api.channels.token_refresh.httpx.AsyncClient.post",
+            new_callable=AsyncMock,
+            return_value=google_response,
+        ):
+            with pytest.raises(YouTubeReauthRequiredError) as exc_info:
+                await refresh_youtube_access_token_if_needed(connection, youtube_repo)
+
+    expected_error = (
+        "YouTube authorization failed during token refresh "
+        "(HTTP 400: Token has been expired or revoked.). "
+        "Please reconnect your YouTube channel."
+    )
+    assert str(exc_info.value) == expected_error
+    persisted = await youtube_repo.get_connection("ws_usr_creator_01")
+    assert persisted is not None
+    assert persisted.status == "reauth_required"
+    assert persisted.error_message == expected_error
+
+
+@pytest.mark.asyncio
+async def test_temporary_refresh_outage_preserves_connected_status(
+    repos: tuple,
+) -> None:
+    _, _, youtube_repo, _ = repos
+    connection = _youtube_connection(
+        token_expiry=datetime.now(UTC) + timedelta(minutes=1),
+    )
+    await youtube_repo.save_connection(connection)
+    google_response = httpx.Response(
+        status_code=502,
+        json={
+            "error": "server_error",
+            "error_description": "upstream unavailable",
+        },
+        request=httpx.Request("POST", "https://oauth2.googleapis.com/token"),
+    )
+
+    with patch("croviq_api.channels.token_refresh.get_settings") as settings:
+        settings.return_value.google_oauth_client_id = "client-id"
+        settings.return_value.google_oauth_client_secret = "client-secret"
+        with patch(
+            "croviq_api.channels.token_refresh.httpx.AsyncClient.post",
+            new_callable=AsyncMock,
+            return_value=google_response,
+        ):
+            access_token, degraded = await refresh_youtube_access_token_if_needed(
+                connection,
+                youtube_repo,
+            )
+
+    expected_error = (
+        "Google OAuth is temporarily unavailable while refreshing the YouTube token "
+        "(HTTP 502: upstream unavailable)."
+    )
+    assert access_token == "access-token"
+    assert degraded.status == "connected"
+    assert degraded.error_message == expected_error
+    persisted = await youtube_repo.get_connection("ws_usr_creator_01")
+    assert persisted is not None
+    assert persisted.status == "connected"
+    assert persisted.error_message == expected_error
 
 def test_youtube_callback_rejects_invalid_or_consumed_state(client: TestClient) -> None:
     # Attempt with non-existent state

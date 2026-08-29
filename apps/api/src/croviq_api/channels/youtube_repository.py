@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
+import os
 import secrets
 from typing import Any
 
@@ -39,6 +40,8 @@ class YouTubeConnectionRecord(BaseModel):
     subscriber_count: int = Field(default=0, ge=0)
     encrypted_token_payload: str = Field(..., min_length=1)
     encryption_schema_version: str = Field(default=DEFAULT_ENCRYPTION_SCHEMA_VERSION)
+    status: str = Field(default="connected")
+    error_message: str | None = Field(default=None)
     scopes: list[str] = Field(default_factory=list)
     token_expiry: datetime | None = None
     connected_at: datetime
@@ -67,6 +70,8 @@ class YouTubeConnection(BaseModel):
     subscriber_count: int = Field(default=0, ge=0)
     access_token: str = Field(..., min_length=1)
     refresh_token: str | None = None
+    status: str = Field(default="connected")
+    error_message: str | None = Field(default=None)
     token_expiry: datetime | None = None
     scopes: list[str] = Field(default_factory=list)
     connected_at: datetime
@@ -168,6 +173,8 @@ class YouTubeConnectionRepository(ABC):
             subscriber_count=record.subscriber_count,
             access_token=payload.access_token,
             refresh_token=payload.refresh_token,
+            status=record.status,
+            error_message=record.error_message,
             token_expiry=record.token_expiry,
             scopes=record.scopes,
             connected_at=record.connected_at,
@@ -197,6 +204,8 @@ class YouTubeConnectionRepository(ABC):
             avatar_url=connection.avatar_url,
             subscriber_count=connection.subscriber_count,
             encrypted_token_payload=encrypted_payload,
+            status=connection.status,
+            error_message=connection.error_message,
             scopes=connection.scopes,
             token_expiry=connection.token_expiry,
             connected_at=connection.connected_at,

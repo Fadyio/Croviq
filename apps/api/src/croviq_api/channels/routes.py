@@ -340,6 +340,8 @@ async def handle_youtube_callback(
         subscriber_count=sub_count,
         access_token=access_token,
         refresh_token=refresh_token,
+        status="connected",
+        error_message=None,
         token_expiry=now + timedelta(hours=1),
         scopes=scopes,
         connected_at=now,
@@ -359,6 +361,8 @@ async def handle_youtube_callback(
 
     return YouTubeConnectionPublicSummary(
         connected=True,
+        status="connected",
+        error_message=None,
         channel_id=channel_id,
         channel_title=title,
         avatar_url=avatar_url,
@@ -383,12 +387,10 @@ async def get_youtube_connection_status(
     connection = await youtube_repo.get_connection(workspace.workspace_id)
     if connection is None:
         return YouTubeConnectionPublicSummary(connected=False, status="disconnected")
-    now = datetime.now(UTC)
-    is_expired = connection.token_expiry is not None and connection.token_expiry <= now
-    status_str = "reauth_required" if (is_expired and not connection.refresh_token) else "connected"
     return YouTubeConnectionPublicSummary(
         connected=True,
-        status=status_str,
+        status=connection.status,
+        error_message=connection.error_message,
         channel_id=connection.channel_id,
         channel_title=connection.channel_title,
         avatar_url=connection.avatar_url,
@@ -505,9 +507,18 @@ async def get_youtube_channel_dashboard(
             error=str(exc),
         )
         if "401" in err_msg or "unauthorized" in err_msg:
+            error_message = f"YouTube authorization expired or invalid: {exc}"
+            await youtube_repo.save_connection(
+                connection.model_copy(
+                    update={
+                        "status": "reauth_required",
+                        "error_message": error_message,
+                    }
+                )
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"YouTube authorization expired or invalid: {exc}",
+                detail=error_message,
             ) from exc
         if "403" in err_msg or "forbidden" in err_msg or "permission" in err_msg:
             raise HTTPException(
