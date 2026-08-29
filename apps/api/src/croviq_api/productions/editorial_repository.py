@@ -158,7 +158,14 @@ class InMemoryEditorialRepository(EditorialRepository):
 class FirestoreEditorialRepository(EditorialRepository):
     """Production Editorial repository persisting to Google Cloud Firestore Native mode."""
 
-    def __init__(self, client: Any | None = None) -> None:
+    def __init__(
+        self,
+        project_id: str | None = None,
+        database: str = "(default)",
+        client: Any | None = None,
+    ) -> None:
+        self._project_id = project_id
+        self._database = database
         self._client = client
 
     def _get_client(self) -> Any:
@@ -169,8 +176,8 @@ class FirestoreEditorialRepository(EditorialRepository):
             try:
                 firebase_admin.get_app()
             except ValueError:
-                settings = get_settings()
-                options = {"projectId": settings.gcp_project_id} if settings.gcp_project_id else None
+                project = self._project_id or settings.gcp_project_id
+                options = {"projectId": project} if project else None
                 firebase_admin.initialize_app(options=options)
             self._client = firestore.client()
         return self._client

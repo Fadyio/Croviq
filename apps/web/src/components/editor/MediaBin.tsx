@@ -34,6 +34,8 @@ interface MediaBinProps {
   hasRenderedPreview: boolean;
   hasMaster: boolean;
   hasStudioVoice: boolean;
+  hasProposalOrEdl?: boolean;
+  isRunFailed?: boolean;
   brollAssets?: BRollAssetItem[];
   onSelectMode: (mode: PreviewMode) => void;
   onSeek?: (timeMs: number) => void;
@@ -49,6 +51,8 @@ export const MediaBin: React.FC<MediaBinProps> = ({
   hasRenderedPreview,
   hasMaster,
   hasStudioVoice,
+  hasProposalOrEdl = false,
+  isRunFailed = false,
   brollAssets = [],
   onSelectMode,
   onSeek,
@@ -64,17 +68,20 @@ export const MediaBin: React.FC<MediaBinProps> = ({
     typeLabel: "Raw",
   };
 
+  const isEditedAvailable =
+    !isRunFailed && (hasRenderedPreview || (Boolean(hasProposalOrEdl) && editedDurationMs > 0));
+
   const outputItems: MediaBinItem[] = [
     {
       id: "edited",
       name: "Edited Preview",
       category: "output",
       mode: "edited",
-      durationMs: editedDurationMs > 0 ? editedDurationMs : 0,
-      isAvailable: true,
+      durationMs: isEditedAvailable && editedDurationMs > 0 ? editedDurationMs : 0,
+      isAvailable: isEditedAvailable,
       typeLabel: hasRenderedPreview ? "Rendered" : "EDL",
     },
-    ...(hasStudioVoice
+    ...(hasStudioVoice && !isRunFailed
       ? [
           {
             id: "studio_voice",
@@ -82,12 +89,12 @@ export const MediaBin: React.FC<MediaBinProps> = ({
             category: "output" as const,
             mode: "studio_voice" as PreviewMode,
             durationMs: studioVoiceDurationMs || 0,
-            isAvailable: true,
+            isAvailable: Boolean(studioVoiceDurationMs && studioVoiceDurationMs > 0),
             typeLabel: "Narrated",
           },
         ]
       : []),
-    ...(hasMaster
+    ...(hasMaster && !isRunFailed
       ? [
           {
             id: "master",
@@ -95,7 +102,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
             category: "output" as const,
             mode: "edited" as PreviewMode,
             durationMs: masterDurationMs || 0,
-            isAvailable: true,
+            isAvailable: Boolean(masterDurationMs && masterDurationMs > 0),
             typeLabel: "Master",
           },
         ]
@@ -179,18 +186,27 @@ export const MediaBin: React.FC<MediaBinProps> = ({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => onSelectMode(item.mode)}
+                  onClick={() => {
+                    if (item.isAvailable) onSelectMode(item.mode);
+                  }}
+                  disabled={!item.isAvailable}
                   className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-all ${
-                    isSelected
-                      ? "bg-primary/10 border border-primary/40 text-text-primary shadow-xs"
-                      : "hover:bg-surface-2 text-text-secondary hover:text-text-primary border border-transparent"
+                    !item.isAvailable
+                      ? "opacity-40 cursor-not-allowed border border-transparent text-text-muted"
+                      : isSelected
+                        ? "bg-primary/10 border border-primary/40 text-text-primary shadow-xs"
+                        : "hover:bg-surface-2 text-text-secondary hover:text-text-primary border border-transparent cursor-pointer"
                   }`}
                   data-testid={`asset-${item.id}`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <Icon
                       className={`w-3.5 h-3.5 shrink-0 ${
-                        isSelected ? "text-primary" : "text-text-muted"
+                        !item.isAvailable
+                          ? "text-text-muted"
+                          : isSelected
+                            ? "text-primary"
+                            : "text-text-muted"
                       }`}
                     />
                     <div className="flex flex-col min-w-0">
@@ -201,7 +217,9 @@ export const MediaBin: React.FC<MediaBinProps> = ({
                     </div>
                   </div>
                   <span className="text-[10px] font-mono text-text-muted tabular-nums shrink-0 ml-2">
-                    {item.durationMs > 0 ? formatDuration(item.durationMs) : "--"}
+                    {item.isAvailable && item.durationMs > 0
+                      ? formatDuration(item.durationMs)
+                      : "--:--"}
                   </span>
                 </button>
               );

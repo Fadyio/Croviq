@@ -293,3 +293,9 @@ async def test_analyze_production_model_failure_maps_to_failed_run(app_and_deps,
     assert run is not None
     assert run.status == EditorialRunStatus.FAILED
     assert run.failure_code == "SIMULATED_EDITOR_FAILURE"
+
+def test_firestore_editorial_repository_init_with_project_id():
+    from croviq_api.productions.editorial_repository import FirestoreEditorialRepository
+    repo = FirestoreEditorialRepository(project_id="croviq-506602")
+    assert repo._project_id == "croviq-506602"
+    assert repo._database == "(default)"

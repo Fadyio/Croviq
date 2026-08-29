@@ -138,7 +138,6 @@ const PASSED_QA_REVIEW = {
     },
   ],
   master_artifact_id: "art_master_01",
-  short_artifact_id: "art_short_01",
   packaging_proposal_id: "pkg_fairphone6p_001",
 };
 
@@ -394,21 +393,10 @@ const mockPublishApis = async (
             edl_id: "edl_01",
             artifact_type: "MASTER",
             status: "completed",
+            playback_url: "https://storage.googleapis.com/test-bucket/master.mp4",
             duration_ms: 113824,
-            created_at: "2026-08-28T00:00:00Z",
+            created_at: "2026-08-26T00:00:00Z",
           },
-          short_artifact: {
-            artifact_id: "art_short_01",
-            production_id: FAIRPHONE_PRODUCTION_ID,
-            edl_id: "edl_01",
-            artifact_type: "SHORT",
-            status: "completed",
-            duration_ms: 39800,
-            created_at: "2026-08-28T00:00:00Z",
-          },
-          has_master: true,
-          has_short: true,
-          has_packaging: true,
           generated_at: PASSED_QA_REVIEW.created_at,
         }),
       });

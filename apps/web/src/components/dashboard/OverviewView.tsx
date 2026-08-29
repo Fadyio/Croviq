@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowRight, Beaker, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import type { components } from "../../api/generated";
 import { ChannelTrendChart } from "./ChannelTrendChart";
 type ChannelDashboard = components["schemas"]["ChannelDashboard"];
@@ -41,7 +41,7 @@ const formatChange = (value: number | null | undefined): string => {
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
   dashboard,
-  onNavigateToExperiments,
+  onNavigateToExperiments: _onNavigateToExperiments,
 }) => {
   return (
     <div className="space-y-6">
@@ -150,9 +150,6 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 Alex Channel Insight · {dashboard.insights[0].title}
               </h2>
             </div>
-            <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-mono font-semibold text-primary">
-              Confidence {(dashboard.insights[0].confidence * 100).toFixed(0)}%
-            </span>
           </div>
 
           <div className="space-y-2 text-xs">
@@ -184,71 +181,6 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                   : ""}
               </p>
             </div>
-          </div>
-        </section>
-      )}
-      {(dashboard.active_experiment || dashboard.proposed_experiment) && (
-        <section
-          className="rounded-xl border border-border-subtle bg-surface-1 p-4 sm:p-5 shadow-sm space-y-3"
-          aria-labelledby="experiment-teaser-title"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Beaker className="h-4 w-4 text-primary" />
-              <h2
-                id="experiment-teaser-title"
-                className="text-xs font-semibold tracking-tight text-text-primary uppercase tracking-wider"
-              >
-                {dashboard.active_experiment ? "Active Experiment" : "Proposed Hypothesis"}
-              </h2>
-            </div>
-            <span
-              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                dashboard.active_experiment
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : "bg-primary/10 border-primary/20 text-primary"
-              }`}
-            >
-              {dashboard.active_experiment ? "ACTIVE" : dashboard.proposed_experiment.status}
-            </span>
-          </div>
-
-          <p className="text-xs text-text-secondary leading-relaxed">
-            <span className="font-semibold text-text-primary">Hypothesis: </span>
-            {(dashboard.active_experiment || dashboard.proposed_experiment).hypothesis}
-          </p>
-
-          <div className="flex items-center justify-between pt-1 text-xs">
-            <div className="flex items-center gap-4 text-text-muted text-[11px]">
-              <span>
-                Baseline:{" "}
-                <span className="font-mono font-medium text-text-primary">
-                  {(
-                    dashboard.active_experiment || dashboard.proposed_experiment
-                  ).baseline_value.toFixed(1)}
-                  %
-                </span>
-              </span>
-              <span>
-                Target:{" "}
-                <span className="font-medium text-success">
-                  {
-                    (dashboard.active_experiment || dashboard.proposed_experiment)
-                      .expected_direction
-                  }
-                </span>
-              </span>
-            </div>
-            {onNavigateToExperiments && (
-              <button
-                type="button"
-                onClick={onNavigateToExperiments}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-              >
-                <span>Open Experiments</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            )}
           </div>
         </section>
       )}

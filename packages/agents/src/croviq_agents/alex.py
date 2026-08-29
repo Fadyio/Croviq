@@ -564,11 +564,22 @@ class AlexDataScientist:
 
         enabled_prompts = [p for p in prompts if p.enabled]
         if not enabled_prompts:
-            run.status = ResearchRunStatus.COMPLETED
-            run.completed_at = datetime.now(UTC)
-            run.latency_ms = int((run.completed_at - start_time).total_seconds() * 1000)
-            return run, []
-
+            default_sources = [
+                "news.ycombinator.com",
+                "ai.google.dev",
+                "cloud.google.com",
+                "github.com",
+                "reddit.com/r/LocalLLaMA",
+            ]
+            enabled_prompts = [
+                ResearchPrompt(
+                    prompt_id="autonomous_channel_research",
+                    text="Emerging AI engineering, multimodal video systems, agent evaluation, and developer tooling opportunities for the channel",
+                    enabled=True,
+                    use_broad_web_search=True,
+                    preferred_sources=default_sources,
+                )
+            ]
         try:
             if not force_mock and configured_project_id:
                 findings, search_queries, input_toks, output_toks = await self._execute_gemini_grounded_search(

@@ -1819,7 +1819,7 @@ export interface components {
     UpdateResearchConfigRequest: {
       enabled: boolean;
       cadence: components["schemas"]["ResearchCadence"];
-      prompts: components["schemas"]["ResearchPrompt"][];
+      prompts?: components["schemas"]["ResearchPrompt"][];
     };
     UpdateVoiceSettingsRequest: {
       /** Selected narration mode */

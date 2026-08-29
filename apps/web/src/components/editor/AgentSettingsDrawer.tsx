@@ -8,13 +8,13 @@ import {
   RotateCcw,
   Save,
   Search,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import type { components } from "../../api/generated";
 import { useAuth } from "../../auth/AuthContext";
 import { AGENT_IDENTITIES, type AgentId } from "../AgentTeamSelector";
-
 type AgentPromptConfig = components["schemas"]["AgentPromptConfig"];
 type VoiceSettingsConfig = components["schemas"]["VoiceSettingsConfig"];
 type AgentMemorySummary = components["schemas"]["AgentMemorySummaryResponse"] & {
@@ -82,8 +82,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   const [research, setResearch] = useState<ResearchConfig | null>(null);
   const [isResearchSaving, setIsResearchSaving] = useState<boolean>(false);
   const [researchNotice, setResearchNotice] = useState<string | null>(null);
-  const [sourceDrafts, setSourceDrafts] = useState<Record<string, string>>({});
-
+  const [newSourceDraft, setNewSourceDraft] = useState<string>("");
   // Voice state (Leo)
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettingsConfig | null>(null);
   const [voices, setVoices] = useState<VoiceCatalogItem[]>([]);
@@ -778,7 +777,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                     </select>
                   </div>
 
-                  {/* Enabled Toggle & Prompts */}
+                  {/* Enabled Toggle & Autonomous Intelligence Policy */}
                   <div className="space-y-4">
                     <label className="flex items-center gap-2.5 text-xs font-semibold text-text-primary cursor-pointer">
                       <input
@@ -792,128 +791,129 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                       />
                       <span>Enable autonomous research runs</span>
                     </label>
+                    {/* How Alex Researches explanation */}
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs space-y-2">
+                      <div className="font-semibold text-text-primary flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <span>Channel-Driven Autonomous Intelligence</span>
+                      </div>
+                      <p className="text-text-secondary leading-relaxed">
+                        Alex does not require manual search prompts. Alex dynamically constructs
+                        deep research plans from your canonical Working Prompt, Channel Memory Bank,
+                        recent video catalog, and retention baselines, grounded with Gemini 3.7
+                        Flash and real Google Search.
+                      </p>
+                    </div>
 
-                    {(research.prompts || []).map((p, idx) => (
-                      <div
-                        key={p.prompt_id || idx}
-                        className="rounded-xl border border-border-subtle bg-surface-2 p-4 space-y-3"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-text-primary">
-                            Research prompt #{idx + 1}
-                          </span>
-                          <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={p.enabled}
-                              onChange={(e) => {
-                                const nextPrompts = [...(research.prompts || [])];
-                                nextPrompts[idx] = { ...p, enabled: e.target.checked };
-                                setResearch((cur) =>
-                                  cur ? { ...cur, prompts: nextPrompts } : cur,
-                                );
-                              }}
-                              className="rounded border-border-subtle bg-surface-1 text-primary focus:ring-primary"
-                            />
-                            <span>Active</span>
-                          </label>
-                        </div>
+                    {/* Broad Web Search Option */}
+                    <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={research.prompts?.[0]?.use_broad_web_search ?? true}
+                        onChange={(e) => {
+                          const currentSources = research.prompts?.[0]?.preferred_sources || [];
+                          const updatedPrompts = [
+                            {
+                              prompt_id:
+                                research.prompts?.[0]?.prompt_id || "autonomous_channel_research",
+                              text:
+                                research.prompts?.[0]?.text ||
+                                "Autonomous channel grounded research",
+                              enabled: research.enabled,
+                              use_broad_web_search: e.target.checked,
+                              preferred_sources: currentSources,
+                            },
+                          ];
+                          setResearch((cur) => (cur ? { ...cur, prompts: updatedPrompts } : cur));
+                        }}
+                        className="rounded border-border-subtle bg-surface-1 text-primary focus:ring-primary"
+                      />
+                      <span>Search broader public web (Google Search Grounding)</span>
+                    </label>
 
-                        <textarea
-                          value={p.text}
-                          onChange={(e) => {
-                            const nextPrompts = [...(research.prompts || [])];
-                            nextPrompts[idx] = { ...p, text: e.target.value };
-                            setResearch((cur) => (cur ? { ...cur, prompts: nextPrompts } : cur));
-                          }}
-                          rows={2}
-                          className="w-full rounded-lg border border-border-subtle bg-surface-1 p-3 text-xs text-text-primary outline-none focus:border-primary transition-colors"
-                          placeholder="What should Alex research?"
-                        />
-
-                        {/* Search Broader Web Option */}
-                        <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={p.use_broad_web_search}
-                            onChange={(e) => {
-                              const nextPrompts = [...(research.prompts || [])];
-                              nextPrompts[idx] = { ...p, use_broad_web_search: e.target.checked };
-                              setResearch((cur) => (cur ? { ...cur, prompts: nextPrompts } : cur));
-                            }}
-                            className="rounded border-border-subtle bg-surface-1 text-primary focus:ring-primary"
-                          />
-                          <span>Search broader web</span>
-                        </label>
-
-                        {/* Preferred Sources */}
-                        <div className="space-y-1.5 pt-1">
-                          <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                            Preferred Public Sources
-                          </span>
-                          <div className="flex flex-wrap gap-2">
-                            {(p.preferred_sources || []).map((src) => (
-                              <span
-                                key={src}
-                                className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-1 px-2.5 py-1 text-xs text-text-primary"
-                              >
-                                <ExternalLink className="h-3 w-3 text-text-muted" />
-                                <span>{src}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextSources = (p.preferred_sources || []).filter(
-                                      (s) => s !== src,
-                                    );
-                                    const nextPrompts = [...(research.prompts || [])];
-                                    nextPrompts[idx] = { ...p, preferred_sources: nextSources };
-                                    setResearch((cur) =>
-                                      cur ? { ...cur, prompts: nextPrompts } : cur,
-                                    );
-                                  }}
-                                  className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-
-                          {/* Add Source Input */}
-                          <div className="flex items-center gap-2 pt-1">
-                            <input
-                              type="text"
-                              value={sourceDrafts[p.prompt_id] || ""}
-                              onChange={(e) =>
-                                setSourceDrafts((cur) => ({
-                                  ...cur,
-                                  [p.prompt_id]: e.target.value,
-                                }))
-                              }
-                              placeholder="domain or full public URL (e.g. news.ycombinator.com)"
-                              className="flex-1 rounded-lg border border-border-subtle bg-surface-1 px-3 py-1.5 text-xs text-text-primary outline-none focus:border-primary transition-colors"
-                            />
+                    {/* Preferred Sources Policy */}
+                    <div className="space-y-2 pt-1">
+                      <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                        Preferred Public Ecosystems & Sources
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {(research.prompts?.[0]?.preferred_sources || []).map((src) => (
+                          <span
+                            key={src}
+                            className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-1 px-2.5 py-1 text-xs text-text-primary"
+                          >
+                            <ExternalLink className="h-3 w-3 text-text-muted" />
+                            <span>{src}</span>
                             <button
                               type="button"
                               onClick={() => {
-                                const draft = (sourceDrafts[p.prompt_id] || "").trim();
-                                if (!draft) return;
-                                const nextSources = [...(p.preferred_sources || []), draft];
-                                const nextPrompts = [...(research.prompts || [])];
-                                nextPrompts[idx] = { ...p, preferred_sources: nextSources };
+                                const currentSources =
+                                  research.prompts?.[0]?.preferred_sources || [];
+                                const nextSources = currentSources.filter((s) => s !== src);
+                                const updatedPrompts = [
+                                  {
+                                    prompt_id:
+                                      research.prompts?.[0]?.prompt_id ||
+                                      "autonomous_channel_research",
+                                    text:
+                                      research.prompts?.[0]?.text ||
+                                      "Autonomous channel grounded research",
+                                    enabled: research.enabled,
+                                    use_broad_web_search:
+                                      research.prompts?.[0]?.use_broad_web_search ?? true,
+                                    preferred_sources: nextSources,
+                                  },
+                                ];
                                 setResearch((cur) =>
-                                  cur ? { ...cur, prompts: nextPrompts } : cur,
+                                  cur ? { ...cur, prompts: updatedPrompts } : cur,
                                 );
-                                setSourceDrafts((cur) => ({ ...cur, [p.prompt_id]: "" }));
                               }}
-                              className="rounded-lg bg-surface-3 p-2 text-text-primary hover:bg-surface-4 transition-colors cursor-pointer"
+                              className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
                             >
-                              <Plus className="h-3.5 w-3.5" />
+                              <X className="h-3 w-3" />
                             </button>
-                          </div>
-                        </div>
+                          </span>
+                        ))}
                       </div>
-                    ))}
+
+                      {/* Add Source Input */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={newSourceDraft}
+                          onChange={(e) => setNewSourceDraft(e.target.value)}
+                          placeholder="domain or full public URL (e.g. news.ycombinator.com)"
+                          className="flex-1 rounded-lg border border-border-subtle bg-surface-1 px-3 py-1.5 text-xs text-text-primary outline-none focus:border-primary transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const draft = newSourceDraft.trim();
+                            if (!draft) return;
+                            const currentSources = research.prompts?.[0]?.preferred_sources || [];
+                            const nextSources = [...currentSources, draft];
+                            const updatedPrompts = [
+                              {
+                                prompt_id:
+                                  research.prompts?.[0]?.prompt_id || "autonomous_channel_research",
+                                text:
+                                  research.prompts?.[0]?.text ||
+                                  "Autonomous channel grounded research",
+                                enabled: research.enabled,
+                                use_broad_web_search:
+                                  research.prompts?.[0]?.use_broad_web_search ?? true,
+                                preferred_sources: nextSources,
+                              },
+                            ];
+                            setResearch((cur) => (cur ? { ...cur, prompts: updatedPrompts } : cur));
+                            setNewSourceDraft("");
+                          }}
+                          className="rounded-lg bg-surface-3 p-2 text-text-primary hover:bg-surface-4 transition-colors cursor-pointer"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex justify-end pt-2">

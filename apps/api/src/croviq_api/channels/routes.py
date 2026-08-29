@@ -72,8 +72,7 @@ class UpdateResearchConfigRequest(BaseModel):
 
     enabled: bool
     cadence: ResearchCadence
-    prompts: list[ResearchPrompt]
-
+    prompts: list[ResearchPrompt] = Field(default_factory=list)
 
 class YouTubeAuthUrlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")

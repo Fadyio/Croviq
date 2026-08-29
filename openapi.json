@@ -8663,7 +8663,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["enabled", "cadence", "prompts"],
+        "required": ["enabled", "cadence"],
         "title": "UpdateResearchConfigRequest"
       },
       "UpdateVoiceSettingsRequest": {

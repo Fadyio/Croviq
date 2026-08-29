@@ -428,23 +428,38 @@ async def build_channel_dashboard(
         video.analytics.avg_view_percentage for video in analysis_videos
     ]
     correlation = _pearson(demo_times, retentions)
-    direction = "lower" if correlation < 0 else "higher"
-    relationship = "negative" if correlation < 0 else "positive"
+    early_videos = [
+        v for v in analysis_videos if float(v.derived.first_demo_seconds) <= 30.0
+    ]
+    late_videos = [
+        v for v in analysis_videos if float(v.derived.first_demo_seconds) > 30.0
+    ]
+    early_avg = (
+        sum(v.analytics.avg_view_percentage for v in early_videos) / len(early_videos)
+        if early_videos
+        else 0.0
+    )
+    late_avg = (
+        sum(v.analytics.avg_view_percentage for v in late_videos) / len(late_videos)
+        if late_videos
+        else 0.0
+    )
+    diff = early_avg - late_avg
     insight = ChannelInsight(
         insight_id=f"{channel.channel_id}:first-demo-retention:{period_end.isoformat()}",
         channel_id=channel.channel_id,
         type=InsightType.RETENTION,
         title="First demonstration timing tracks retention",
         statement=(
-            f"Videos reaching the first demonstration before 00:30 retain 14.3 percentage points "
-            f"more viewers across n={len(analysis_videos)} videos ({correlation:.2f} correlation)."
+            f"Videos reaching the first demonstration within 00:30 average {early_avg:.1f}% retention "
+            f"vs {late_avg:.1f}% for later demonstrations (n={len(analysis_videos)} videos, r={correlation:.2f})."
         ),
         evidence=[
             InsightEvidence(
                 kind=EvidenceKind.FACT,
                 statement=(
-                    f"MEASUREMENT: Videos with early demonstrations (<=00:30) average 58.4% retention "
-                    f"vs 44.1% for later demonstrations across n={len(analysis_videos)} videos."
+                    f"MEASUREMENT: Videos with early demonstrations (<=00:30) average {early_avg:.1f}% retention "
+                    f"vs {late_avg:.1f}% for later demonstrations across n={len(analysis_videos)} videos (delta {diff:+.1f}%)."
                 ),
                 metric_refs=[
                     "video:firstDemoSeconds",

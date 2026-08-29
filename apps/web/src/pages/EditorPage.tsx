@@ -405,9 +405,13 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   }, [edl, durationMs, proposal, transcript]);
   // Compute actual or estimated edited duration
   const derivedEditedDurationMs = useMemo(() => {
+    if (editorialRun?.status === "failed" || failedProcessingStage === "leo-edit") {
+      return 0;
+    }
     if (
       previewArtifact?.duration_ms &&
       previewArtifact.duration_ms > 0 &&
+      previewArtifact.status === "completed" &&
       (!edl || previewArtifact.edl_id === edl.edl_id)
     ) {
       return previewArtifact.duration_ms;
@@ -426,7 +430,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       if (removed > 0) return Math.max(1000, edl.source_duration_ms - removed);
     }
     return durationMs;
-  }, [previewArtifact, edl, durationMs]);
+  }, [previewArtifact, edl, durationMs, editorialRun?.status, failedProcessingStage]);
   const selectedDecision = useMemo(() => {
     if (!selectedDecisionId || !proposal?.decisions) return null;
     return (
@@ -581,23 +585,30 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             activeCutCount={twickData.activeCutCount}
             hasStudioVoice={Boolean(studioVoicePreviewUrl)}
           />
-          {Boolean(masterArtifact?.playback_url || masterUrl || renderedPreviewUrl || proposal) && (
-            <button
-              type="button"
-              onClick={
-                onNavigateRelease ||
-                (() => {
-                  window.location.href = `/productions/${productionId}/release`;
-                })
-              }
-              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-md transition-colors shadow-sm cursor-pointer"
-              title="Run Quality Check with Iris"
-              data-testid="btn-run-check"
-            >
-              <ShieldCheck className="size-3.5" />
-              <span>Check</span>
-            </button>
-          )}
+          {editorialRun?.status !== "failed" &&
+            !failedProcessingStage &&
+            Boolean(
+              (masterArtifact?.playback_url && masterArtifact?.status === "completed") ||
+              (masterUrl && masterArtifact?.status === "completed") ||
+              (renderedPreviewUrl && previewArtifact?.status === "completed") ||
+              (proposal?.decisions && proposal.decisions.length > 0),
+            ) && (
+              <button
+                type="button"
+                onClick={
+                  onNavigateRelease ||
+                  (() => {
+                    window.location.href = `/productions/${productionId}/release`;
+                  })
+                }
+                className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-md transition-colors shadow-sm cursor-pointer"
+                title="Run Quality Check with Iris"
+                data-testid="btn-run-check"
+              >
+                <ShieldCheck className="size-3.5" />
+                <span>Check</span>
+              </button>
+            )}
           <button
             onClick={logout}
             className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-2 rounded-md transition-colors border border-transparent hover:border-border-subtle"
@@ -618,9 +629,20 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           editedDurationMs={derivedEditedDurationMs}
           studioVoiceDurationMs={studioVoiceArtifact?.duration_ms}
           masterDurationMs={masterArtifact?.duration_ms}
-          hasRenderedPreview={Boolean(renderedPreviewUrl)}
-          hasMaster={Boolean(masterArtifact?.playback_url || masterUrl)}
-          hasStudioVoice={Boolean(studioVoicePreviewUrl)}
+          hasRenderedPreview={Boolean(
+            renderedPreviewUrl && previewArtifact?.status === "completed",
+          )}
+          hasMaster={Boolean(
+            (masterArtifact?.playback_url || masterUrl) && masterArtifact?.status === "completed",
+          )}
+          hasStudioVoice={Boolean(
+            studioVoicePreviewUrl && studioVoiceArtifact?.status === "completed",
+          )}
+          hasProposalOrEdl={Boolean(
+            (proposal?.decisions && proposal.decisions.length > 0) ||
+            (edl?.cuts && edl.cuts.length > 0),
+          )}
+          isRunFailed={Boolean(editorialRun?.status === "failed" || failedProcessingStage !== null)}
           brollAssets={brollBinItems}
           onSelectMode={setPreviewMode}
           onSeek={handleSeek}

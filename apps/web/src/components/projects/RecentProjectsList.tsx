@@ -1,5 +1,5 @@
 import React from "react";
-import { Clock, Film, Play, Video } from "lucide-react";
+import { Clock, Film, Play, Trash2, Video } from "lucide-react";
 import type { components } from "../../api/generated";
 
 type Production = components["schemas"]["Production"];
@@ -8,6 +8,7 @@ interface RecentProjectsListProps {
   productions: Production[];
   isLoading?: boolean;
   onOpenProject: (productionId: string) => void;
+  onDeleteProject?: (productionId: string, filename: string) => void;
 }
 
 const formatBytes = (bytes?: number | null): string => {
@@ -31,6 +32,7 @@ export const RecentProjectsList: React.FC<RecentProjectsListProps> = ({
   productions,
   isLoading = false,
   onOpenProject,
+  onDeleteProject,
 }) => {
   if (isLoading) {
     return (
@@ -102,7 +104,7 @@ export const RecentProjectsList: React.FC<RecentProjectsListProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-text-muted">
                   {prod.status}
                 </span>
@@ -112,11 +114,30 @@ export const RecentProjectsList: React.FC<RecentProjectsListProps> = ({
                     e.stopPropagation();
                     onOpenProject(prod.production_id);
                   }}
-                  className="flex items-center gap-1 rounded-md bg-surface-3 px-2.5 py-1 text-xs font-semibold text-text-primary hover:bg-primary hover:text-white transition-colors"
+                  className="flex items-center gap-1 rounded-md bg-surface-3 px-2.5 py-1 text-xs font-semibold text-text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer"
                 >
                   <Play className="h-3 w-3 fill-current" />
                   <span>Open &gt;</span>
                 </button>
+                {onDeleteProject && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteProject(
+                        prod.production_id,
+                        prod.source_media?.original_filename ||
+                          `Production ${prod.production_id.slice(-6)}`,
+                      );
+                    }}
+                    className="p-1 text-text-muted hover:text-danger hover:bg-danger/10 rounded-md transition-colors cursor-pointer"
+                    title="Delete project"
+                    aria-label={`Delete ${prod.source_media?.original_filename || prod.production_id}`}
+                    data-testid={`btn-delete-${prod.production_id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           ))}

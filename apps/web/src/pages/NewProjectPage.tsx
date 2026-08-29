@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Loader2,
   LogOut,
+  Trash2,
   Upload,
   Video,
   X,
@@ -13,7 +14,6 @@ import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
 import type { components } from "../api/generated";
 import { RecentProjectsList } from "../components/projects/RecentProjectsList";
-
 type CreateUploadResponse = components["schemas"]["CreateUploadResponse"];
 type Production = components["schemas"]["Production"];
 
@@ -48,10 +48,14 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [productions, setProductions] = useState<Production[]>([]);
   const [isLoadingProductions, setIsLoadingProductions] = useState<boolean>(true);
+  const [deletingTarget, setDeletingTarget] = useState<{ id: string; filename: string } | null>(
+    null,
+  );
+  const [isDeletingProduction, setIsDeletingProduction] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeXhrRef = useRef<XMLHttpRequest | null>(null);
-
   const loadProductions = useCallback(async () => {
     if (!firebaseUser) return;
     setIsLoadingProductions(true);
@@ -84,6 +88,34 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
     }
   };
 
+  // Delete project handlers
+  const handleDeleteRequest = (productionId: string, filename: string) => {
+    setDeletingTarget({ id: productionId, filename });
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingTarget || !firebaseUser) return;
+    setIsDeletingProduction(true);
+    setDeleteError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch(`/api/productions/${deletingTarget.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to delete production");
+      }
+      setDeletingTarget(null);
+      await loadProductions();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete project");
+    } finally {
+      setIsDeletingProduction(false);
+    }
+  };
   // Local file validation
   const handleFileChange = (file: File | null) => {
     if (!file) {
@@ -506,10 +538,72 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
               productions={productions}
               isLoading={isLoadingProductions}
               onOpenProject={handleOpenEditor}
+              onDeleteProject={handleDeleteRequest}
             />
           </div>
         </div>
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {deletingTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-project-title"
+          data-testid="modal-delete-confirmation"
+        >
+          <div className="w-full max-w-md rounded-xl border border-border-subtle bg-surface-1 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-danger">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger/10 border border-danger/20">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3
+                  id="delete-project-title"
+                  className="text-sm font-semibold text-text-primary truncate"
+                >
+                  Delete &ldquo;{deletingTarget.filename}&rdquo;?
+                </h3>
+                <p className="text-xs text-text-muted mt-0.5">
+                  This permanently removes the project and associated media.
+                </p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <p className="text-xs text-danger font-medium bg-danger/10 p-2.5 rounded-lg border border-danger/20">
+                {deleteError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingTarget(null)}
+                disabled={isDeletingProduction}
+                className="px-3.5 py-2 text-xs font-semibold text-text-secondary hover:bg-surface-2 rounded-lg transition-colors border border-border-subtle cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingProduction}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-danger hover:bg-danger/90 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                data-testid="btn-confirm-delete"
+              >
+                {isDeletingProduction ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                <span>Delete Project</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
