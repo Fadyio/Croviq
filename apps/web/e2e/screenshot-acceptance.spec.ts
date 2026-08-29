@@ -391,6 +391,7 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: "e2e/screenshots/overview-1600x900.png" });
+    await page.screenshot({ path: "e2e/screenshots/home-1600x900.png" });
   });
 
   test("overview-1440x900.png", async ({ page }) => {
@@ -462,6 +463,22 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: "e2e/screenshots/new-project-1440x900.png" });
+  });
+
+  test("home-1280x800.png", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockFirebasePasswordSignIn(page);
+    await mockBackendApis(page);
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(DEMO_EMAIL);
+    await page.getByLabel("Password").fill("valid-password");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL("**/app*");
+
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await page.waitForTimeout(500);
+
+    await page.screenshot({ path: "e2e/screenshots/home-1280x800.png" });
   });
 
   test("new-project-1280x800.png", async ({ page }) => {
