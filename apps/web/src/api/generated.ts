@@ -73,6 +73,7 @@ export interface paths {
     get: {
       responses: {
         200: components["schemas"]["AgentMemorySummaryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
     };
   };
@@ -93,6 +94,20 @@ export interface paths {
     post: {
       responses: {
         200: components["schemas"]["VoiceSampleResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/workspace/agents/{agent_id}/chat": {
+    get: {
+      responses: {
+        200: components["schemas"]["AgentConversationHistoryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+    post: {
+      responses: {
+        200: components["schemas"]["AgentChatMessageResponse"];
         422: components["schemas"]["HTTPValidationError"];
       };
     };
@@ -469,6 +484,24 @@ export interface components {
       related_decision_id?: string | null;
       /** Timestamp when the activity occurred */
       created_at?: string;
+    };
+    AgentChatMessageRequest: {
+      /** Message text sent by creator */
+      message: string;
+      /** Optional production or channel context */
+      context?: Record<string, unknown> | null;
+    };
+    AgentChatMessageResponse: {
+      message_id: string;
+      role?: string;
+      content: string;
+      tool_executions?: Record<string, unknown>[];
+      structured_artifact?: Record<string, unknown> | null;
+      created_at: string;
+    };
+    AgentConversationHistoryResponse: {
+      agent_id: string;
+      messages?: components["schemas"]["AgentChatMessageResponse"][];
     };
     AgentId: "leo" | "maya" | "alex" | "iris";
     AgentMemorySummaryResponse: {

@@ -311,9 +311,48 @@
     "/api/workspace/agent-settings/memory": {
       "get": {
         "tags": ["Workspaces"],
-        "summary": "View Agent Memory (Read-Only)",
-        "description": "Retrieve what Leo currently knows from the Channel Memory Bank.",
+        "summary": "View Agent Memory with Search",
+        "description": "Retrieve agent-scoped lessons and preferences from Channel Memory Bank with search filtering.",
         "operationId": "get_agent_memory_api_workspace_agent_settings_memory_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -324,13 +363,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/workspace/agent-settings/voice": {
@@ -444,6 +488,104 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/workspace/agents/{agent_id}/chat": {
+      "get": {
+        "tags": ["Workspaces"],
+        "summary": "Get Agent Conversation History",
+        "operationId": "get_agent_chat_history_api_workspace_agents__agent_id__chat_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConversationHistoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Workspaces"],
+        "summary": "Send Message to Agent Workspace Chat",
+        "operationId": "send_agent_chat_message_api_workspace_agents__agent_id__chat_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentChatMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentChatMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/channel/memory/profile": {
@@ -2619,6 +2761,102 @@
         ],
         "title": "AgentActivity",
         "description": "Product-facing persisted activity message from Maya or Leo."
+      },
+      "AgentChatMessageRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message",
+            "description": "Message text sent by creator"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context",
+            "description": "Optional production or channel context"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["message"],
+        "title": "AgentChatMessageRequest",
+        "description": "Incoming user chat message to a specific agent."
+      },
+      "AgentChatMessageResponse": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "assistant"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "tool_executions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Tool Executions"
+          },
+          "structured_artifact": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured Artifact"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": ["message_id", "content", "created_at"],
+        "title": "AgentChatMessageResponse",
+        "description": "Single agent chat message with internal tool telemetry and optional structured artifacts."
+      },
+      "AgentConversationHistoryResponse": {
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "title": "Agent Id"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AgentChatMessageResponse"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": ["agent_id"],
+        "title": "AgentConversationHistoryResponse",
+        "description": "Conversation history for an agent workspace."
       },
       "AgentId": {
         "type": "string",
