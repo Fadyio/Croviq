@@ -118,7 +118,7 @@ class ChannelDashboard(BaseModel):
     traffic_sources: list[TrafficSourceMetric]
     insights: list[ChannelInsight]
     active_experiment: ChannelExperiment | None
-    proposed_experiment: ChannelExperiment
+    proposed_experiment: ChannelExperiment | None = None
     is_sample_modeled_timeseries: bool
 
 

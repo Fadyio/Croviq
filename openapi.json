@@ -3881,7 +3881,14 @@
             ]
           },
           "proposed_experiment": {
-            "$ref": "#/components/schemas/ChannelExperiment"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelExperiment"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "is_sample_modeled_timeseries": {
             "type": "boolean",
@@ -3902,7 +3909,6 @@
           "traffic_sources",
           "insights",
           "active_experiment",
-          "proposed_experiment",
           "is_sample_modeled_timeseries"
         ],
         "title": "ChannelDashboard"

@@ -707,7 +707,7 @@ export interface components {
       traffic_sources: components["schemas"]["TrafficSourceMetric"][];
       insights: components["schemas"]["ChannelInsight"][];
       active_experiment: components["schemas"]["ChannelExperiment"] | null;
-      proposed_experiment: components["schemas"]["ChannelExperiment"];
+      proposed_experiment?: components["schemas"]["ChannelExperiment"] | null;
       is_sample_modeled_timeseries: boolean;
     };
     ChannelExperiment: {

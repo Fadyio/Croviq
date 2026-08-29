@@ -176,7 +176,12 @@ class FirestoreEditorialRepository(EditorialRepository):
             try:
                 firebase_admin.get_app()
             except ValueError:
-                project = self._project_id or settings.gcp_project_id
+                settings = get_settings()
+                project = (
+                    self._project_id
+                    or (settings.gcp_project_id if settings else None)
+                    or os.environ.get("GOOGLE_CLOUD_PROJECT")
+                )
                 options = {"projectId": project} if project else None
                 firebase_admin.initialize_app(options=options)
             self._client = firestore.client()

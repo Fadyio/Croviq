@@ -337,3 +337,38 @@ async def test_assemble_edl_success_and_idempotency(app_and_deps):
     assert len(detail["keep_segments"]) == 2  # (0 -> cut_start), (cut_end -> duration)
     assert detail["keep_segments"][0][0] == 0
     assert detail["keep_segments"][-1][1] == 60000
+
+
+def test_get_edl_service_production_firestore_wiring():
+    from unittest.mock import patch
+    from croviq_api.config import Settings
+    from croviq_api.productions.editorial_repository import (
+        get_editorial_repository,
+        set_editorial_repository,
+        FirestoreEditorialRepository,
+    )
+    from croviq_api.productions.edl_repository import (
+        get_edl_repository,
+        set_edl_repository,
+        FirestoreEDLRepository,
+    )
+
+    try:
+        set_editorial_repository(None)
+        set_edl_repository(None)
+        with patch("croviq_api.productions.editorial_repository.get_settings") as mock_ed_settings, \
+             patch("croviq_api.productions.edl_repository.get_settings") as mock_edl_settings:
+            prod_settings = Settings(environment="production", gcp_project_id="croviq-506602")
+            mock_ed_settings.return_value = prod_settings
+            mock_edl_settings.return_value = prod_settings
+
+            ed_repo = get_editorial_repository()
+            assert isinstance(ed_repo, FirestoreEditorialRepository)
+            assert ed_repo._project_id == "croviq-506602"
+
+            edl_repo = get_edl_repository()
+            assert isinstance(edl_repo, FirestoreEDLRepository)
+            assert edl_repo._project_id == "croviq-506602"
+    finally:
+        set_editorial_repository(None)
+        set_edl_repository(None)
