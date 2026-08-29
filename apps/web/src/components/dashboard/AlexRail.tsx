@@ -96,9 +96,7 @@ export const AlexRail: React.FC<AlexRailProps> = ({
                   {insight.title}
                 </h3>
 
-                <p className="text-xs leading-relaxed text-text-secondary">
-                  {insight.statement}
-                </p>
+                <p className="text-xs leading-relaxed text-text-secondary">{insight.statement}</p>
 
                 <div className="rounded-md border-l-2 border-primary/70 bg-surface-3/60 px-3 py-2 text-xs leading-relaxed">
                   <span className="font-semibold text-text-primary">Next: </span>

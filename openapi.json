@@ -7,9 +7,7 @@
   "paths": {
     "/api/health": {
       "get": {
-        "tags": [
-          "Health"
-        ],
+        "tags": ["Health"],
         "summary": "Service Health Check",
         "operationId": "health_check_api_health_get",
         "responses": {
@@ -28,9 +26,7 @@
     },
     "/api/client-events": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Record Sanitized Client Authentication Event",
         "description": "Record a constrained client auth event without accepting sensitive payloads.",
         "operationId": "record_client_auth_event_api_client_events_post",
@@ -113,9 +109,7 @@
     },
     "/api/auth/me": {
       "get": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Get Current Authenticated User",
         "description": "Retrieve the canonical User profile derived from verified identity.",
         "operationId": "get_me_api_auth_me_get",
@@ -140,9 +134,7 @@
     },
     "/api/auth/logout": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Record User Logout",
         "description": "Record client-side logout activity and emit operational audit log.",
         "operationId": "logout_api_auth_logout_post",
@@ -166,9 +158,7 @@
     },
     "/api/workspace": {
       "get": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Get or Provision Default Workspace",
         "description": "Retrieve the default workspace belonging to the verified creator. If none exists, creates exactly one default Workspace idempotently.",
         "operationId": "get_or_provision_default_workspace_api_workspace_get",
@@ -193,9 +183,7 @@
     },
     "/api/workspace/agent-settings": {
       "get": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Get Agent Settings",
         "description": "Retrieve creator-configured prompts for Alex, Leo, and Iris, narration voice settings, and official Google voice catalog.",
         "operationId": "get_agent_settings_api_workspace_agent_settings_get",
@@ -220,9 +208,7 @@
     },
     "/api/workspace/agent-settings/prompts/{agent_id}": {
       "put": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Update Agent Working Prompt",
         "description": "Update the complete working prompt for Alex, Leo, or Iris. Bumps version and timestamps.",
         "operationId": "update_agent_prompt_api_workspace_agent_settings_prompts__agent_id__put",
@@ -278,9 +264,7 @@
     },
     "/api/workspace/agent-settings/prompts/{agent_id}/reset": {
       "post": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Reset Agent Working Prompt",
         "description": "Reset Alex, Leo, or Iris working prompt back to the system default prompt.",
         "operationId": "reset_agent_prompt_api_workspace_agent_settings_prompts__agent_id__reset_post",
@@ -326,9 +310,7 @@
     },
     "/api/workspace/agent-settings/memory": {
       "get": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "View Agent Memory with Search",
         "description": "Retrieve agent-scoped memories from Google Agent Platform Memory Bank with optional search filtering.",
         "operationId": "get_agent_memory_api_workspace_agent_settings_memory_get",
@@ -395,9 +377,7 @@
         }
       },
       "post": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Add Memory to Google Memory Bank",
         "description": "Add a new durable memory, directive, or preference to Google Memory Bank.",
         "operationId": "add_agent_memory_api_workspace_agent_settings_memory_post",
@@ -460,9 +440,7 @@
     },
     "/api/workspace/agent-settings/memory/{memory_id}": {
       "delete": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Delete Memory from Google Memory Bank",
         "description": "Permanently delete a memory record from Google Memory Bank.",
         "operationId": "delete_agent_memory_api_workspace_agent_settings_memory__memory_id__delete",
@@ -510,9 +488,7 @@
     },
     "/api/workspace/agent-settings/memory/search": {
       "post": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Search Google Memory Bank",
         "description": "Search Google Memory Bank entries by semantic query or keyword.",
         "operationId": "search_agent_memory_api_workspace_agent_settings_memory_search_post",
@@ -583,9 +559,7 @@
     },
     "/api/workspace/agent-settings/voice": {
       "get": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Get Voice Settings",
         "description": "Get current narration mode and Studio Voice selection.",
         "operationId": "get_voice_settings_endpoint_api_workspace_agent_settings_voice_get",
@@ -608,9 +582,7 @@
         ]
       },
       "put": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Update Voice Settings",
         "description": "Update narration mode (Original, Enhanced Original, Studio Voice) and selected Google voice.",
         "operationId": "update_voice_settings_endpoint_api_workspace_agent_settings_voice_put",
@@ -655,9 +627,7 @@
     },
     "/api/workspace/agent-settings/voice/sample": {
       "post": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Audition Voice Sample",
         "description": "Preview audio sample for a selected Studio Voice (Gemini TTS) prebuilt voice.",
         "operationId": "get_voice_sample_endpoint_api_workspace_agent_settings_voice_sample_post",
@@ -702,9 +672,7 @@
     },
     "/api/workspace/agents/{agent_id}/chat": {
       "get": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Get Agent Conversation History",
         "operationId": "get_agent_chat_history_api_workspace_agents__agent_id__chat_get",
         "security": [
@@ -747,9 +715,7 @@
         }
       },
       "post": {
-        "tags": [
-          "Workspaces"
-        ],
+        "tags": ["Workspaces"],
         "summary": "Send Message to Agent Workspace Chat",
         "operationId": "send_agent_chat_message_api_workspace_agents__agent_id__chat_post",
         "security": [
@@ -804,9 +770,7 @@
     },
     "/api/channel/memory/profile": {
       "get": {
-        "tags": [
-          "Memory"
-        ],
+        "tags": ["Memory"],
         "summary": "Retrieve Channel Memory Profile",
         "description": "Retrieve the canonical structured ChannelMemoryProfile from Memory Bank.",
         "operationId": "get_channel_memory_profile_api_channel_memory_profile_get",
@@ -855,9 +819,7 @@
     },
     "/api/channel/memory/lessons": {
       "get": {
-        "tags": [
-          "Memory"
-        ],
+        "tags": ["Memory"],
         "summary": "Retrieve Channel Lessons",
         "description": "Retrieve active ChannelLessons scoped to a channel, optionally filtered by target agent.",
         "operationId": "get_channel_lessons_api_channel_memory_lessons_get",
@@ -928,9 +890,7 @@
     },
     "/api/uploads": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Initiate Direct GCS Media Upload",
         "description": "Registers an upload session, creates a pending Production record, and returns a short-lived V4 signed PUT URL for direct browser-to-GCS upload.",
         "operationId": "create_upload_api_uploads_post",
@@ -975,9 +935,7 @@
     },
     "/api/uploads/{upload_id}/complete": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Verify and Complete Media Upload",
         "description": "Verifies the uploaded object in GCS (existence, size, content type) and transitions the Production to uploaded.",
         "operationId": "complete_upload_api_uploads__upload_id__complete_post",
@@ -1023,9 +981,7 @@
     },
     "/api/productions": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "List Recent Productions",
         "description": "Retrieve a list of recent content productions belonging to the creator's workspace.",
         "operationId": "list_productions_api_productions_get",
@@ -1072,9 +1028,7 @@
     },
     "/api/productions/{production_id}": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Production by ID",
         "description": "Retrieve a single Production record by its identifier.",
         "operationId": "get_production_api_productions__production_id__get",
@@ -1118,9 +1072,7 @@
         }
       },
       "delete": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Delete Production",
         "description": "Idempotent coordinated deletion of a production: sets status to deleting, removes GCS production prefix, purges external transcript records and subcollections, and deletes root production document last.",
         "operationId": "delete_production_api_productions__production_id__delete",
@@ -1166,9 +1118,7 @@
     },
     "/api/productions/{production_id}/transcribe": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Transcribe Production Source Media",
         "description": "Extract 16 kHz mono WAV audio from uploaded source media and transcribe it with Gemini 3.5 Transcribe.",
         "operationId": "transcribe_production_api_productions__production_id__transcribe_post",
@@ -1214,9 +1164,7 @@
     },
     "/api/productions/{production_id}/transcript": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Production Transcript",
         "description": "Retrieve the word-aligned transcript for a production.",
         "operationId": "get_production_transcript_api_productions__production_id__transcript_get",
@@ -1262,9 +1210,7 @@
     },
     "/api/productions/{production_id}/source-analysis-input": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Source Video Analysis Input Contract",
         "description": "Retrieve the complete source video analysis contract ready for Gemini reasoning (Issue #26).",
         "operationId": "get_source_analysis_input_api_productions__production_id__source_analysis_input_get",
@@ -1310,9 +1256,7 @@
     },
     "/api/productions/{production_id}/analyze": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Run Leo Editorial Analysis and Render Preview",
         "description": "Run Leo's dialogue edit, deterministic cut safety, EDL assembly, and Preview rendering.",
         "operationId": "analyze_production_api_productions__production_id__analyze_post",
@@ -1368,9 +1312,7 @@
     },
     "/api/productions/{production_id}/editorial-run": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Latest Editorial Run Details",
         "description": "Retrieve the latest editorial run, Leo proposal, and agent activities.",
         "operationId": "get_editorial_run_api_productions__production_id__editorial_run_get",
@@ -1416,9 +1358,7 @@
     },
     "/api/productions/{production_id}/edl": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Assemble Canonical Edit Decision List (EDL)",
         "description": "Deterministically derives audio-safe cut instructions and visual coverage markers from Leo's proposal.",
         "operationId": "assemble_edl_api_productions__production_id__edl_post",
@@ -1462,9 +1402,7 @@
         }
       },
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Production Edit Decision List",
         "description": "Retrieve the active canonical Edit Decision List and derived renderable keep segments.",
         "operationId": "get_production_edl_api_productions__production_id__edl_get",
@@ -1510,9 +1448,7 @@
     },
     "/api/productions/{production_id}/renders/preview": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Render Fast Preview Video",
         "description": "Deterministically render a fast preview MP4 from the canonical Edit Decision List.",
         "operationId": "render_preview_video_api_productions__production_id__renders_preview_post",
@@ -1558,9 +1494,7 @@
     },
     "/api/productions/{production_id}/renders/master": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Render High Quality Master Video",
         "description": "Deterministically render a high quality YouTube master MP4 from the canonical Edit Decision List.",
         "operationId": "render_master_video_api_productions__production_id__renders_master_post",
@@ -1606,9 +1540,7 @@
     },
     "/api/productions/{production_id}/renders": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "List Production Render Artifacts",
         "description": "Retrieve all rendered artifacts (preview and master) for a production.",
         "operationId": "list_production_renders_api_productions__production_id__renders_get",
@@ -1654,9 +1586,7 @@
     },
     "/api/productions/{production_id}/playback": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Production Media Playback URLs",
         "description": "Retrieve distinct signed URLs for Original, Edited Preview, Master, and Studio Voice media.",
         "operationId": "get_production_playback_urls_api_productions__production_id__playback_get",
@@ -1702,9 +1632,7 @@
     },
     "/api/productions/{production_id}/studio-voice": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Generate Studio Voice Narration",
         "description": "Synthesize section-by-section Studio Voice narration adhering to strict hard duration budgets.",
         "operationId": "generate_studio_voice_api_productions__production_id__studio_voice_post",
@@ -1748,9 +1676,7 @@
         }
       },
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Studio Voice Result",
         "description": "Retrieve the latest generated Studio Voice segments and timing data for a production.",
         "operationId": "get_studio_voice_api_productions__production_id__studio_voice_get",
@@ -1796,9 +1722,7 @@
     },
     "/api/productions/{production_id}/broll": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "List Generated B-Roll Artifacts",
         "description": "Retrieve all B-roll video clips generated by Leo for this production.",
         "operationId": "list_production_broll_api_productions__production_id__broll_get",
@@ -1844,9 +1768,7 @@
     },
     "/api/productions/{production_id}/packaging": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Production Packaging Details",
         "description": "Retrieve the latest packaging proposal, creator overrides, and publishing state for a production.",
         "operationId": "get_packaging_details_api_productions__production_id__packaging_get",
@@ -1890,9 +1812,7 @@
         }
       },
       "patch": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Update Creator Package Overrides",
         "description": "Update creator overrides for title, description, chapters, or thumbnail selection.",
         "operationId": "update_packaging_overrides_api_productions__production_id__packaging_patch",
@@ -1948,9 +1868,7 @@
     },
     "/api/productions/{production_id}/release-review": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Generate Iris QA Release Review",
         "description": "Invoke Iris (QA Agent) to evaluate the Master video, transcript, captions, chapters, and packaging truth before release.",
         "operationId": "generate_release_review_api_productions__production_id__release_review_post",
@@ -2011,9 +1929,7 @@
         }
       },
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Production Release Review Details",
         "description": "Retrieve the latest Iris QA evaluation, checklist, and release readiness for a production.",
         "operationId": "get_release_review_details_api_productions__production_id__release_review_get",
@@ -2059,9 +1975,7 @@
     },
     "/api/productions/{production_id}/publish/prep": {
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get YouTube Publishing Preparation Data",
         "description": "Retrieve channel connection info, suggested title/description/chapters, and synthetic media suggestions before publishing.",
         "operationId": "get_publish_preparation_api_productions__production_id__publish_prep_get",
@@ -2107,9 +2021,7 @@
     },
     "/api/productions/{production_id}/publish": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Initiate Creator-Approved YouTube Publication",
         "description": "Trigger creator-approved, idempotent publishing of Master video to YouTube with release gate validation.",
         "operationId": "publish_to_youtube_api_productions__production_id__publish_post",
@@ -2163,9 +2075,7 @@
         }
       },
       "get": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Get Production YouTube Publish Status",
         "description": "Poll current or latest YouTube publish job status, upload progress, and remote video metadata.",
         "operationId": "get_publish_status_api_productions__production_id__publish_get",
@@ -2211,9 +2121,7 @@
     },
     "/api/productions/{production_id}/publish/cancel": {
       "post": {
-        "tags": [
-          "Productions & Uploads"
-        ],
+        "tags": ["Productions & Uploads"],
         "summary": "Cancel Pending YouTube Publish Job",
         "description": "Cancel a queued or pending publish job before bytes start uploading.",
         "operationId": "cancel_publish_job_api_productions__production_id__publish_cancel_post",
@@ -2259,9 +2167,7 @@
     },
     "/api/channels/sample/dashboard": {
       "get": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Get Sample Channel Intelligence Dashboard",
         "description": "Compute channel intelligence from the canonical deterministic sample channel. Daily sample trends are modeled from the fixture and disclosed in the response.",
         "operationId": "get_sample_channel_dashboard_api_channels_sample_dashboard_get",
@@ -2325,9 +2231,7 @@
     },
     "/api/channels/youtube/auth-url": {
       "post": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Generate YouTube OAuth Authorization URL",
         "description": "Generate secure Google OAuth 2.0 authorization URL with CSRF state token.",
         "operationId": "generate_youtube_auth_url_api_channels_youtube_auth_url_post",
@@ -2372,9 +2276,7 @@
     },
     "/api/channels/youtube/callback": {
       "post": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Handle YouTube OAuth Callback",
         "description": "Exchange authorization code for tokens, verify CSRF state, and store connection server-side.",
         "operationId": "handle_youtube_callback_api_channels_youtube_callback_post",
@@ -2419,9 +2321,7 @@
     },
     "/api/channels/youtube/connection": {
       "get": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Get Connected YouTube Channel Status",
         "operationId": "get_youtube_connection_status_api_channels_youtube_connection_get",
         "responses": {
@@ -2445,9 +2345,7 @@
     },
     "/api/channels/youtube/disconnect": {
       "post": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Disconnect YouTube Channel",
         "operationId": "disconnect_youtube_channel_api_channels_youtube_disconnect_post",
         "responses": {
@@ -2464,9 +2362,7 @@
     },
     "/api/channels/youtube/dashboard": {
       "get": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Get Connected Real YouTube Channel Dashboard",
         "operationId": "get_youtube_channel_dashboard_api_channels_youtube_dashboard_get",
         "security": [
@@ -2529,9 +2425,7 @@
     },
     "/api/channels/research/config": {
       "get": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Get Alex Research Settings",
         "operationId": "get_research_config_api_channels_research_config_get",
         "responses": {
@@ -2553,9 +2447,7 @@
         ]
       },
       "put": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Update Alex Research Settings",
         "operationId": "update_research_config_api_channels_research_config_put",
         "requestBody": {
@@ -2599,9 +2491,7 @@
     },
     "/api/channels/research/findings": {
       "get": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Get Active Topic Radar Research Findings",
         "description": "Retrieve ranked, grounded research findings with source citations for the Alex Briefing rail.",
         "operationId": "get_research_findings_api_channels_research_findings_get",
@@ -2652,9 +2542,7 @@
     },
     "/api/channels/research/run": {
       "post": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Trigger Manual Alex Research Run",
         "operationId": "trigger_manual_research_run_api_channels_research_run_post",
         "responses": {
@@ -2682,9 +2570,7 @@
     },
     "/api/channels/research/tick": {
       "post": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Cloud Scheduler Background Research Tick",
         "description": "Internal idempotent endpoint invoked by Cloud Scheduler to process due Alex research runs.",
         "operationId": "process_scheduler_tick_api_channels_research_tick_post",
@@ -2704,9 +2590,7 @@
     },
     "/api/channels/analysis/code-execution": {
       "post": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Run Alex Python Code Execution Statistical Analysis",
         "operationId": "run_alex_code_execution_api_channels_analysis_code_execution_post",
         "requestBody": {
@@ -2752,9 +2636,7 @@
     },
     "/api/channels/research/findings/{finding_id}/distill": {
       "post": {
-        "tags": [
-          "Channel Intelligence"
-        ],
+        "tags": ["Channel Intelligence"],
         "summary": "Distill Research Finding into Durable Memory Bank Lesson",
         "operationId": "distill_research_finding_api_channels_research_findings__finding_id__distill_post",
         "security": [
@@ -2902,9 +2784,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "message"
-        ],
+        "required": ["message"],
         "title": "AgentChatMessageRequest",
         "description": "Incoming user chat message to a specific agent."
       },
@@ -2950,11 +2830,7 @@
         },
         "additionalProperties": true,
         "type": "object",
-        "required": [
-          "message_id",
-          "content",
-          "created_at"
-        ],
+        "required": ["message_id", "content", "created_at"],
         "title": "AgentChatMessageResponse",
         "description": "Single agent chat message with internal tool telemetry and optional structured artifacts."
       },
@@ -2974,19 +2850,13 @@
         },
         "additionalProperties": true,
         "type": "object",
-        "required": [
-          "agent_id"
-        ],
+        "required": ["agent_id"],
         "title": "AgentConversationHistoryResponse",
         "description": "Conversation history for an agent workspace."
       },
       "AgentId": {
         "type": "string",
-        "enum": [
-          "leo",
-          "alex",
-          "iris"
-        ],
+        "enum": ["leo", "alex", "iris"],
         "title": "AgentId",
         "description": "Supported Croviq agents."
       },
@@ -3025,9 +2895,7 @@
         },
         "additionalProperties": true,
         "type": "object",
-        "required": [
-          "channel_title"
-        ],
+        "required": ["channel_title"],
         "title": "AgentMemorySummaryResponse",
         "description": "Canonical summary of current Google Memory Bank records."
       },
@@ -3065,11 +2933,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "agent_id",
-          "prompt_text",
-          "updated_at"
-        ],
+        "required": ["agent_id", "prompt_text", "updated_at"],
         "title": "AgentPromptConfig",
         "description": "Creator-editable working prompt configuration for an agent."
       },
@@ -3097,13 +2961,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "leo_prompt",
-          "alex_prompt",
-          "iris_prompt",
-          "voice_settings",
-          "voices"
-        ],
+        "required": ["leo_prompt", "alex_prompt", "iris_prompt", "voice_settings", "voices"],
         "title": "AgentSettingsResponse",
         "description": "Complete Agent Settings state returned to client."
       },
@@ -3180,12 +3038,7 @@
       },
       "ArtifactStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "rendering",
-          "completed",
-          "failed"
-        ],
+        "enum": ["pending", "rendering", "completed", "failed"],
         "title": "ArtifactStatus",
         "description": "Lifecycle status of a render artifact."
       },
@@ -3306,9 +3159,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "AuthExplicitLogoutEvent"
       },
       "AuthLoginAttemptEvent": {
@@ -3343,9 +3194,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "AuthLoginAttemptEvent"
       },
       "AuthLoginFailedEvent": {
@@ -3381,10 +3230,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "invalid_credentials",
-                  "demo_access_restricted"
-                ]
+                "enum": ["invalid_credentials", "demo_access_restricted"]
               },
               {
                 "type": "null"
@@ -3395,9 +3241,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "AuthLoginFailedEvent"
       },
       "AuthSessionLostEvent": {
@@ -3443,9 +3287,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "AuthSessionLostEvent"
       },
       "AuthSessionRestoredEvent": {
@@ -3480,9 +3322,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "AuthSessionRestoredEvent"
       },
       "AuthTokenRefreshFailedEvent": {
@@ -3528,9 +3368,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "AuthTokenRefreshFailedEvent"
       },
       "AuthTokenRefreshedEvent": {
@@ -3565,9 +3403,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "AuthTokenRefreshedEvent"
       },
       "BRollArtifact": {
@@ -3848,13 +3684,7 @@
       },
       "BRollArtifactStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "planned",
-          "accepted",
-          "rejected",
-          "failed"
-        ],
+        "enum": ["pending", "planned", "accepted", "rejected", "failed"],
         "title": "BRollArtifactStatus",
         "description": "Lifecycle status of a B-roll planning or media asset."
       },
@@ -3876,20 +3706,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id"
-        ],
+        "required": ["production_id"],
         "title": "BRollListResponse",
         "description": "Response listing generated B-roll artifacts for a production."
       },
       "BRollQualityMode": {
         "type": "string",
-        "enum": [
-          "draft",
-          "standard",
-          "finishing",
-          "4k"
-        ],
+        "enum": ["draft", "standard", "finishing", "4k"],
         "title": "BRollQualityMode",
         "description": "Explicit quality modes for Gemini Omni video generation."
       },
@@ -4247,25 +4070,19 @@
             "type": "string",
             "title": "Lesson Id",
             "description": "Unique identifier for the lesson.",
-            "examples": [
-              "lsn_early_demo_01"
-            ]
+            "examples": ["lsn_early_demo_01"]
           },
           "channel_id": {
             "type": "string",
             "title": "Channel Id",
             "description": "Channel identifier scope.",
-            "examples": [
-              "croviq_syn_ai_eng_01"
-            ]
+            "examples": ["croviq_syn_ai_eng_01"]
           },
           "directive": {
             "type": "string",
             "title": "Directive",
             "description": "Actionable instruction for the agent.",
-            "examples": [
-              "Reach the first concrete demonstration before 00:30."
-            ]
+            "examples": ["Reach the first concrete demonstration before 00:30."]
           },
           "target_agent": {
             "$ref": "#/components/schemas/TargetAgent",
@@ -4285,9 +4102,7 @@
             "minimum": 0.0,
             "title": "Confidence",
             "description": "Confidence score for this lesson (0.0 to 1.0).",
-            "examples": [
-              0.92
-            ]
+            "examples": [0.92]
           },
           "status": {
             "type": "string",
@@ -4320,17 +4135,13 @@
             "type": "string",
             "title": "Channel Id",
             "description": "Canonical channel identifier used as memory scope.",
-            "examples": [
-              "croviq_syn_ai_eng_01"
-            ]
+            "examples": ["croviq_syn_ai_eng_01"]
           },
           "channel_name": {
             "type": "string",
             "title": "Channel Name",
             "description": "Display name of the channel.",
-            "examples": [
-              "AI Engineering & Agent Systems"
-            ]
+            "examples": ["AI Engineering & Agent Systems"]
           },
           "primary_topics": {
             "items": {
@@ -4339,13 +4150,7 @@
             "type": "array",
             "title": "Primary Topics",
             "description": "Top subject-matter domains covered by the channel.",
-            "examples": [
-              [
-                "AI Agents",
-                "LLM Systems",
-                "DevOps & CI/CD"
-              ]
-            ]
+            "examples": [["AI Agents", "LLM Systems", "DevOps & CI/CD"]]
           },
           "content_pillars": {
             "items": {
@@ -4354,13 +4159,7 @@
             "type": "array",
             "title": "Content Pillars",
             "description": "Core content themes and recurring series pillars.",
-            "examples": [
-              [
-                "Agent Architecture",
-                "Production Deployment",
-                "Emerging AI Releases"
-              ]
-            ]
+            "examples": [["Agent Architecture", "Production Deployment", "Emerging AI Releases"]]
           },
           "language": {
             "type": "string",
@@ -4375,15 +4174,7 @@
             "type": "array",
             "title": "Audience Geographies",
             "description": "Top audience geography ISO country codes ordered by viewership volume.",
-            "examples": [
-              [
-                "US",
-                "IN",
-                "GB",
-                "CA",
-                "DE"
-              ]
-            ]
+            "examples": [["US", "IN", "GB", "CA", "DE"]]
           },
           "audience_characteristics": {
             "items": {
@@ -4393,11 +4184,7 @@
             "title": "Audience Characteristics",
             "description": "Key audience behavioral and demographic attributes.",
             "examples": [
-              [
-                "Software Engineers",
-                "DevOps / SRE Practitioners",
-                "High desktop viewing share"
-              ]
+              ["Software Engineers", "DevOps / SRE Practitioners", "High desktop viewing share"]
             ]
           },
           "historical_baselines": {
@@ -4415,12 +4202,7 @@
             "type": "array",
             "title": "High Performing Formats",
             "description": "Video formats demonstrating above-average performance.",
-            "examples": [
-              [
-                "agent_build",
-                "deep_dive"
-              ]
-            ]
+            "examples": [["agent_build", "deep_dive"]]
           },
           "weak_formats": {
             "items": {
@@ -4429,11 +4211,7 @@
             "type": "array",
             "title": "Weak Formats",
             "description": "Video formats demonstrating below-average performance.",
-            "examples": [
-              [
-                "tutorial"
-              ]
-            ]
+            "examples": [["tutorial"]]
           },
           "recurring_retention_patterns": {
             "items": {
@@ -4467,10 +4245,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "channel_id",
-          "channel_name"
-        ],
+        "required": ["channel_id", "channel_name"],
         "title": "ChannelMemoryProfile",
         "description": "Canonical structured memory profile for a channel stored in Memory Bank."
       },
@@ -4513,23 +4288,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "title",
-          "source_start_ms",
-          "source_end_ms",
-          "summary"
-        ],
+        "required": ["title", "source_start_ms", "source_end_ms", "summary"],
         "title": "ChapterMarker",
         "description": "Semantic chapter candidate generated from Leo's multimodal video understanding."
       },
       "ClaimSupportStatus": {
         "type": "string",
-        "enum": [
-          "SUPPORTED_BY_VIDEO",
-          "SUPPORTED_EXTERNALLY",
-          "UNSUPPORTED",
-          "MANUAL_REVIEW"
-        ],
+        "enum": ["SUPPORTED_BY_VIDEO", "SUPPORTED_EXTERNALLY", "UNSUPPORTED", "MANUAL_REVIEW"],
         "title": "ClaimSupportStatus",
         "description": "Categorized status for claim evaluation."
       },
@@ -4574,11 +4339,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "claim_text",
-          "status",
-          "evidence"
-        ],
+        "required": ["claim_text", "status", "evidence"],
         "title": "ClaimVerification",
         "description": "Individual factual or packaging claim verification result."
       },
@@ -4636,9 +4397,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "event_type"
-        ],
+        "required": ["event_type"],
         "title": "ClientErrorEvent"
       },
       "CodeExecutionRequest": {
@@ -4708,10 +4467,7 @@
       },
       "CoverageType": {
         "type": "string",
-        "enum": [
-          "SOURCE_SCREEN",
-          "BROLL_CANDIDATE"
-        ],
+        "enum": ["SOURCE_SCREEN", "BROLL_CANDIDATE"],
         "title": "CoverageType",
         "description": "Visual coverage types supported for jump-cut mitigation and B-roll insertion."
       },
@@ -4738,9 +4494,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "fact"
-        ],
+        "required": ["fact"],
         "title": "CreateMemoryRequest",
         "description": "Request payload for adding a new durable memory to Google Memory Bank."
       },
@@ -4752,45 +4506,32 @@
             "minLength": 1,
             "title": "Filename",
             "description": "Original name of the video file to upload",
-            "examples": [
-              "github_actions_tutorial.mp4"
-            ]
+            "examples": ["github_actions_tutorial.mp4"]
           },
           "content_type": {
             "type": "string",
             "title": "Content Type",
             "description": "MIME content type of the video file (e.g. video/mp4, video/quicktime, video/webm)",
-            "examples": [
-              "video/mp4"
-            ]
+            "examples": ["video/mp4"]
           },
           "size_bytes": {
             "type": "integer",
             "exclusiveMinimum": 0.0,
             "title": "Size Bytes",
             "description": "Declared size of the file in bytes (must be <= 1 GB)",
-            "examples": [
-              104857600
-            ]
+            "examples": [104857600]
           },
           "channel_id": {
             "type": "string",
             "minLength": 1,
             "title": "Channel Id",
             "description": "Canonical channel identifier for this production (e.g. croviq_syn_ai_eng_01)",
-            "examples": [
-              "croviq_syn_ai_eng_01"
-            ]
+            "examples": ["croviq_syn_ai_eng_01"]
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "filename",
-          "content_type",
-          "size_bytes",
-          "channel_id"
-        ],
+        "required": ["filename", "content_type", "size_bytes", "channel_id"],
         "title": "CreateUploadRequest",
         "description": "Request payload to initiate a direct GCS media upload."
       },
@@ -4834,12 +4575,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "upload_id",
-          "upload_url",
-          "expires_at"
-        ],
+        "required": ["production_id", "upload_id", "upload_url", "expires_at"],
         "title": "CreateUploadResponse",
         "description": "Response returned upon successfully registering an upload and generating a signed PUT URL."
       },
@@ -5064,11 +4800,7 @@
       },
       "CutSafetyStatus": {
         "type": "string",
-        "enum": [
-          "SAFE",
-          "NEEDS_COVERAGE",
-          "REJECTED_UNSAFE"
-        ],
+        "enum": ["SAFE", "NEEDS_COVERAGE", "REJECTED_UNSAFE"],
         "title": "CutSafetyStatus",
         "description": "Deterministic safety classification for proposed cuts."
       },
@@ -5151,12 +4883,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "metric",
-          "current_value",
-          "previous_value",
-          "change_percentage"
-        ],
+        "required": ["metric", "current_value", "previous_value", "change_percentage"],
         "title": "DashboardKpi"
       },
       "DashboardTrendPoint": {
@@ -5232,10 +4959,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "deleted_at"
-        ],
+        "required": ["production_id", "deleted_at"],
         "title": "DeleteProductionResponse",
         "description": "Response returned upon successful deletion of a production and all associated media storage objects."
       },
@@ -5281,12 +5005,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "lesson_id",
-          "directive",
-          "confidence",
-          "status"
-        ],
+        "required": ["lesson_id", "directive", "confidence", "status"],
         "title": "DistillFindingResponse"
       },
       "EDLDetailResponse": {
@@ -5316,10 +5035,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "edl",
-          "keep_segments"
-        ],
+        "required": ["edl", "keep_segments"],
         "title": "EDLDetailResponse",
         "description": "Detailed response for inspecting an EditDecisionList along with derived renderable segments."
       },
@@ -5390,12 +5106,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "edl_id",
-          "production_id",
-          "source_duration_ms",
-          "created_at"
-        ],
+        "required": ["edl_id", "production_id", "source_duration_ms", "created_at"],
         "title": "EditDecisionList",
         "description": "Canonical, vendor-neutral Edit Decision List (EDL) schema."
       },
@@ -5603,12 +5314,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "model",
-          "summary",
-          "overall_confidence"
-        ],
+        "required": ["production_id", "model", "summary", "overall_confidence"],
         "title": "EditorProposal",
         "description": "Complete batch proposal emitted by Leo (Video Editor)."
       },
@@ -5677,10 +5383,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "run_id",
-          "production_id"
-        ],
+        "required": ["run_id", "production_id"],
         "title": "EditorialRun",
         "description": "Operational record representing an editorial analysis run lifecycle."
       },
@@ -5712,52 +5415,29 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "run"
-        ],
+        "required": ["run"],
         "title": "EditorialRunDetailResponse",
         "description": "Detailed response for inspecting an editorial run and Leo's proposal."
       },
       "EditorialRunStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "analyzing",
-          "reviewing",
-          "completed",
-          "failed"
-        ],
+        "enum": ["pending", "analyzing", "reviewing", "completed", "failed"],
         "title": "EditorialRunStatus",
         "description": "Operational state of an editorial analysis run."
       },
       "EvidenceKind": {
         "type": "string",
-        "enum": [
-          "FACT",
-          "INFERENCE",
-          "RESEARCH",
-          "RECOMMENDATION"
-        ],
+        "enum": ["FACT", "INFERENCE", "RESEARCH", "RECOMMENDATION"],
         "title": "EvidenceKind"
       },
       "ExperimentStatus": {
         "type": "string",
-        "enum": [
-          "PROPOSED",
-          "ACTIVE",
-          "COMPLETED",
-          "INCONCLUSIVE"
-        ],
+        "enum": ["PROPOSED", "ACTIVE", "COMPLETED", "INCONCLUSIVE"],
         "title": "ExperimentStatus"
       },
       "FindingLifecycle": {
         "type": "string",
-        "enum": [
-          "NEW",
-          "UPDATED",
-          "SEEN",
-          "EXPIRED"
-        ],
+        "enum": ["NEW", "UPDATED", "SEEN", "EXPIRED"],
         "title": "FindingLifecycle"
       },
       "GenerateReleaseReviewRequest": {
@@ -5808,9 +5488,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "git_sha"
-        ],
+        "required": ["git_sha"],
         "title": "HealthResponse"
       },
       "InsightEvidence": {
@@ -5841,22 +5519,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "kind",
-          "statement"
-        ],
+        "required": ["kind", "statement"],
         "title": "InsightEvidence"
       },
       "InsightType": {
         "type": "string",
-        "enum": [
-          "PERFORMANCE",
-          "RETENTION",
-          "AUDIENCE",
-          "TRAFFIC",
-          "TOPIC",
-          "EXPERIMENT"
-        ],
+        "enum": ["PERFORMANCE", "RETENTION", "AUDIENCE", "TRAFFIC", "TOPIC", "EXPERIMENT"],
         "title": "InsightType"
       },
       "LatestVideoAnalysis": {
@@ -6017,10 +5685,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "duration_ms",
-          "size_bytes"
-        ],
+        "required": ["duration_ms", "size_bytes"],
         "title": "MediaMetadata",
         "description": "Canonical metadata extracted from source video/audio via FFprobe."
       },
@@ -6088,11 +5753,7 @@
         },
         "additionalProperties": true,
         "type": "object",
-        "required": [
-          "name",
-          "memory_id",
-          "fact"
-        ],
+        "required": ["name", "memory_id", "fact"],
         "title": "MemoryCardResponse",
         "description": "Single canonical Memory Bank entry displayed in Agent Settings."
       },
@@ -6122,21 +5783,13 @@
         },
         "additionalProperties": true,
         "type": "object",
-        "required": [
-          "topic",
-          "content"
-        ],
+        "required": ["topic", "content"],
         "title": "MemoryItemResponse",
         "description": "Backward-compatible memory entry representation."
       },
       "NarrationMode": {
         "type": "string",
-        "enum": [
-          "original",
-          "enhanced_original",
-          "studio_voice",
-          "my_voice"
-        ],
+        "enum": ["original", "enhanced_original", "studio_voice", "my_voice"],
         "title": "NarrationMode",
         "description": "Narration audio mode."
       },
@@ -6247,12 +5900,7 @@
       },
       "NarrationSegmentStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "accepted",
-          "rejected",
-          "failed"
-        ],
+        "enum": ["pending", "accepted", "rejected", "failed"],
         "title": "NarrationSegmentStatus",
         "description": "Status of a narration segment synthesis."
       },
@@ -6300,12 +5948,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "title",
-          "start_ms",
-          "end_ms",
-          "formatted_time"
-        ],
+        "required": ["title", "start_ms", "end_ms", "formatted_time"],
         "title": "PackagingChapter",
         "description": "Publish-ready chapter timestamp for YouTube description."
       },
@@ -6420,10 +6063,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "effective_title"
-        ],
+        "required": ["production_id", "effective_title"],
         "title": "PackagingDetailResponse",
         "description": "Publish-ready packaging details including creator metadata and media references."
       },
@@ -6646,9 +6286,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "total"
-        ],
+        "required": ["total"],
         "title": "ProductionListResponse",
         "description": "Response returned when listing recent productions."
       },
@@ -6723,21 +6361,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id"
-        ],
+        "required": ["production_id"],
         "title": "ProductionPlaybackResponse",
         "description": "Playback URLs for all available media outputs of a production."
       },
       "ProductionStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "uploading",
-          "uploaded",
-          "deleting",
-          "failed"
-        ],
+        "enum": ["pending", "uploading", "uploaded", "deleting", "failed"],
         "title": "ProductionStatus"
       },
       "PublishJobDetailResponse": {
@@ -6932,11 +6562,7 @@
         "properties": {
           "requested_privacy": {
             "type": "string",
-            "enum": [
-              "private",
-              "unlisted",
-              "public"
-            ],
+            "enum": ["private", "unlisted", "public"],
             "title": "Requested Privacy",
             "description": "Target privacy status (default private)",
             "default": "private"
@@ -7167,12 +6793,7 @@
       },
       "ReleaseIssueSeverity": {
         "type": "string",
-        "enum": [
-          "LOW",
-          "MEDIUM",
-          "HIGH",
-          "BLOCKING"
-        ],
+        "enum": ["LOW", "MEDIUM", "HIGH", "BLOCKING"],
         "title": "ReleaseIssueSeverity",
         "description": "Severity classification of identified quality or packaging defects."
       },
@@ -7361,12 +6982,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "review_id",
-          "production_id",
-          "verdict",
-          "summary"
-        ],
+        "required": ["review_id", "production_id", "verdict", "summary"],
         "title": "ReleaseReview",
         "description": "Canonical release evaluation emitted by Iris (QA Agent)."
       },
@@ -7473,20 +7089,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "release_status"
-        ],
+        "required": ["production_id", "release_status"],
         "title": "ReleaseReviewDetailResponse",
         "description": "Comprehensive release evaluation, checklist, media playback, and publishing readiness."
       },
       "ReleaseVerdict": {
         "type": "string",
-        "enum": [
-          "PASS",
-          "FIX_REQUIRED",
-          "MANUAL_REVIEW"
-        ],
+        "enum": ["PASS", "FIX_REQUIRED", "MANUAL_REVIEW"],
         "title": "ReleaseVerdict",
         "description": "Evaluation verdict issued by Iris (QA Agent) for publishing gate."
       },
@@ -7693,10 +7302,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "renders"
-        ],
+        "required": ["production_id", "renders"],
         "title": "RenderListResponse",
         "description": "Response returning all render artifacts for a production."
       },
@@ -7765,13 +7371,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "workspace_id",
-          "channel_id",
-          "cadence",
-          "next_run_at",
-          "updated_at"
-        ],
+        "required": ["workspace_id", "channel_id", "cadence", "next_run_at", "updated_at"],
         "title": "ResearchConfig"
       },
       "ResearchFinding": {
@@ -7968,10 +7568,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "prompt_id",
-          "text"
-        ],
+        "required": ["prompt_id", "text"],
         "title": "ResearchPrompt"
       },
       "SchedulerTickResponse": {
@@ -7995,22 +7592,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "runs_evaluated",
-          "runs_executed",
-          "findings_created",
-          "status"
-        ],
+        "required": ["runs_evaluated", "runs_executed", "findings_created", "status"],
         "title": "SchedulerTickResponse"
       },
       "SectionAction": {
         "type": "string",
-        "enum": [
-          "KEEP",
-          "TIGHTEN",
-          "REMOVE",
-          "COVERAGE"
-        ],
+        "enum": ["KEEP", "TIGHTEN", "REMOVE", "COVERAGE"],
         "title": "SectionAction",
         "description": "Editorial action applied to a full-timeline production section."
       },
@@ -8037,11 +7624,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "start_ms",
-          "end_ms",
-          "duration_ms"
-        ],
+        "required": ["start_ms", "end_ms", "duration_ms"],
         "title": "SilenceInterval",
         "description": "Represents a silence or non-speech interval between spoken words."
       },
@@ -8101,11 +7684,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "url",
-          "title",
-          "domain"
-        ],
+        "required": ["url", "title", "domain"],
         "title": "SourceCitation"
       },
       "SourceMedia": {
@@ -8186,12 +7765,7 @@
       },
       "SourceMediaStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "uploading",
-          "uploaded",
-          "failed"
-        ],
+        "enum": ["pending", "uploading", "uploaded", "failed"],
         "title": "SourceMediaStatus"
       },
       "SourceVideoAnalysisInput": {
@@ -8235,13 +7809,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "source_media",
-          "media_metadata",
-          "transcript",
-          "channel_id"
-        ],
+        "required": ["production_id", "source_media", "media_metadata", "transcript", "channel_id"],
         "title": "SourceVideoAnalysisInput",
         "description": "Canonical provider-neutral input contract consumed by Gemini agents in Issue #26."
       },
@@ -8271,10 +7839,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "result"
-        ],
+        "required": ["production_id", "result"],
         "title": "StudioVoiceGenerationResponse",
         "description": "Response returned upon generating Studio Voice narration for a production."
       },
@@ -8359,22 +7924,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "production_id",
-          "voice_id",
-          "created_at",
-          "updated_at"
-        ],
+        "required": ["production_id", "voice_id", "created_at", "updated_at"],
         "title": "StudioVoiceResult",
         "description": "Aggregated Studio Voice generation result for a production."
       },
       "TargetAgent": {
         "type": "string",
-        "enum": [
-          "alex",
-          "leo",
-          "iris"
-        ],
+        "enum": ["alex", "leo", "iris"],
         "title": "TargetAgent"
       },
       "ThumbnailConcept": {
@@ -8498,24 +8054,13 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "concept_index",
-          "headline",
-          "verdict",
-          "reason"
-        ],
+        "required": ["concept_index", "headline", "verdict", "reason"],
         "title": "ThumbnailEvaluation",
         "description": "Evaluation of a specific creator thumbnail concept."
       },
       "ThumbnailUploadStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "uploading",
-          "completed",
-          "failed",
-          "skipped"
-        ],
+        "enum": ["pending", "uploading", "completed", "failed", "skipped"],
         "title": "ThumbnailUploadStatus",
         "description": "Lifecycle status of custom thumbnail upload to YouTube."
       },
@@ -8563,12 +8108,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "text",
-          "angle",
-          "why_it_works",
-          "confidence"
-        ],
+        "required": ["text", "angle", "why_it_works", "confidence"],
         "title": "TitleCandidate",
         "description": "Distinct title candidate representing a specific packaging strategy."
       },
@@ -8637,11 +8177,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "source",
-          "views",
-          "percentage"
-        ],
+        "required": ["source", "views", "percentage"],
         "title": "TrafficSourceMetric",
         "description": "Breakdown of views by traffic source."
       },
@@ -8649,15 +8185,10 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": [
-              "completed",
-              "already_transcribed"
-            ],
+            "enum": ["completed", "already_transcribed"],
             "title": "Status",
             "description": "Transcription status ('completed' or 'already_transcribed')",
-            "examples": [
-              "completed"
-            ]
+            "examples": ["completed"]
           },
           "transcript_id": {
             "type": "string",
@@ -8885,12 +8416,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "index",
-          "text",
-          "start_ms",
-          "end_ms"
-        ],
+        "required": ["index", "text", "start_ms", "end_ms"],
         "title": "TranscriptWord",
         "description": "Canonical representation of a single spoken word with millisecond time alignment."
       },
@@ -8976,9 +8502,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "prompt_text"
-        ],
+        "required": ["prompt_text"],
         "title": "UpdatePromptRequest",
         "description": "Request payload for updating an agent's working prompt."
       },
@@ -9001,11 +8525,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "enabled",
-          "cadence",
-          "prompts"
-        ],
+        "required": ["enabled", "cadence", "prompts"],
         "title": "UpdateResearchConfigRequest"
       },
       "UpdateVoiceSettingsRequest": {
@@ -9040,9 +8560,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "narration_mode"
-        ],
+        "required": ["narration_mode"],
         "title": "UpdateVoiceSettingsRequest",
         "description": "Request payload for updating narration and Studio Voice settings."
       },
@@ -9093,13 +8611,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "user_id",
-          "email",
-          "display_name",
-          "created_at",
-          "updated_at"
-        ],
+        "required": ["user_id", "email", "display_name", "created_at", "updated_at"],
         "title": "User",
         "description": "Canonical User identity model for Croviq."
       },
@@ -9136,11 +8648,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
+        "required": ["loc", "msg", "type"],
         "title": "ValidationError"
       },
       "VideoPerformancePoint": {
@@ -9351,10 +8859,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "voice_id",
-          "display_name"
-        ],
+        "required": ["voice_id", "display_name"],
         "title": "VoiceCatalogItem",
         "description": "Studio Voice catalog entry."
       },
@@ -9452,12 +8957,7 @@
       },
       "VoiceReplicationStatus": {
         "type": "string",
-        "enum": [
-          "available",
-          "blocked",
-          "consent_required",
-          "expired"
-        ],
+        "enum": ["available", "blocked", "consent_required", "expired"],
         "title": "VoiceReplicationStatus",
         "description": "Capability / operational state for Gemini 3.1 Flash TTS My Voice replication."
       },
@@ -9480,9 +8980,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "voice_id"
-        ],
+        "required": ["voice_id"],
         "title": "VoiceSampleRequest",
         "description": "Request to preview audio for a specific Studio Voice."
       },
@@ -9512,11 +9010,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "voice_id",
-          "sample_text",
-          "audio_base64"
-        ],
+        "required": ["voice_id", "sample_text", "audio_base64"],
         "title": "VoiceSampleResponse",
         "description": "Generated audio preview for voice audition."
       },
@@ -9561,9 +9055,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "updated_at"
-        ],
+        "required": ["updated_at"],
         "title": "VoiceSettingsConfig",
         "description": "Creator-configured narration and Studio Voice settings."
       },
@@ -9618,13 +9110,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "workspace_id",
-          "owner_user_id",
-          "name",
-          "created_at",
-          "updated_at"
-        ],
+        "required": ["workspace_id", "owner_user_id", "name", "created_at", "updated_at"],
         "title": "Workspace",
         "description": "Canonical Workspace tenant container model for Croviq."
       },
@@ -9648,9 +9134,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "redirect_uri"
-        ],
+        "required": ["redirect_uri"],
         "title": "YouTubeAuthUrlRequest"
       },
       "YouTubeAuthUrlResponse": {
@@ -9673,11 +9157,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "auth_url",
-          "state_token",
-          "scopes"
-        ],
+        "required": ["auth_url", "state_token", "scopes"],
         "title": "YouTubeAuthUrlResponse"
       },
       "YouTubeCallbackRequest": {
@@ -9700,11 +9180,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "code",
-          "state",
-          "redirect_uri"
-        ],
+        "required": ["code", "state", "redirect_uri"],
         "title": "YouTubeCallbackRequest"
       },
       "YouTubeConnectionPublicSummary": {
@@ -9805,9 +9281,7 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "connected"
-        ],
+        "required": ["connected"],
         "title": "YouTubeConnectionPublicSummary",
         "description": "Public non-sensitive connection information returned to creator client."
       },

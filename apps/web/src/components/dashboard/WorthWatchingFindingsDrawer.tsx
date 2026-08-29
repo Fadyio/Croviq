@@ -44,9 +44,7 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
                   <Sparkles className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-text-primary">
-                    Ideas Worth Making
-                  </h2>
+                  <h2 className="text-sm font-semibold text-text-primary">Ideas Worth Making</h2>
                   <p className="text-xs text-text-muted">
                     {findings.length} channel-aligned video opportunities
                   </p>

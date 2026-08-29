@@ -289,9 +289,11 @@ const mockBackendApis = async (page: Page) => {
             insight_id: "ins_1",
             type: "Retention Pattern",
             title: "Early terminal demonstration tracks +28% retention",
-            statement: "Videos placing code demonstrations before 00:30 achieve 58.4% mean retention vs 44.1% for late demos.",
+            statement:
+              "Videos placing code demonstrations before 00:30 achieve 58.4% mean retention vs 44.1% for late demos.",
             confidence: 0.92,
-            recommended_action: "Introduce terminal demonstration within the first 25 seconds of your next production.",
+            recommended_action:
+              "Introduce terminal demonstration within the first 25 seconds of your next production.",
             evidence_data: {},
             created_at: "2026-08-28T00:00:00Z",
           },

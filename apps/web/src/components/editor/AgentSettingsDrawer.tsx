@@ -145,8 +145,8 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
           agentId === "leo"
             ? data.leo_prompt
             : agentId === "iris"
-            ? data.iris_prompt
-            : data.alex_prompt;
+              ? data.iris_prompt
+              : data.alex_prompt;
         if (p) {
           setPromptText(p.prompt_text || "");
         }
@@ -159,10 +159,9 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
       }
 
       // 2. Load canonical Memory Bank records
-      const memoryRes = await fetch(
-        `/api/workspace/agent-settings/memory?agent_id=${agentId}`,
-        { headers }
-      );
+      const memoryRes = await fetch(`/api/workspace/agent-settings/memory?agent_id=${agentId}`, {
+        headers,
+      });
       if (memoryRes.ok) {
         const memData = (await memoryRes.json()) as AgentMemorySummary;
         // Parse canonical memories or fallback lessons if any
@@ -175,7 +174,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
               memory_id: `lsn_${idx}`,
               fact: l.topic + (l.content ? `\n${l.content}` : ""),
               provenance: l.learned_from || "Channel analytics",
-            }))
+            })),
           );
         } else {
           setMemories([]);
@@ -288,7 +287,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
       });
       if (!res.ok) throw new Error("Failed to delete memory from Memory Bank");
       setMemories((prev) =>
-        prev.filter((m) => m.memory_id !== memoryIdOrName && m.name !== memoryIdOrName)
+        prev.filter((m) => m.memory_id !== memoryIdOrName && m.name !== memoryIdOrName),
       );
       setDeletingMemoryId(null);
       setMemoryNotice("Memory deleted from Memory Bank");
@@ -567,11 +566,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                 <div className="space-y-5" data-testid="settings-memory-view">
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="text-sm font-semibold text-text-primary">
-                        Memory Bank
-                      </h3>
+                      <h3 className="text-sm font-semibold text-text-primary">Memory Bank</h3>
                       <p className="text-xs text-text-muted">
-                        Canonical long-term knowledge and lessons retrieved during {agent.name} runtime.
+                        Canonical long-term knowledge and lessons retrieved during {agent.name}{" "}
+                        runtime.
                       </p>
                     </div>
                     {memoryNotice && (
@@ -658,7 +656,8 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                       </div>
                     ) : (
                       filteredMemories.map((mem) => {
-                        const isConfirmingDelete = deletingMemoryId === mem.memory_id || deletingMemoryId === mem.name;
+                        const isConfirmingDelete =
+                          deletingMemoryId === mem.memory_id || deletingMemoryId === mem.name;
                         return (
                           <div
                             key={mem.memory_id || mem.name}
@@ -770,7 +769,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                       value={research.cadence}
                       onChange={(e) =>
                         setResearch((cur) =>
-                          cur ? { ...cur, cadence: e.target.value as ResearchCadence } : cur
+                          cur ? { ...cur, cadence: e.target.value as ResearchCadence } : cur,
                         )
                       }
                       className="w-full rounded-xl border border-border-subtle bg-surface-2 px-4 py-2.5 text-xs text-text-primary outline-none focus:border-primary transition-colors cursor-pointer"
@@ -791,9 +790,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                         type="checkbox"
                         checked={research.enabled}
                         onChange={(e) =>
-                          setResearch((cur) =>
-                            cur ? { ...cur, enabled: e.target.checked } : cur
-                          )
+                          setResearch((cur) => (cur ? { ...cur, enabled: e.target.checked } : cur))
                         }
                         className="rounded border-border-subtle bg-surface-2 text-primary focus:ring-primary"
                         data-testid="checkbox-research-enabled"
@@ -817,7 +814,9 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                               onChange={(e) => {
                                 const nextPrompts = [...(research.prompts || [])];
                                 nextPrompts[idx] = { ...p, enabled: e.target.checked };
-                                setResearch((cur) => (cur ? { ...cur, prompts: nextPrompts } : cur));
+                                setResearch((cur) =>
+                                  cur ? { ...cur, prompts: nextPrompts } : cur,
+                                );
                               }}
                               className="rounded border-border-subtle bg-surface-1 text-primary focus:ring-primary"
                             />
@@ -868,10 +867,14 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const nextSources = (p.preferred_sources || []).filter((s) => s !== src);
+                                    const nextSources = (p.preferred_sources || []).filter(
+                                      (s) => s !== src,
+                                    );
                                     const nextPrompts = [...(research.prompts || [])];
                                     nextPrompts[idx] = { ...p, preferred_sources: nextSources };
-                                    setResearch((cur) => (cur ? { ...cur, prompts: nextPrompts } : cur));
+                                    setResearch((cur) =>
+                                      cur ? { ...cur, prompts: nextPrompts } : cur,
+                                    );
                                   }}
                                   className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
                                 >
@@ -887,7 +890,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                               type="text"
                               value={sourceDrafts[p.prompt_id] || ""}
                               onChange={(e) =>
-                                setSourceDrafts((cur) => ({ ...cur, [p.prompt_id]: e.target.value }))
+                                setSourceDrafts((cur) => ({
+                                  ...cur,
+                                  [p.prompt_id]: e.target.value,
+                                }))
                               }
                               placeholder="domain or full public URL (e.g. news.ycombinator.com)"
                               className="flex-1 rounded-lg border border-border-subtle bg-surface-1 px-3 py-1.5 text-xs text-text-primary outline-none focus:border-primary transition-colors"
@@ -900,7 +906,9 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                                 const nextSources = [...(p.preferred_sources || []), draft];
                                 const nextPrompts = [...(research.prompts || [])];
                                 nextPrompts[idx] = { ...p, preferred_sources: nextSources };
-                                setResearch((cur) => (cur ? { ...cur, prompts: nextPrompts } : cur));
+                                setResearch((cur) =>
+                                  cur ? { ...cur, prompts: nextPrompts } : cur,
+                                );
                                 setSourceDrafts((cur) => ({ ...cur, [p.prompt_id]: "" }));
                               }}
                               className="rounded-lg bg-surface-3 p-2 text-text-primary hover:bg-surface-4 transition-colors cursor-pointer"
@@ -958,17 +966,33 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                     </label>
                     <div className="grid grid-cols-2 gap-3">
                       {[
-                        { id: "original", label: "Original Audio", desc: "Keep creator's raw vocal track" },
-                        { id: "enhanced_original", label: "Enhanced Original", desc: "Denoised and leveled voice" },
-                        { id: "studio_voice", label: "Studio Voice", desc: "High-clarity synthetic narration" },
-                        { id: "my_voice", label: "My Voice Model", desc: "Custom consented voice clone" },
+                        {
+                          id: "original",
+                          label: "Original Audio",
+                          desc: "Keep creator's raw vocal track",
+                        },
+                        {
+                          id: "enhanced_original",
+                          label: "Enhanced Original",
+                          desc: "Denoised and leveled voice",
+                        },
+                        {
+                          id: "studio_voice",
+                          label: "Studio Voice",
+                          desc: "High-clarity synthetic narration",
+                        },
+                        {
+                          id: "my_voice",
+                          label: "My Voice Model",
+                          desc: "Custom consented voice clone",
+                        },
                       ].map((m) => (
                         <button
                           key={m.id}
                           type="button"
                           onClick={() =>
                             setVoiceSettings((cur: VoiceSettingsConfig | null) =>
-                              cur ? { ...cur, narration_mode: m.id as any } : cur
+                              cur ? { ...cur, narration_mode: m.id as any } : cur,
                             )
                           }
                           className={`rounded-xl border p-3 text-left transition-colors cursor-pointer ${
@@ -980,9 +1004,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                           <span className="block text-xs font-semibold text-text-primary">
                             {m.label}
                           </span>
-                          <span className="block text-[11px] text-text-muted mt-0.5">
-                            {m.desc}
-                          </span>
+                          <span className="block text-[11px] text-text-muted mt-0.5">{m.desc}</span>
                         </button>
                       ))}
                     </div>
@@ -1026,7 +1048,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                                 type="button"
                                 onClick={() =>
                                   setVoiceSettings((cur: VoiceSettingsConfig | null) =>
-                                    cur ? { ...cur, selected_voice: v.voice_id } : cur
+                                    cur ? { ...cur, selected_voice: v.voice_id } : cur,
                                   )
                                 }
                                 className={`rounded-lg px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer ${

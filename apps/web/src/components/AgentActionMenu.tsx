@@ -89,9 +89,7 @@ export const AgentActionMenu: React.FC<AgentActionMenuProps> = ({
               <span className="block text-xs font-semibold text-text-primary leading-tight">
                 {agent.name}
               </span>
-              <span className="block text-[11px] text-text-muted truncate">
-                {agent.role}
-              </span>
+              <span className="block text-[11px] text-text-muted truncate">{agent.role}</span>
             </div>
           </div>
 

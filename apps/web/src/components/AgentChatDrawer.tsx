@@ -230,7 +230,8 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
               <div>
                 <h3 className="text-sm font-semibold text-text-primary">{agent.name}</h3>
                 <p className="text-xs text-text-muted mt-1 max-w-sm">
-                  Ask quantitative questions, analyze channel retention baselines, or evaluate video opportunities.
+                  Ask quantitative questions, analyze channel retention baselines, or evaluate video
+                  opportunities.
                 </p>
               </div>
 
@@ -285,9 +286,7 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
                           className="flex items-center gap-1.5 rounded-lg bg-surface-3/80 px-2.5 py-1 text-[11px] font-mono text-text-secondary"
                         >
                           <Wrench className="h-3 w-3 text-primary shrink-0" />
-                          <span className="font-semibold text-text-primary">
-                            {tool.tool_name}
-                          </span>
+                          <span className="font-semibold text-text-primary">{tool.tool_name}</span>
                           {tool.goal && (
                             <span className="truncate text-text-muted">· {tool.goal}</span>
                           )}
@@ -306,7 +305,7 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
                         typeof msg.structured_artifact.metrics === "object" && (
                           <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-text-secondary">
                             {Object.entries(
-                              msg.structured_artifact.metrics as Record<string, unknown>
+                              msg.structured_artifact.metrics as Record<string, unknown>,
                             ).map(([k, v]) => (
                               <div key={k}>
                                 <span className="text-text-muted">{k}: </span>

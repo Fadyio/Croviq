@@ -34,7 +34,8 @@ const formatKpiValue = (kpi: DashboardKpi): string => {
 };
 
 const formatChange = (value: number | null | undefined): string => {
-  if (value === null || value === undefined || isNaN(Number(value))) return "No comparable baseline";
+  if (value === null || value === undefined || isNaN(Number(value)))
+    return "No comparable baseline";
   const num = Number(value);
   return `${num >= 0 ? "+" : ""}${num.toFixed(1)}% vs previous period`;
 };
@@ -213,11 +214,7 @@ const KpiCell: React.FC<{ kpi: DashboardKpi }> = ({ kpi }) => {
         </p>
         <p
           className={`mt-1.5 flex items-center gap-1 text-[11px] font-medium ${
-            changeVal === null
-              ? "text-text-muted"
-              : isPositive
-                ? "text-success"
-                : "text-danger"
+            changeVal === null ? "text-text-muted" : isPositive ? "text-success" : "text-danger"
           }`}
         >
           {changeVal !== null &&
