@@ -1010,7 +1010,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     ).toBeVisible();
   });
 
-  test("loads real Fairphone workspace with synchronized transcript, Twick timeline, and Leo/Maya activity", async ({
+  test("loads real Fairphone workspace with synchronized transcript, Twick timeline, and Leo activity", async ({
     page,
   }) => {
     const consoleErrors: string[] = [];

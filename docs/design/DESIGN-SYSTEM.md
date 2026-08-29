@@ -129,10 +129,10 @@ Clear, uncluttered creator entry point:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┬───────────────────────────┐
-│                                                             │ Maya · Director           │
+│                                                             │ Leo · Video Editor        │
 │                                                             │ [Avatar Chip]             │
-│                      VIDEO PLAYER                           │ "The opening is too slow. │
-│                                                             │ Handing off to Leo..."    │
+│                      VIDEO PLAYER                           │ "Dialogue pass in         │
+│                                                             │ progress..."              │
 │                                                             ├───────────────────────────┤
 │                                                             │ SYNCHRONIZED TRANSCRIPT   │
 │                                                             │                           │
@@ -162,12 +162,9 @@ Clear, uncluttered creator entry point:
 
 | Agent | Name | Role | Canonical Icon | Responsibility |
 |---|---|---|---|---|
-| **Director** | Maya | Senior Production Lead | `Clapperboard` | Editorial strategy, memory reading, batch review, approval |
-| **Editor** | Leo | Video Editor | `Scissors` | Video editing, false-start & filler removal, pacing, Short extraction |
 | **Data Scientist** | Alex | Statistical Intelligence | `TrendingUp` | Retention change-points, baseline analysis, memory lessons |
-| **Packaging** | Nina | Packaging & Presentation | `Sparkles` | Titles, descriptions, chapters, thumbnail concepts |
+| **Editor** | Leo | Video Editor | `Scissors` | Video editing, false-start & filler removal, pacing |
 | **Quality Assurance** | Iris | QA & Compliance | `ShieldCheck` | Truthfulness, claims, caption alignment, publishing readiness |
-
 ---
 
 ## 7. Motion Language (Motion for React)

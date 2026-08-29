@@ -174,7 +174,7 @@ export const VideoPerformanceTable: React.FC<VideoPerformanceTableProps> = ({
             {sortedData.map((video) => (
               <tr
                 key={video.video_id}
-                onClick={() => onSelectVideo && onSelectVideo(video)}
+                onClick={() => onSelectVideo?.(video)}
                 className="hover:bg-surface-2/40 transition-colors cursor-pointer"
               >
                 <td className="px-4 py-3 min-w-[220px]">

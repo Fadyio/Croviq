@@ -6,14 +6,12 @@ import {
   VolumeX,
   Maximize2,
   Minimize2,
-  Layers,
   RotateCcw,
   Sparkles,
 } from "lucide-react";
 import {
   findExecutableSkipInterval,
   formatTimecode,
-  formatDuration,
   sourceToEditedTimeMs,
   editedToSourceTimeMs,
   type EditDecisionList,
@@ -179,7 +177,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     if (
       previewMode === "original" &&
       video.duration &&
-      !isNaN(video.duration) &&
+      !Number.isNaN(video.duration) &&
       onDurationChange
     ) {
       onDurationChange(Math.round(video.duration * 1000));

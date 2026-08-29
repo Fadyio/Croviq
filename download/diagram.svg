@@ -130,7 +130,7 @@
 
       <g transform="translate(10, 266)">
         <rect x="0" y="0" width="172" height="60" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.8" />
-        <text x="10" y="22" fill="#e2e8f0" font-size="12" font-weight="700">🤖 Maya / Leo Presence</text>
+        <text x="10" y="22" fill="#e2e8f0" font-size="12" font-weight="700">🤖 Leo Presence</text>
         <text x="10" y="38" fill="#94a3b8" font-size="10">AgentPresence.tsx</text>
         <text x="10" y="50" fill="#64748b" font-size="9">Live reasoning summaries</text>
       </g>
@@ -354,72 +354,55 @@
       <rect x="0" y="0" width="1385" height="260" rx="12" fill="#141930" stroke="#8b5cf6" stroke-width="1.5" />
       <text x="20" y="26" fill="#c084fc" font-size="14" font-weight="700" letter-spacing="0.5">MULTI-AGENT REASONING &amp; INTELLIGENCE LAYER — GOOGLE GENAI SDK (VERTEX AI / GEMINI API)</text>
 
-      <!-- Maya: Director Agent -->
-      <g transform="translate(20, 42)">
-        <rect x="0" y="0" width="320" height="200" rx="8" fill="url(#purpleCard)" stroke="#a855f7" stroke-width="1.5" />
-        <circle cx="30" cy="28" r="14" fill="#7e22ce" />
-        <text x="30" y="33" fill="#ffffff" font-size="14" text-anchor="middle">🎬</text>
-        <text x="56" y="26" fill="#f8fafc" font-size="13" font-weight="700">Maya (Director Agent)</text>
-        <text x="56" y="42" fill="#d8b4fe" font-size="11">Senior Production Lead</text>
-
-        <rect x="12" y="58" width="296" height="130" rx="6" fill="#0f172a" stroke="#581c87" stroke-width="0.8" />
-        <text x="20" y="78" fill="#e2e8f0" font-size="11" font-weight="600">• Creative Objectives &amp; Strategy</text>
-        <text x="20" y="96" fill="#e2e8f0" font-size="11" font-weight="600">• Multimodal Video Understanding</text>
-        <text x="20" y="114" fill="#e2e8f0" font-size="11" font-weight="600">• Batch Review &amp; Quality Scoring</text>
-        <text x="20" y="132" fill="#e2e8f0" font-size="11" font-weight="600">• Correction Routing (PASS / REVISE)</text>
-        <text x="20" y="154" fill="#c084fc" font-size="10" font-weight="700">Model: <tspan fill="#f8fafc">gemini-3.7-flash</tspan></text>
-        <text x="20" y="172" fill="#94a3b8" font-size="9">croviq_agents.director</text>
-      </g>
-
       <!-- Leo: Editor Agent -->
-      <g transform="translate(365, 42)">
-        <rect x="0" y="0" width="320" height="200" rx="8" fill="url(#purpleCard)" stroke="#a855f7" stroke-width="1.5" />
+      <g transform="translate(20, 42)">
+        <rect x="0" y="0" width="430" height="200" rx="8" fill="url(#purpleCard)" stroke="#a855f7" stroke-width="1.5" />
         <circle cx="30" cy="28" r="14" fill="#7e22ce" />
         <text x="30" y="33" fill="#ffffff" font-size="14" text-anchor="middle">✂️</text>
         <text x="56" y="26" fill="#f8fafc" font-size="13" font-weight="700">Leo (Editor Agent)</text>
         <text x="56" y="42" fill="#d8b4fe" font-size="11">Senior Video Editor</text>
 
-        <rect x="12" y="58" width="296" height="130" rx="6" fill="#0f172a" stroke="#581c87" stroke-width="0.8" />
+        <rect x="12" y="58" width="406" height="130" rx="6" fill="#0f172a" stroke="#581c87" stroke-width="0.8" />
         <text x="20" y="78" fill="#e2e8f0" font-size="11" font-weight="600">• Dialogue Pass &amp; Narrative Pacing</text>
         <text x="20" y="96" fill="#e2e8f0" font-size="11" font-weight="600">• Redundancy &amp; Filler Word Cleanup</text>
         <text x="20" y="114" fill="#e2e8f0" font-size="11" font-weight="600">• Natural Cut Boundary Selection</text>
-        <text x="20" y="132" fill="#e2e8f0" font-size="11" font-weight="600">• Vertical Short Extraction (9:16)</text>
-        <text x="20" y="154" fill="#c084fc" font-size="10" font-weight="700">Schema: <tspan fill="#f8fafc">DialoguePassReport</tspan></text>
+        <text x="20" y="132" fill="#e2e8f0" font-size="11" font-weight="600">• Frame-Safe &amp; Audio-Safe Cut Instructions</text>
+        <text x="20" y="154" fill="#c084fc" font-size="10" font-weight="700">Model: <tspan fill="#f8fafc">gemini-3.7-flash</tspan></text>
         <text x="20" y="172" fill="#94a3b8" font-size="9">croviq_agents.editor</text>
       </g>
 
       <!-- Studio Voice & Narration Agent -->
-      <g transform="translate(710, 42)">
-        <rect x="0" y="0" width="320" height="200" rx="8" fill="url(#purpleCard)" stroke="#a855f7" stroke-width="1.5" />
+      <g transform="translate(475, 42)">
+        <rect x="0" y="0" width="430" height="200" rx="8" fill="url(#purpleCard)" stroke="#a855f7" stroke-width="1.5" />
         <circle cx="30" cy="28" r="14" fill="#7e22ce" />
         <text x="30" y="33" fill="#ffffff" font-size="14" text-anchor="middle">🎙️</text>
         <text x="56" y="26" fill="#f8fafc" font-size="13" font-weight="700">Studio Voice Agent</text>
         <text x="56" y="42" fill="#d8b4fe" font-size="11">Voice Fit &amp; Synthesis Loop</text>
 
-        <rect x="12" y="58" width="296" height="130" rx="6" fill="#0f172a" stroke="#581c87" stroke-width="0.8" />
+        <rect x="12" y="58" width="406" height="130" rx="6" fill="#0f172a" stroke="#581c87" stroke-width="0.8" />
         <text x="20" y="78" fill="#e2e8f0" font-size="11" font-weight="600">• Iterative Duration-Fit Loop</text>
         <text x="20" y="96" fill="#e2e8f0" font-size="11" font-weight="600">• Speed/Pacing Bounded Adjustments</text>
         <text x="20" y="114" fill="#e2e8f0" font-size="11" font-weight="600">• Speech Synthesis Provider</text>
-        <text x="20" y="132" fill="#e2e8f0" font-size="11" font-weight="600">• B-Roll Trigger Matching</text>
+        <text x="20" y="132" fill="#e2e8f0" font-size="11" font-weight="600">• Prebuilt Voice Audition</text>
         <text x="20" y="154" fill="#c084fc" font-size="10" font-weight="700">Schema: <tspan fill="#f8fafc">StudioVoiceResult</tspan></text>
         <text x="20" y="172" fill="#94a3b8" font-size="9">croviq_agents.voice</text>
       </g>
 
-      <!-- Department Agents: Nina, Alex, Iris -->
-      <g transform="translate(1055, 42)">
-        <rect x="0" y="0" width="310" height="200" rx="8" fill="url(#purpleCard)" stroke="#a855f7" stroke-width="1.5" />
+      <!-- Department Agents: Alex, Iris -->
+      <g transform="translate(930, 42)">
+        <rect x="0" y="0" width="435" height="200" rx="8" fill="url(#purpleCard)" stroke="#a855f7" stroke-width="1.5" />
         <circle cx="30" cy="28" r="14" fill="#7e22ce" />
         <text x="30" y="33" fill="#ffffff" font-size="14" text-anchor="middle">👥</text>
-        <text x="56" y="26" fill="#f8fafc" font-size="13" font-weight="700">Department Agents</text>
-        <text x="56" y="42" fill="#d8b4fe" font-size="11">Packaging, Analytics &amp; QA</text>
+        <text x="56" y="26" fill="#f8fafc" font-size="13" font-weight="700">Department Intelligence</text>
+        <text x="56" y="42" fill="#d8b4fe" font-size="11">Alex (Data Scientist) &amp; Iris (QA)</text>
 
-        <rect x="12" y="58" width="286" height="130" rx="6" fill="#0f172a" stroke="#581c87" stroke-width="0.8" />
-        <text x="18" y="78" fill="#e2e8f0" font-size="11" font-weight="600">• <tspan fill="#f472b6">Alex</tspan>: Data Scientist (Retention curve)</text>
-        <text x="18" y="96" fill="#e2e8f0" font-size="11" font-weight="600">• <tspan fill="#fb923c">Nina</tspan>: Packaging (Titles, Chapters)</text>
-        <text x="18" y="114" fill="#e2e8f0" font-size="11" font-weight="600">• <tspan fill="#34d399">Iris</tspan>: QA Evaluator (Fact &amp; Sync checks)</text>
+        <rect x="12" y="58" width="411" height="130" rx="6" fill="#0f172a" stroke="#581c87" stroke-width="0.8" />
+        <text x="18" y="78" fill="#e2e8f0" font-size="11" font-weight="600">• <tspan fill="#f472b6">Alex</tspan>: Statistical Intelligence &amp; Retention analysis</text>
+        <text x="18" y="96" fill="#e2e8f0" font-size="11" font-weight="600">• <tspan fill="#34d399">Iris</tspan>: QA Evaluator (Loudness, Captions, Continuity)</text>
+        <text x="18" y="114" fill="#e2e8f0" font-size="11" font-weight="600">• Long-term Channel Memory Bank integration</text>
         <text x="18" y="132" fill="#e2e8f0" font-size="11" font-weight="600">• Human Approval Gate for Publish</text>
         <text x="18" y="154" fill="#c084fc" font-size="10" font-weight="700">Contract: <tspan fill="#f8fafc">Pydantic v2 Models</tspan></text>
-        <text x="18" y="172" fill="#94a3b8" font-size="9">croviq_domain.agent_schemas</text>
+        <text x="18" y="172" fill="#94a3b8" font-size="9">croviq_domain</text>
       </g>
     </g>
 

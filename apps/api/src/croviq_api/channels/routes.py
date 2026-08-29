@@ -711,46 +711,70 @@ async def process_scheduler_tick(
         if existing_run and existing_run.status == ResearchRunStatus.COMPLETED:
             continue
 
-        existing_findings = await research_repo.list_findings(
-            workspace_id=cfg.workspace_id, channel_id=cfg.channel_id
-        )
-        alex_prompt = await agent_config_repo.get_agent_prompt(cfg.workspace_id, AgentId.ALEX)
-        channel_profile = await memory_store.get_profile(cfg.channel_id)
-        run, findings = await alex.run_grounded_research(
-            prompts=cfg.prompts,
-            channel_profile=channel_profile,
-            existing_findings=existing_findings,
-            custom_prompt=alex_prompt.prompt_text if alex_prompt.is_custom else None,
-            workspace_id=cfg.workspace_id,
-            channel_id=cfg.channel_id,
-            scheduled_at=cfg.next_run_at,
-            request_id=request_id,
-        )
-        await research_repo.save_run(run)
-        await research_repo.save_findings(findings)
-        total_findings += len(findings)
-        executed += 1
+        try:
+            existing_findings = await research_repo.list_findings(
+                workspace_id=cfg.workspace_id, channel_id=cfg.channel_id
+            )
+            alex_prompt = await agent_config_repo.get_agent_prompt(
+                cfg.workspace_id, AgentId.ALEX
+            )
+            channel_profile = await memory_store.get_profile(cfg.channel_id)
+            run, findings = await alex.run_grounded_research(
+                prompts=cfg.prompts,
+                channel_profile=channel_profile,
+                existing_findings=existing_findings,
+                custom_prompt=alex_prompt.prompt_text
+                if alex_prompt.is_custom
+                else None,
+                workspace_id=cfg.workspace_id,
+                channel_id=cfg.channel_id,
+                scheduled_at=cfg.next_run_at,
+                request_id=request_id,
+            )
+            await research_repo.save_run(run)
+            await research_repo.save_findings(findings)
+            total_findings += len(findings)
+            executed += 1
+        except Exception as exc:
+            logger.exception(
+                "Scheduled research execution failed for workspace=%s channel=%s: %s",
+                cfg.workspace_id,
+                cfg.channel_id,
+                exc,
+            )
+            log_event(
+                "research.scheduler.config_failed",
+                request_id=request_id,
+                workspace_id=cfg.workspace_id,
+                channel_id=cfg.channel_id,
+                error_code=type(exc).__name__,
+                error_detail=str(exc),
+            )
+        finally:
+            # Always advance next_run_at to prevent repeated retry storms
+            updated_cfg = cfg.model_copy(
+                update={
+                    "last_run_at": now,
+                    "next_run_at": cfg.cadence.next_run_after(now),
+                    "updated_at": now,
+                }
+            )
+            await research_repo.save_config(updated_cfg)
 
-        updated_cfg = cfg.model_copy(
-            update={
-                "last_run_at": now,
-                "next_run_at": cfg.cadence.next_run_after(now),
-                "updated_at": now,
-            }
-        )
-        await research_repo.save_config(updated_cfg)
+    status_label = "completed" if executed == len(due_configs) else "partial_failure" if executed > 0 else "failed"
     log_event(
         "research.scheduler.completed",
         request_id=request_id,
         runs_evaluated=len(due_configs),
         runs_executed=executed,
         findings_created=total_findings,
+        status=status_label,
     )
     return SchedulerTickResponse(
         runs_evaluated=len(due_configs),
         runs_executed=executed,
         findings_created=total_findings,
-        status="completed",
+        status=status_label,
     )
 
 

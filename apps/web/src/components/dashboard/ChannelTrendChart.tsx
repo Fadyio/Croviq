@@ -36,18 +36,41 @@ const formatTooltipValue = (metric: TrendMetric, value: number): string => {
   return String(value);
 };
 
+const computeRollingMean = (values: (number | null)[], windowSize = 7): (number | null)[] => {
+  const result: (number | null)[] = [];
+  for (let i = 0; i < values.length; i++) {
+    const windowVals = values
+      .slice(Math.max(0, i - windowSize + 1), i + 1)
+      .filter((v): v is number => typeof v === "number" && !Number.isNaN(v));
+    if (windowVals.length === 0) {
+      result.push(null);
+    } else {
+      const avg = windowVals.reduce((sum, v) => sum + v, 0) / windowVals.length;
+      result.push(Math.round(avg * 10) / 10);
+    }
+  }
+  return result;
+};
+
 export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
   data,
   title = "Channel Performance",
   compact = false,
 }) => {
   const [metric, setMetric] = useState<TrendMetric>("views");
-  const [includeForecast, setIncludeForecast] = useState<boolean>(true);
 
-  // Statistical 7-day projection derived from recent moving trend + variance
-  const { extendedDates, currentSeries, previousSeries, forecastLow, forecastBand } =
+  // Relative day index calculation (Day 1..Day N)
+  const relativeDays = useMemo(() => {
+    return data.map((_, idx) => `Day ${idx + 1}`);
+  }, [data]);
+
+  const { currentDaily, currentRolling7, previousRolling7, calendarDates, maxObservationIndex } =
     useMemo(() => {
-      const dateLabels = data.map((p) => {
+      const curr = data.map((point) => point[metric] ?? null);
+      const prev = data.map(
+        (point) => (point[`previous_${metric}` as keyof TrendPoint] as number | undefined) ?? null,
+      );
+      const dates = data.map((p) => {
         try {
           return new Intl.DateTimeFormat("en", {
             month: "short",
@@ -59,91 +82,66 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
         }
       });
 
-      const curr = data.map((point) => point[metric] ?? null);
-      const prev = data.map(
-        (point) => (point[`previous_${metric}` as keyof TrendPoint] as number | undefined) ?? null,
-      );
+      const currRolling = computeRollingMean(curr, 7);
+      const prevRolling = computeRollingMean(prev, 7);
 
-      if (!includeForecast || data.length < 7) {
-        return {
-          extendedDates: dateLabels,
-          currentSeries: curr,
-          previousSeries: prev,
-          forecastLow: [] as (number | null)[],
-          forecastBand: [] as (number | null)[],
-        };
-      }
-
-      const validVals = curr.filter((v): v is number => typeof v === "number" && !isNaN(v));
-      const n = validVals.length;
-      if (n < 7) {
-        return {
-          extendedDates: dateLabels,
-          currentSeries: curr,
-          previousSeries: prev,
-          forecastLow: [],
-          forecastBand: [],
-        };
-      }
-
-      const recent = validVals.slice(-7);
-      const recentAvg = recent.reduce((sum, v) => sum + v, 0) / 7;
-      const lastVal = validVals[n - 1];
-      const stepSlope = (lastVal - recent[0]) / 6;
-      const variance = recent.reduce((sum, v) => sum + Math.pow(v - recentAvg, 2), 0) / 7;
-      const stdDev = Math.sqrt(variance);
-
-      const lastDate = new Date(`${data[data.length - 1].date}T00:00:00Z`);
-      const forecastDates: string[] = [];
-      const forecastLowVals: (number | null)[] = new Array(data.length - 1).fill(null);
-      const forecastBandVals: (number | null)[] = new Array(data.length - 1).fill(null);
-
-      forecastLowVals.push(lastVal);
-      forecastBandVals.push(0);
-
-      for (let day = 1; day <= 7; day++) {
-        const projDate = new Date(lastDate);
-        projDate.setUTCDate(lastDate.getUTCDate() + day);
-        try {
-          forecastDates.push(
-            new Intl.DateTimeFormat("en", {
-              month: "short",
-              day: "numeric",
-              timeZone: "UTC",
-            }).format(projDate),
-          );
-        } catch {
-          forecastDates.push(`+${day}d`);
+      // Find peak daily observation for evidence-backed annotation (max 1 peak annotation)
+      let maxIdx = -1;
+      let maxVal = -Infinity;
+      curr.forEach((val, i) => {
+        if (typeof val === "number" && val > maxVal) {
+          maxVal = val;
+          maxIdx = i;
         }
-
-        const centerProj = Math.max(0, lastVal + stepSlope * day);
-        const spread = stdDev * (1 + 0.15 * day);
-        const low = Math.max(0, centerProj - spread);
-        const high = centerProj + spread;
-
-        forecastLowVals.push(Math.round(low * 10) / 10);
-        forecastBandVals.push(Math.round((high - low) * 10) / 10);
-      }
+      });
 
       return {
-        extendedDates: [...dateLabels, ...forecastDates],
-        currentSeries: [...curr, ...new Array(7).fill(null)],
-        previousSeries: [...prev, ...new Array(7).fill(null)],
-        forecastLow: forecastLowVals,
-        forecastBand: forecastBandVals,
+        currentDaily: curr,
+        currentRolling7: currRolling,
+        previousRolling7: prevRolling,
+        calendarDates: dates,
+        maxObservationIndex: maxIdx,
       };
-    }, [data, metric, includeForecast]);
+    }, [data, metric]);
 
   const chartOption = useMemo<EChartsOption>(() => {
+    // Evidence-backed annotations: at most 2 (e.g. Period Peak and Latest Day)
+    const markData: Array<{
+      name: string;
+      coord: [number, number];
+      value: string;
+    }> = [];
+
+    if (maxObservationIndex >= 0 && typeof currentDaily[maxObservationIndex] === "number") {
+      markData.push({
+        name: "Peak",
+        coord: [maxObservationIndex, currentDaily[maxObservationIndex] as number],
+        value: "Peak",
+      });
+    }
+
     return {
       backgroundColor: GRAPHITE_THEME.background,
       animation: false,
       grid: {
-        top: compact ? 20 : 30,
+        top: compact ? 24 : 32,
         right: 16,
         bottom: 30,
         left: 54,
         containLabel: false,
+      },
+      legend: {
+        show: !compact,
+        top: 0,
+        right: 16,
+        itemWidth: 14,
+        itemHeight: 8,
+        textStyle: {
+          color: GRAPHITE_THEME.textSecondary,
+          fontSize: 11,
+          fontFamily: GRAPHITE_THEME.fontFamily,
+        },
+        data: ["Current 7-Day Mean", "Previous 7-Day Baseline", "Daily Observations"],
       },
       tooltip: {
         trigger: "axis",
@@ -170,55 +168,45 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
             value: number | null;
             dataIndex: number;
           }>;
-          if (!items || !items.length) return "";
+          if (!items?.length) return "";
           const idx = items[0].dataIndex;
-          const dateStr = extendedDates[idx] || "";
-          const isForecastPoint = idx >= data.length;
-          const curr = currentSeries[idx];
-          const prev = previousSeries[idx];
-          const low = forecastLow[idx];
-          const band = forecastBand[idx];
-
-          if (isForecastPoint && low !== null && band !== null && band > 0) {
-            const high = low + band;
-            const center = low + band / 2;
-            return `
-              <div style="font-weight: 600; margin-bottom: 6px; color: ${GRAPHITE_THEME.textPrimary}; font-size: 12px;">
-                ${dateStr} <span style="font-size: 10px; font-weight: 500; color: ${GRAPHITE_THEME.primary}; background: rgba(37,99,235,0.15); padding: 1px 5px; border-radius: 4px; margin-left: 4px;">Forecast Range</span>
-              </div>
-              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 3px; font-size: 11px;">
-                <span style="color: ${GRAPHITE_THEME.textSecondary};">Expected projection:</span>
-                <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 600; color: ${GRAPHITE_THEME.textPrimary};">${formatTooltipValue(metric, center)}</span>
-              </div>
-              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 11px;">
-                <span style="color: ${GRAPHITE_THEME.textMuted};">Confidence band:</span>
-                <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 500; color: ${GRAPHITE_THEME.textSecondary};">${formatAxisValue(metric, low)} – ${formatAxisValue(metric, high)}</span>
-              </div>
-            `;
-          }
+          const dayLabel = relativeDays[idx] || `Day ${idx + 1}`;
+          const dateStr = calendarDates[idx] || "";
+          const curr = currentDaily[idx];
+          const currRolling = currentRolling7[idx];
+          const prevRolling = previousRolling7[idx];
 
           let deltaHtml = "";
-          if (curr !== null && prev !== null && prev > 0) {
-            const delta = ((curr - prev) / prev) * 100;
+          if (currRolling !== null && prevRolling !== null && prevRolling > 0) {
+            const delta = ((currRolling - prevRolling) / prevRolling) * 100;
             const isPos = delta >= 0;
-            deltaHtml = `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid ${GRAPHITE_THEME.borderSubtle}; font-weight: 600; font-size: 11px; color: ${isPos ? GRAPHITE_THEME.success : GRAPHITE_THEME.danger};">${isPos ? "+" : ""}${delta.toFixed(1)}% vs previous period</div>`;
+            deltaHtml = `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid ${GRAPHITE_THEME.borderSubtle}; font-weight: 600; font-size: 11px; color: ${isPos ? GRAPHITE_THEME.success : GRAPHITE_THEME.danger};">${isPos ? "+" : ""}${delta.toFixed(1)}% vs previous baseline</div>`;
           }
 
           return `
-            <div style="font-weight: 600; margin-bottom: 6px; color: ${GRAPHITE_THEME.textPrimary}; font-size: 12px;">${dateStr}</div>
+            <div style="font-weight: 600; margin-bottom: 6px; color: ${GRAPHITE_THEME.textPrimary}; font-size: 12px;">
+              ${dayLabel} <span style="font-size: 11px; font-weight: 400; color: ${GRAPHITE_THEME.textMuted}; margin-left: 4px;">(${dateStr})</span>
+            </div>
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 3px; font-size: 11px;">
               <span style="color: ${GRAPHITE_THEME.textSecondary}; display: flex; align-items: center; gap: 6px;">
-                <span style="width: 8px; height: 8px; border-radius: 50%; background: ${GRAPHITE_THEME.primary}; display: inline-block;"></span>
-                Actual
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; display: inline-block;"></span>
+                Daily Actual
               </span>
               <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 600; color: ${GRAPHITE_THEME.textPrimary};">${curr !== null ? formatTooltipValue(metric, curr) : "—"}</span>
             </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 3px; font-size: 11px;">
+              <span style="color: ${GRAPHITE_THEME.textSecondary}; display: flex; align-items: center; gap: 6px;">
+                <span style="width: 8px; height: 2px; background: ${GRAPHITE_THEME.primary}; display: inline-block;"></span>
+                7-Day Rolling Mean
+              </span>
+              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 600; color: ${GRAPHITE_THEME.textPrimary};">${currRolling !== null ? formatTooltipValue(metric, currRolling) : "—"}</span>
+            </div>
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 11px;">
               <span style="color: ${GRAPHITE_THEME.textMuted}; display: flex; align-items: center; gap: 6px;">
-                <span style="width: 8px; height: 2px; background: ${GRAPHITE_THEME.textMuted}; display: inline-block;"></span>
-                Previous
+                <span style="width: 8px; height: 2px; border-top: 1px dashed ${GRAPHITE_THEME.textMuted}; display: inline-block;"></span>
+                Previous Baseline
               </span>
-              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 500; color: ${GRAPHITE_THEME.textSecondary};">${prev !== null ? formatTooltipValue(metric, prev) : "—"}</span>
+              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 500; color: ${GRAPHITE_THEME.textSecondary};">${prevRolling !== null ? formatTooltipValue(metric, prevRolling) : "—"}</span>
             </div>
             ${deltaHtml}
           `;
@@ -226,7 +214,7 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
       },
       xAxis: {
         type: "category",
-        data: extendedDates,
+        data: relativeDays,
         boundaryGap: false,
         axisLine: {
           lineStyle: {
@@ -256,31 +244,39 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
           lineStyle: {
             color: GRAPHITE_THEME.borderSubtle,
             type: "dashed",
-            opacity: 0.7,
+            opacity: 0.6,
           },
         },
       },
       series: [
+        // 1. Subtle daily observations
         {
-          name: "Previous period",
+          name: "Daily Observations",
           type: "line",
-          data: previousSeries,
-          showSymbol: false,
-          lineStyle: {
-            color: GRAPHITE_THEME.textMuted,
-            width: 1.5,
-            type: "dashed",
+          data: currentDaily,
+          showSymbol: true,
+          symbolSize: 4,
+          itemStyle: {
+            color: "#38bdf8",
+            opacity: 0.5,
           },
-          z: 1,
+          lineStyle: {
+            width: 1,
+            color: "#38bdf8",
+            opacity: 0.25,
+          },
+          z: 2,
         },
+        // 2. Dominant 7-Day Rolling Mean
         {
-          name: "Current",
+          name: "Current 7-Day Mean",
           type: "line",
-          data: currentSeries,
+          data: currentRolling7,
+          smooth: true,
           showSymbol: false,
           lineStyle: {
+            width: 2.5,
             color: GRAPHITE_THEME.primary,
-            width: 2.2,
           },
           areaStyle: {
             color: {
@@ -290,151 +286,133 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: "rgba(37, 99, 235, 0.22)" },
-                { offset: 1, color: "rgba(37, 99, 235, 0.00)" },
+                { offset: 0, color: "rgba(37, 99, 235, 0.18)" },
+                { offset: 1, color: "rgba(37, 99, 235, 0.0)" },
               ],
             },
           },
-          z: 2,
+          markPoint:
+            markData.length > 0
+              ? {
+                  data: markData,
+                  symbol: "circle",
+                  symbolSize: 6,
+                  itemStyle: {
+                    color: "#f59e0b",
+                  },
+                  label: {
+                    show: true,
+                    position: "top",
+                    fontSize: 9,
+                    color: GRAPHITE_THEME.textSecondary,
+                    formatter: "{b}",
+                  },
+                }
+              : undefined,
+          z: 4,
         },
-        ...(forecastBand.length > 0
-          ? [
-              {
-                name: "Forecast Lower",
-                type: "line" as const,
-                data: forecastLow,
-                lineStyle: { opacity: 0 },
-                stack: "forecast",
-                symbol: "none",
-              },
-              {
-                name: "Forecast Range",
-                type: "line" as const,
-                data: forecastBand,
-                lineStyle: {
-                  color: "rgba(59, 130, 246, 0.6)",
-                  type: "dashed" as const,
-                  width: 1.5,
-                },
-                areaStyle: {
-                  color: "rgba(59, 130, 246, 0.12)",
-                },
-                stack: "forecast",
-                symbol: "none",
-              },
-            ]
-          : []),
+        // 3. Muted Previous-Period 7-Day Rolling Baseline
+        {
+          name: "Previous 7-Day Baseline",
+          type: "line",
+          data: previousRolling7,
+          smooth: true,
+          showSymbol: false,
+          lineStyle: {
+            width: 1.75,
+            type: "dashed",
+            color: "#64748b",
+            opacity: 0.75,
+          },
+          z: 3,
+        },
       ],
     };
   }, [
-    extendedDates,
-    currentSeries,
-    previousSeries,
-    forecastLow,
-    forecastBand,
-    metric,
     compact,
-    data.length,
+    relativeDays,
+    calendarDates,
+    currentDaily,
+    currentRolling7,
+    previousRolling7,
+    maxObservationIndex,
+    metric,
   ]);
 
   return (
-    <section
-      className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm space-y-4"
-      aria-labelledby="trend-title"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm space-y-4">
+      {/* Header & Metric Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 id="trend-title" className="text-sm font-semibold tracking-tight text-text-primary">
-            {title}
-          </h2>
-          <p className="mt-0.5 text-xs text-text-muted">
-            {metric === "views"
-              ? "Daily views compared to previous period baseline"
-              : metric === "watch_time_hours"
-                ? "Total watch time hours compared to previous period"
-                : "Net subscriber gains compared to previous period"}
+          <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
+          <p className="text-xs text-text-muted mt-0.5">
+            Relative period baseline comparison · 7-day rolling mean
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {data.length < 7 ? (
-            <span
-              className="rounded-lg border border-border-subtle bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-text-muted cursor-not-allowed"
-              title="Requires at least 7 historical data points"
-            >
-              Not enough history for a reliable projection
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIncludeForecast((prev) => !prev)}
-              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors border ${
-                includeForecast
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border-subtle bg-surface-2 text-text-muted hover:text-text-secondary"
-              }`}
-              title="Statistical 7-day projection derived from moving trend and residual variance"
-            >
-              <span>{includeForecast ? "Projection active" : "Add projection"}</span>
-            </button>
-          )}
-
-          <div className="hidden sm:flex items-center gap-3 text-[11px] text-text-muted">
-            <span className="inline-flex items-center gap-1.5 font-medium text-text-secondary">
-              <span className="h-2 w-2 rounded-full bg-primary" />
-              Actual
-            </span>
-            <span className="inline-flex items-center gap-1.5 font-medium text-text-muted">
-              <span className="h-0.5 w-3 border-t border-dashed border-text-muted" />
-              Previous period
-            </span>
-          </div>
-          <div
-            className="inline-flex rounded-lg border border-border-subtle bg-surface-2 p-0.5"
-            role="tablist"
-            aria-label="Trend metric"
+        {/* Metric Selector Tabs */}
+        <div className="flex items-center rounded-lg bg-surface-2 p-1 border border-border-subtle text-xs">
+          <button
+            type="button"
+            onClick={() => setMetric("views")}
+            className={`px-3 py-1 rounded-md font-medium transition-all ${
+              metric === "views"
+                ? "bg-surface-3 text-text-primary shadow-xs font-semibold"
+                : "text-text-muted hover:text-text-primary"
+            }`}
           >
-            {(
-              [
-                { id: "views", label: "Views" },
-                { id: "watch_time_hours", label: "Watch time" },
-                { id: "net_subscribers", label: "Subscribers" },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                role="tab"
-                aria-selected={metric === opt.id}
-                onClick={() => setMetric(opt.id)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                  metric === opt.id
-                    ? "bg-surface-1 text-text-primary shadow-sm"
-                    : "text-text-muted hover:text-text-secondary"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+            Views
+          </button>
+          <button
+            type="button"
+            onClick={() => setMetric("watch_time_hours")}
+            className={`px-3 py-1 rounded-md font-medium transition-all ${
+              metric === "watch_time_hours"
+                ? "bg-surface-3 text-text-primary shadow-xs font-semibold"
+                : "text-text-muted hover:text-text-primary"
+            }`}
+          >
+            Watch time
+          </button>
+          <button
+            type="button"
+            onClick={() => setMetric("net_subscribers")}
+            className={`px-3 py-1 rounded-md font-medium transition-all ${
+              metric === "net_subscribers"
+                ? "bg-surface-3 text-text-primary shadow-xs font-semibold"
+                : "text-text-muted hover:text-text-primary"
+            }`}
+          >
+            Subscribers
+          </button>
         </div>
       </div>
 
+      {/* Chart Canvas */}
       <div className="h-64 sm:h-72 w-full">
-        <EChartsWrapper option={chartOption} ariaLabel={`${title} chart showing ${metric}`} />
+        <EChartsWrapper option={chartOption} />
       </div>
 
-      {includeForecast && data.length >= 7 && (
-        <div className="pt-2 border-t border-border-subtle/50 flex flex-wrap items-center justify-between gap-2 text-[11px] text-text-muted">
-          <span>
-            <span className="font-semibold text-text-secondary">Projection method: </span>
-            Rolling 7-day trend slope with ±1σ to ±2σ residual uncertainty corridor
+      {/* Legend & Semantics Note */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border-subtle/50 text-[11px] text-text-muted">
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-primary" />
+            Current 7-day mean
           </span>
-          <span className="font-mono text-[10px]">
-            Assumptions: constant upload cadence · no exogenous traffic shocks
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-3 border-t border-dashed border-slate-500" />
+            Previous 7-day baseline
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-sky-400 opacity-60" />
+            Daily observations
           </span>
         </div>
-      )}
-    </section>
+        <span className="text-[10px] font-mono text-text-muted">
+          Aligned by relative day index (Day 1..{data.length})
+        </span>
+      </div>
+    </div>
   );
 };

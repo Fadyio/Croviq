@@ -153,7 +153,7 @@ export const VideoPerformanceRankedChart: React.FC<VideoPerformanceRankedChartPr
         },
         formatter: (params: unknown) => {
           const arr = params as Array<{ dataIndex: number }>;
-          if (!arr || !arr.length) return "";
+          if (!arr?.length) return "";
           const idx = arr[0].dataIndex;
           const video = reversed[idx];
           if (!video) return "";

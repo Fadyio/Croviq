@@ -1,29 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
-  Check,
   CheckCircle2,
-  ChevronRight,
   Clock,
   ExternalLink,
   Film,
-  Image as ImageIcon,
-  Layers,
   Loader2,
   Lock,
   LogOut,
-  Maximize2,
-  Minimize2,
   Pause,
   Play,
-  RefreshCw,
   Save,
-  ShieldAlert,
   ShieldCheck,
-  Sparkles,
-  UploadCloud,
   Volume2,
   VolumeX,
   X,
@@ -39,15 +29,10 @@ import {
 import type { components } from "../api/generated";
 
 type PackagingDetailResponse = components["schemas"]["PackagingDetailResponse"];
-type PackagingChapter = components["schemas"]["PackagingChapter"];
 type ReleaseReviewDetailResponse = components["schemas"]["ReleaseReviewDetailResponse"];
-type ReleaseReview = components["schemas"]["ReleaseReview"];
 type ReleaseIssue = components["schemas"]["ReleaseIssue"];
-type ReleaseChecklist = components["schemas"]["ReleaseChecklist"];
-type ClaimVerification = components["schemas"]["ClaimVerification"];
 type PublishPreparationResponse = components["schemas"]["PublishPreparationResponse"];
 type PublishJobDetailResponse = components["schemas"]["PublishJobDetailResponse"];
-type YouTubePublishJob = components["schemas"]["YouTubePublishJob"];
 
 interface ReleasePageProps {
   productionId: string;
@@ -105,7 +90,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
 
   const [qaData, setQaData] = useState<ReleaseReviewDetailResponse | null>(null);
   const [packagingData, setPackagingData] = useState<PackagingDetailResponse | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [_isLoading, setIsLoading] = useState<boolean>(true);
   const [isRunningQA, setIsRunningQA] = useState<boolean>(false);
   const [isSavingMetadata, setIsSavingMetadata] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -121,7 +106,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   // Video playback
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
-  const [durationMs, setDurationMs] = useState<number>(113824);
+  const [durationMs, setDurationMs] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
   // Iris settings drawer
@@ -305,7 +290,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       const dur = Math.floor(videoRef.current.duration * 1000);
-      if (!isNaN(dur) && dur > 0) {
+      if (!Number.isNaN(dur) && dur > 0) {
         setDurationMs(dur);
       }
     }
@@ -347,9 +332,17 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
         }),
       });
       if (res.ok) {
-        const data = await res.json();
-        if (data.authorization_url) {
-          window.location.href = data.authorization_url;
+        const data = (await res.json()) as {
+          auth_url?: string;
+          authorization_url?: string;
+          state_token?: string;
+        };
+        const targetUrl = data.auth_url || data.authorization_url;
+        if (targetUrl) {
+          if (data.state_token) {
+            sessionStorage.setItem("croviq_yt_oauth_state", data.state_token);
+          }
+          window.location.href = targetUrl;
         }
       }
     } catch (err: unknown) {

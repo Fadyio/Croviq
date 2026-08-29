@@ -1,12 +1,5 @@
 import React, { useMemo, useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
-  Lightbulb,
-  Sparkles,
-  TrendingUp,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Sparkles, TrendingUp } from "lucide-react";
 import type { components } from "../../api/generated";
 import { AgentActionMenu } from "../AgentActionMenu";
 
@@ -65,7 +58,7 @@ export const AlexRail: React.FC<AlexRailProps> = ({
     const diverse: ResearchFinding[] = [];
     for (const f of findings) {
       const rawEntity =
-        f.primary_entity || f.title.split(/[:\-\—|]/)[0]?.trim() || f.category || "AI Topic";
+        f.primary_entity || f.title.split(/[:\-—|]/)[0]?.trim() || f.category || "AI Topic";
       const entityKey = rawEntity.toLowerCase().replace(/[^a-z0-9]/g, "");
       if (!seenEntities.has(entityKey)) {
         seenEntities.add(entityKey);

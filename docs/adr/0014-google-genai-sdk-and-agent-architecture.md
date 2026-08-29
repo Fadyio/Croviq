@@ -1,5 +1,7 @@
 # 0014: Google GenAI SDK and Visible Production Team Architecture
 
+*Status: Historical Context (Agent roster refined to canonical 3: Alex Data Scientist, Leo Video Editor, Iris Quality Control)*
+
 ## Context
 Croviq requires an AI agent architecture to power specialized creative agents: Maya (Director), Leo (Editor), Alex (Data Scientist), Nina (Packaging), and Iris (QA). Hackathon compliance mandates at least one approved Google Agent Framework, Gemini 3.5 or newer, and Google Cloud infrastructure. Using excessive abstraction frameworks (such as full ADK when direct GenAI SDK suffices) adds unnecessary complexity, configuration overhead, and debugging latency to a tight 5-day delivery schedule.
 

@@ -26,7 +26,7 @@ const FAIRPHONE_PRODUCTION_ID = "prod_0b7657f515ae";
 const INITIAL_FAIRPHONE_PROPOSAL = {
   proposal_id: "pkg_fairphone6p_001",
   production_id: FAIRPHONE_PRODUCTION_ID,
-  agent: "nina",
+  agent: "creator",
   model: "gemini-3.7-flash",
   primary_title: "Fairphone 6 Plus: The Modular Smartphone That Actually Makes Sense",
   title_candidates: [
@@ -333,9 +333,16 @@ const mockReleaseApis = async (
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        nina_prompt: {
-          agent_id: "nina",
-          prompt_text: "You are Nina, Croviq's Packaging Agent for YouTube creators...",
+        alex_prompt: {
+          agent_id: "alex",
+          prompt_text: "You are Alex, Croviq's Data Scientist...",
+          version: 1,
+          updated_at: "2026-08-28T00:00:00Z",
+          is_custom: false,
+        },
+        leo_prompt: {
+          agent_id: "leo",
+          prompt_text: "You are Leo, Croviq's Video Editor...",
           version: 1,
           updated_at: "2026-08-28T00:00:00Z",
           is_custom: false,

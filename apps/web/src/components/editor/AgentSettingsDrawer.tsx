@@ -1,20 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
-  Brain,
-  Check,
-  Compass,
   ExternalLink,
   Loader2,
-  Mic,
   Play,
   Plus,
-  Radio,
   RotateCcw,
   Save,
   Search,
   Trash2,
-  Volume2,
   X,
 } from "lucide-react";
 import type { components } from "../../api/generated";
@@ -28,7 +22,6 @@ type AgentMemorySummary = components["schemas"]["AgentMemorySummaryResponse"] & 
 };
 type VoiceCatalogItem = components["schemas"]["VoiceCatalogItem"];
 type ResearchConfig = components["schemas"]["ResearchConfig"];
-type ResearchPrompt = components["schemas"]["ResearchPrompt"];
 type ResearchCadence = components["schemas"]["ResearchCadence"];
 
 interface MemoryRecordItem {
@@ -393,7 +386,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
     const q = memorySearchQuery.toLowerCase();
     return (
       m.fact.toLowerCase().includes(q) ||
-      (m.provenance && m.provenance.toLowerCase().includes(q)) ||
+      m.provenance?.toLowerCase().includes(q) ||
       (m.scope && Object.values(m.scope).some((v) => v.toLowerCase().includes(q)))
     );
   });
@@ -702,7 +695,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                                   })}
                                 </span>
                               )}
-                              {mem.scope && mem.scope.channel_id && (
+                              {mem.scope?.channel_id && (
                                 <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-mono text-text-secondary">
                                   {mem.scope.channel_id}
                                 </span>

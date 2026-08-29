@@ -164,7 +164,7 @@ Croviq establishes a multi-layered, incontrovertible AI observability architectu
      protoPayload.serviceName="aiplatform.googleapis.com"
      protoPayload.resourceName:"gemini-3.1-flash-tts-preview"
      ```
-   - **Reasoning Calls (Gemini 3.7 Flash: Leo, Maya, Alex, Nina, Iris)**:
+   - **Reasoning Calls (Gemini 3.7 Flash: Leo, Alex, Iris)**:
      ```text
      protoPayload.serviceName="aiplatform.googleapis.com"
      protoPayload.resourceName:"gemini-3.7-flash"
@@ -211,7 +211,7 @@ Croviq establishes a multi-layered, incontrovertible AI observability architectu
 ## 5. Testing Seams
 
 - **Seam 1 — Judge / Browser Seam (Highest Priority)**:
-  Real Chrome E2E verification: sign in, select sample channel, upload raw video, observe live Maya/Leo interaction on timeline & transcript, verify natural cuts, verify master render and one Short.
+  Real Chrome E2E verification: sign in, select sample channel, upload raw video, observe live Leo interaction on timeline & transcript, verify natural cuts, and verify master render.
 - **Seam 2 — Agent Contract Seam**:
   Verify structured Gemini outputs, schema validation, batch review logic, bounded correction loops, and rejection of malformed agent responses.
 - **Seam 3 — Media & EDL Seam**:

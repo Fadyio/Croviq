@@ -1,18 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AlertCircle,
-  Brain,
-  Code,
-  LineChart,
-  Loader2,
-  Send,
-  Settings,
-  Sparkles,
-  Trash2,
-  User,
-  Wrench,
-  X,
-} from "lucide-react";
+import { AlertCircle, Loader2, Send, Settings, Trash2, User, Wrench, X } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { AGENT_IDENTITIES, type AgentId } from "./AgentTeamSelector";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -113,7 +100,7 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isSending, isOpen]);
+  }, [isOpen]);
 
   // Escape key handler
   useEffect(() => {
@@ -291,27 +278,32 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
               <div>
                 <h3 className="text-sm font-semibold text-text-primary">{agent.name}</h3>
                 <p className="text-xs text-text-muted mt-1 max-w-sm">
-                  Ask quantitative questions, analyze channel retention baselines, or evaluate video
-                  opportunities.
+                  {agentId === "alex"
+                    ? "Ask quantitative questions, analyze channel retention baselines, or evaluate video opportunities."
+                    : agentId === "leo"
+                      ? "Leo is active in the Editor workspace. Direct conversational chat will activate in the Editor development phase."
+                      : "Iris is active at the Release QA gate. Direct conversational chat will activate in the QA development phase."}
                 </p>
               </div>
 
-              {/* Starter Prompts */}
-              <div className="w-full max-w-md space-y-2 pt-2">
-                <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                  Suggested Prompts
-                </p>
-                {STARTER_PROMPTS[agentId].map((starter, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => void sendMessage(starter)}
-                    className="w-full rounded-xl border border-border-subtle bg-surface-2/80 p-3 text-left text-xs text-text-secondary hover:border-primary/50 hover:bg-surface-2 hover:text-text-primary transition-all cursor-pointer"
-                  >
-                    {starter}
-                  </button>
-                ))}
-              </div>
+              {/* Suggested Prompts (Active for Alex) */}
+              {agentId === "alex" && (
+                <div className="w-full max-w-md space-y-2 pt-2">
+                  <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                    Suggested Prompts
+                  </p>
+                  {STARTER_PROMPTS.alex.map((starter, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => void sendMessage(starter)}
+                      className="w-full rounded-xl border border-border-subtle bg-surface-2/80 p-3 text-left text-xs text-text-secondary hover:border-primary/50 hover:bg-surface-2 hover:text-text-primary transition-all cursor-pointer"
+                    >
+                      {starter}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             messages.map((msg) => (
@@ -421,27 +413,36 @@ export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
 
         {/* Input Footer */}
         <div className="border-t border-border-subtle p-4 bg-surface-1">
-          <div className="relative flex items-end rounded-xl border border-border-subtle bg-surface-2 focus-within:border-primary transition-colors">
-            <textarea
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={2}
-              placeholder={`Ask ${agent.name} a question... (Enter to send, Shift+Enter for new line)`}
-              className="w-full resize-none bg-transparent p-3 pr-12 text-xs text-text-primary outline-none placeholder:text-text-muted"
-              data-testid="input-chat-message"
-            />
-            <button
-              type="button"
-              onClick={() => void sendMessage()}
-              disabled={!inputMessage.trim() || isSending}
-              className="absolute bottom-2.5 right-2.5 rounded-lg bg-primary p-2 text-white hover:bg-primary-hover transition-colors disabled:opacity-40 cursor-pointer"
-              aria-label="Send message"
-              data-testid="btn-send-chat"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          {agentId === "alex" ? (
+            <div className="relative flex items-end rounded-xl border border-border-subtle bg-surface-2 focus-within:border-primary transition-colors">
+              <textarea
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={2}
+                placeholder={`Ask ${agent.name} a question... (Enter to send, Shift+Enter for new line)`}
+                className="w-full resize-none bg-transparent p-3 pr-12 text-xs text-text-primary outline-none placeholder:text-text-muted"
+                data-testid="input-chat-message"
+              />
+              <button
+                type="button"
+                onClick={() => void sendMessage()}
+                disabled={!inputMessage.trim() || isSending}
+                className="absolute bottom-2.5 right-2.5 rounded-lg bg-primary p-2 text-white hover:bg-primary-hover transition-colors disabled:opacity-40 cursor-pointer"
+                aria-label="Send message"
+                data-testid="btn-send-chat"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border-subtle bg-surface-2/60 p-3 text-center text-xs text-text-muted">
+              <span>
+                {agent.name} direct chat activates in the {agentId === "leo" ? "Editor" : "QA"}{" "}
+                development phase.
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

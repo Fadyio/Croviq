@@ -13,7 +13,7 @@ from croviq_api.channels.token_refresh import (
 )
 
 from croviq_api.channels.token_encryption import (
-    InvertedLocalTinkOAuthTokenEncryptor,
+    LocalTinkOAuthTokenEncryptor,
     OAuthTokenEncryptor,
     TokenPayload,
     build_record_aad,
@@ -28,7 +28,7 @@ from croviq_api.channels.youtube_repository import (
 
 @pytest.fixture
 def encryptor() -> OAuthTokenEncryptor:
-    return InvertedLocalTinkOAuthTokenEncryptor()
+    return LocalTinkOAuthTokenEncryptor()
 
 
 def test_token_payload_model() -> None:

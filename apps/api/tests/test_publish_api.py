@@ -473,6 +473,32 @@ def test_publish_blocked_on_sample_channel(test_setup: dict) -> None:
     assert "Sample Channel cannot publish" in resp.json()["detail"]
 
 
+def test_publish_blocked_on_canonical_croviq_syn_channel(test_setup: dict) -> None:
+    client: TestClient = test_setup["client"]
+    sample_prod: Production = test_setup["sample_prod"]
+    prod_repo = test_setup["prod_repo"]
+
+    # Update channel_id to canonical sample channel id
+    updated = sample_prod.model_copy(update={"channel_id": "croviq_syn_ai_eng_01"})
+    import asyncio
+    asyncio.run(prod_repo.create_production(updated))
+
+    resp_prep = client.get(f"/api/productions/{updated.production_id}/publish/prep")
+    assert resp_prep.status_code == 200
+    assert resp_prep.json()["is_sample_channel"] is True
+    assert resp_prep.json()["can_publish"] is False
+
+    resp = client.post(
+        f"/api/productions/{updated.production_id}/publish",
+        json={
+            "requested_privacy": "private",
+            "made_for_kids": False,
+            "contains_synthetic_media": False,
+        },
+    )
+    assert resp.status_code == 400
+    assert "Sample Channel cannot publish" in resp.json()["detail"]
+
 def test_publish_blocked_if_iris_gate_locked(test_setup: dict) -> None:
     client: TestClient = test_setup["client"]
     real_prod: Production = test_setup["real_prod"]

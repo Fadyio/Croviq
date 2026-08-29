@@ -13,7 +13,7 @@ export const ExperimentsView: React.FC<ExperimentsViewProps> = ({ dashboard }) =
   const proposed = dashboard.proposed_experiment;
   const active = dashboard.active_experiment;
 
-  const hasAnyExperiment = Boolean(proposed || active);
+  const _hasAnyExperiment = Boolean(proposed || active);
 
   return (
     <div className="space-y-6">

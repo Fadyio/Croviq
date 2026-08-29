@@ -73,7 +73,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
 
   useEffect(() => {
     manualScrollUntilRef.current = 0;
-  }, [selectedDecisionId]);
+  }, []);
 
   useEffect(() => {
     const container = scrollRef.current;

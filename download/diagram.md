@@ -20,7 +20,7 @@ flowchart TB
             Cockpit["🎬 Studio Cockpit (EditorPage.tsx)"]
             Timeline["📊 Timeline & Twick Sync (EditorTimeline.tsx)"]
             TranscriptUI["📝 Interactive Transcript (TranscriptPanel.tsx)"]
-            AgentPresenceUI["🤖 Maya & Leo Presence (AgentPresence.tsx)"]
+            AgentPresenceUI["🤖 Leo Presence (AgentPresence.tsx)"]
             InspectorUI["📋 Decision Inspector (DecisionInspector.tsx)"]
             MediaBinUI["🎙️ Studio Voice & B-Roll (MediaBin.tsx)"]
             StageUI["🎞️ Master & Short Stage (VideoStage.tsx)"]
@@ -53,10 +53,9 @@ flowchart TB
         end
 
         subgraph Agents["MULTI-AGENT REASONING LAYER (GOOGLE GenAI SDK / GEMINI 3.7 FLASH)"]
-            Maya["🎬 Maya (Director Agent)<br/>croviq_agents.director<br/>• Creative Goals & Strategy<br/>• Multimodal Video Review<br/>• Batch Quality Scoring & Routing"]
-            Leo["✂️ Leo (Editor Agent)<br/>croviq_agents.editor<br/>• Dialogue Pass & Pacing<br/>• Redundancy & Filler Cleanup<br/>• Short 9:16 Extraction"]
+            Leo["✂️ Leo (Editor Agent)<br/>croviq_agents.editor<br/>• Dialogue Pass & Pacing<br/>• Redundancy & Filler Cleanup"]
             VoiceAgent["🎙️ Studio Voice Agent<br/>croviq_agents.voice<br/>• Iterative Duration-Fit Loop<br/>• Speech Synthesis Pacing"]
-            DeptAgents["👥 Department Agents (Pydantic Models)<br/>• Alex: Data Scientist (Retention)<br/>• Nina: Packaging (Titles, Chapters)<br/>• Iris: QA Evaluator (Sync & Facts)"]
+            DeptAgents["👥 Department Agents (Pydantic Models)<br/>• Alex: Data Scientist (Retention & Baselines)<br/>• Iris: QA Evaluator (Sync & Loudness)"]
         end
 
         subgraph MediaEngine["DETERMINISTIC MEDIA & AUDIO PIPELINE (FFMPEG & GEMINI TRANSCRIBE)"]
@@ -86,12 +85,9 @@ flowchart TB
     WebSPA -.->|Direct V4 Signed PUT (No API Proxy)| GCS
 
     %% Internal API flows
-    ApiRun --> Maya
     ApiRun --> Leo
     ApiRun --> VoiceAgent
     ApiRun --> DeptAgents
-    
-    Maya <--> Leo
     Leo --> CutSafety
     
     ApiRun --> Inspector
@@ -161,7 +157,7 @@ flowchart TB
 | **Interactive Timeline** | Multi-track timeline visualizing raw clips, cuts, and transitions | `apps/web/src/components/editor/EditorTimeline.tsx` |
 | **Interactive Transcript** | Word-synchronized transcript with playback seek and cut indicators | `apps/web/src/components/editor/TranscriptPanel.tsx` |
 | **Video Preview Stage** | Dual 16:9 Master and 9:16 Short video preview players | `apps/web/src/components/editor/VideoStage.tsx` |
-| **Agent Presence** | Real-time status cards for Maya (Director) and Leo (Editor) | `apps/web/src/components/editor/AgentPresence.tsx` |
+| **Agent Presence** | Real-time status card for Leo (Editor) | `apps/web/src/components/editor/AgentPresence.tsx` |
 | **Decision Inspector** | Detailed audit drawer displaying cut reasons, timestamps, and confidence | `apps/web/src/components/editor/DecisionInspector.tsx` |
 | **Media Bin & B-Roll** | Source footage management, B-roll overlays, Studio Voice trigger | `apps/web/src/components/editor/MediaBin.tsx` |
 | **Production Run Strip** | Stepper header showing Upload ➔ Transcribe ➔ Edit ➔ EDL ➔ Render ➔ Review | `apps/web/src/components/editor/ProductionRunStrip.tsx` |
@@ -178,7 +174,7 @@ flowchart TB
 | **Config & Settings** | Centralized environment variables, model IDs, bucket names, GCP project | `apps/api/src/croviq_api/config.py` |
 | **Workspaces Routes** | Workspace CRUD, member access, agent configuration management | `apps/api/src/croviq_api/workspaces/routes.py` |
 | **Productions Routes** | Complete production lifecycle endpoints (upload, transcribe, edit, render) | `apps/api/src/croviq_api/productions/routes.py` |
-| **Editorial Service** | Coordinates Maya Director and Leo Editor multi-agent execution | `apps/api/src/croviq_api/productions/editorial_service.py` |
+| **Editorial Service** | Coordinates Leo Editor dialogue and narrative editing | `apps/api/src/croviq_api/productions/editorial_service.py` |
 | **EDL Service** | Assembles frame-safe, acoustic-safe Edit Decision Lists | `apps/api/src/croviq_api/productions/edl_service.py` |
 | **Media Storage** | GCS V4 Signed URL generator and object verification adapter | `apps/api/src/croviq_api/media/storage.py`, `google.py` |
 | **Memory Routes** | Creator memory profile, lessons, and experiments endpoints | `apps/api/src/croviq_api/memory/routes.py`, `google.py` |
@@ -190,11 +186,10 @@ flowchart TB
 
 | Agent / Module | Responsibility | Key Prompts / Schemas | Exact File Path |
 | :--- | :--- | :--- | :--- |
-| **Maya (Director Agent)** | Interprets creative intent, reviews dialogue passes, scores quality, routes revisions | `DIRECTOR_BATCH_REVIEW_PROMPT`<br/>`DirectorReviewDecision` | `packages/agents/src/croviq_agents/director.py` |
-| **Leo (Editor Agent)** | Identifies semantic redundancy, filler words, speech pauses, extracts Shorts | `EDITOR_DIALOGUE_PASS_PROMPT`<br/>`DialoguePassReport` | `packages/agents/src/croviq_agents/editor.py` |
+| **Leo (Editor Agent)** | Identifies semantic redundancy, filler words, speech pauses | `EDITOR_DIALOGUE_PASS_PROMPT`<br/>`DialoguePassReport` | `packages/agents/src/croviq_agents/editor.py` |
 | **Studio Voice Agent** | Generates synthesized voiceover with bounded duration-fit pacing loop | `StudioVoiceSynthesizer`<br/>`StudioVoiceResult` | `packages/agents/src/croviq_agents/voice.py` |
 | **GenAI SDK Client** | Google GenAI SDK client wrapper with Vertex AI / Gemini API backend | Model: `gemini-3.7-flash`<br/>Location: `global` | `packages/agents/src/croviq_agents/client.py` |
-| **Agent Prompts** | Canonical, battle-tested system prompts for Maya and Leo | Typed prompt builders | `packages/agents/src/croviq_agents/prompts.py` |
+| **Agent Prompts** | Canonical, battle-tested system prompts for Leo, Alex, and Iris | Typed prompt builders | `packages/agents/src/croviq_agents/prompts.py` |
 | **Tool Registry & Sandbox** | Tool execution environment and terminal sandbox for agents | `AgentToolRegistry`<br/>`TerminalSandbox` | `packages/agents/src/croviq_agents/tools.py`, `terminal.py` |
 
 ---
@@ -223,7 +218,7 @@ flowchart TB
 | **`render.py`** | `RenderArtifact`, `RenderJob`, `RenderType` (`MASTER_16_9`, `SHORT_9_16`), `ArtifactStatus` | `packages/domain/src/croviq_domain/render.py` |
 | **`render_review.py`** | `RenderReview`, `ReviewVerdict` (`APPROVED`, `REVISE`), `QualityScores` | `packages/domain/src/croviq_domain/render_review.py` |
 | **`transcript.py`** | `Transcript`, `TranscriptSegment`, `TranscriptWord` (word-level start/end/confidence) | `packages/domain/src/croviq_domain/transcript.py` |
-| **`agent_config.py`** | `AgentConfig`, `PersonaSettings` (Maya & Leo aggressiveness, tone, pacing) | `packages/domain/src/croviq_domain/agent_config.py` |
+| **`agent_config.py`** | `AgentConfig`, `PersonaSettings` (Leo, Alex, Iris prompt and voice settings) | `packages/domain/src/croviq_domain/agent_config.py` |
 | **`narration.py`** | `NarrationSegment`, `StudioVoiceResult`, `BRollArtifact` | `packages/domain/src/croviq_domain/narration.py` |
 | **`user.py`** | `User`, `Workspace`, `WorkspaceMembership`, `AuthPrincipal` | `packages/domain/src/croviq_domain/user.py` |
 
@@ -254,14 +249,11 @@ flowchart TB
   ➔ Gemini 3.5 Transcribe generates word-level timestamps
   ➔ Firestore stores Transcript with word start/end timings
 
-[3. Multi-Agent Editorial Pass]
+[3. AI Editorial Dialogue Pass]
   POST /api/workspaces/{w_id}/productions/{p_id}/editorial/run
-  ➔ Maya (Director) sets pacing targets & creative goals
   ➔ Leo (Editor) analyzes transcript + video via Gemini 3.7 Flash
   ➔ Leo generates DialoguePassReport (removes false starts, redundancy, filler words)
-  ➔ Maya reviews Leo's proposal with quality scoring (Verdict: PASS / REVISE)
   ➔ Firestore stores EditorialRun with detailed reasoning
-
 [4. Safe EDL Assembly]
   POST /api/workspaces/{w_id}/productions/{p_id}/edl/assemble
   ➔ CutSafetyPipeline compares Leo's cuts with audio envelope & word boundaries
@@ -277,11 +269,10 @@ flowchart TB
   ➔ Firestore records RenderArtifact(status=COMPLETED)
 
 [6. Multimodal Quality Verification & Playback]
-  POST /api/workspaces/{w_id}/productions/{p_id}/renders/{r_id}/review
-  ➔ Maya verifies rendered video against original audio & sync benchmarks
+  POST /api/workspaces/{w_id}/productions/{p_id}/qa/review
+  ➔ Iris verifies rendered video against sync and loudness benchmarks (-16 LUFS)
   ➔ GET /api/workspaces/{w_id}/productions/{p_id}/playback
   ➔ Returns signed GCS playback URLs to Web SPA VideoStage
-```
 
 ---
 

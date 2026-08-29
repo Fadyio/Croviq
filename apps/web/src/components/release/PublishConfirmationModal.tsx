@@ -1,22 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  AlertCircle,
-  AlertTriangle,
   Check,
-  CheckCircle2,
   Clock,
-  ExternalLink,
   Film,
-  HelpCircle,
   Image as ImageIcon,
   Info,
   Loader2,
   Lock,
-  Radio,
-  Scissors,
-  ShieldAlert,
-  ShieldCheck,
-  Sparkles,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -38,7 +28,6 @@ export interface VerifiedThumbnailFrame {
 import type { components } from "../../api/generated";
 
 type PublishPreparationResponse = components["schemas"]["PublishPreparationResponse"];
-type PackagingChapter = components["schemas"]["PackagingChapter"];
 
 interface PublishConfirmationModalProps {
   isOpen: boolean;

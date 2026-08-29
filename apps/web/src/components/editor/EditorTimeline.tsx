@@ -286,7 +286,6 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           onMouseDown={handleScrubStart}
           role="region"
           aria-label="Timeline Tracks Canvas"
-          tabIndex={0}
         >
           <div
             className="relative flex flex-col min-h-full"

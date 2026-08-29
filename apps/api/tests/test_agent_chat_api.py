@@ -208,3 +208,32 @@ def test_latest_video_selection_provenance_and_shuffled_ordering(client: TestCli
     assert inspection_tool["source_provider"] == "sample"
     assert inspection_tool["channel_median_views"] > 0
     assert inspection_tool["channel_median_retention"] > 0
+
+
+def test_bounded_conversation_store_eviction_and_isolation() -> None:
+    from croviq_api.workspaces.chat_service import BoundedConversationStore
+
+    store = BoundedConversationStore(max_messages=5, max_chars=50, ttl_hours=1)
+    ws_id = "ws_test_bound"
+    agent_id = "alex"
+    user_a = "user_a"
+    user_b = "user_b"
+
+    # 1. Test user isolation
+    store.append_message(ws_id, agent_id, "user", "Message from user A", user_id=user_a)
+    assert len(store.get_history(ws_id, agent_id, user_id=user_a)) == 1
+    assert len(store.get_history(ws_id, agent_id, user_id=user_b)) == 0
+
+    # 2. Test max_chars bounding
+    long_content = "A" * 100
+    msg = store.append_message(ws_id, agent_id, "user", long_content, user_id=user_a)
+    assert len(msg["content"]) == 50
+
+    # 3. Test FIFO message eviction (cap=5)
+    for i in range(10):
+        store.append_message(ws_id, agent_id, "user", f"msg {i}", user_id=user_a)
+
+    hist = store.get_history(ws_id, agent_id, user_id=user_a)
+    assert len(hist) == 5
+    assert hist[-1]["content"] == "msg 9"
+    assert hist[0]["content"] == "msg 5"

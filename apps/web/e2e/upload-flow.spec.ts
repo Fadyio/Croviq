@@ -540,7 +540,7 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByText("51,317 subscribers · 100 videos")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Here's what changed" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Channel Performance" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Alex", exact: true })).toBeVisible();
     await expect(page.getByText("Ideas Worth Making")).toBeVisible();
     await expect(page.getByText("Since your last upload")).toBeVisible();
     await expect(page.getByText("Proposed Hypothesis")).toBeVisible();
@@ -740,7 +740,7 @@ test.describe("Product Home and Creator Flow", () => {
     await mockBackendApis(page, []);
 
     // Mock upload initiation endpoint
-    await page.route("**/api/productions/upload", async (route) => {
+    await page.route("**/api/uploads", async (route) => {
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -763,8 +763,8 @@ test.describe("Product Home and Creator Flow", () => {
       });
     });
 
-    // Mock verify-upload endpoint
-    await page.route("**/api/productions/prod_test_001/verify-upload", async (route) => {
+    // Mock complete-upload endpoint
+    await page.route("**/api/uploads/upl_test_001/complete", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",

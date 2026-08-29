@@ -114,7 +114,6 @@ async function main() {
     const hasDialogueEditor = bodyText.includes("Dialogue Editor");
     const hasAlex = bodyText.includes("Alex");
     const hasIris = bodyText.includes("Iris");
-    const hasNina = bodyText.includes("Nina");
 
     const checklist = document.querySelector('[data-testid="pipeline-checklist"]') !== null;
     const video = document.querySelector("video");
@@ -124,7 +123,7 @@ async function main() {
       bodyText.includes("Media") || !!document.querySelector('[data-testid="media-bin"]');
     const hasTimeline =
       !!document.querySelector('[data-testid="editor-timeline"]') || bodyText.includes("Timeline");
-    const hasConversation = bodyText.includes("Leo") && bodyText.includes("Maya");
+    const hasConversation = bodyText.includes("Leo");
 
     return {
       title: document.title,
@@ -134,7 +133,6 @@ async function main() {
       hasDialogueEditor,
       hasAlex,
       hasIris,
-      hasNina,
       hasChecklist: checklist,
       hasMediaBin,
       hasTimeline,
@@ -326,35 +324,6 @@ async function main() {
     await page.keyboard.press("Escape");
   }
   await page.waitForTimeout(1000);
-  // Step 10: Test Maya Settings
-  console.log("Testing Maya Settings...");
-  const mayaAvatar = page
-    .locator('[data-testid="agent-avatar-maya"], button:has-text("Maya"), [aria-label*="Maya"]')
-    .first();
-  let mayaSettingsAudit = null;
-  if ((await mayaAvatar.count()) > 0) {
-    await mayaAvatar.click();
-    await page.waitForTimeout(1000);
-
-    const pathMayaSettings = path.join(SCREENSHOT_DIR, "maya_settings_modal.png");
-    await page.screenshot({ path: pathMayaSettings });
-
-    mayaSettingsAudit = await page.evaluate(() => {
-      const text = document.body.innerText;
-      return {
-        hasPromptTab: text.includes("Prompt"),
-        hasMemoryTab: text.includes("Memory"),
-        hasVoiceTab: text.includes("Voice"),
-      };
-    });
-    console.log("Maya Settings Audit:", JSON.stringify(mayaSettingsAudit, null, 2));
-
-    const closeMayaBtn = page.locator('button[aria-label="Close"]').first();
-    if ((await closeMayaBtn.count()) > 0) {
-      await closeMayaBtn.click();
-    }
-    await page.waitForTimeout(1000);
-  }
 
   // Step 11: Test Media Modes (Original, Edited, Studio)
   // Step 11: Test Media Modes (Original -> Edited -> Studio Voice -> Original)
@@ -444,7 +413,6 @@ async function main() {
     memoryAudit,
     voiceAudit,
     voiceSampleStatus,
-    mayaSettingsAudit,
     mediaModes,
     shortAudit,
     consoleLogsCount: consoleLogs.length,

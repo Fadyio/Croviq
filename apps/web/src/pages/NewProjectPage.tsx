@@ -3,7 +3,6 @@ import {
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
-  HardDrive,
   Loader2,
   LogOut,
   Upload,
@@ -26,7 +25,7 @@ const formatBytes = (bytes: number): string => {
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
 };
 
 interface NewProjectPageProps {
@@ -122,7 +121,7 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    if (e.dataTransfer.files?.[0]) {
       handleFileChange(e.dataTransfer.files[0]);
     }
   };
@@ -148,7 +147,7 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
       const token = await firebaseUser.getIdToken();
 
       // 1. Request pre-signed upload URL from backend
-      const initResponse = await fetch("/api/productions/upload", {
+      const initResponse = await fetch("/api/uploads", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -168,7 +167,7 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
       }
 
       const uploadData: CreateUploadResponse = await initResponse.json();
-      const { upload_url, production_id } = uploadData;
+      const { upload_id, upload_url, production_id } = uploadData;
 
       // 2. Direct binary PUT upload to Google Cloud Storage
       setUploadStatus("uploading");
@@ -208,7 +207,7 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
       // 3. Verify upload with backend
       setUploadStatus("verifying");
 
-      const verifyResponse = await fetch(`/api/productions/${production_id}/verify-upload`, {
+      const verifyResponse = await fetch(`/api/uploads/${upload_id}/complete`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

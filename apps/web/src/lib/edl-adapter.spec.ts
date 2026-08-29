@@ -9,7 +9,6 @@ import {
   formatDuration,
   formatCutLabel,
   type EditDecisionList,
-  type CutInstruction,
 } from "./edl-adapter";
 
 test.describe("EDL Adapter & Playback Logic", () => {

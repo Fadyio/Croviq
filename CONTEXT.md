@@ -38,9 +38,6 @@ _Avoid_: Post-Production, Cutter, Video Processor
 The independent verification agent responsible for factual consistency, caption accuracy, audio loudness/sync, video continuity, and publishing readiness on the rendered output.
 _Avoid_: Reviewer, Linter, Inspector, Fact Checker
 
-**Director (Maya — Internal Review)**:
-The internal director agent who reviews Leo's proposed edit decisions against raw footage and Channel Memory before deterministic Edit Decision List (EDL) compilation.
-_Avoid_: Master Agent, Manager, Orchestrator, Supervisor
 ---
 
 ### Channel Intelligence & Memory

@@ -29,6 +29,8 @@ services:
       - ./apps/api:/app/apps/api
       - ./packages/domain:/app/packages/domain
       - ./packages/observability:/app/packages/observability
+      - ./packages/media:/app/packages/media
+      - ./packages/agents:/app/packages/agents
       - /app/apps/api/.venv
     environment:
       - ENVIRONMENT=development

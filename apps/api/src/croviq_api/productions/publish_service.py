@@ -83,6 +83,7 @@ from croviq_api.workspaces.repository import (
     WorkspaceRepository,
     get_workspace_repository,
 )
+from croviq_domain.channel import is_sample_channel
 from croviq_domain.packaging import PackagingChapter, format_ms_as_timestamp
 from croviq_domain.production import Production
 from croviq_domain.publish import (
@@ -164,7 +165,7 @@ class YouTubePublishService:
             raise ValueError(f"Workspace '{production.workspace_id}' not found.")
 
         # Check channel connection
-        is_sample = production.channel_id.startswith("sample_") or production.channel_id == "sample_tech_channel"
+        is_sample = is_sample_channel(production.channel_id)
         connection = await self.youtube_repo.get_connection(workspace.workspace_id)
 
         channel_title = "Croviq Sample Channel" if is_sample else (connection.channel_title if connection else "Not Connected")
@@ -304,7 +305,7 @@ class YouTubePublishService:
             raise ValueError(f"Workspace '{production.workspace_id}' not found.")
 
         # 1. Sample Channel Restriction
-        if production.channel_id.startswith("sample_") or production.channel_id == "sample_tech_channel":
+        if is_sample_channel(production.channel_id):
             raise ValueError("The synthetic Croviq Sample Channel cannot publish to YouTube. Please connect a YouTube channel.")
 
         # 2. Connection and Scope Validation

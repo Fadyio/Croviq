@@ -5620,6 +5620,37 @@
           "retention_delta_points": {
             "type": "number",
             "title": "Retention Delta Points"
+          },
+          "views_percentile": {
+            "type": "number",
+            "title": "Views Percentile",
+            "default": 50.0
+          },
+          "retention_percentile": {
+            "type": "number",
+            "title": "Retention Percentile",
+            "default": 50.0
+          },
+          "ctr_percentile": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ctr Percentile"
+          },
+          "subscriber_conversion_per_1k_views": {
+            "type": "number",
+            "title": "Subscriber Conversion Per 1K Views",
+            "default": 0.0
+          },
+          "comparison_window": {
+            "type": "string",
+            "title": "Comparison Window",
+            "default": "lifetime catalog baseline"
           }
         },
         "additionalProperties": false,

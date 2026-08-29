@@ -1,5 +1,7 @@
 # 0016: Channel Data Provider Abstraction (Real YouTube vs Deterministic Sample Channel)
 
+*Status: Historical Context (Active agents consuming provider: Alex, Leo)*
+
 ## Context
 Croviq's agents (Alex, Maya, Nina) analyze historical channel performance, retention curves, click-through rates, and audience trends to guide editing and packaging decisions. Hackathon judges and developers exploring the platform may not possess a mature YouTube channel with thousands of historical videos. Hardcoding fake numbers into UI components produces untestable, brittle demo code and prevents downstream agents from exercising real statistical analysis.
 

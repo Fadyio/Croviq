@@ -1,8 +1,17 @@
-"""Agent chat service executing real reasoning, tool execution, and memory queries for Alex, Leo, and Iris."""
+"""Agent chat service executing real reasoning, tool execution, and memory queries for Alex.
+
+Bounded ephemeral conversation storage:
+- Max 50 messages per conversation (oldest FIFO evicted).
+- Max 10,000 characters per message.
+- 24-hour TTL with automatic eviction.
+- Workspace, user, and agent scope isolation (`{workspace_id}:{user_id}:{agent_id}`).
+- Ephemeral in-memory storage; durable knowledge lives in Google Agent Platform Memory Bank.
+"""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 import json
 import logging
 from typing import Any
@@ -20,17 +29,113 @@ from croviq_domain.channel_provider import ChannelDataProvider, SampleChannelDat
 
 logger = logging.getLogger(__name__)
 
-# Scoped in-memory conversation history store
-_CONVERSATION_STORE: dict[str, list[dict[str, Any]]] = {}
+MAX_MESSAGES_PER_CONVERSATION = 50
+MAX_CHARS_PER_MESSAGE = 10_000
+CONVERSATION_TTL_HOURS = 24
 
 
-def get_conversation_history(workspace_id: str, agent_id: str) -> list[dict[str, Any]]:
-    key = f"{workspace_id}:{agent_id.lower()}"
-    return list(_CONVERSATION_STORE.get(key, []))
+@dataclass
+class ConversationEntry:
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    last_accessed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-def clear_conversation_history(workspace_id: str, agent_id: str) -> None:
-    key = f"{workspace_id}:{agent_id.lower()}"
-    _CONVERSATION_STORE.pop(key, None)
+
+class BoundedConversationStore:
+    """Bounded, TTL-aware in-memory conversation store with workspace/user/agent isolation."""
+
+    def __init__(
+        self,
+        *,
+        max_messages: int = MAX_MESSAGES_PER_CONVERSATION,
+        max_chars: int = MAX_CHARS_PER_MESSAGE,
+        ttl_hours: int = CONVERSATION_TTL_HOURS,
+    ) -> None:
+        self._store: dict[str, ConversationEntry] = {}
+        self._max_messages = max_messages
+        self._max_chars = max_chars
+        self._ttl = timedelta(hours=ttl_hours)
+
+    def _build_key(self, workspace_id: str, agent_id: str, user_id: str | None = None) -> str:
+        uid = (user_id or "default").strip()
+        return f"{workspace_id.strip()}:{uid}:{agent_id.lower().strip()}"
+
+    def _evict_expired(self) -> None:
+        now = datetime.now(UTC)
+        expired = [
+            k
+            for k, entry in self._store.items()
+            if (now - entry.last_accessed_at) > self._ttl
+        ]
+        for k in expired:
+            self._store.pop(k, None)
+
+    def get_history(
+        self, workspace_id: str, agent_id: str, user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        self._evict_expired()
+        key = self._build_key(workspace_id, agent_id, user_id)
+        entry = self._store.get(key)
+        if entry is None:
+            return []
+        entry.last_accessed_at = datetime.now(UTC)
+        return list(entry.messages)
+
+    def append_message(
+        self,
+        workspace_id: str,
+        agent_id: str,
+        role: str,
+        content: str,
+        tool_executions: list[dict[str, Any]] | None = None,
+        structured_artifact: dict[str, Any] | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        self._evict_expired()
+        key = self._build_key(workspace_id, agent_id, user_id)
+        if key not in self._store:
+            self._store[key] = ConversationEntry()
+
+        entry = self._store[key]
+        entry.last_accessed_at = datetime.now(UTC)
+
+        bounded_content = (
+            content[: self._max_chars] if len(content) > self._max_chars else content
+        )
+
+        msg = {
+            "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+            "role": role,
+            "content": bounded_content,
+            "tool_executions": tool_executions or [],
+            "structured_artifact": structured_artifact,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+
+        entry.messages.append(msg)
+        if len(entry.messages) > self._max_messages:
+            entry.messages = entry.messages[-self._max_messages :]
+        return msg
+
+    def clear(
+        self, workspace_id: str, agent_id: str, user_id: str | None = None
+    ) -> None:
+        key = self._build_key(workspace_id, agent_id, user_id)
+        self._store.pop(key, None)
+
+
+_GLOBAL_CONVERSATION_STORE = BoundedConversationStore()
+
+
+def get_conversation_history(
+    workspace_id: str, agent_id: str, user_id: str | None = None
+) -> list[dict[str, Any]]:
+    return _GLOBAL_CONVERSATION_STORE.get_history(workspace_id, agent_id, user_id)
+
+
+def clear_conversation_history(
+    workspace_id: str, agent_id: str, user_id: str | None = None
+) -> None:
+    _GLOBAL_CONVERSATION_STORE.clear(workspace_id, agent_id, user_id)
 
 
 def append_conversation_message(
@@ -40,23 +145,17 @@ def append_conversation_message(
     content: str,
     tool_executions: list[dict[str, Any]] | None = None,
     structured_artifact: dict[str, Any] | None = None,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
-    key = f"{workspace_id}:{agent_id.lower()}"
-    if key not in _CONVERSATION_STORE:
-        _CONVERSATION_STORE[key] = []
-    
-    msg = {
-        "message_id": f"msg_{uuid.uuid4().hex[:12]}",
-        "role": role,
-        "content": content,
-        "tool_executions": tool_executions or [],
-        "structured_artifact": structured_artifact,
-        "created_at": datetime.now(UTC).isoformat(),
-    }
-    _CONVERSATION_STORE[key].append(msg)
-    return msg
-
-
+    return _GLOBAL_CONVERSATION_STORE.append_message(
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        role=role,
+        content=content,
+        tool_executions=tool_executions,
+        structured_artifact=structured_artifact,
+        user_id=user_id,
+    )
 class AgentChatService:
     """Executes authentic agent conversations with domain tools, code execution, and persistent memory."""
 
@@ -170,54 +269,32 @@ class AgentChatService:
             structured_artifact=structured_artifact,
         )
 
-    async def handle_leo_message(self, message: str) -> dict[str, Any]:
-        """Leo (Video Editor) handles dialogue edits, cut pacing, and cut safety."""
-        prompt_config = await self.agent_config_repo.get_agent_prompt(
-            self.workspace_id, AgentId.LEO
-        )
-        tool_executions = [
-            {
-                "tool_name": "dialogue_decision_inspector",
-                "goal": "Inspect transcript word-level timestamps and cut safety intervals",
-                "agent": "leo",
-            }
-        ]
+    async def handle_leo_message(self, message: str, user_id: str | None = None) -> dict[str, Any]:
+        """Leo (Video Editor) conversational chat activates in Editor phase."""
         reply = (
-            "I'm Leo, your Video Editor.\n\n"
-            "I analyze spoken dialogue, eliminate filler words, and enforce natural cut safety boundaries. "
-            "Let me know if you want me to tighten a section or preserve more context."
+            "Leo is active in the Editor workspace where he performs dialogue passes, filler cleanup, "
+            "and natural cut safety. Direct conversational chat with Leo will activate in the Editor development phase."
         )
-        append_conversation_message(self.workspace_id, "leo", "user", message)
+        append_conversation_message(self.workspace_id, "leo", "user", message, user_id=user_id)
         return append_conversation_message(
             self.workspace_id,
             "leo",
             "assistant",
             reply,
-            tool_executions=tool_executions,
+            user_id=user_id,
         )
 
-    async def handle_iris_message(self, message: str) -> dict[str, Any]:
-        """Iris (Quality Control) inspects rendered output, caption alignment, and loudness compliance."""
-        prompt_config = await self.agent_config_repo.get_agent_prompt(
-            self.workspace_id, AgentId.IRIS
-        )
-        tool_executions = [
-            {
-                "tool_name": "quality_control_verifier",
-                "goal": "Audit audio loudness (-16 LUFS), caption sync, and video continuity",
-                "agent": "iris",
-            }
-        ]
+    async def handle_iris_message(self, message: str, user_id: str | None = None) -> dict[str, Any]:
+        """Iris (Quality Control) conversational chat activates in Release QA phase."""
         reply = (
-            "I'm Iris, your Quality Control gatekeeper.\n\n"
-            "I verify factual consistency, caption accuracy, target audio loudness (-16 LUFS, -1 dBTP), "
-            "and visual continuity on rendered videos before release."
+            "Iris is active at the Release QA gate where she inspects rendered videos for loudness (-16 LUFS), "
+            "caption sync, and factual integrity. Direct conversational chat with Iris will activate in the QA development phase."
         )
-        append_conversation_message(self.workspace_id, "iris", "user", message)
+        append_conversation_message(self.workspace_id, "iris", "user", message, user_id=user_id)
         return append_conversation_message(
             self.workspace_id,
             "iris",
             "assistant",
             reply,
-            tool_executions=tool_executions,
+            user_id=user_id,
         )

@@ -1,10 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
-  ArrowRight,
-  Bot,
-  Brain,
-  Code,
   LineChart,
   Loader2,
   MessageSquare,
@@ -104,7 +100,7 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({ agentId,
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isSending]);
+  }, []);
 
   const sendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputMessage).trim();

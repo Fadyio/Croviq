@@ -1,8 +1,7 @@
 import React from "react";
-import { ArrowRight, Beaker, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowRight, Beaker, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import type { components } from "../../api/generated";
 import { ChannelTrendChart } from "./ChannelTrendChart";
-
 type ChannelDashboard = components["schemas"]["ChannelDashboard"];
 type DashboardKpi = components["schemas"]["DashboardKpi"];
 
@@ -34,7 +33,7 @@ const formatKpiValue = (kpi: DashboardKpi): string => {
 };
 
 const formatChange = (value: number | null | undefined): string => {
-  if (value === null || value === undefined || isNaN(Number(value)))
+  if (value === null || value === undefined || Number.isNaN(Number(value)))
     return "No comparable baseline";
   const num = Number(value);
   return `${num >= 0 ? "+" : ""}${num.toFixed(1)}% vs previous period`;
@@ -110,38 +109,83 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end text-xs">
               <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary">
-                <span
-                  className={
-                    dashboard.latest_video.view_delta_percentage >= 0
-                      ? "text-success font-semibold"
-                      : "text-danger font-semibold"
-                  }
-                >
-                  {dashboard.latest_video.view_delta_percentage >= 0 ? "+" : ""}
-                  {dashboard.latest_video.view_delta_percentage.toFixed(1)}%
+                <span className="font-semibold text-primary">
+                  {(dashboard.latest_video.views_percentile ?? 50).toFixed(0)}th
                 </span>{" "}
-                views vs channel median
+                views percentile
               </span>
               <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary">
-                <span
-                  className={
-                    dashboard.latest_video.subscriber_conversion_delta_percentage >= 0
-                      ? "text-success font-semibold"
-                      : "text-danger font-semibold"
-                  }
-                >
-                  {dashboard.latest_video.subscriber_conversion_delta_percentage >= 0 ? "+" : ""}
-                  {dashboard.latest_video.subscriber_conversion_delta_percentage.toFixed(1)}%
+                <span className="font-semibold text-primary">
+                  {(dashboard.latest_video.retention_percentile ?? 50).toFixed(0)}th
                 </span>{" "}
-                conversion
+                retention percentile
+              </span>
+              <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary font-mono">
+                {(dashboard.latest_video.subscriber_conversion_per_1k_views ?? 0).toFixed(1)}{" "}
+                subs/1k views
+              </span>
+              <span className="rounded-lg bg-surface-3 px-2 py-1 text-[10px] text-text-muted">
+                {dashboard.latest_video.comparison_window || "lifetime catalog baseline"}
               </span>
             </div>
           </div>
         </section>
       ) : null}
+
       {/* Dominant Trend Chart */}
       {dashboard.trend && dashboard.trend.length > 0 && (
         <ChannelTrendChart data={dashboard.trend} title="Channel Performance" compact={true} />
+      )}
+
+      {/* Alex Primary Insight */}
+      {dashboard.insights && dashboard.insights.length > 0 && (
+        <section
+          className="rounded-xl border border-primary/20 bg-primary/5 p-5 shadow-sm space-y-3"
+          aria-labelledby="alex-insight-title"
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-primary/15 pb-2.5">
+            <div className="flex items-center gap-2 text-xs font-semibold text-text-primary">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <h2 id="alex-insight-title" className="tracking-tight">
+                Alex Channel Insight · {dashboard.insights[0].title}
+              </h2>
+            </div>
+            <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-mono font-semibold text-primary">
+              Confidence {(dashboard.insights[0].confidence * 100).toFixed(0)}%
+            </span>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            {dashboard.insights[0].evidence && dashboard.insights[0].evidence.length > 0 ? (
+              dashboard.insights[0].evidence.map((ev, idx) => (
+                <div key={idx} className="flex items-start gap-2">
+                  <span className="font-mono text-[10px] font-bold text-primary uppercase mt-0.5 shrink-0">
+                    {ev.kind === "FACT" ? "MEASUREMENT" : "INTERPRETATION"}
+                  </span>
+                  <p className="text-text-secondary leading-relaxed">
+                    {ev.statement
+                      ? ev.statement.replace(/^(MEASUREMENT|INTERPRETATION):\s*/i, "")
+                      : ""}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-text-secondary leading-relaxed">
+                {dashboard.insights[0].statement}
+              </p>
+            )}
+            <div className="flex items-start gap-2 pt-1 border-t border-primary/10">
+              <span className="font-mono text-[10px] font-bold text-emerald-400 uppercase mt-0.5 shrink-0">
+                ACTION
+              </span>
+              <p className="text-text-primary font-medium leading-relaxed">
+                {dashboard.insights[0].recommended_action
+                  ? dashboard.insights[0].recommended_action.replace(/^ACTION:\s*/i, "")
+                  : ""}
+              </p>
+            </div>
+          </div>
+        </section>
       )}
       {(dashboard.active_experiment || dashboard.proposed_experiment) && (
         <section

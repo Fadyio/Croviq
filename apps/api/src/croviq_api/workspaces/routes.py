@@ -4,7 +4,10 @@ from datetime import datetime, timezone
 from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from croviq_agents.client import GenAIClient
 from croviq_agents.voice import StudioVoiceSynthesizer, VoiceCatalog
+from croviq_api.config import get_settings
+from croviq_api.productions.dependencies import get_genai_client
 from croviq_api.auth.dependencies import get_current_user
 from croviq_api.memory.dependencies import get_memory_store, initialize_sample_channel_memory
 from croviq_api.memory.store import ChannelMemoryStore
@@ -374,13 +377,29 @@ async def update_voice_settings_endpoint(
 async def get_voice_sample_endpoint(
     payload: VoiceSampleRequest,
     current_user: Annotated[User, Depends(get_current_user)],
+    genai_client: Annotated[GenAIClient, Depends(get_genai_client)],
 ) -> VoiceSampleResponse:
     synthesizer = StudioVoiceSynthesizer()
+    pcm_bytes: bytes | None = None
+    if genai_client:
+        try:
+            _, pcm_bytes = await genai_client.synthesize_studio_voice(
+                text=payload.sample_text,
+                voice_id=payload.voice_id,
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Live TTS voice sample synthesis failed: %s", exc)
+            if get_settings().is_production:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Studio Voice synthesis failed: {exc}",
+                )
     return synthesizer.generate_sample_audio_payload(
         voice_id=payload.voice_id,
         sample_text=payload.sample_text,
+        pcm_bytes=pcm_bytes,
     )
-
 
 @router.get(
     "/workspace/agents/{agent_id}/chat",

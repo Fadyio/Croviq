@@ -1,5 +1,7 @@
 # 0006: Channel Memory via Google Agent Platform Memory Bank
 
+*Status: Historical Context (Reflects early multi-agent team design; canonical active agents are Alex, Leo, Iris)*
+
 ## Context
 Croviq's production team (Maya, Leo, Alex, Nina, Iris) requires persistent, shared long-term memory across productions to learn from past channel performance, audience retention curves, packaging CTRs, and editorial guidelines. Storing memory as unstructured conversational chat dumps leads to hallucinated, untestable advice. Conversely, deploying external vector databases (Pinecone, Weaviate, pgvector) introduces unnecessary operational complexity, separate infrastructure failure modes, and cost overhead.
 

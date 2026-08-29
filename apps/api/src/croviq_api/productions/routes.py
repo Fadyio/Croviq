@@ -752,25 +752,7 @@ async def transcribe_production(
     request_id = getattr(request.state, "request_id", "unknown")
     prod = await _get_owned_production(production_id, current_user, production_repo)
 
-    # Validate production source media state
-    if (
-        prod.status != ProductionStatus.UPLOADED
-        or prod.source_media is None
-        or prod.source_media.status != SourceMediaStatus.UPLOADED
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Production source media is not uploaded or invalid",
-        )
-
-    source = prod.source_media
-    if source.content_type.strip().lower() not in ALLOWED_MEDIA_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported media content type: {source.content_type}",
-        )
-
-    # Idempotency check: check if transcript already exists for this production
+    # 1. Idempotency check: if transcript already exists for this production, return it immediately
     existing = await transcript_repo.get_transcript_by_production_id(production_id)
     if existing:
         log_transcription_event(
@@ -794,6 +776,24 @@ async def transcribe_production(
             segment_count=existing.segment_count,
             language_code=existing.language_code,
             transcript=existing,
+        )
+
+    # 2. Validate production source media state for fresh transcription
+    if (
+        prod.status in {ProductionStatus.DELETING, ProductionStatus.FAILED}
+        or prod.source_media is None
+        or prod.source_media.status != SourceMediaStatus.UPLOADED
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Production source media is not uploaded or invalid",
+        )
+
+    source = prod.source_media
+    if source.content_type.strip().lower() not in ALLOWED_MEDIA_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported media content type: {source.content_type}",
         )
 
     perf_start = time.perf_counter()
@@ -1568,7 +1568,7 @@ async def generate_studio_voice(
 
                 # Create composite narration audio track at 24000 Hz, 16-bit mono (matching Gemini TTS output)
                 sample_rate = 24000
-                total_dur_ms = edl.source_duration_ms or prod.source_media.duration_ms or 10000
+                total_dur_ms = edl.source_duration_ms or (transcript.duration_ms if transcript else 10000)
                 num_samples = int(sample_rate * total_dur_ms / 1000)
                 audio_buffer = bytearray(num_samples * 2)
 
@@ -2027,7 +2027,7 @@ async def generate_release_review(
         if (
             latest_review
             and latest_review.master_artifact_id == master_artifact.artifact_id
-            and latest_review.packaging_proposal_id == proposal.proposal_id
+            and latest_review.packaging_proposal_id == (proposal.proposal_id if proposal else "none")
         ):
             return await _build_release_review_response(
                 production_id=prod.production_id,

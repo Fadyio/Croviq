@@ -253,14 +253,35 @@ class StudioVoiceSynthesizer:
         self,
         voice_id: str,
         sample_text: str = "Welcome to Croviq. I'll make your video clear, concise, and easy to follow.",
+        pcm_bytes: bytes | None = None,
     ) -> VoiceSampleResponse:
-        """Generate or retrieve cached audio sample for voice preview."""
-        # Create standard synthetic audio bytes for preview
-        dummy_wav_header = (
-            b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00"
-            b"\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
-        )
-        b64_audio = base64.b64encode(dummy_wav_header).decode("ascii")
+        """Generate audio sample payload for voice preview with valid WAV container and audio frames."""
+        import base64
+        import io
+        import math
+        import struct
+        import wave
+
+        if pcm_bytes is None or len(pcm_bytes) == 0:
+            # Generate 1.5s of gentle test tone audio frames (24000 Hz, 16-bit mono)
+            sample_rate = 24000
+            num_samples = int(sample_rate * 1.5)
+            samples = []
+            for i in range(num_samples):
+                t = i / sample_rate
+                env = math.exp(-2.5 * t)
+                val = int(8000 * math.sin(2 * math.pi * 440.0 * t) * env)
+                samples.append(val)
+            pcm_bytes = struct.pack(f"<{len(samples)}h", *samples)
+
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(24000)
+            wf.writeframes(pcm_bytes)
+        wav_bytes = buf.getvalue()
+        b64_audio = base64.b64encode(wav_bytes).decode("ascii")
         return VoiceSampleResponse(
             voice_id=voice_id,
             sample_text=sample_text,

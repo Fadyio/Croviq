@@ -664,7 +664,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await expect(page.getByRole("heading", { name: "Channel Performance" })).toBeVisible();
 
     // Check Alex rail is present on the right
-    await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Alex", exact: true })).toBeVisible();
     await expect(page.getByRole("complementary").getByText("Data Scientist")).toBeVisible();
     await expect(page.getByText("Ideas Worth Making")).toBeVisible();
   });

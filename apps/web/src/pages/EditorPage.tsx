@@ -5,13 +5,10 @@ import {
   LogOut,
   Loader2,
   CheckCircle2,
-  Sparkles,
   ShieldCheck,
   MessageSquare,
   FileText,
   Sliders,
-  Play,
-  RotateCcw,
 } from "lucide-react";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
@@ -34,11 +31,9 @@ import {
   type Transcript,
   type TimelineBlock,
   type CoverageMarker,
-  formatDuration,
 } from "../lib/edl-adapter";
 import type { components } from "../api/generated";
 import {
-  deriveProductionRunStages,
   nextMissingProcessingStage,
   type PersistedProductionRun,
   type ProcessingStage,
@@ -59,7 +54,7 @@ interface LoadedEditorData {
   runDetail: EditorialRunDetail | null;
 }
 
-const readOptionalJson = async <T,>(response: Response, label: string): Promise<T | null> => {
+const readOptionalJson = async <T,>(response: Response, _label: string): Promise<T | null> => {
   if (!response.ok) return null;
   return response.json() as Promise<T>;
 };
@@ -75,7 +70,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   onNavigateHome,
   onNavigateRelease,
 }) => {
-  const { user, firebaseUser, logout } = useAuth();
+  const { firebaseUser, logout } = useAuth();
 
   const [production, setProduction] = useState<Production | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
@@ -107,7 +102,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [failedProcessingStage, setFailedProcessingStage] = useState<ProcessingStage | null>(null);
 
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
-  const [durationMs, setDurationMs] = useState(113824);
+  const [durationMs, setDurationMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("edited");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
@@ -217,7 +212,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setTranscript(transcriptPayload);
     setEdl(actualEdl);
 
-    const initialDur = actualEdl?.source_duration_ms || transcriptPayload?.duration_ms || 113824;
+    const initialDur = actualEdl?.source_duration_ms || transcriptPayload?.duration_ms || 0;
     if (initialDur > 0) {
       setDurationMs(initialDur);
     }
@@ -433,7 +428,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     return durationMs;
   }, [previewArtifact, edl, durationMs]);
   const selectedDecision = useMemo(() => {
-    if (!selectedDecisionId || !proposal || !proposal.decisions) return null;
+    if (!selectedDecisionId || !proposal?.decisions) return null;
     return (
       proposal.decisions.find((d: EditorDecision) => d.decision_id === selectedDecisionId) || null
     );
@@ -489,7 +484,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     failedProcessingStage,
     editorialRun?.status,
     previewArtifact,
-    durationMs,
     renderSubStatus,
   ]);
 

@@ -207,6 +207,17 @@ def test_voice_settings_and_sample_endpoint(api_test_context):
     assert sample_data["voice_id"] == "Charon"
     assert "audio_base64" in sample_data
     assert len(sample_data["audio_base64"]) > 0
+    import base64
+    import wave
+    import io
+    raw_wav = base64.b64decode(sample_data["audio_base64"])
+    # Audio must contain real audio frames (strictly greater than 44-byte empty header)
+    assert len(raw_wav) > 44
+    with wave.open(io.BytesIO(raw_wav), "rb") as wf:
+        assert wf.getnchannels() == 1
+        assert wf.getsampwidth() == 2
+        assert wf.getframerate() == 24000
+        assert wf.getnframes() > 0
 
 
 @pytest.mark.asyncio

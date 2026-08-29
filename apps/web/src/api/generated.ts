@@ -1110,6 +1110,11 @@ export interface components {
       subscriber_conversion_delta_percentage: number;
       retention_percentage: number;
       retention_delta_points: number;
+      views_percentile?: number;
+      retention_percentile?: number;
+      ctr_percentile?: number | null;
+      subscriber_conversion_per_1k_views?: number;
+      comparison_window?: string;
     };
     MediaMetadata: {
       /** Duration of the media in milliseconds */

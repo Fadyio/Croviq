@@ -66,7 +66,7 @@ export const TrafficSourceChart: React.FC<TrafficSourceChartProps> = ({ data }) 
           const items = params as Array<{
             dataIndex: number;
           }>;
-          if (!items || !items.length) return "";
+          if (!items?.length) return "";
           const idx = items[0].dataIndex;
           const name = categories[idx];
           const pct = values[idx];

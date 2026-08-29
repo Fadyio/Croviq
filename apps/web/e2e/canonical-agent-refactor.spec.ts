@@ -284,6 +284,25 @@ const mockBackendApis = async (page: Page) => {
             average_retention: 59.4,
           },
         ],
+        latest_video: {
+          video_id: "vid_syn_100",
+          title: "Google GenAI SDK Tutorial for Beginners (Part 5)",
+          published_at: "2026-08-24T10:00:00Z",
+          views: 4500,
+          watch_time_hours: 320.5,
+          subscribers_gained: 52,
+          subscribers_lost: 4,
+          net_subscribers: 48,
+          view_delta_percentage: 22.4,
+          subscriber_conversion_delta_percentage: 18.2,
+          retention_percentage: 58.4,
+          retention_delta_points: 9.5,
+          views_percentile: 85.0,
+          retention_percentile: 78.0,
+          ctr_percentile: 82.0,
+          subscriber_conversion_per_1k_views: 11.5,
+          comparison_window: "lifetime catalog baseline",
+        },
         insights: [
           {
             insight_id: "ins_1",
@@ -294,12 +313,33 @@ const mockBackendApis = async (page: Page) => {
             confidence: 0.92,
             recommended_action:
               "Introduce terminal demonstration within the first 25 seconds of your next production.",
-            evidence_data: {},
+            evidence: [
+              {
+                kind: "FACT",
+                statement: "MEASUREMENT: Early demos achieve 58.4% mean retention.",
+                metric_refs: [],
+                citation_urls: [],
+              },
+            ],
             created_at: "2026-08-28T00:00:00Z",
           },
         ],
-        recent_upload: null,
-        proposed_experiment: null,
+        proposed_experiment: {
+          experiment_id: "exp_1",
+          channel_id: "croviq_syn_ai_eng_01",
+          hypothesis: "Showing early demos improves retention",
+          primary_metric: "averageViewPercentage",
+          baseline_value: 48.9,
+          expected_direction: "INCREASE",
+          status: "PROPOSED",
+          started_at: null,
+          completed_at: null,
+          video_ids: [],
+          result: null,
+          created_by: "alex",
+          confidence_summary: "Strong statistical confidence.",
+        },
+        is_sample_modeled_timeseries: true,
       }),
     });
   });
@@ -516,6 +556,7 @@ const signInAndGoTo = async (page: Page, path: string = "/app") => {
   await page.getByLabel("Password").fill("valid-password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL("**/app*");
+  await expect(page.locator('[aria-label="Channel KPIs"]')).toBeVisible({ timeout: 15000 });
   if (path !== "/app" && !page.url().endsWith(path)) {
     await page.goto(path);
   }

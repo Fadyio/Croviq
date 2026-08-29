@@ -419,3 +419,18 @@ class SampleChannelFixture(BaseModel):
     @classmethod
     def check_timezone_aware(cls, v: datetime) -> datetime:
         return validate_timezone_aware(v)
+
+CANONICAL_SAMPLE_CHANNEL_ID = "croviq_syn_ai_eng_01"
+
+
+def is_sample_channel(channel_id: str | None) -> bool:
+    """Return True if channel_id belongs to a synthetic sample channel that must never publish externally."""
+    if not channel_id:
+        return False
+    normalized = channel_id.strip().lower()
+    return (
+        normalized == CANONICAL_SAMPLE_CHANNEL_ID
+        or normalized == "sample_tech_channel"
+        or normalized.startswith("sample_")
+        or normalized.startswith("croviq_syn_")
+    )

@@ -11,12 +11,11 @@ Croviq is an autonomous, visible multi-agent production team that learns a creat
 - **Alex (Data Scientist)**: Channel intelligence and research agent. Alex analyzes channel performance trends, executes automated Google Search-grounded research on configurable cadences with verifiable citations, runs Python code execution for statistical correlations, and distills falsifiable lessons into the persistent Channel Memory Bank.
 - **Leo (Video Editor)**: Full-timeline dialogue and narrative editing agent. Leo inspects raw footage, demuxes multi-track audio, detects speech boundaries, eliminates filler/redundancy, generates candidates for vertical Shorts (9:16), rewrites Studio Voice voiceover scripts, and generates context-aware B-roll coverage.
 - **Iris (Quality Control)**: Independent verification and release gatekeeper agent. Iris inspects the actual rendered video artifact for editing continuity, bad cuts, dead air, audio loudness (~ -16 LUFS target), caption sync, vertical Short framing, and factual consistency.
-- **Maya (Director — Internal Review)**: Production quality director reviewing candidate cut decisions against multimodal footage and channel guidelines before deterministic Edit Decision List (EDL) compilation.
 ---
 
 ## Current AI Stack (Vertex AI & Google GenAI SDK)
 
-- **Multimodal AI Reasoning**: Gemini 3.7 Flash (`gemini-3.7-flash`) on Vertex AI for agent decision-making, dialogue pass generation, and director review.
+- **Multimodal AI Reasoning**: Gemini 3.7 Flash (`gemini-3.7-flash`) on Vertex AI for agent decision-making and dialogue pass generation.
 - **Speech Transcription**: Gemini 3.5 Transcribe Preview (`gemini-3.5-transcribe-preview`) on Vertex AI for word-level timestamped speech recognition with natural casing and punctuation.
 - **Studio Voice Synthesis**: Gemini 3.1 Flash TTS Preview (`gemini-3.1-flash-tts-preview`) with prebuilt voice catalog (Puck, Charon, Aoede, Kore, Fenrir, Leda, Orus, Zephyr) and a bounded duration-fit loop.
 - **B-Roll Visual Coverage Planning**: Visual continuity and B-roll recommendation planning (prompts, timing, framing, and keyframe transition specifications) planned by Leo.

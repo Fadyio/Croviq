@@ -86,7 +86,7 @@ export interface TwickTimelineRepresentation {
  * REJECTED_UNSAFE cuts are non-executable and must never be skipped.
  */
 export function getExecutableCuts(edl?: EditDecisionList | null): CutInstruction[] {
-  if (!edl || !edl.cuts) return [];
+  if (!edl?.cuts) return [];
   return edl.cuts.filter((c) => c.safety_status === "SAFE" || c.safety_status === "NEEDS_COVERAGE");
 }
 
@@ -166,7 +166,7 @@ export function deriveAudioRegions(
   edl: EditDecisionList,
   transcript?: Transcript | null,
 ): AudioTrackRegion[] {
-  const totalMs = edl.source_duration_ms || 113824;
+  const totalMs = edl.source_duration_ms || (transcript?.duration_ms ?? 0);
   if (totalMs <= 0) return [];
 
   const executableCuts = getExecutableCuts(edl);
@@ -282,7 +282,7 @@ export function findExecutableSkipInterval(
   edl?: EditDecisionList | null,
   leadThresholdMs = 80,
 ): { safe_start_ms: number; safe_end_ms: number; cut_id: string } | null {
-  if (!edl || !edl.cuts) return null;
+  if (!edl?.cuts) return null;
 
   const executableCuts = getExecutableCuts(edl);
   for (const cut of executableCuts) {
@@ -308,7 +308,7 @@ export function edlToTwickTimeline(
   proposal?: EditorProposal | null,
   transcript?: Transcript | null,
 ): TwickTimelineRepresentation {
-  const sourceDurationMs = edl.source_duration_ms || 113824;
+  const sourceDurationMs = edl.source_duration_ms || (transcript?.duration_ms ?? 0);
   const blocks: TimelineBlock[] = [];
 
   // 1. VIDEO track (continuous base footage)
@@ -460,7 +460,7 @@ export function edlToTwickTimeline(
  * Format milliseconds to MM:SS.mmm timecode string.
  */
 export function formatTimecode(ms: number): string {
-  if (isNaN(ms) || ms < 0) return "00:00.00";
+  if (Number.isNaN(ms) || ms < 0) return "00:00.00";
   const totalSeconds = ms / 1000;
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = Math.floor(totalSeconds % 60);
@@ -472,7 +472,7 @@ export function formatTimecode(ms: number): string {
  * Format milliseconds to human readable duration string (e.g. "1m 53s" or "42.3s").
  */
 export function formatDuration(ms: number): string {
-  if (isNaN(ms) || ms < 0) return "0s";
+  if (Number.isNaN(ms) || ms < 0) return "0s";
   const totalSeconds = ms / 1000;
   if (totalSeconds < 60) {
     return `${totalSeconds.toFixed(1)}s`;

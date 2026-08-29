@@ -224,7 +224,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
                 .map((asset, idx) => (
                   <div
                     key={asset.artifactId || idx}
-                    onClick={() => onSeek && onSeek(asset.sourceStartMs)}
+                    onClick={() => onSeek?.(asset.sourceStartMs)}
                     className="p-2 rounded-lg border border-info/40 bg-info/10 hover:bg-info/20 cursor-pointer transition-colors flex flex-col gap-1"
                   >
                     <div className="flex items-center justify-between text-xs">
@@ -266,7 +266,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
                 .map((asset, idx) => (
                   <div
                     key={asset.artifactId || idx}
-                    onClick={() => onSeek && onSeek(asset.sourceStartMs)}
+                    onClick={() => onSeek?.(asset.sourceStartMs)}
                     className="p-2 rounded-lg border border-border-subtle/50 bg-surface-2/30 hover:bg-surface-2 cursor-pointer transition-colors flex flex-col gap-1"
                   >
                     <div className="flex items-center justify-between text-xs">

@@ -1,4 +1,4 @@
-"""Comprehensive unit and integration tests for Nina Packaging API and repository (Issue #32)."""
+"""Comprehensive unit and integration tests for Packaging API and repository."""
 
 from datetime import datetime, timezone
 import pytest

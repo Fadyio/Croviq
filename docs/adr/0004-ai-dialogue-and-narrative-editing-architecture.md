@@ -1,5 +1,7 @@
 # 0004: AI Dialogue Editing, Director/Editor Batch Review, and Natural Cut Safety
 
+*Status: Historical (Maya Director superseded; Leo Video Editor executes direct dialogue pass)*
+
 ## Context
 Video editing requires both high-level semantic understanding (identifying rambling, false starts, repetitive explanations, filler words, narrative pacing) and frame/sample-accurate cut execution. Relying purely on raw multimodal LLM timestamp estimates causes jarring audio cutoffs, clipped words, and unnatural visual jump cuts. Conversely, asking creators to approve every single filler word removal creates overwhelming friction and defeats the autonomous production vision.
 

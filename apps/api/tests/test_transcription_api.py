@@ -493,3 +493,57 @@ def test_get_transcription_service_resolves_gemini_provider(monkeypatch: pytest.
     assert service.model == "gemini-3.5-transcribe-preview"
     set_transcription_service(None)
     get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage_status", [
+    ProductionStatus.UPLOADED,
+    "analyzing",
+    "analyzed",
+    "ready",
+    "completed",
+])
+async def test_transcribe_idempotent_across_all_production_stages(
+    app_and_deps,
+    test_user: User,
+    stage_status: str,
+):
+    """Verify re-requesting transcription returns cached transcript regardless of later production stage."""
+    client, _, prod_repo, transcript_repo, fake_stt, _ = app_and_deps
+    pid = f"prod_idempotent_{stage_status}"
+    prod = make_uploaded_production(
+        test_user,
+        production_id=pid,
+        upload_id=f"upl_{stage_status}",
+        filename="demo.mp4",
+        content_type="video/mp4",
+    )
+    # Simulate advanced production stage
+    if stage_status in ProductionStatus.__members__.values():
+        prod = prod.model_copy(update={"status": stage_status})
+    await prod_repo.create_production(prod)
+
+    # Pre-seed existing transcript
+    now = datetime.now(timezone.utc)
+    transcript = Transcript(
+        transcript_id=f"tr_{pid}",
+        production_id=pid,
+        duration_ms=10000,
+        language_code="en-US",
+        words=[
+            TranscriptWord(index=0, text="Hello", start_ms=0, end_ms=500, confidence=0.99),
+            TranscriptWord(index=1, text="world", start_ms=600, end_ms=1000, confidence=0.99),
+        ],
+        created_at=now,
+    )
+    await transcript_repo.save_transcript(transcript)
+
+    # Request transcription
+    resp = client.post(f"/api/productions/{pid}/transcribe")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "already_transcribed"
+    assert data["transcript_id"] == f"tr_{pid}"
+    assert data["duration_ms"] == 10000
+    # Ensure fake_stt was never invoked again
+    assert len([p for p in fake_stt.audio_paths if pid in str(p)]) == 0

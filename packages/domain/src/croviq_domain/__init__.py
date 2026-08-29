@@ -1,5 +1,6 @@
 from croviq_domain.brand_kit import BrandKit
 from croviq_domain.channel import (
+    CANONICAL_SAMPLE_CHANNEL_ID,
     Channel,
     ChannelPrivateAnalytics,
     ChannelPublicMetadata,
@@ -8,6 +9,7 @@ from croviq_domain.channel import (
     DerivedChannelFeatures,
     DerivedVideoFeatures,
     VideoPublicMetadata,
+    is_sample_channel,
 )
 from croviq_domain.edl import (
     CoverageMarker,
@@ -187,6 +189,8 @@ __all__ = [
     "Workspace",
     "ALLOWED_MEDIA_TYPES",
     "DEFAULT_SIGNED_URL_EXPIRY_SECONDS",
+    "CANONICAL_SAMPLE_CHANNEL_ID",
+    "is_sample_channel",
     "MAX_UPLOAD_SIZE_BYTES",
     "Production",
     "ProductionStatus",

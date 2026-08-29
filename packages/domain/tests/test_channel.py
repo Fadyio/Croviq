@@ -5,11 +5,13 @@ from pathlib import Path
 import sys
 import pytest
 from croviq_domain.channel import (
+    CANONICAL_SAMPLE_CHANNEL_ID,
     Channel,
     ContentPillar,
     SampleChannelFixture,
     TitleStyle,
     VideoFormat,
+    is_sample_channel,
 )
 from croviq_domain.channel_provider import (
     ChannelDataProvider,
@@ -353,3 +355,16 @@ class TestByteDeterminism:
         run1 = generate_sample_dataset().model_dump_json(indent=2)
         run2 = generate_sample_dataset().model_dump_json(indent=2)
         assert run1 == run2
+
+
+class TestSampleChannelSafety:
+    def test_is_sample_channel_helper(self) -> None:
+        """Verify canonical and legacy sample channel IDs are recognized and blocked from publish."""
+        assert is_sample_channel(CANONICAL_SAMPLE_CHANNEL_ID) is True
+        assert is_sample_channel("croviq_syn_ai_eng_01") is True
+        assert is_sample_channel("sample_tech_channel") is True
+        assert is_sample_channel("sample_custom_01") is True
+        assert is_sample_channel("croviq_syn_v2") is True
+        assert is_sample_channel("UC_real_creator_channel_123") is False
+        assert is_sample_channel("") is False
+        assert is_sample_channel(None) is False

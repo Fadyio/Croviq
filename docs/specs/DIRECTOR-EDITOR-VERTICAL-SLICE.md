@@ -1,8 +1,8 @@
 # Specification: Director + Editor Vertical Slice
 
-**Status:** Canonical Working Specification for Day 1 Implementation  
+**Status:** HISTORICAL SPECIFICATION (Superseded — Maya Director removed; canonical workflow is Alex -> Leo -> Iris)  
 **Frozen Baseline:** `Croviq — Product & Architecture Freeze (2026-08-26)`  
-**Target Milestone:** Director + Editor Hero Experience  
+**Target Milestone:** Historical Vertical Slice  
 
 ---
 

@@ -1,5 +1,7 @@
 # 0001: Deterministic Workflow Engine with Coordinator Director Agent
 
+*Status: Historical (Coordinator Director superseded by deterministic state machine + direct Alex -> Leo -> Iris agent architecture)*
+
 ## Context
 Croviq requires multi-step creator workflows (video understanding, timeline editing, packaging, QA verification, external publishing) that must be reliable, auditable, and resilient to hallucinations, while still adapting intelligently to diverse video content and creative intent. Unconstrained LLM agents risk skipping required checks, hallucinating workflow states, or violating external safety gates (e.g. publishing without human approval). Pure hardcoded orchestration lacks the flexibility to reason over unstructured footage and contextual creator preferences.
 

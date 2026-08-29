@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Check, ChevronDown, LogOut, Plus, RefreshCw, TrendingUp, X } from "lucide-react";
 import type { components } from "../api/generated";
-import alexAvatar from "../assets/agents/alex.webp";
 import { useAuth } from "../auth/AuthContext";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { AgentTeamSelector, type AgentId } from "../components/AgentTeamSelector";
@@ -34,7 +33,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
   const [isLoading, setIsLoading] = useState(true);
   const [isConnectingYt, setIsConnectingYt] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [_refreshKey, setRefreshKey] = useState(0);
   const [settingsAgentId, setSettingsAgentId] = useState<AgentId | null>(null);
   const [chatAgentId, setChatAgentId] = useState<AgentId | null>(null);
   const [channelSelectorOpen, setChannelSelectorOpen] = useState(false);
@@ -98,7 +97,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
             body: JSON.stringify({
               code,
               state,
-              redirect_uri: window.location.origin + "/app",
+              redirect_uri: `${window.location.origin}/app`,
             }),
           });
           window.history.replaceState({}, document.title, "/app");
@@ -149,6 +148,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
         if (!cancelled) {
           setDashboard(dashData);
         }
+        await loadFindings();
       } catch (reason) {
         if (!cancelled) {
           setDashboard(null);
@@ -163,15 +163,12 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
         }
       }
     };
-
     void load();
-    void loadFindings();
 
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser, period, channelMode, refreshKey, loadFindings]);
-
+  }, [firebaseUser, period, channelMode, loadFindings]);
   const startYouTubeConnect = async () => {
     if (!firebaseUser) return;
     setIsConnectingYt(true);
@@ -185,7 +182,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          redirect_uri: window.location.origin + "/app",
+          redirect_uri: `${window.location.origin}/app`,
           include_monetary: false,
         }),
       });

@@ -48,7 +48,7 @@ Unlike generic auto-cutters, silence-strippers, or opaque black-box video genera
   - Backend: Python 3.12, FastAPI, Pydantic v2 on Google Cloud Run.
   - Storage & Media: Google Cloud Storage (GCS), Firestore Native Mode, FFmpeg deterministic render pipelines.
   - Reasoning & Memory: Gemini 3.7 Flash via Google GenAI SDK, Google Agent Platform Memory Bank.
-  - Domain Language: Strictly follow `CONTEXT.md` terms (`Workspace`, `Production`, `Run`, `Editor (Leo)`, `Data Scientist (Alex)`, `QA (Iris)`, `Director (Maya)`, `Timeline`, `Transcript`, `Edit Decision List (EDL)`, `Master`, `Short`, `Approval Gate`).
+  - Domain Language: Strictly follow `CONTEXT.md` terms (`Workspace`, `Production`, `Run`, `Editor (Leo)`, `Data Scientist (Alex)`, `QA (Iris)`, `Timeline`, `Transcript`, `Edit Decision List (EDL)`, `Master`, `Short`, `Approval Gate`).
 ## Brand Commitments
 
 - **Brand Name**: Croviq
@@ -59,7 +59,6 @@ Unlike generic auto-cutters, silence-strippers, or opaque black-box video genera
   - Alex (`TrendingUp`): Statistical Intelligence & Data Scientist
   - Leo (`Scissors`): Video Editor
   - Iris (`ShieldCheck`): Quality Assurance & Compliance
-  - Maya: Director (Internal Review)
 ## Evidence on Hand
 
 - Deterministic synthetic sample channel (`croviq_syn_ai_eng_01`) with ~50k subscribers, 100 historical videos, and 18 months of realistic analytics curves (retention drops, CTR baselines).

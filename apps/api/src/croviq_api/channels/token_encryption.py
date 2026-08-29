@@ -185,8 +185,6 @@ class LocalTinkOAuthTokenEncryptor(OAuthTokenEncryptor):
         return TokenPayload.model_validate(data)
 
 
-# Alias for backward compatibility
-InvertedLocalTinkOAuthTokenEncryptor = LocalTinkOAuthTokenEncryptor
 
 _global_encryptor: OAuthTokenEncryptor | None = None
 

@@ -12,3 +12,11 @@ infra
 .venv
 __pycache__
 .pytest_cache
+test-results
+playwright-report
+screenshots
+**/tests
+*.pyc
+.coverage
+coverage
+.wrangler
