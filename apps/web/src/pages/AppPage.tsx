@@ -5,8 +5,9 @@ import type { components } from "../api/generated";
 import alexAvatar from "../assets/agents/alex.webp";
 import { useAuth } from "../auth/AuthContext";
 import { CroviqLogo } from "../components/CroviqLogo";
-import { AgentTeamSelector } from "../components/AgentTeamSelector";
-import { AlexSettingsDrawer } from "../components/dashboard/AlexSettingsDrawer";
+import { AgentTeamSelector, type AgentId } from "../components/AgentTeamSelector";
+import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
+import { AgentChatDrawer } from "../components/AgentChatDrawer";
 import { AlexRail } from "../components/dashboard/AlexRail";
 import { OverviewView } from "../components/dashboard/OverviewView";
 import { WorthWatchingFindingsDrawer } from "../components/dashboard/WorthWatchingFindingsDrawer";
@@ -32,7 +33,8 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
   const [isConnectingYt, setIsConnectingYt] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsAgentId, setSettingsAgentId] = useState<AgentId | null>(null);
+  const [chatAgentId, setChatAgentId] = useState<AgentId | null>(null);
   const [channelSelectorOpen, setChannelSelectorOpen] = useState(false);
   const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
   const [evidenceModalInsight, setEvidenceModalInsight] = useState<Insight | null>(null);
@@ -352,7 +354,11 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
             <span>New Project</span>
           </button>
 
-          <AgentTeamSelector onSelect={(agentId) => onNavigateRoute?.(`/app/agents/${agentId}`)} />
+          <AgentTeamSelector
+            onChat={(agentId) => setChatAgentId(agentId)}
+            onSettings={(agentId) => setSettingsAgentId(agentId)}
+            onSelect={(agentId) => onNavigateRoute?.(`/app/agents/${agentId}`)}
+          />
 
           <div className="hidden md:flex items-center gap-3 border-l border-border-subtle pl-3">
             <span className="max-w-[130px] truncate text-xs text-text-secondary">
@@ -373,7 +379,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
 
       {/* 2. Desktop Layout: Full available width without dead right gap */}
       <div className="w-full px-4 sm:px-6 py-6">
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
           {/* Main Intelligence Workspace */}
           <main className="min-w-0 space-y-6">
             {error && (
@@ -476,8 +482,8 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
           <AlexRail
             insights={dashboard?.insights || []}
             findings={findings}
-            onOpenChat={() => onNavigateRoute?.("/app/agents/alex")}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenChat={() => setChatAgentId("alex")}
+            onOpenSettings={() => setSettingsAgentId("alex")}
             onOpenEvidence={(insight) => setEvidenceModalInsight(insight)}
             onOpenAllFindings={() => setAllFindingsDrawerOpen(true)}
           />
@@ -623,8 +629,24 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
         findings={findings}
         onClose={() => setAllFindingsDrawerOpen(false)}
       />
-      {/* Alex Settings Drawer */}
-      <AlexSettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      {/* Canonical Agent Chat Drawer */}
+      <AgentChatDrawer
+        isOpen={Boolean(chatAgentId)}
+        agentId={chatAgentId || "alex"}
+        onClose={() => setChatAgentId(null)}
+        onOpenSettings={() => {
+          const currentAid = chatAgentId || "alex";
+          setChatAgentId(null);
+          setSettingsAgentId(currentAid);
+        }}
+      />
+
+      {/* Canonical Agent Settings Drawer */}
+      <AgentSettingsDrawer
+        isOpen={Boolean(settingsAgentId)}
+        agentId={settingsAgentId || "alex"}
+        onClose={() => setSettingsAgentId(null)}
+      />
     </div>
   );
 };

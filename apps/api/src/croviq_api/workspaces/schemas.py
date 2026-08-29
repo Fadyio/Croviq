@@ -32,27 +32,45 @@ class UpdateVoiceSettingsRequest(BaseModel):
     language: str = Field(default="en-US", min_length=2)
     my_voice: VoiceReplicationConfig | None = Field(default=None, description="Optional My Voice replication configuration")
 
-class MemoryItemResponse(BaseModel):
-    """Single read-only memory entry displayed in creator Agent Settings."""
+class CreateMemoryRequest(BaseModel):
+    """Request payload for adding a new durable memory to Google Memory Bank."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    fact: str = Field(..., min_length=1, description="Durable memory, lesson, or preference statement")
+    provenance: str | None = Field(default=None, description="Optional provenance source")
 
+
+class MemoryCardResponse(BaseModel):
+    """Single canonical Memory Bank entry displayed in Agent Settings."""
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+    name: str = Field(..., description="Full resource name")
+    memory_id: str = Field(..., description="Unique memory ID")
+    fact: str = Field(..., description="Memory statement text")
+    scope: dict[str, str] = Field(default_factory=dict, description="Scope key-values")
+    provenance: str | None = Field(default=None, description="Source provenance")
+    created_at: str | None = Field(default=None, description="Creation ISO timestamp")
+    updated_at: str | None = Field(default=None, description="Update ISO timestamp")
+
+
+class MemoryItemResponse(BaseModel):
+    """Backward-compatible memory entry representation."""
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
     topic: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1)
     learned_from: str | None = Field(default=None)
 
 
 class AgentMemorySummaryResponse(BaseModel):
-    """Read-only summary of current channel memory."""
+    """Canonical summary of current Google Memory Bank records."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
     channel_title: str
-    style_guide: str
+    style_guide: str = ""
+    memories: list[MemoryCardResponse] = Field(default_factory=list)
     creator_preferences: list[str] = Field(default_factory=list)
     lessons: list[MemoryItemResponse] = Field(default_factory=list)
-
-
 class AgentSettingsResponse(BaseModel):
     """Complete Agent Settings state returned to client."""
 

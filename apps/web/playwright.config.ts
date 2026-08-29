@@ -9,7 +9,7 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:5173",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:5173",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -25,9 +25,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --port 5173",
-    url: "http://localhost:5173",
+    command: "bun run dev --host 127.0.0.1 --port 5173",
+    url: "http://127.0.0.1:5173",
     reuseExistingServer: true,
-    timeout: 120000,
+    timeout: 30000,
   },
 });

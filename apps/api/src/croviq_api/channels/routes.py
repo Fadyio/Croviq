@@ -726,6 +726,8 @@ async def process_scheduler_tick(
             scheduled_at=cfg.next_run_at,
             request_id=request_id,
         )
+        await research_repo.save_run(run)
+        await research_repo.save_findings(findings)
         total_findings += len(findings)
         executed += 1
 
@@ -737,7 +739,6 @@ async def process_scheduler_tick(
             }
         )
         await research_repo.save_config(updated_cfg)
-
     log_event(
         "research.scheduler.completed",
         request_id=request_id,

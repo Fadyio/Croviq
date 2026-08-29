@@ -666,7 +666,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     // Check Alex rail is present on the right
     await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
     await expect(page.getByRole("complementary").getByText("Data Scientist")).toBeVisible();
-    await expect(page.getByText("Worth watching")).toBeVisible();
+    await expect(page.getByText("Ideas Worth Making")).toBeVisible();
   });
 
   test("Legacy /app/performance and /app/experiments routes redirect cleanly to canonical /app", async ({
@@ -711,7 +711,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
       }
     }
   });
-  test("Worth Watching feed shows max 3 default cards and opens all findings drawer", async ({
+  test("Ideas Worth Making feed shows max 3 default cards and opens all findings drawer", async ({
     page,
   }) => {
     await signInAndGoTo(page, "/app");
@@ -729,7 +729,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
 
     // Click View all findings -> Drawer opens
     await viewAllBtn.click();
-    await expect(page.getByText("Worth Watching · Topic Radar")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Ideas Worth Making" }).last()).toBeVisible();
     await expect(page.getByText("OpenTelemetry Distributed Tracing Standards")).toBeVisible();
 
     // Close drawer

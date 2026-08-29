@@ -119,3 +119,48 @@ def test_agent_chat_history_persists(client: TestClient) -> None:
     data = hist_resp.json()
     assert data["agent_id"] == "alex"
     assert len(data["messages"]) >= 2
+
+
+def test_alex_chat_answers_simple_greeting(client: TestClient) -> None:
+    headers = {"Authorization": "Bearer creator-token"}
+    resp = client.post(
+        "/api/workspace/agents/alex/chat",
+        headers=headers,
+        json={"message": "hi"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["role"] == "assistant"
+    assert len(data["content"]) > 10
+    assert "alex" in data["content"].lower() or "channel" in data["content"].lower() or "croviq" in data["content"].lower()
+
+
+def test_alex_chat_topic_recommendation_and_prompt_override(client: TestClient) -> None:
+    headers = {"Authorization": "Bearer creator-token"}
+    # 1. Save a custom prompt override
+    custom_instruction = "When answering analytical questions, begin with EVIDENCE."
+    save_resp = client.put(
+        "/api/workspace/agent-settings/prompts/alex",
+        headers=headers,
+        json={"prompt_text": f"You are Alex. {custom_instruction}"},
+    )
+    assert save_resp.status_code == 200
+
+    # 2. Ask what to make next
+    resp = client.post(
+        "/api/workspace/agents/alex/chat",
+        headers=headers,
+        json={"message": "What should I make next?"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["role"] == "assistant"
+    assert "opportunity" in data["content"].lower() or "recommend" in data["content"].lower() or "evidence" in data["content"].lower()
+    assert any(t["tool_name"] == "channel_interest_profile_match" for t in data.get("tool_executions", []))
+
+    # 3. Reset prompt back to default
+    reset_resp = client.post(
+        "/api/workspace/agent-settings/prompts/alex/reset",
+        headers=headers,
+    )
+    assert reset_resp.status_code == 200

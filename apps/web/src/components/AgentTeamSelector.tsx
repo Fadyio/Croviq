@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, MessageSquare, Settings } from "lucide-react";
 import alexAvatar from "../assets/agents/alex.webp";
 import leoAvatar from "../assets/agents/leo.webp";
 import irisAvatar from "../assets/agents/Iris.png";
@@ -29,10 +29,17 @@ export const AGENT_IDENTITIES = {
 
 interface AgentTeamSelectorProps {
   activeAgent?: AgentId;
-  onSelect: (agent: AgentId) => void;
+  onSelect?: (agent: AgentId) => void;
+  onChat?: (agent: AgentId) => void;
+  onSettings?: (agent: AgentId) => void;
 }
 
-export const AgentTeamSelector: React.FC<AgentTeamSelectorProps> = ({ activeAgent, onSelect }) => {
+export const AgentTeamSelector: React.FC<AgentTeamSelectorProps> = ({
+  activeAgent,
+  onSelect,
+  onChat,
+  onSettings,
+}) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -42,16 +49,33 @@ export const AgentTeamSelector: React.FC<AgentTeamSelectorProps> = ({ activeAgen
         setOpen(false);
       }
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", closeOnOutsideClick);
-    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
+  const handleAgentAction = (agentId: AgentId, action: "chat" | "settings") => {
+    setOpen(false);
+    if (action === "chat") {
+      if (onSelect) onSelect(agentId);
+      else if (onChat) onChat(agentId);
+    } else if (action === "settings") {
+      if (onSettings) onSettings(agentId);
+      else if (onSelect) onSelect(agentId);
+    }
+  };
   return (
     <div className="relative" ref={rootRef}>
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-left transition-colors hover:border-border-strong hover:bg-surface-2"
+        className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-left transition-colors hover:border-border-strong hover:bg-surface-2 cursor-pointer"
         aria-label="Select production agent"
         aria-expanded={open}
         title="Production Team: Alex, Leo, Iris"
@@ -74,37 +98,70 @@ export const AgentTeamSelector: React.FC<AgentTeamSelectorProps> = ({ activeAgen
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border-strong bg-surface-2 p-1.5 shadow-2xl">
-          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+        <div
+          className="absolute right-0 top-full z-50 mt-1.5 w-72 rounded-xl border border-border-strong bg-surface-2 p-2 shadow-2xl space-y-1 animate-in fade-in zoom-in-95 duration-100"
+          role="menu"
+          data-testid="menu-team-selector"
+        >
+          <p className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
             Autonomous Production Team
           </p>
           {(Object.keys(AGENT_IDENTITIES) as AgentId[]).map((agentId) => {
             const agent = AGENT_IDENTITIES[agentId];
             const isActive = agentId === activeAgent;
             return (
-              <button
+              <div
                 key={agentId}
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  onSelect(agentId);
-                }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-surface-3 hover:text-text-primary"
-                aria-current={isActive ? "page" : undefined}
+                className={`rounded-lg p-2 transition-colors ${
+                  isActive ? "bg-surface-3/90 ring-1 ring-primary/30" : "hover:bg-surface-3/50"
+                }`}
               >
-                <img
-                  src={agent.avatar}
-                  alt=""
-                  className="h-6 w-6 rounded-full object-cover ring-1 ring-border-subtle"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block font-semibold text-text-primary">{agent.name} </span>
-                  <span className="block truncate text-[10px] text-text-muted">
-                    {agent.role} · {agent.focus}
-                  </span>
-                </span>
-                {isActive && <span className="text-[10px] font-semibold text-primary">Active</span>}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleAgentAction(agentId, "chat")}
+                  className="flex w-full items-center gap-2.5 text-left cursor-pointer rounded p-1 hover:bg-surface-2/60 transition-colors"
+                >
+                  <img
+                    src={agent.avatar}
+                    alt=""
+                    className="h-8 w-8 rounded-full object-cover ring-1 ring-border-subtle shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-xs text-text-primary">{agent.name} </span>
+                      {isActive && (
+                        <span className="text-[10px] font-semibold text-primary">Active</span>
+                      )}
+                    </div>
+                    <span className="block truncate text-[11px] text-text-muted">
+                      {agent.role} · {agent.focus}
+                    </span>
+                  </div>
+                </button>
+
+                <div className="mt-2 flex items-center gap-2 pt-1 border-t border-border-subtle/40">
+                  <button
+                    type="button"
+                    onClick={() => handleAgentAction(agentId, "chat")}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-surface-1 py-1 text-[11px] font-medium text-text-primary hover:bg-primary/20 hover:text-primary transition-colors cursor-pointer"
+                    data-testid={`btn-team-chat-${agentId}`}
+                  >
+                    <MessageSquare className="h-3 w-3 text-primary" />
+                    <span>Chat with {agent.name}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAgentAction(agentId, "settings")}
+                    className="flex items-center justify-center gap-1 rounded-md bg-surface-1 px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:bg-surface-4 hover:text-text-primary transition-colors cursor-pointer"
+                    title={`${agent.name} Settings`}
+                    data-testid={`btn-team-settings-${agentId}`}
+                  >
+                    <Settings className="h-3 w-3" />
+                    <span>Settings</span>
+                  </button>
+                </div>
+              </div>
             );
           })}
         </div>

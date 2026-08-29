@@ -1,7 +1,7 @@
 """Abstract interface for Channel Memory persistence."""
 
 from abc import ABC, abstractmethod
-from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile, TargetAgent
+from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile, MemoryRecord, TargetAgent
 
 
 class ChannelMemoryStore(ABC):
@@ -32,4 +32,39 @@ class ChannelMemoryStore(ABC):
     @abstractmethod
     async def add_lesson(self, lesson: ChannelLesson) -> ChannelLesson:
         """Persist a new ChannelLesson record for a channel."""
+        pass
+
+    @abstractmethod
+    async def delete_lesson(self, lesson_id: str, channel_id: str) -> bool:
+        """Remove a ChannelLesson from the memory store."""
+        pass
+
+    @abstractmethod
+    async def list_memories(
+        self, scope: dict[str, str] | None = None, query: str | None = None
+    ) -> list[MemoryRecord]:
+        """List MemoryRecords from the canonical Memory Bank matching optional scope and query."""
+        pass
+
+    @abstractmethod
+    async def create_memory(
+        self,
+        fact: str,
+        scope: dict[str, str],
+        display_name: str = "",
+        provenance: str | None = None,
+    ) -> MemoryRecord:
+        """Create a new MemoryRecord in the canonical Memory Bank."""
+        pass
+
+    @abstractmethod
+    async def delete_memory(self, memory_name_or_id: str) -> bool:
+        """Delete a MemoryRecord from the canonical Memory Bank by resource name or ID."""
+        pass
+
+    @abstractmethod
+    async def search_memories(
+        self, query: str, scope: dict[str, str] | None = None, limit: int = 20
+    ) -> list[MemoryRecord]:
+        """Search memory records using similarity retrieval or keyword matching."""
         pass

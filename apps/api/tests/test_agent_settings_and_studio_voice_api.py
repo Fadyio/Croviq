@@ -144,10 +144,40 @@ def test_agent_memory_read_only_endpoint(api_test_context):
     assert resp.status_code == 200
     data = resp.json()
     assert "channel_title" in data
-    assert "style_guide" in data
-    assert "creator_preferences" in data
-    assert "lessons" in data
+    assert "memories" in data
 
+
+def test_agent_memory_create_search_delete_lifecycle(api_test_context):
+    client = api_test_context["client"]
+
+    # 1. Create a memory
+    create_resp = client.post(
+        "/api/workspace/agent-settings/memory",
+        json={
+            "fact": "Use subtle background music during technical walkthroughs.",
+            "provenance": "Creator preference",
+        },
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    created_data = create_resp.json()
+    assert "memory_id" in created_data
+    assert "subtle background music" in created_data["fact"]
+    mem_id = created_data["memory_id"]
+
+    # 2. Search for memory
+    search_resp = client.post(
+        "/api/workspace/agent-settings/memory/search",
+        json={"query": "background music"},
+    )
+    assert search_resp.status_code == 200
+    results = search_resp.json()
+    assert len(results) >= 1
+    assert any("subtle background music" in r["fact"] for r in results)
+
+    # 3. Delete the memory
+    del_resp = client.delete(f"/api/workspace/agent-settings/memory/{mem_id}")
+    assert del_resp.status_code == 200
+    assert del_resp.json()["deleted"] is True
 
 def test_voice_settings_and_sample_endpoint(api_test_context):
     client = api_test_context["client"]

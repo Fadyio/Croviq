@@ -37,7 +37,9 @@ from croviq_domain.memory import (
     ChannelLesson,
     ChannelMemoryProfile,
     ChannelProfileBuilder,
+    MemoryRecord,
     TargetAgent,
+    build_memory_scope,
 )
 from croviq_domain.production import (
     ALLOWED_MEDIA_TYPES,

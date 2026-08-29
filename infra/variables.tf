@@ -127,7 +127,7 @@ variable "firestore_location" {
 variable "memory_bank_id" {
   type        = string
   description = "The identifier for the Google Agent Platform Memory Bank."
-  default     = "croviq-channel-memory"
+  default     = "9001435065032376320"
 }
 
 variable "cloud_run_service_url" {

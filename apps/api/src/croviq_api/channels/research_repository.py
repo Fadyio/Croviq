@@ -17,30 +17,29 @@ from croviq_domain.channel_intelligence import (
 
 SAMPLE_CHANNEL_ID = "croviq_syn_ai_eng_01"
 DEFAULT_RESEARCH_PROMPT = ResearchPrompt(
-    prompt_id="emerging-topics",
-    text="Find emerging AI engineering topics, model release capabilities, and developer architectures",
+    prompt_id="emerging-opportunities",
+    text="Discover high-conviction video opportunities, emerging tools, and architecture breakdowns for this channel",
     enabled=True,
     use_broad_web_search=True,
-    preferred_sources=["ai.google.dev", "cloud.google.com"],
+    preferred_sources=[],
 )
 DEFAULT_RESEARCH_PROMPTS = [
     DEFAULT_RESEARCH_PROMPT,
     ResearchPrompt(
-        prompt_id="agent-workflows",
-        text="Investigate production agent architectures, multi-turn tool evaluation, and orchestration patterns",
+        prompt_id="developer-tooling-sdks",
+        text="Investigate production developer tooling, agent evaluation benchmarks, and open-source frameworks",
         enabled=True,
         use_broad_web_search=True,
-        preferred_sources=["cloud.google.com", "github.com"],
+        preferred_sources=[],
     ),
     ResearchPrompt(
-        prompt_id="multimodal-media",
-        text="Explore real-time multimodal video processing, WebCodecs, and low-latency streaming AI tooling",
+        prompt_id="multimodal-pacing-patterns",
+        text="Explore streaming multimodal architectures, video engineering standards, and audience retention dynamics",
         enabled=True,
         use_broad_web_search=True,
-        preferred_sources=["developer.mozilla.org", "ai.google.dev"],
+        preferred_sources=[],
     ),
 ]
-
 
 def filter_findings_diversity(
     findings: list[ResearchFinding], max_per_cluster: int = 2, limit: int = 10

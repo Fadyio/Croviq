@@ -24,17 +24,19 @@ const KPI_LABELS: Record<string, string> = {
 };
 
 const formatKpiValue = (kpi: DashboardKpi): string => {
-  if (kpi.metric === "average_retention") return `${kpi.current_value.toFixed(1)}%`;
-  if (kpi.metric === "watch_time_hours") return `${compactNumber.format(kpi.current_value)} hours`;
+  const currentVal = kpi.current_value ?? (kpi as any).current ?? 0;
+  if (kpi.metric === "average_retention") return `${Number(currentVal).toFixed(1)}%`;
+  if (kpi.metric === "watch_time_hours") return `${compactNumber.format(Number(currentVal))} hours`;
   if (kpi.metric === "net_subscribers") {
-    return `${kpi.current_value >= 0 ? "+" : ""}${compactNumber.format(kpi.current_value)}`;
+    return `${Number(currentVal) >= 0 ? "+" : ""}${compactNumber.format(Number(currentVal))}`;
   }
-  return compactNumber.format(kpi.current_value);
+  return compactNumber.format(Number(currentVal));
 };
 
-const formatChange = (value: number | null): string => {
-  if (value === null) return "No comparable baseline";
-  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}% vs previous period`;
+const formatChange = (value: number | null | undefined): string => {
+  if (value === null || value === undefined || isNaN(Number(value))) return "No comparable baseline";
+  const num = Number(value);
+  return `${num >= 0 ? "+" : ""}${num.toFixed(1)}% vs previous period`;
 };
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
@@ -52,8 +54,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           className="grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-border-subtle bg-surface-1 divide-y lg:divide-y-0 lg:divide-x divide-border-subtle shadow-sm"
           aria-label="Channel KPIs"
         >
-          {dashboard.kpis.map((kpi) => (
-            <KpiCell key={kpi.metric} kpi={kpi} />
+          {dashboard.kpis.map((kpi, idx) => (
+            <KpiCell key={kpi.metric || (kpi as any).metric_name || idx} kpi={kpi} />
           ))}
         </section>
       </div>
@@ -198,7 +200,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 };
 
 const KpiCell: React.FC<{ kpi: DashboardKpi }> = ({ kpi }) => {
-  const isPositive = (kpi.change_percentage ?? 0) >= 0;
+  const changeVal = kpi.change_percentage ?? (kpi as any).delta_percentage ?? null;
+  const isPositive = (changeVal ?? 0) >= 0;
   return (
     <article className="p-4 sm:p-5 flex flex-col justify-between">
       <p className="text-xs font-medium text-text-secondary">
@@ -210,20 +213,20 @@ const KpiCell: React.FC<{ kpi: DashboardKpi }> = ({ kpi }) => {
         </p>
         <p
           className={`mt-1.5 flex items-center gap-1 text-[11px] font-medium ${
-            kpi.change_percentage === null
+            changeVal === null
               ? "text-text-muted"
               : isPositive
                 ? "text-success"
                 : "text-danger"
           }`}
         >
-          {kpi.change_percentage !== null &&
+          {changeVal !== null &&
             (isPositive ? (
               <TrendingUp className="h-3 w-3" />
             ) : (
               <TrendingDown className="h-3 w-3" />
             ))}
-          <span>{formatChange(kpi.change_percentage)}</span>
+          <span>{formatChange(changeVal)}</span>
         </p>
       </div>
     </article>

@@ -541,7 +541,7 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByRole("heading", { name: "Here's what changed" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Channel Performance" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
-    await expect(page.getByText("Worth watching")).toBeVisible();
+    await expect(page.getByText("Ideas Worth Making")).toBeVisible();
     await expect(page.getByText("Since your last upload")).toBeVisible();
     await expect(page.getByText("Active Hypothesis & Experiment")).toBeVisible();
     // DOM Regression Guards (Negative Assertions)

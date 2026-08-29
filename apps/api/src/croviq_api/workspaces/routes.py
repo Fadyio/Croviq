@@ -1,7 +1,7 @@
 """Workspace and Agent Settings API routes."""
 
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from croviq_agents.voice import StudioVoiceSynthesizer, VoiceCatalog
@@ -32,6 +32,8 @@ from croviq_api.workspaces.schemas import (
     AgentConversationHistoryResponse,
     AgentMemorySummaryResponse,
     AgentSettingsResponse,
+    CreateMemoryRequest,
+    MemoryCardResponse,
     MemoryItemResponse,
     UpdatePromptRequest,
     UpdateVoiceSettingsRequest,
@@ -45,7 +47,7 @@ from croviq_domain.agent_config import (
     VoiceSettingsConfig,
 )
 from croviq_domain.channel_provider import SampleChannelDataProvider
-from croviq_domain.memory import ChannelProfileBuilder
+from croviq_domain.memory import ChannelProfileBuilder, build_memory_scope
 from croviq_domain.user import User
 from croviq_domain.workspace import Workspace
 
@@ -196,7 +198,7 @@ async def reset_agent_prompt(
     "/workspace/agent-settings/memory",
     response_model=AgentMemorySummaryResponse,
     summary="View Agent Memory with Search",
-    description="Retrieve agent-scoped lessons and preferences from Channel Memory Bank with search filtering.",
+    description="Retrieve agent-scoped memories from Google Agent Platform Memory Bank with optional search filtering.",
 )
 async def get_agent_memory(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -208,94 +210,122 @@ async def get_agent_memory(
     channel_title = "Croviq"
     aid = (agent_id or "alex").lower()
 
+    await initialize_sample_channel_memory(memory_store)
+    
     try:
-        await initialize_sample_channel_memory(memory_store)
         profile = await memory_store.get_profile(channel_id)
-        lessons = await memory_store.get_lessons(channel_id)
         if profile and getattr(profile, "channel_name", None):
             channel_title = profile.channel_name
-        formatted_lessons = [
-            MemoryItemResponse(
-                topic=getattr(lesson, "directive", str(lesson)),
-                content=getattr(lesson, "evidence_summary", getattr(lesson, "directive", "Memory lesson")),
-                learned_from=getattr(lesson, "learned_from_production_id", "historical_analysis.mp4"),
-            )
-            for lesson in lessons
-        ]
     except Exception:
-        provider = SampleChannelDataProvider()
-        channel = await provider.get_channel()
-        profile = ChannelProfileBuilder.build_profile(channel)
-        channel_title = profile.channel_name
-        lessons = ChannelProfileBuilder.build_lessons(channel)
-        formatted_lessons = [
-            MemoryItemResponse(
-                topic=getattr(lesson, "directive", str(lesson)),
-                content=getattr(lesson, "evidence_summary", getattr(lesson, "directive", "Memory lesson")),
-                learned_from=getattr(lesson, "learned_from_production_id", "historical_analysis.mp4"),
-            )
-            for lesson in lessons
-        ]
+        pass
 
-    # Agent-specific knowledge enrichment
-    if aid == "alex":
-        style_guide = "Evidence-first quantitative statistical analysis with falsifiable hypotheses and regression baselines."
-        prefs = [
-            "Prefers 30-second early demonstrations to maximize viewer retention.",
-            "Track net subscriber conversion per 1,000 views across all content pillars.",
-            "Deduplicate external research semantically and prioritize high-signal developer releases.",
-        ]
-        if not any("demonstration" in l.topic.lower() for l in formatted_lessons):
-            formatted_lessons.insert(
-                0,
-                MemoryItemResponse(
-                    topic="Early demonstration timing tracks viewer retention",
-                    content="Videos with technical terminal demonstrations in the first 30 seconds average 58.4% retention.",
-                    learned_from="100-video historical channel dataset",
-                ),
-            )
-    elif aid == "iris":
-        style_guide = "Broadcast-grade quality verification adhering to strict audio loudness and caption timing standards."
-        prefs = [
-            "Target dialogue loudness at -16 LUFS (±1 LUFS) with -1 dBTP ceiling.",
-            "Zero tolerance for caption drift exceeding 100ms from speech onset.",
-            "Enforce strict human confirmation before external YouTube publishing.",
-        ]
-        formatted_lessons = [
-            MemoryItemResponse(
-                topic="Audio Loudness & Ceiling Compliance",
-                content="Master renders must meet EBU R128 / ITU-R BS.1770 standards at -16.0 LUFS.",
-                learned_from="Broadcast QA specification",
-            ),
-            MemoryItemResponse(
-                topic="Caption Boundary Synchronization",
-                content="Word-level timestamps must match speech start times within 50ms to prevent perceptual lag.",
-                learned_from="Viewer accessibility benchmarks",
-            ),
-        ]
-    else:
-        style_guide = "Concise, high-momentum narrative pacing eliminating filler speech and dead air."
-        prefs = [
-            "Remove conversational preambles ('So basically', 'Um') while keeping natural rhythm.",
-            "Apply room-tone bridges and visual B-roll coverage across dialogue cuts.",
-        ]
+    try:
+        records = await memory_store.list_memories(
+            scope={"channel_id": channel_id},
+            query=query,
+        )
+    except Exception:
+        records = []
 
-    # Filter by query if provided
-    if query and query.strip():
-        q = query.strip().lower()
-        formatted_lessons = [
-            item for item in formatted_lessons
-            if q in item.topic.lower() or q in item.content.lower() or (item.learned_from and q in item.learned_from.lower())
-        ]
-        prefs = [p for p in prefs if q in p.lower()]
+    memory_cards = [
+        MemoryCardResponse(
+            name=r.name,
+            memory_id=r.memory_id,
+            fact=r.fact,
+            scope=r.scope,
+            provenance=r.provenance,
+            created_at=r.created_at.isoformat() if r.created_at else None,
+            updated_at=r.updated_at.isoformat() if r.updated_at else None,
+        )
+        for r in records
+    ]
 
     return AgentMemorySummaryResponse(
         channel_title=channel_title,
-        style_guide=style_guide,
-        creator_preferences=prefs,
-        lessons=formatted_lessons,
+        style_guide="Evidence-first quantitative statistical analysis",
+        memories=memory_cards,
+        creator_preferences=[],
+        lessons=[],
     )
 
+
+@router.post(
+    "/workspace/agent-settings/memory",
+    response_model=MemoryCardResponse,
+    summary="Add Memory to Google Memory Bank",
+    description="Add a new durable memory, directive, or preference to Google Memory Bank.",
+)
+async def add_agent_memory(
+    payload: CreateMemoryRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
+    agent_id: str | None = None,
+) -> MemoryCardResponse:
+    channel_id = "croviq_syn_ai_eng_01"
+    scope = build_memory_scope(channel_id=channel_id, agent_id=agent_id)
+    record = await memory_store.create_memory(
+        fact=payload.fact,
+        scope=scope,
+        provenance=payload.provenance or "Creator Added",
+    )
+    return MemoryCardResponse(
+        name=record.name,
+        memory_id=record.memory_id,
+        fact=record.fact,
+        scope=record.scope,
+        provenance=record.provenance,
+        created_at=record.created_at.isoformat() if record.created_at else None,
+        updated_at=record.updated_at.isoformat() if record.updated_at else None,
+    )
+
+
+@router.delete(
+    "/workspace/agent-settings/memory/{memory_id:path}",
+    summary="Delete Memory from Google Memory Bank",
+    description="Permanently delete a memory record from Google Memory Bank.",
+)
+async def delete_agent_memory(
+    memory_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
+) -> dict[str, Any]:
+    deleted = await memory_store.delete_memory(memory_id)
+    if not deleted:
+        # Also try deleting as lesson if it was a lesson ID
+        await memory_store.delete_lesson(memory_id, "croviq_syn_ai_eng_01")
+    return {"deleted": True, "memory_id": memory_id}
+
+
+@router.post(
+    "/workspace/agent-settings/memory/search",
+    response_model=list[MemoryCardResponse],
+    summary="Search Google Memory Bank",
+    description="Search Google Memory Bank entries by semantic query or keyword.",
+)
+async def search_agent_memory(
+    payload: dict[str, str],
+    current_user: Annotated[User, Depends(get_current_user)],
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
+    agent_id: str | None = None,
+) -> list[MemoryCardResponse]:
+    channel_id = "croviq_syn_ai_eng_01"
+    query = payload.get("query", "")
+    records = await memory_store.search_memories(
+        query=query,
+        scope={"channel_id": channel_id},
+    )
+    return [
+        MemoryCardResponse(
+            name=r.name,
+            memory_id=r.memory_id,
+            fact=r.fact,
+            scope=r.scope,
+            provenance=r.provenance,
+            created_at=r.created_at.isoformat() if r.created_at else None,
+            updated_at=r.updated_at.isoformat() if r.updated_at else None,
+        )
+        for r in records
+    ]
 
 @router.get(
     "/workspace/agent-settings/voice",

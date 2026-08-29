@@ -1,0 +1,385 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertCircle,
+  Brain,
+  Code,
+  LineChart,
+  Loader2,
+  Send,
+  Settings,
+  Sparkles,
+  User,
+  Wrench,
+  X,
+} from "lucide-react";
+import { useAuth } from "../auth/AuthContext";
+import { AGENT_IDENTITIES, type AgentId } from "./AgentTeamSelector";
+
+interface ToolExecution {
+  tool_name: string;
+  goal?: string;
+  result?: unknown;
+  explanation?: string;
+  [key: string]: unknown;
+}
+
+interface ChatMessage {
+  message_id: string;
+  role: "user" | "assistant";
+  content: string;
+  tool_executions?: ToolExecution[];
+  structured_artifact?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+interface AgentChatDrawerProps {
+  isOpen: boolean;
+  agentId: AgentId;
+  onClose: () => void;
+  onOpenSettings?: () => void;
+}
+
+const STARTER_PROMPTS: Record<AgentId, string[]> = {
+  alex: [
+    "How did my last video perform?",
+    "Calculate the correlation between demo timing and retention.",
+    "What if I upload every week for the next 90 days?",
+    "What should my next video be about and why?",
+  ],
+  leo: [
+    "Where is the strongest hook in this footage?",
+    "Can you make this dialogue tighter?",
+    "Why did you flag the cut at 00:42?",
+  ],
+  iris: [
+    "Is this video ready for release?",
+    "Check audio loudness and continuity again.",
+    "Why did you flag the captions in chapter 2?",
+  ],
+};
+
+export const AgentChatDrawer: React.FC<AgentChatDrawerProps> = ({
+  isOpen,
+  agentId,
+  onClose,
+  onOpenSettings,
+}) => {
+  const { firebaseUser } = useAuth();
+  const agent = AGENT_IDENTITIES[agentId];
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputMessage, setInputMessage] = useState("");
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const getAuthHeaders = useCallback(async () => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (firebaseUser) {
+      const token = await firebaseUser.getIdToken();
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  }, [firebaseUser]);
+
+  const loadHistory = useCallback(async () => {
+    if (!isOpen || !firebaseUser) return;
+    setIsLoadingHistory(true);
+    setError(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/workspace/agents/${agentId}/chat`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data.messages || []);
+      }
+    } catch {
+      // Non-blocking history load
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [agentId, firebaseUser, getAuthHeaders, isOpen]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  useEffect(() => {
+    if (isOpen) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isSending, isOpen]);
+
+  // Escape key handler
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  const sendMessage = async (textToSend?: string) => {
+    const text = (textToSend || inputMessage).trim();
+    if (!text || isSending || !firebaseUser) return;
+
+    setInputMessage("");
+    setIsSending(true);
+    setError(null);
+
+    const tempUserMsg: ChatMessage = {
+      message_id: `temp_${Date.now()}`,
+      role: "user",
+      content: text,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempUserMsg]);
+
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/workspace/agents/${agentId}/chat`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ message: text }),
+      });
+      if (!res.ok) {
+        throw new Error("Agent message failed to send");
+      }
+      const assistantMsg: ChatMessage = await res.json();
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to communicate with agent");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void sendMessage();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="agent-chat-title"
+      data-testid="agent-chat-drawer"
+    >
+      <div className="flex h-full w-full max-w-2xl flex-col border-l border-border-subtle bg-surface-1 shadow-2xl text-text-primary">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border-subtle px-6 py-4">
+          <div className="flex items-center gap-3">
+            <img
+              src={agent.avatar}
+              alt={agent.name}
+              className="h-10 w-10 rounded-full object-cover ring-2 ring-primary/20"
+            />
+            <div>
+              <h2 id="agent-chat-title" className="text-base font-semibold text-text-primary">
+                Chat with {agent.name}
+              </h2>
+              <p className="text-xs text-text-muted">{agent.role} · Autonomous Partner</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer"
+                title="Open settings"
+                data-testid="btn-chat-settings-shortcut"
+              >
+                <Settings className="h-3.5 w-3.5" />
+                <span>Settings</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary cursor-pointer"
+              aria-label="Close chat"
+              data-testid="btn-close-chat"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Messages Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {isLoadingHistory ? (
+            <div className="flex h-48 items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center text-center space-y-4 py-8">
+              <img
+                src={agent.avatar}
+                alt={agent.name}
+                className="h-16 w-16 rounded-full object-cover ring-4 ring-surface-2 shadow-lg"
+              />
+              <div>
+                <h3 className="text-sm font-semibold text-text-primary">{agent.name}</h3>
+                <p className="text-xs text-text-muted mt-1 max-w-sm">
+                  Ask quantitative questions, analyze channel retention baselines, or evaluate video opportunities.
+                </p>
+              </div>
+
+              {/* Starter Prompts */}
+              <div className="w-full max-w-md space-y-2 pt-2">
+                <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                  Suggested Prompts
+                </p>
+                {STARTER_PROMPTS[agentId].map((starter, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => void sendMessage(starter)}
+                    className="w-full rounded-xl border border-border-subtle bg-surface-2/80 p-3 text-left text-xs text-text-secondary hover:border-primary/50 hover:bg-surface-2 hover:text-text-primary transition-all cursor-pointer"
+                  >
+                    {starter}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <div
+                key={msg.message_id}
+                className={`flex gap-3 text-xs ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                }`}
+              >
+                {msg.role === "assistant" && (
+                  <img
+                    src={agent.avatar}
+                    alt={agent.name}
+                    className="h-7 w-7 rounded-full object-cover ring-1 ring-border-subtle shrink-0 mt-0.5"
+                  />
+                )}
+
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 space-y-2 ${
+                    msg.role === "user"
+                      ? "bg-primary text-white"
+                      : "bg-surface-2 border border-border-subtle text-text-primary"
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+
+                  {/* Tool Execution Badges */}
+                  {msg.tool_executions && msg.tool_executions.length > 0 && (
+                    <div className="space-y-1.5 pt-2 border-t border-border-subtle/40">
+                      {msg.tool_executions.map((tool, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-1.5 rounded-lg bg-surface-3/80 px-2.5 py-1 text-[11px] font-mono text-text-secondary"
+                        >
+                          <Wrench className="h-3 w-3 text-primary shrink-0" />
+                          <span className="font-semibold text-text-primary">
+                            {tool.tool_name}
+                          </span>
+                          {tool.goal && (
+                            <span className="truncate text-text-muted">· {tool.goal}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Structured Artifact Metric display */}
+                  {msg.structured_artifact && (
+                    <div className="mt-2 rounded-lg bg-surface-3/60 p-2.5 text-[11px] space-y-1 border border-border-subtle/30">
+                      <span className="font-semibold uppercase tracking-wider text-[10px] text-primary">
+                        Artifact: {String(msg.structured_artifact.type || "Analysis")}
+                      </span>
+                      {Boolean(msg.structured_artifact.metrics) &&
+                        typeof msg.structured_artifact.metrics === "object" && (
+                          <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-text-secondary">
+                            {Object.entries(
+                              msg.structured_artifact.metrics as Record<string, unknown>
+                            ).map(([k, v]) => (
+                              <div key={k}>
+                                <span className="text-text-muted">{k}: </span>
+                                <span className="text-text-primary font-semibold">
+                                  {String(v ?? "")}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                    </div>
+                  )}
+                </div>
+
+                {msg.role === "user" && (
+                  <div className="h-7 w-7 rounded-full bg-surface-3 flex items-center justify-center text-text-muted shrink-0 mt-0.5">
+                    <User className="h-4 w-4" />
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+
+          {isSending && (
+            <div className="flex gap-3 text-xs justify-start items-center">
+              <img
+                src={agent.avatar}
+                alt={agent.name}
+                className="h-7 w-7 rounded-full object-cover ring-1 ring-border-subtle shrink-0"
+              />
+              <div className="flex items-center gap-2 rounded-2xl bg-surface-2 border border-border-subtle px-4 py-2.5 text-text-muted">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                <span>{agent.name} is analyzing...</span>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="mx-6 mb-2 flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3.5 py-2 text-xs text-red-400">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Input Footer */}
+        <div className="border-t border-border-subtle p-4 bg-surface-1">
+          <div className="relative flex items-end rounded-xl border border-border-subtle bg-surface-2 focus-within:border-primary transition-colors">
+            <textarea
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={2}
+              placeholder={`Ask ${agent.name} a question... (Enter to send, Shift+Enter for new line)`}
+              className="w-full resize-none bg-transparent p-3 pr-12 text-xs text-text-primary outline-none placeholder:text-text-muted"
+              data-testid="input-chat-message"
+            />
+            <button
+              type="button"
+              onClick={() => void sendMessage()}
+              disabled={!inputMessage.trim() || isSending}
+              className="absolute bottom-2.5 right-2.5 rounded-lg bg-primary p-2 text-white hover:bg-primary-hover transition-colors disabled:opacity-40 cursor-pointer"
+              aria-label="Send message"
+              data-testid="btn-send-chat"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

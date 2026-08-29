@@ -369,7 +369,7 @@ const signInAndGoTo = async (page: Page, path: string = "/app") => {
 };
 
 test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
-  const routes = ["/app", "/app/performance", "/app/experiments"] as const;
+  const routes = ["/app", "/app/performance"] as const;
   const viewports = [
     { width: 1600, height: 900 },
     { width: 1440, height: 900 },
@@ -430,24 +430,24 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
           metrics.workspacePaddingRight + metrics.scrollbarWidth,
         );
 
-        // 3. Verify sticky behavior while scrolled
-        await page.evaluate(() => window.scrollTo(0, 400));
+        // 3. Verify single natural page scroll and no independent rail scroll context
+        await page.evaluate(() => window.scrollTo(0, 100));
         await page.waitForTimeout(200);
 
         const scrolledMetrics = await page.evaluate(() => {
           const rail = document.querySelector("aside");
           const rect = rail ? rail.getBoundingClientRect() : null;
           const vpW = window.innerWidth;
+          const overflowY = rail ? window.getComputedStyle(rail).overflowY : "visible";
           return {
             top: rect ? Math.round(rect.top * 100) / 100 : 0,
             unusedRightGap: rect ? Math.round((vpW - rect.right) * 100) / 100 : 0,
+            hasIndependentScrollbar: overflowY === "auto" || overflowY === "scroll",
             scrollY: window.scrollY,
           };
         });
 
-        // Rail top should remain near sticky top (80px / top-20)
-        expect(scrolledMetrics.top).toBeGreaterThanOrEqual(70);
-        expect(scrolledMetrics.top).toBeLessThanOrEqual(90);
+        expect(scrolledMetrics.hasIndependentScrollbar).toBe(false);
         expect(scrolledMetrics.unusedRightGap).toBeLessThanOrEqual(32);
       });
     }

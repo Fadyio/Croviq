@@ -1,6 +1,6 @@
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ExternalLink, Radio, X } from "lucide-react";
+import { ExternalLink, Sparkles, X } from "lucide-react";
 import type { components } from "../../api/generated";
 
 type ResearchFinding = components["schemas"]["ResearchFinding"];
@@ -41,21 +41,21 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
             <div className="flex items-center justify-between border-b border-border-subtle p-5">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                  <Radio className="h-4 w-4" />
+                  <Sparkles className="h-4 w-4" />
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold text-text-primary">
-                    Worth Watching · Topic Radar
+                    Ideas Worth Making
                   </h2>
                   <p className="text-xs text-text-muted">
-                    {findings.length} active research findings grounded in web search
+                    {findings.length} channel-aligned video opportunities
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg p-1.5 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors"
+                className="rounded-lg p-1.5 text-text-muted hover:bg-surface-2 hover:text-text-primary transition-colors cursor-pointer"
                 aria-label="Close research findings"
               >
                 <X className="h-4 w-4" />
@@ -70,8 +70,8 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
                   className="rounded-xl border border-border-subtle bg-surface-2/40 p-4 text-xs space-y-3"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="rounded bg-surface-3 px-2 py-0.5 text-[10px] font-medium text-text-secondary">
-                      {finding.category}
+                    <span className="rounded bg-surface-3 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                      {finding.primary_entity || finding.category}
                     </span>
                     <span className="text-[11px] text-text-muted">
                       {formatDiscoveredAgo(finding.discovered_at)}
@@ -85,7 +85,7 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
                   <p className="text-xs text-text-secondary leading-relaxed">{finding.summary}</p>
 
                   <div className="rounded-lg border-l-2 border-primary/70 bg-surface-3/50 p-3 text-xs leading-relaxed">
-                    <span className="font-semibold text-text-primary">Why it matters: </span>
+                    <span className="font-semibold text-text-primary">Why it fits: </span>
                     <span className="text-text-secondary">{finding.why_it_matters}</span>
                   </div>
 
@@ -121,11 +121,11 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
             </div>
 
             {/* Footer */}
-            <div className="border-t border-border-subtle p-4 flex justify-end">
+            <div className="border-t border-border-subtle p-4 bg-surface-1 flex justify-end">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg bg-surface-2 px-4 py-2 text-xs font-semibold text-text-primary hover:bg-surface-3 transition-colors"
+                className="rounded-lg bg-surface-2 px-4 py-2 text-xs font-semibold text-text-primary hover:bg-surface-3 transition-colors cursor-pointer"
               >
                 Close
               </button>

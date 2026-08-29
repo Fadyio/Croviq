@@ -295,3 +295,55 @@ class ChannelProfileBuilder:
                 created_at=now,
             ),
         ]
+
+
+class MemoryRecord(BaseModel):
+    """Canonical memory record representing a resource stored in Google Memory Bank."""
+
+    name: str = Field(
+        ...,
+        description="Full resource name of the memory in Google Memory Bank.",
+    )
+    memory_id: str = Field(
+        ...,
+        description="Extracted unique identifier of the memory item.",
+    )
+    fact: str = Field(
+        ...,
+        description="Readable memory fact, directive, or statement.",
+    )
+    scope: dict[str, str] = Field(
+        default_factory=dict,
+        description="Scope metadata key-values (channel_id, agent_id, workspace_id).",
+    )
+    memory_type: str = Field(
+        default="NATURAL_LANGUAGE_COLLECTION",
+        description="Google Agent Platform memory type.",
+    )
+    provenance: str | None = Field(
+        default=None,
+        description="Human-readable provenance or source citation if available.",
+    )
+    created_at: datetime | None = Field(
+        default=None,
+        description="Creation timestamp (UTC).",
+    )
+    updated_at: datetime | None = Field(
+        default=None,
+        description="Last updated timestamp (UTC).",
+    )
+
+
+def build_memory_scope(
+    *,
+    channel_id: str = "croviq_syn_ai_eng_01",
+    agent_id: str | None = None,
+    workspace_id: str | None = None,
+) -> dict[str, str]:
+    """Canonical builder for constructing Google Agent Platform Memory Bank scope key-value pairs."""
+    scope: dict[str, str] = {"channel_id": channel_id}
+    if agent_id:
+        scope["agent_id"] = agent_id.lower()
+    if workspace_id:
+        scope["workspace_id"] = workspace_id
+    return scope
