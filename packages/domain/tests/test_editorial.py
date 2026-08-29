@@ -98,7 +98,7 @@ def test_agent_activity_validation() -> None:
         production_id="prod_123",
         run_id="run_456",
         agent="Leo",
-        role="Dialogue Editor",
+        role="Video Editor",
         activity_type="proposal",
         message="Found a repeated explanation around 00:42.",
         related_decision_id="dec_01",

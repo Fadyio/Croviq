@@ -9,7 +9,7 @@ import uuid
 from fastapi import HTTPException, status
 
 from croviq_agents.client import GenAIClient
-from croviq_agents.editor import LeoDialogueEditor
+from croviq_agents.editor import LeoVideoEditor
 from croviq_api.config import get_settings
 from croviq_api.media.storage import MediaStorage
 from croviq_api.memory.store import ChannelMemoryStore
@@ -146,7 +146,7 @@ class EditorialService:
                 transcript=transcript,
                 media_metadata=analysis_input.media_metadata,
             )
-            raw_proposal, _usage, leo_activities = await LeoDialogueEditor(
+            raw_proposal, _usage, leo_activities = await LeoVideoEditor(
                 client=self._genai_client
             ).analyze(
                 analysis_input=analysis_input,

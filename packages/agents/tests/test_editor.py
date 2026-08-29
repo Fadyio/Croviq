@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import pytest
 
 from croviq_agents.client import FakeGenAIClient
-from croviq_agents.editor import LeoDialogueEditor
+from croviq_agents.editor import LeoVideoEditor
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.production import SourceMedia, SourceMediaStatus
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
@@ -90,7 +90,7 @@ def _sample_analysis_input() -> SourceVideoAnalysisInput:
 @pytest.mark.asyncio
 async def test_leo_dialogue_editor_generates_proposal_and_activities() -> None:
     fake_client = FakeGenAIClient()
-    editor = LeoDialogueEditor(client=fake_client)
+    editor = LeoVideoEditor(client=fake_client)
     analysis_input = _sample_analysis_input()
 
     proposal, usage, activities = await editor.analyze(
@@ -125,7 +125,7 @@ async def test_leo_dialogue_editor_generates_proposal_and_activities() -> None:
 @pytest.mark.asyncio
 async def test_leo_video_editor_self_review_render() -> None:
     fake_client = FakeGenAIClient()
-    editor = LeoDialogueEditor(client=fake_client)
+    editor = LeoVideoEditor(client=fake_client)
     analysis_input = _sample_analysis_input()
 
     proposal, _, _ = await editor.analyze(
