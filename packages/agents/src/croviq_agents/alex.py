@@ -797,6 +797,20 @@ class AlexDataScientist:
                 "opportunity_score": 0.89,
                 "citations": [
                     SourceCitation(
+                        url="https://news.ycombinator.com/item?id=39501234",
+                        title="Discussion: Failure Modes and Evaluation in Production Agent Swarms — Hacker News",
+                        domain="news.ycombinator.com",
+                        published_at=None,
+                        grounding_metadata={"source": "hacker_news"},
+                    ),
+                    SourceCitation(
+                        url="https://github.com/langchain-ai/langgraph",
+                        title="LangGraph: Build Resilient Agentic Workflows — GitHub",
+                        domain="github.com",
+                        published_at=None,
+                        grounding_metadata={"source": "github_repo"},
+                    ),
+                    SourceCitation(
                         url="https://cloud.google.com/products/agent-builder",
                         title="Google Cloud Agent Builder and Evaluation Standards",
                         domain="cloud.google.com",
@@ -816,6 +830,20 @@ class AlexDataScientist:
                 "freshness_score": 0.92,
                 "opportunity_score": 0.90,
                 "citations": [
+                    SourceCitation(
+                        url="https://www.reddit.com/r/LocalLLaMA/comments/1ai_vision_benchmarks",
+                        title="Community Benchmarks: Low-Latency Multimodal Frame Analysis — r/LocalLLaMA",
+                        domain="reddit.com",
+                        published_at=None,
+                        grounding_metadata={"source": "reddit_community"},
+                    ),
+                    SourceCitation(
+                        url="https://github.com/ggerganov/llama.cpp",
+                        title="llama.cpp: Fast Multimodal and LLM Inference in C/C++ — GitHub",
+                        domain="github.com",
+                        published_at=None,
+                        grounding_metadata={"source": "github_repo"},
+                    ),
                     SourceCitation(
                         url="https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API",
                         title="WebCodecs API Standards — MDN Web Docs",
