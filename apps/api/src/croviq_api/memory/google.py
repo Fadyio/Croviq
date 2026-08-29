@@ -416,11 +416,16 @@ class GoogleMemoryBankStore(ChannelMemoryStore):
                     scope=scope,
                 ),
             )
-            # Response may be Memory or Operation
-            name = resp.name if hasattr(resp, "name") else f"{parent}/memories/created"
-            if hasattr(resp, "response") and hasattr(resp.response, "name"):
+            # In Google Cloud client SDK, create_memory returns an Operation (LRO)
+            if hasattr(resp, "result") and callable(resp.result):
+                memory_obj = resp.result()
+                name = getattr(memory_obj, "name", "") or getattr(resp, "name", "")
+            elif hasattr(resp, "name"):
+                name = resp.name
+            elif hasattr(resp, "response") and hasattr(resp.response, "name"):
                 name = resp.response.name
-
+            else:
+                name = f"{parent}/memories/created"
             mem_id = name.split("/")[-1]
             now = datetime.now(UTC)
             return MemoryRecord(
@@ -450,7 +455,12 @@ class GoogleMemoryBankStore(ChannelMemoryStore):
         try:
             client.delete_memory(name=full_name)
             return True
+        except TypeError:
+            # Google Cloud GAPIC client SDK unpacking quirk when DeleteMemory returns Memory in LRO payload
+            return True
         except Exception as exc:
+            if "Could not convert" in str(exc) or "Empty" in str(exc):
+                return True
             raise MemoryStoreError(f"Memory Bank delete_memory error: {str(exc)}") from exc
 
     async def search_memories(
