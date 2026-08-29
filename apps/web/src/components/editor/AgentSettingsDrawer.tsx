@@ -423,7 +423,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
             type="button"
             onClick={onClose}
             className="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary cursor-pointer"
-            aria-label="Close drawer"
+            aria-label="Close"
             data-testid="btn-close-settings"
           >
             <X className="h-5 w-5" />
@@ -444,7 +444,6 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
           >
             Prompt
           </button>
-
           <button
             type="button"
             onClick={() => setActiveTab("memory")}
@@ -940,9 +939,8 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                 </div>
               )}
 
-              {/* TAB 4: VOICE (Leo only) */}
               {activeTab === "voice" && voiceSettings && (
-                <div className="space-y-6">
+                <div className="space-y-6" data-testid="settings-voice-view">
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="text-sm font-semibold text-text-primary">
@@ -995,6 +993,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                               cur ? { ...cur, narration_mode: m.id as any } : cur,
                             )
                           }
+                          data-testid={`voice-mode-${m.id}`}
                           className={`rounded-xl border p-3 text-left transition-colors cursor-pointer ${
                             voiceSettings.narration_mode === m.id
                               ? "border-primary bg-primary/10"
@@ -1012,7 +1011,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
 
                   {/* Voice Picker */}
                   {voiceSettings.narration_mode === "studio_voice" && (
-                    <div className="space-y-3">
+                    <div className="space-y-3" data-testid="voice-selector-dropdown">
                       <label className="block text-xs font-semibold text-text-primary">
                         Select Studio Voice
                       </label>
@@ -1039,6 +1038,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                                 type="button"
                                 onClick={() => handlePreviewVoice(v.voice_id)}
                                 disabled={isPlayingAudio}
+                                data-testid="btn-play-voice-sample"
                                 className="rounded-lg p-1.5 text-text-muted hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer"
                                 title="Preview voice sample"
                               >

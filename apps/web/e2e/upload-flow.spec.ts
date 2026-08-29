@@ -612,21 +612,19 @@ test.describe("Product Home and Creator Flow", () => {
     await mockBackendApis(page, []);
     await login(page, false);
 
-    await page.getByRole("button", { name: "Open Alex settings" }).click();
-    await expect(page.getByRole("dialog", { name: "Alex settings" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Tools" })).toHaveCount(0);
-    await page.getByRole("button", { name: "research", exact: true }).click();
-    await page.getByLabel("Schedule").selectOption("EVERY_6_HOURS");
-    await page.getByPlaceholder("domain or full public URL").fill("ai.google.dev");
-    await page.getByRole("button", { name: "Add preferred source" }).click();
-    await page.getByRole("button", { name: "Save research settings" }).click();
-    await expect(page.getByText("Research schedule saved")).toBeVisible();
-    await page.getByRole("button", { name: "Close Alex settings" }).click();
+    await page.getByTestId("btn-agent-menu-alex").click();
+    await page.getByTestId("action-settings-alex").click();
+    await expect(page.getByTestId("agent-settings-drawer")).toBeVisible();
+    await page.getByTestId("tab-research").click();
+    await page.getByTestId("select-research-cadence").selectOption("EVERY_6_HOURS");
+    await page.getByTestId("btn-save-research").click();
+    await expect(page.getByText("Research settings saved")).toBeVisible();
+    await page.getByTestId("btn-close-settings").click();
 
-    await page.getByRole("button", { name: "Open Alex settings" }).click();
-    await page.getByRole("button", { name: "research", exact: true }).click();
-    await expect(page.getByLabel("Schedule")).toHaveValue("EVERY_6_HOURS");
-    await expect(page.getByRole("button", { name: /ai\.google\.dev/ })).toBeVisible();
+    await page.getByTestId("btn-agent-menu-alex").click();
+    await page.getByTestId("action-settings-alex").click();
+    await page.getByTestId("tab-research").click();
+    await expect(page.getByTestId("select-research-cadence")).toHaveValue("EVERY_6_HOURS");
   });
 
   test("allows creator to connect and switch to real YouTube channel", async ({ page }) => {

@@ -41,8 +41,7 @@ test.describe("Web Application Smoke", () => {
     });
 
     // Navigate to local web frontend
-    const targetUrl = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:5173";
-    const response = await page.goto(targetUrl, { waitUntil: "networkidle" });
+    const response = await page.goto("/", { waitUntil: "networkidle" });
 
     // Assert page reached and returned successful HTTP status
     expect(response, "Expected non-null response from web server").not.toBeNull();

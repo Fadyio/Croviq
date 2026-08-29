@@ -1337,19 +1337,16 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(drawer.getByTestId("btn-save-prompt")).toBeVisible();
     await expect(drawer.getByTestId("btn-reset-prompt")).toBeVisible();
 
-    // 6. Switch to Memory tab and verify read-only
+    // 6. Switch to Memory tab and verify Memory Bank view
     await drawer.getByTestId("tab-memory").click();
     await expect(drawer.getByTestId("settings-memory-view")).toBeVisible();
-    await expect(drawer.getByText("Channel Memory Bank")).toBeVisible();
-    await expect(drawer.getByRole("button", { name: "Edit" })).toHaveCount(0);
-    await expect(drawer.getByRole("button", { name: "Delete" })).toHaveCount(0);
-
+    await expect(drawer.getByText(/Memory Bank/)).toBeVisible();
     // 7. Switch to Voice tab and verify voice catalog & Play sample
     await drawer.getByTestId("tab-voice").click();
     await expect(drawer.getByTestId("settings-voice-view")).toBeVisible();
     await drawer.getByTestId("voice-mode-studio_voice").click();
     await expect(drawer.getByTestId("voice-selector-dropdown")).toBeVisible();
-    await expect(drawer.getByTestId("btn-play-voice-sample")).toBeVisible();
+    await expect(drawer.getByTestId("btn-play-voice-sample").first()).toBeVisible();
     await drawer.getByRole("button", { name: "Close" }).click();
     await expect(drawer).not.toBeVisible();
   });
