@@ -14,7 +14,22 @@ from croviq_api.workspaces.agent_config_repository import (
 )
 from croviq_api.workspaces.logging import log_workspace_event
 from croviq_api.workspaces.repository import WorkspaceRepository, get_workspace_repository
+from croviq_api.channels.research_repository import (
+    ResearchRepository,
+    get_research_repository,
+)
+from croviq_api.channels.youtube_repository import (
+    YouTubeConnectionRepository,
+    get_youtube_connection_repository,
+)
+from croviq_api.workspaces.chat_service import (
+    AgentChatService,
+    get_conversation_history,
+)
 from croviq_api.workspaces.schemas import (
+    AgentChatMessageRequest,
+    AgentChatMessageResponse,
+    AgentConversationHistoryResponse,
     AgentMemorySummaryResponse,
     AgentSettingsResponse,
     MemoryItemResponse,
@@ -289,3 +304,62 @@ async def get_voice_sample_endpoint(
         voice_id=payload.voice_id,
         sample_text=payload.sample_text,
     )
+
+
+@router.get(
+    "/workspace/agents/{agent_id}/chat",
+    response_model=AgentConversationHistoryResponse,
+    summary="Get Agent Conversation History",
+)
+async def get_agent_chat_history(
+    agent_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+) -> AgentConversationHistoryResponse:
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    history = get_conversation_history(workspace.workspace_id, agent_id)
+    return AgentConversationHistoryResponse(
+        agent_id=agent_id.lower(),
+        messages=[AgentChatMessageResponse.model_validate(m) for m in history],
+    )
+
+
+@router.post(
+    "/workspace/agents/{agent_id}/chat",
+    response_model=AgentChatMessageResponse,
+    summary="Send Message to Agent Workspace Chat",
+)
+async def send_agent_chat_message(
+    agent_id: str,
+    payload: AgentChatMessageRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
+    youtube_repo: Annotated[YouTubeConnectionRepository, Depends(get_youtube_connection_repository)],
+    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
+) -> AgentChatMessageResponse:
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
+    aid = agent_id.lower()
+    if aid not in {"alex", "leo", "iris"}:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent '{agent_id}' is not an active production agent",
+        )
+
+    service = AgentChatService(
+        workspace_id=workspace.workspace_id,
+        agent_config_repo=agent_config_repo,
+        memory_store=memory_store,
+        youtube_repo=youtube_repo,
+        research_repo=research_repo,
+    )
+
+    if aid == "alex":
+        result = await service.handle_alex_message(payload.message)
+    elif aid == "leo":
+        result = await service.handle_leo_message(payload.message)
+    else:
+        result = await service.handle_iris_message(payload.message)
+
+    return AgentChatMessageResponse.model_validate(result)

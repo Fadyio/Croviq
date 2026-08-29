@@ -248,6 +248,116 @@ const mockBackendApis = async (page: Page) => {
     });
   });
 
+  const chatHistory: Record<string, Record<string, unknown>[]> = {
+    alex: [],
+    leo: [],
+    iris: [],
+  };
+
+  await page.route("**/api/workspace/agents/*/chat", async (route) => {
+    const url = route.request().url();
+    const match = url.match(/\/agents\/(alex|leo|iris)\/chat/);
+    const agent = match ? match[1] : "alex";
+
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          agent_id: agent,
+          messages: chatHistory[agent] || [],
+        }),
+      });
+      return;
+    }
+
+    const reqBody = route.request().postDataJSON();
+    const userText = reqBody?.message || "";
+    const userMsg = {
+      message_id: `msg_user_${Date.now()}`,
+      role: "user",
+      content: userText,
+      created_at: new Date().toISOString(),
+    };
+    chatHistory[agent].push(userMsg);
+
+    let assistantReply = "";
+    let toolExecutions: Record<string, unknown>[] = [];
+    let artifact: Record<string, unknown> | null = null;
+
+    if (agent === "alex") {
+      if (userText.toLowerCase().includes("correlation") || userText.toLowerCase().includes("calculate")) {
+        toolExecutions = [
+          {
+            tool_name: "python_code_execution",
+            goal: "Calculate Pearson correlation between demo timing and retention",
+          },
+        ];
+        artifact = {
+          type: "statistical_analysis",
+          metrics: {
+            sample_size: 100,
+            correlation_r: -0.68,
+            baseline_retention: "58.4%",
+          },
+        };
+        assistantReply =
+          "I executed the statistical correlation calculation across your 100-video history. Demonstrations starting within 00:30 correlate with +14.3% retention advantage (r = -0.68).";
+      } else {
+        toolExecutions = [
+          {
+            tool_name: "channel_analytics_inspection",
+            goal: "Query latest upload performance and subscriber conversion",
+          },
+        ];
+        artifact = {
+          type: "video_summary",
+          metrics: {
+            views: "23,314",
+            retention: "54.8%",
+            subscribers: "+303",
+          },
+        };
+        assistantReply =
+          "Your latest upload **Google GenAI SDK Tutorial (Part 5)** achieved 23,314 views with 54.8% retention and +303 subscribers.";
+      }
+    } else if (agent === "leo") {
+      toolExecutions = [
+        {
+          tool_name: "dialogue_decision_inspector",
+          goal: "Inspect timeline cuts and audio phrasing",
+        },
+      ];
+      assistantReply =
+        "I analyzed the timeline dialogue cuts. We can tighten the introduction at 00:18 and extract a high-energy vertical Short from 01:12 to 01:45.";
+    } else {
+      toolExecutions = [
+        {
+          tool_name: "quality_control_verifier",
+          goal: "Verify audio loudness (-16 LUFS) and caption timing",
+        },
+      ];
+      assistantReply =
+        "I verified the rendered master. Target loudness is -16.1 LUFS, speech captions are synchronized with zero frame gaps, and all release criteria pass.";
+    }
+
+    const assistantMsg = {
+      message_id: `msg_asst_${Date.now()}`,
+      role: "assistant",
+      content: assistantReply,
+      tool_executions: toolExecutions,
+      structured_artifact: artifact,
+      created_at: new Date().toISOString(),
+    };
+    chatHistory[agent].push(assistantMsg);
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(assistantMsg),
+    });
+  });
+
   await page.route("**/api/channels/youtube/connection", async (route) => {
     await route.fulfill({
       status: 200,
@@ -566,6 +676,75 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await page.goForward();
     await expect(page).toHaveURL(/\/app\/agents\/iris$/);
     await expect(page.getByRole("heading", { name: "Iris", exact: true })).toBeVisible();
+  });
+
+  test("agent workspaces provide real chat with tool execution telemetry, artifacts, and persistence across refresh", async ({
+    page,
+  }) => {
+    await signInAndGoTo(page, "/app");
+
+    // Open Alex chat
+    await page.getByTestId("btn-team-selector").click();
+    await page
+      .getByText("Autonomous Production Team", { exact: true })
+      .locator("..")
+      .getByRole("button", { name: /^Alex / })
+      .click();
+
+    await expect(page).toHaveURL(/\/app\/agents\/alex$/);
+    await expect(page.getByRole("heading", { name: "Alex", exact: true })).toBeVisible();
+
+    // Send analytical message
+    const chatInput = page.getByPlaceholder(/Ask Alex a question/i);
+    await chatInput.fill("How did my last video perform?");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    // Verify real agent response with tool telemetry and artifact
+    await expect(page.getByText("Google GenAI SDK Tutorial (Part 5)")).toBeVisible();
+    await expect(page.getByText("channel_analytics_inspection")).toBeVisible();
+    await expect(page.getByText("Analytical Artifact: video_summary")).toBeVisible();
+
+    // Send Python calculation query
+    await chatInput.fill("Calculate the correlation between demo timing and retention.");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect(page.getByText("python_code_execution")).toBeVisible();
+    await expect(page.getByText("correlation r")).toBeVisible();
+
+    // Refresh and verify conversation persists
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/agents\/alex$/);
+    await expect(page.getByText("python_code_execution")).toBeVisible();
+
+    // Switch to Leo
+    await page.getByTestId("btn-team-selector").click();
+    await page
+      .getByText("Autonomous Production Team", { exact: true })
+      .locator("..")
+      .getByRole("button", { name: /^Leo / })
+      .click();
+
+    await expect(page).toHaveURL(/\/app\/agents\/leo$/);
+    await expect(page.getByRole("heading", { name: "Leo", exact: true })).toBeVisible();
+    const leoInput = page.getByPlaceholder(/Ask Leo a question/i);
+    await leoInput.fill("Where is the strongest hook?");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByText("dialogue_decision_inspector")).toBeVisible();
+
+    // Switch to Iris
+    await page.getByTestId("btn-team-selector").click();
+    await page
+      .getByText("Autonomous Production Team", { exact: true })
+      .locator("..")
+      .getByRole("button", { name: /^Iris / })
+      .click();
+
+    await expect(page).toHaveURL(/\/app\/agents\/iris$/);
+    await expect(page.getByRole("heading", { name: "Iris", exact: true })).toBeVisible();
+    const irisInput = page.getByPlaceholder(/Ask Iris a question/i);
+    await irisInput.fill("Is this video ready for release?");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByText("quality_control_verifier")).toBeVisible();
   });
 
   test("transitions cleanly from sample mode to connected YouTube and isolates live metrics", async ({
