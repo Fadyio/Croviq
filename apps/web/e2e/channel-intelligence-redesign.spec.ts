@@ -198,8 +198,23 @@ const mockFirebasePasswordSignIn = async (page: Page) => {
     }
     await route.continue();
   });
-};
 
+  await page.route("**/securetoken.googleapis.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        access_token: FIREBASE_ID_TOKEN,
+        expires_in: "3600",
+        token_type: "Bearer",
+        refresh_token: "fake-refresh-token",
+        id_token: FIREBASE_ID_TOKEN,
+        user_id: "demo_user_123",
+        project_id: "croviq-506602",
+      }),
+    });
+  });
+};
 const mockBackendApis = async (page: Page) => {
   await page.route("**/api/auth/me", async (route) => {
     await route.fulfill({
@@ -249,7 +264,7 @@ const mockBackendApis = async (page: Page) => {
         channel: {
           channel_id: "croviq_syn_ai_eng_01",
           source_type: "synthetic",
-          title: "Modern AI Engineering",
+          title: "Croviq",
           description: "Sample channel",
           avatar_url: null,
           subscriber_count: 51317,
@@ -425,7 +440,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await signInAndGoTo(page, "/app");
 
     // Check header & channel title
-    await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
 
     // Check Overview tab is active
     const overviewTab = page.getByRole("button", { name: /Overview/i });
@@ -623,6 +638,107 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await page.goForward();
     await expect(page).toHaveURL(/\/app\/agents\/iris$/);
     await expect(page.getByRole("heading", { name: "Iris", exact: true })).toBeVisible();
+  });
+
+  test("transitions cleanly from sample mode to connected YouTube and isolates live metrics", async ({
+    page,
+  }) => {
+    await signInAndGoTo(page, "/app");
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+    await expect(page.getByText("51,317 subscribers")).toBeVisible();
+
+    // Route connected YouTube dashboard
+    await page.route("**/api/channels/youtube/connection", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          connected: true,
+          status: "connected",
+          channel_id: "UC_real_creator_123",
+          channel_title: "Real Creator Studio",
+          subscriber_count: 128500,
+        }),
+      });
+    });
+
+    await page.route("**/api/channels/youtube/dashboard?*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          channel: {
+            channel_id: "UC_real_creator_123",
+            source_type: "youtube",
+            title: "Real Creator Studio",
+            description: "Authentic creator channel",
+            avatar_url: null,
+            subscriber_count: 128500,
+            video_count: 42,
+          },
+          period_days: 28,
+          period_end: "2026-08-28",
+          kpis: [
+            {
+              metric: "views",
+              current_value: 88400,
+              previous_value: 71200,
+              change_percentage: 24.1,
+            },
+            {
+              metric: "watch_time_hours",
+              current_value: 6200,
+              previous_value: 5100,
+              change_percentage: 21.5,
+            },
+            {
+              metric: "net_subscribers",
+              current_value: 940,
+              previous_value: 650,
+              change_percentage: 44.6,
+            },
+            {
+              metric: "average_retention",
+              current_value: 64.2,
+              previous_value: 59.8,
+              change_percentage: 7.3,
+            },
+          ],
+          trend: [],
+          latest_video: null,
+          video_performance: [],
+          topic_clusters: [],
+          traffic_sources: [],
+          insights: [],
+          active_experiment: null,
+          proposed_experiment: null,
+          is_sample_modeled_timeseries: false,
+        }),
+      });
+    });
+
+    await page.reload();
+
+    // Verify real creator channel is active and sample numbers disappeared
+    await expect(
+      page.getByRole("heading", { name: "Real Creator Studio", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(/128.?500 subscribers/)).toBeVisible();
+    await expect(page.getByText("51,317")).not.toBeVisible();
+    await expect(page.getByText("Modern AI Engineering")).not.toBeVisible();
+
+    // Verify live error state does not silently fall back to sample numbers
+    await page.route("**/api/channels/youtube/dashboard?*", async (route) => {
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "YouTube analytics sync failed upstream" }),
+      });
+    });
+
+    await page.reload();
+    await expect(page.getByRole("alert")).toContainText("YouTube analytics sync failed upstream");
+    await expect(page.getByText("51,317")).not.toBeVisible();
   });
 
   test("New Project page includes Back button, upload card, and Recent Projects list", async ({

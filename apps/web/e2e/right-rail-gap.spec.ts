@@ -206,7 +206,7 @@ const mockBackendApis = async (page: Page) => {
         channel: {
           channel_id: "croviq_syn_ai_eng_01",
           source_type: "synthetic",
-          title: "Modern AI Engineering",
+          title: "Croviq",
           description: "Sample channel",
           avatar_url: null,
           subscriber_count: 51317,
@@ -383,7 +383,7 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
         await signInAndGoTo(page, route);
 
         if (route === "/app") {
-          await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
+          await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
         } else if (route === "/app/performance") {
           await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
         } else {
@@ -461,7 +461,7 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
   test("Capture Bug #1 verification screenshots", async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await signInAndGoTo(page, "/app");
-    await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
 
     // 1. bug01-overview-1600x900.png
@@ -492,7 +492,7 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
 
     // 6. Scrolled screenshot where sticky rail is visible
     await page.goto("/app");
-    await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, 450));
     await page.waitForTimeout(500);
     await page.screenshot({ path: "e2e/screenshots/bug01-overview-1440x900-scrolled.png" });

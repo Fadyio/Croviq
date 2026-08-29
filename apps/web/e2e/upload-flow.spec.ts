@@ -101,7 +101,7 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
         channel: {
           channel_id: "croviq_syn_ai_eng_01",
           source_type: "synthetic",
-          title: "Modern AI Engineering",
+          title: "Croviq",
           description: "Sample channel",
           avatar_url: null,
           subscriber_count: 51317,
@@ -520,7 +520,7 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(page.getByText(DEMO_EMAIL)).toBeVisible();
     await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New Project" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Modern AI Engineering" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await expect(page.getByText("Sample channel", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("51,317 subscribers · 100 videos")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Here's what changed" })).toBeVisible();

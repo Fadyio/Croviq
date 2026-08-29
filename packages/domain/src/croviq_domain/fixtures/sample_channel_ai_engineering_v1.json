@@ -11,9 +11,9 @@
     "source_type": "synthetic",
     "public": {
       "channel_id": "croviq_syn_ai_eng_01",
-      "title": "Modern AI Engineering",
+      "title": "Croviq",
       "description": "Deep-dive technical tutorials, architecture walkthroughs, and production benchmarks for AI engineers building with Gemini, Vertex AI, Cloud Run, Python, and GitHub Actions.",
-      "custom_url": "@ModernAIEngineering",
+      "custom_url": "@croviq",
       "subscriber_count": 51317,
       "video_count": 100,
       "total_views": 3501567,

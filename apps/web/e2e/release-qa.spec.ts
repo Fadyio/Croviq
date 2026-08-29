@@ -303,7 +303,7 @@ const mockReleaseApis = async (
       body: JSON.stringify({
         connected: false,
         channel_id: "croviq_syn_ai_eng_01",
-        title: "Modern AI Engineering",
+        title: "Croviq",
       }),
     });
   });

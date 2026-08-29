@@ -201,7 +201,7 @@ async def test_google_store_retrieve_profile_success() -> None:
 
     fake_profile_data = {
         "channel_id": "croviq_syn_ai_eng_01",
-        "channel_name": "Modern AI Engineering",
+        "channel_name": "Croviq",
         "primary_topics": ["AI Agents"],
         "content_pillars": ["Architecture"],
         "language": "en",
@@ -227,7 +227,7 @@ async def test_google_store_retrieve_profile_success() -> None:
         profile = await store.get_profile("croviq_syn_ai_eng_01")
         assert profile is not None
         assert profile.channel_id == "croviq_syn_ai_eng_01"
-        assert profile.channel_name == "Modern AI Engineering"
+        assert profile.channel_name == "Croviq"
 
 
 @pytest.mark.asyncio
@@ -292,7 +292,7 @@ def test_get_memory_profile_sample_channel_auto_initializes(
     assert response.status_code == 200
     data = response.json()
     assert data["channel_id"] == "croviq_syn_ai_eng_01"
-    assert data["channel_name"] == "Modern AI Engineering"
+    assert data["channel_name"] == "Croviq"
     assert len(data["primary_topics"]) > 0
     assert len(data["content_pillars"]) > 0
     assert "mean_views" in data["historical_baselines"]
