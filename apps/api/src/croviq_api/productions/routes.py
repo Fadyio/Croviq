@@ -8,6 +8,7 @@ from typing import Annotated
 import tempfile
 import time
 import uuid
+import wave
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +77,10 @@ from croviq_api.productions.schemas import (
     RenderReviewDetailResponse,
     StudioVoiceGenerationResponse,
     BRollListResponse,
-    GeneratePackagingRequest,
     PackagingDetailResponse,
     UpdatePackagingOverridesRequest,
     GenerateReleaseReviewRequest,
     ReleaseReviewDetailResponse,
-    AutoCorrectQARequest,
-    AutoCorrectQAResponse,
     PublishPreparationResponse,
     PublishRequest,
     PublishJobDetailResponse,
@@ -117,7 +115,6 @@ from croviq_api.channels.research_repository import (
 )
 from croviq_api.memory.dependencies import get_memory_store
 from croviq_api.memory.store import ChannelMemoryStore
-from croviq_agents.nina import NinaPackagingAgent
 from croviq_domain.agent_config import AgentId
 from croviq_domain.packaging import (
     CreatorPackageOverrides,
@@ -1817,10 +1814,12 @@ async def generate_studio_voice(
     synthesizer = StudioVoiceSynthesizer()
 
     # Define TTS generator and Leo narration rewrite function for fit loop
-    async def mock_tts(text: str, voice_id: str) -> tuple[int, bytes]:
-        words = len(text.split())
-        dur_ms = max(500, int(words * 360 + 100))
-        return dur_ms, b"fake_studio_voice_pcm_bytes"
+    async def tts_fn(text: str, voice_id: str) -> tuple[int, bytes]:
+        return await genai_client.synthesize_studio_voice(
+            text=text,
+            voice_id=voice_id,
+            production_id=prod.production_id,
+        )
 
     async def leo_rewrite_fn(orig_text: str, max_dur_s: float, attempt: int) -> str:
         return await genai_client.generate_narration_rewrite(
@@ -1831,7 +1830,7 @@ async def generate_studio_voice(
         )
 
     tasks = [
-        synthesizer.fit_narration_segment(
+        synthesizer.fit_narration_segment_with_audio(
             segment_id=f"seg_{idx+1:03d}",
             production_id=prod.production_id,
             source_start_ms=seg.start_ms,
@@ -1839,18 +1838,24 @@ async def generate_studio_voice(
             available_duration_ms=max(500, seg.end_ms - seg.start_ms),
             original_text=seg.text,
             voice_id=selected_voice,
-            tts_fn=mock_tts,
+            tts_fn=tts_fn,
             rewrite_fn=leo_rewrite_fn,
         )
         for idx, seg in enumerate(transcript.segments)
     ]
-    segments: list[NarrationSegment] = list(await asyncio.gather(*tasks))
+    results: list[tuple[NarrationSegment, bytes]] = list(await asyncio.gather(*tasks))
+    segments: list[NarrationSegment] = [r[0] for r in results]
     now = datetime.now(timezone.utc)
-    all_within = all(s.generated_duration_ms <= s.available_duration_ms for s in segments if s.status == NarrationSegmentStatus.ACCEPTED)
+    all_within = all(
+        s.generated_duration_ms <= s.available_duration_ms
+        for s in segments
+        if s.status == NarrationSegmentStatus.ACCEPTED
+    )
 
     # Render distinct Studio Voice Preview artifact
     edl = await edl_repo.get_latest_edl(prod.production_id)
     sv_playback_url = None
+    narration_gcs_obj: str | None = None
 
     if edl is not None and prod.source_media and prod.source_media.status == SourceMediaStatus.UPLOADED:
         try:
@@ -1866,16 +1871,34 @@ async def generate_studio_voice(
                     target_path=local_src,
                 )
 
-                # Create composite narration audio track
+                # Create composite narration audio track at 24000 Hz, 16-bit mono (matching Gemini TTS output)
+                sample_rate = 24000
                 total_dur_ms = edl.source_duration_ms or prod.source_media.duration_ms or 10000
-                num_samples = int(48000 * total_dur_ms / 1000)
-                data_size = num_samples * 2
-                with open(local_narr, "wb") as f:
-                    f.write(b"RIFF")
-                    f.write((36 + data_size).to_bytes(4, "little"))
-                    f.write(b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80\xbb\x00\x00\x00\x77\x01\x00\x02\x00\x10\x00data")
-                    f.write(data_size.to_bytes(4, "little"))
-                    f.write(b"\x00" * min(data_size, 48000))
+                num_samples = int(sample_rate * total_dur_ms / 1000)
+                audio_buffer = bytearray(num_samples * 2)
+
+                for seg, pcm_bytes in results:
+                    if seg.status == NarrationSegmentStatus.ACCEPTED and pcm_bytes:
+                        start_sample = int(sample_rate * seg.source_start_ms / 1000)
+                        start_byte = start_sample * 2
+                        end_byte = min(len(audio_buffer), start_byte + len(pcm_bytes))
+                        copy_len = end_byte - start_byte
+                        if copy_len > 0:
+                            audio_buffer[start_byte : start_byte + copy_len] = pcm_bytes[:copy_len]
+
+                with wave.open(str(local_narr), "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(sample_rate)
+                    wf.writeframes(bytes(audio_buffer))
+
+                narration_gcs_obj = f"workspaces/{workspace.workspace_id}/productions/{prod.production_id}/narration/studio_voice_narration.wav"
+                await media_storage.upload_object_from_path(
+                    bucket=prod.source_media.gcs_bucket,
+                    object_name=narration_gcs_obj,
+                    source_path=local_narr,
+                    content_type="audio/wav",
+                )
 
                 # Run deterministic studio voice preview render in worker thread
                 render_res = await asyncio.to_thread(
@@ -1931,15 +1954,24 @@ async def generate_studio_voice(
         except Exception as exc:
             logger.warning("Studio Voice render preview failed: %s", exc)
 
+    accepted_count = sum(1 for s in segments if s.status == NarrationSegmentStatus.ACCEPTED)
+    if narration_gcs_obj:
+        for s in segments:
+            if s.status == NarrationSegmentStatus.ACCEPTED:
+                s.audio_artifact_reference = narration_gcs_obj
+
+    sv_status = "completed" if (accepted_count > 0 and sv_playback_url is not None) else "failed"
     sv_result = StudioVoiceResult(
         production_id=prod.production_id,
         voice_id=selected_voice,
         narration_mode="studio_voice",
         segments=segments,
         total_segments=len(segments),
-        accepted_segments=sum(1 for s in segments if s.status == NarrationSegmentStatus.ACCEPTED),
+        accepted_segments=accepted_count,
         all_within_budget=all_within,
-        status="completed",
+        gcs_bucket=prod.source_media.gcs_bucket if (accepted_count > 0 and narration_gcs_obj) else None,
+        gcs_object=narration_gcs_obj if accepted_count > 0 else None,
+        status=sv_status,
         created_at=now,
         updated_at=now,
     )
@@ -2111,161 +2143,6 @@ async def _build_packaging_detail_response(
     )
 
 
-@router.post(
-    "/productions/{production_id}/package",
-    response_model=PackagingDetailResponse,
-    summary="Generate Packaging Proposal",
-    description="Invoke Nina (Packaging Agent) to generate title candidates, descriptions, chapters, thumbnail concepts, and Short packaging for an approved Master video.",
-)
-async def generate_packaging(
-    production_id: str,
-    request: Request,
-    payload: GeneratePackagingRequest | None = None,
-    current_user: Annotated[User, Depends(get_current_user)] = None,
-    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)] = None,
-    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)] = None,
-    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)] = None,
-    editorial_repo: Annotated[EditorialRepository, Depends(get_editorial_repository)] = None,
-    render_repo: Annotated[RenderRepository, Depends(get_render_repository)] = None,
-    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)] = None,
-    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)] = None,
-    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)] = None,
-    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)] = None,
-    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)] = None,
-    media_storage: Annotated[MediaStorage, Depends(get_media_storage)] = None,
-    genai_client: Annotated[GenAIClient, Depends(get_genai_client)] = None,
-) -> PackagingDetailResponse:
-    request_id = getattr(request.state, "request_id", "unknown")
-    force_regenerate = payload.force_regenerate if payload else False
-
-    prod = await _get_owned_production(production_id, current_user, production_repo)
-    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
-
-    # 1. Prerequisite: Master video artifact must exist and be completed
-    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
-    master_artifact = None
-    short_artifact = None
-    if latest_edl:
-        master_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
-        )
-        if not master_artifact:
-            master_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
-            )
-        short_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
-        )
-    else:
-        renders = await render_repo.list_render_artifacts(prod.production_id)
-        master_artifact = next(
-            (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
-            None,
-        )
-        if master_artifact and master_artifact.edl_id:
-            latest_edl = await edl_repo.get_edl(prod.production_id, master_artifact.edl_id)
-            short_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, master_artifact.edl_id, ArtifactType.SHORT
-            )
-
-    if not master_artifact or master_artifact.status != ArtifactStatus.completed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Master video must be rendered and completed before generating packaging.",
-        )
-    # 2. Retrieve Nina agent prompt configuration
-    nina_prompt_config = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.NINA)
-
-    # 3. Idempotency check: Return cached proposal if already generated with same Master & prompt version
-    overrides = await packaging_repo.get_package_overrides(prod.production_id)
-    if not force_regenerate:
-        latest_proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
-        if (
-            latest_proposal
-            and latest_proposal.master_artifact_id == master_artifact.artifact_id
-            and latest_proposal.prompt_version == nina_prompt_config.version
-        ):
-            return await _build_packaging_detail_response(
-                production_id=prod.production_id,
-                proposal=latest_proposal,
-                overrides=overrides,
-                master_artifact=master_artifact,
-                short_artifact=short_artifact,
-                media_storage=media_storage,
-            )
-
-    # 4. Gather transcript, chapters, editorial decisions, research, and memory
-    transcript = await transcript_repo.get_transcript_by_production_id(prod.production_id)
-    if not transcript:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Transcript not found for production {production_id}.",
-        )
-
-    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
-    latest_run = await editorial_repo.get_latest_editorial_run(prod.production_id)
-    chapters = []
-    short_candidate = None
-    if latest_run and latest_run.editor_proposal_id:
-        editor_prop = await editorial_repo.get_editor_proposal(prod.production_id, latest_run.editor_proposal_id)
-        if editor_prop:
-            short_candidate = editor_prop.short_candidate
-            if editor_prop.chapters:
-                chapters = editor_prop.chapters
-    # Channel memory profile & lessons
-    channel_profile = None
-    lessons = []
-    try:
-        channel_profile = await memory_store.get_profile(prod.channel_id)
-        if not channel_profile:
-            sample_provider = SampleChannelDataProvider()
-            c_data = await sample_provider.get_channel(prod.channel_id)
-            if c_data:
-                channel_profile, lessons = ChannelProfileBuilder.build(c_data)
-                await memory_store.save_profile(channel_profile)
-                if lessons:
-                    await memory_store.save_lessons(prod.channel_id, lessons)
-        else:
-            lessons = await memory_store.get_lessons(prod.channel_id)
-    except Exception as exc:
-        logger.warning("Could not retrieve memory profile for %s: %s", prod.channel_id, exc)
-
-    # Research findings
-    research_findings = []
-    try:
-        research_findings = await research_repo.list_findings(workspace_id=workspace.workspace_id, channel_id=prod.channel_id, limit=5)
-    except Exception as exc:
-        logger.warning("Could not retrieve research findings for %s: %s", prod.channel_id, exc)
-
-    # 5. Invoke Nina Packaging Agent
-    agent = NinaPackagingAgent(genai_client=genai_client)
-    proposal, usage = await agent.package_production(
-        production_id=prod.production_id,
-        master_artifact=master_artifact,
-        transcript=transcript,
-        channel_profile=channel_profile,
-        lessons=lessons,
-        chapters=chapters,
-        research_findings=research_findings,
-        short_candidate=short_candidate,
-        has_short_artifact=bool(short_artifact),
-        custom_prompt=nina_prompt_config.prompt_text if nina_prompt_config.is_custom else None,
-        prompt_version=nina_prompt_config.version,
-        request_id=request_id,
-    )
-
-    # 6. Persist proposal
-    await packaging_repo.save_packaging_proposal(proposal)
-
-    return await _build_packaging_detail_response(
-        production_id=prod.production_id,
-        proposal=proposal,
-        overrides=overrides,
-        master_artifact=master_artifact,
-        short_artifact=short_artifact,
-        media_storage=media_storage,
-    )
-
 
 @router.get(
     "/productions/{production_id}/packaging",
@@ -2435,14 +2312,16 @@ async def _build_release_review_response(
     ) if short_artifact else None
 
     calculated_fingerprint = None
-    if master_artifact and proposal:
+    if master_artifact:
+        pkg_id = proposal.proposal_id if proposal else "none"
+        pkg_ver = (proposal.version if hasattr(proposal, "version") else 1) if proposal else 1
         calculated_fingerprint = build_release_fingerprint(
             production_id=production_id,
             edl_id=master_artifact.edl_id,
             master_artifact_id=master_artifact.artifact_id,
             master_hash=master_artifact.sha256 or "unhashed",
-            packaging_proposal_id=proposal.proposal_id,
-            package_version=proposal.version if hasattr(proposal, "version") else 1,
+            packaging_proposal_id=pkg_id,
+            package_version=pkg_ver,
             release_review_id=review.review_id if review else None,
             short_artifact_id=short_artifact.artifact_id if short_artifact else None,
             short_hash=short_artifact.sha256 if short_artifact else None,
@@ -2453,36 +2332,28 @@ async def _build_release_review_response(
     has_packaging = bool(proposal is not None)
 
     release_ready = False
-    release_status = "Packaging"
+    release_status = "Pending review"
 
-    if not has_packaging:
-        release_status = "Packaging"
-        release_ready = False
-    elif not review:
-        release_status = "Checking final output"
+    if not review:
+        release_status = "Pending review"
         release_ready = False
     else:
         is_pass = review.verdict == ReleaseVerdict.PASS
         approved = review.approved_for_release
         matching_master = bool(master_artifact and review.master_artifact_id == master_artifact.artifact_id)
-        matching_pkg = bool(proposal and review.packaging_proposal_id == proposal.proposal_id)
-        package_ver_valid = bool(proposal and review.package_version >= (proposal.version if hasattr(proposal, "version") else 1))
         matching_short = bool(
             (not has_short and not review.short_artifact_id)
             or (has_short and short_artifact and review.short_artifact_id == short_artifact.artifact_id)
         )
         fingerprint_valid = bool(
-            review.release_fingerprint is None or review.release_fingerprint == calculated_fingerprint
+            review.release_fingerprint is None or calculated_fingerprint is None or review.release_fingerprint == calculated_fingerprint
         )
 
         release_ready = bool(
             has_master
-            and has_packaging
             and is_pass
             and approved
             and matching_master
-            and matching_pkg
-            and package_ver_valid
             and matching_short
             and fingerprint_valid
         )
@@ -2497,7 +2368,6 @@ async def _build_release_review_response(
             release_status = "Manual review"
         else:
             release_status = "Checking final output"
-
     return ReleaseReviewDetailResponse(
         production_id=production_id,
         review=review,
@@ -2576,12 +2446,6 @@ async def generate_release_review(
             detail="Master video must be rendered and completed before executing Iris QA review.",
         )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
-    if not proposal:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nina packaging proposal must exist before executing Iris QA review.",
-        )
-
     overrides = await packaging_repo.get_package_overrides(prod.production_id)
     render_review = await render_review_repo.get_latest_render_review(prod.production_id)
 
@@ -2665,15 +2529,15 @@ async def generate_release_review(
         request_id=request_id,
     )
 
-    # Calculate release fingerprint and bind immutable inputs
-    package_ver = proposal.version if hasattr(proposal, "version") else 1
+    package_ver = (proposal.version if hasattr(proposal, "version") else 1) if proposal else 1
+    pkg_id = proposal.proposal_id if proposal else "none"
     effective_edl_id = latest_edl.edl_id if latest_edl else master_artifact.edl_id
     fp = build_release_fingerprint(
         production_id=prod.production_id,
         edl_id=effective_edl_id,
         master_artifact_id=master_artifact.artifact_id,
         master_hash=master_artifact.sha256 or "unhashed",
-        packaging_proposal_id=proposal.proposal_id,
+        packaging_proposal_id=pkg_id,
         package_version=package_ver,
         release_review_id=review.review_id,
         short_artifact_id=short_artifact.artifact_id if short_artifact else None,
@@ -2753,158 +2617,6 @@ async def get_release_review_details(
         media_storage=media_storage,
     )
 
-
-@router.post(
-    "/productions/{production_id}/release-review/correct",
-    response_model=AutoCorrectQAResponse,
-    summary="Execute 1-Cycle QA Auto-Correction",
-    description="Perform bounded 1-cycle auto-correction routing flagged packaging/claim issues to Nina and re-evaluating with Iris.",
-)
-async def auto_correct_qa(
-    production_id: str,
-    request: Request,
-    payload: AutoCorrectQARequest | None = None,
-    current_user: Annotated[User, Depends(get_current_user)] = None,
-    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)] = None,
-    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)] = None,
-    render_repo: Annotated[RenderRepository, Depends(get_render_repository)] = None,
-    render_review_repo: Annotated[RenderReviewRepository, Depends(get_render_review_repository)] = None,
-    packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)] = None,
-    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)] = None,
-    release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)] = None,
-    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)] = None,
-    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)] = None,
-    research_repo: Annotated[ResearchRepository, Depends(get_research_repository)] = None,
-    genai_client: Annotated[GenAIClient, Depends(get_genai_client)] = None,
-    media_storage: Annotated[MediaStorage, Depends(get_media_storage)] = None,
-) -> AutoCorrectQAResponse:
-    request_id = getattr(request.state, "request_id", "unknown")
-    prod = await _get_owned_production(production_id, current_user, production_repo)
-    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
-    master_artifact = None
-    short_artifact = None
-    if latest_edl:
-        master_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
-        )
-        if not master_artifact:
-            master_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
-            )
-        short_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.SHORT
-        )
-    else:
-        renders = await render_repo.list_render_artifacts(prod.production_id)
-        master_artifact = next(
-            (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
-            None,
-        )
-        if master_artifact and master_artifact.edl_id:
-            latest_edl = await edl_repo.get_edl(prod.production_id, master_artifact.edl_id)
-            short_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, master_artifact.edl_id, ArtifactType.SHORT
-            )
-
-    if not master_artifact or master_artifact.status != ArtifactStatus.completed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Master video must exist to execute QA auto-correction.",
-        )
-    proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
-    if not proposal:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Packaging proposal must exist to execute QA auto-correction.",
-        )
-
-    latest_review = await release_review_repo.get_latest_release_review(prod.production_id)
-    if not latest_review or not latest_review.issues:
-        return AutoCorrectQAResponse(
-            production_id=prod.production_id,
-            revised_proposal=proposal,
-            new_review=latest_review or ReleaseReview(
-                review_id=f"rev_{prod.production_id[:12]}",
-                production_id=prod.production_id,
-                verdict=ReleaseVerdict.PASS,
-                summary="No issues found.",
-                issues=[],
-                approved_for_release=True,
-                confidence=0.98,
-                master_artifact_id=master_artifact.artifact_id,
-                packaging_proposal_id=proposal.proposal_id,
-            ),
-            release_ready=True,
-            message="No actionable QA defects found.",
-        )
-
-    transcript = await transcript_repo.get_transcript_by_production_id(prod.production_id)
-
-    # 1. Nina 1-cycle auto-revision of packaging
-    nina_agent = NinaPackagingAgent(genai_client=genai_client, model_id="gemini-3.7-flash")
-    corrected_proposal, _ = await nina_agent.revise_packaging_for_qa(
-        production_id=prod.production_id,
-        current_proposal=proposal,
-        qa_issues=latest_review.issues,
-        master_artifact=master_artifact,
-        transcript=transcript,
-        request_id=request_id,
-    )
-    await packaging_repo.save_packaging_proposal(corrected_proposal)
-
-    # 2. Iris re-evaluates corrected proposal
-    iris_agent = IrisQAAgent(genai_client=genai_client, model_id="gemini-3.7-flash")
-    new_review, _ = await iris_agent.review_production(
-        production_id=prod.production_id,
-        master_artifact=master_artifact,
-        short_artifact=short_artifact,
-        transcript=transcript or Transcript(
-            transcript_id="tr_dummy",
-            production_id=prod.production_id,
-            language_code="en",
-            created_at=datetime.now(timezone.utc),
-            duration_ms=master_artifact.duration_ms or 0,
-            words=[],
-        ),
-        proposal=corrected_proposal,
-        request_id=request_id,
-    )
-    package_ver = corrected_proposal.version if hasattr(corrected_proposal, "version") else 1
-    effective_edl_id = latest_edl.edl_id if latest_edl else master_artifact.edl_id
-    fp = build_release_fingerprint(
-        production_id=prod.production_id,
-        edl_id=effective_edl_id,
-        master_artifact_id=master_artifact.artifact_id,
-        master_hash=master_artifact.sha256 or "unhashed",
-        packaging_proposal_id=corrected_proposal.proposal_id,
-        package_version=package_ver,
-        release_review_id=new_review.review_id,
-        short_artifact_id=short_artifact.artifact_id if short_artifact else None,
-        short_hash=short_artifact.sha256 if short_artifact else None,
-    )
-    new_review = new_review.model_copy(
-        update={
-            "edl_id": effective_edl_id,
-            "master_hash": master_artifact.sha256,
-            "short_hash": short_artifact.sha256 if short_artifact else None,
-            "package_version": package_ver,
-            "release_fingerprint": fp,
-        }
-    )
-    await release_review_repo.save_release_review(new_review)
-
-    release_ready = (
-        new_review.verdict == ReleaseVerdict.PASS
-        and new_review.approved_for_release
-        and (not short_artifact or (new_review.checklist and new_review.checklist.short))
-    )
-    return AutoCorrectQAResponse(
-        production_id=prod.production_id,
-        revised_proposal=corrected_proposal,
-        new_review=new_review,
-        release_ready=release_ready,
-        message="Nina revised packaging based on QA findings and Iris re-evaluated.",
-    )
 
 
 # -----------------------------------------------------------------------------

@@ -60,6 +60,6 @@ class AgentSettingsResponse(BaseModel):
     leo_prompt: AgentPromptConfig
     maya_prompt: AgentPromptConfig
     alex_prompt: AgentPromptConfig
-    nina_prompt: AgentPromptConfig
+    iris_prompt: AgentPromptConfig
     voice_settings: VoiceSettingsConfig
     voices: list[VoiceCatalogItem]

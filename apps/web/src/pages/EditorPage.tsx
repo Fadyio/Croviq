@@ -6,6 +6,7 @@ import {
   Loader2,
   CheckCircle2,
   Sparkles,
+  ShieldCheck,
   MessageSquare,
   FileText,
   Sliders,
@@ -525,6 +526,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       sourceEndMs: b.source_end_ms,
       durationMs: b.duration_ms,
       promptSummary: b.prompt_summary || "",
+      status: b.status,
+      isGenerated: b.status === "accepted" || Boolean(b.gcs_object),
     }));
   }, [brollArtifacts]);
   const processingFailureMessage: Record<ProcessingStage, string> = {
@@ -661,7 +664,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           {Boolean(
             masterArtifact?.playback_url ||
             masterUrl ||
-            (renderReview?.approved_for_master && masterArtifact?.status === "completed"),
+            (renderReview?.approved_for_master && masterArtifact?.status === "completed") ||
+            renderedPreviewUrl ||
+            proposal,
           ) && (
             <button
               type="button"
@@ -671,12 +676,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                   window.location.href = `/productions/${productionId}/release`;
                 })
               }
-              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-md transition-colors shadow-sm"
-              title="Open Release & Packaging Workspace"
-              data-testid="btn-package-release"
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-md transition-colors shadow-sm cursor-pointer"
+              title="Run Quality Check with Iris"
+              data-testid="btn-run-check"
             >
-              <Sparkles className="size-3.5" />
-              <span>Package / Release</span>
+              <ShieldCheck className="size-3.5" />
+              <span>Check</span>
             </button>
           )}
           <button

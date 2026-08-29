@@ -5,7 +5,6 @@ import pytest
 
 from croviq_agents.client import FakeGenAIClient
 from croviq_agents.iris import IrisQAAgent
-from croviq_agents.nina import NinaPackagingAgent
 from croviq_agents.prompts import DEFAULT_IRIS_PROMPT, build_release_qa_prompt
 from croviq_agents.tools import build_default_iris_tool_registry
 from croviq_domain.agent_config import AgentId
@@ -154,11 +153,9 @@ def test_build_release_qa_prompt(
         production_id="prod_0b7657f515ae",
     )
 
-    assert "IRIS — QUALITY ASSURANCE RELEASE GATE" in prompt
+    assert "IRIS — QUALITY CONTROL & RELEASE VERIFICATION" in prompt
     assert "Fairphone 6 Plus" in prompt
-    assert "CLAIM AUDIT & FACT CHECKING" in prompt
-    assert "Stay tuned for the upcoming full Fairphone 6+ review!" in prompt
-
+    assert "CLAIM AUDIT" in prompt
 
 @pytest.mark.asyncio
 async def test_iris_flags_unsupported_upcoming_review_claim(
@@ -197,52 +194,27 @@ async def test_iris_flags_unsupported_upcoming_review_claim(
 
 
 @pytest.mark.asyncio
-async def test_nina_correction_and_iris_pass(
+async def test_iris_pass_on_clean_production(
     sample_transcript,
     sample_master_artifact,
     sample_short_artifact,
-    sample_packaging_proposal_with_unsupported_claim,
 ):
     fake_client = FakeGenAIClient()
     iris = IrisQAAgent(genai_client=fake_client, model_id="gemini-3.7-flash")
-    nina = NinaPackagingAgent(genai_client=fake_client, model_id="gemini-3.7-flash")
 
-    # 1. Initial Iris check -> FIX_REQUIRED
-    initial_review, _ = await iris.review_production(
+    review, _ = await iris.review_production(
         production_id="prod_0b7657f515ae",
         master_artifact=sample_master_artifact,
         short_artifact=sample_short_artifact,
         transcript=sample_transcript,
-        proposal=sample_packaging_proposal_with_unsupported_claim,
-        request_id="test_qa_01",
-    )
-    assert initial_review.verdict == ReleaseVerdict.FIX_REQUIRED
-
-    # 2. Nina executes 1-cycle auto-correction based on QA issues
-    corrected_proposal, _ = await nina.revise_packaging_for_qa(
-        production_id="prod_0b7657f515ae",
-        current_proposal=sample_packaging_proposal_with_unsupported_claim,
-        qa_issues=initial_review.issues,
-        master_artifact=sample_master_artifact,
-        transcript=sample_transcript,
-        request_id="test_qa_correct_01",
-    )
-    assert "upcoming full" not in corrected_proposal.description.lower()
-
-    # 3. Iris re-evaluates corrected proposal -> PASS
-    final_review, _ = await iris.review_production(
-        production_id="prod_0b7657f515ae",
-        master_artifact=sample_master_artifact,
-        short_artifact=sample_short_artifact,
-        transcript=sample_transcript,
-        proposal=corrected_proposal,
-        request_id="test_qa_02",
+        request_id="test_qa_clean",
     )
 
-    assert final_review.verdict == ReleaseVerdict.PASS
-    assert final_review.approved_for_release is True
-    assert len(final_review.issues) == 0
-    assert final_review.checklist.all_passed is True
+    assert review.agent == "iris"
+    assert review.verdict == ReleaseVerdict.PASS
+    assert review.approved_for_release is True
+    assert len(review.issues) == 0
+    assert review.checklist.all_passed is True
 
 
 def test_iris_tool_registry(

@@ -339,30 +339,70 @@ def test_release_review_idempotency(api_client: TestClient, test_production: Pro
     assert resp_get.json()["review"]["review_id"] == review_id
 
 
-def test_auto_correct_qa_resolves_issues_and_reaches_ready(api_client: TestClient, test_production: Production):
-    # 1. Run initial QA -> Fix required
-    resp1 = api_client.post(f"/api/productions/{test_production.production_id}/release-review", json={})
-    assert resp1.status_code == 200
-    assert resp1.json()["release_ready"] is False
+def test_release_review_pass_on_clean_production(
+    test_user: User,
+    test_workspace: Workspace,
+    test_production: Production,
+    sample_master_render: RenderArtifact,
+    sample_short_render: RenderArtifact,
+    sample_transcript: Transcript,
+):
+    prod_repo = InMemoryProductionRepository()
+    ws_repo = InMemoryWorkspaceRepository()
+    render_repo = InMemoryRenderRepository()
+    transcript_repo = InMemoryTranscriptRepository()
+    packaging_repo = InMemoryPackagingRepository()
+    release_review_repo = InMemoryReleaseReviewRepository()
+    render_review_repo = InMemoryRenderReviewRepository()
+    edl_repo = InMemoryEDLRepository()
+    editorial_repo = InMemoryEditorialRepository()
+    agent_config_repo = InMemoryAgentConfigRepository()
+    research_repo = InMemoryResearchRepository()
+    memory_store = FakeChannelMemoryStore()
+    media_storage = FakeMediaStorage()
+    fake_client = FakeGenAIClient()
 
-    # 2. Execute 1-cycle auto-correction
-    resp_correct = api_client.post(f"/api/productions/{test_production.production_id}/release-review/correct", json={})
-    assert resp_correct.status_code == 200
-    correct_data = resp_correct.json()
+    ws_repo.workspaces[test_workspace.workspace_id] = {
+        "workspace_id": test_workspace.workspace_id,
+        "owner_user_id": test_user.user_id,
+        "name": test_workspace.name,
+        "created_at": test_workspace.created_at,
+        "updated_at": test_workspace.updated_at,
+    }
+    prod_repo._productions[test_production.production_id] = test_production
+    transcript_repo._transcripts[sample_transcript.transcript_id] = sample_transcript
+    transcript_repo._by_production[test_production.production_id] = sample_transcript.transcript_id
+    render_repo._by_production[test_production.production_id] = {
+        sample_master_render.artifact_id: sample_master_render,
+        sample_short_render.artifact_id: sample_short_render,
+    }
 
-    assert correct_data["release_ready"] is True
-    assert correct_data["new_review"]["verdict"] == ReleaseVerdict.PASS.value
-    assert correct_data["new_review"]["approved_for_release"] is True
-    assert len(correct_data["new_review"]["issues"]) == 0
-    assert "upcoming full" not in correct_data["revised_proposal"]["description"].lower()
+    set_production_repository(prod_repo)
+    set_workspace_repository(ws_repo)
+    set_render_repository(render_repo)
+    set_transcript_repository(transcript_repo)
+    set_packaging_repository(packaging_repo)
+    set_release_review_repository(release_review_repo)
+    set_render_review_repository(render_review_repo)
+    set_editorial_repository(editorial_repo)
+    set_edl_repository(edl_repo)
+    set_agent_config_repository(agent_config_repo)
+    set_memory_store(memory_store)
+    set_research_repository(research_repo)
+    set_genai_client(fake_client)
 
-    # 3. Subsequent GET returns Ready to publish
-    resp_get = api_client.get(f"/api/productions/{test_production.production_id}/release-review")
-    assert resp_get.status_code == 200
-    assert resp_get.json()["release_ready"] is True
-    assert resp_get.json()["release_status"] == "Ready to publish"
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: test_user
+    app.dependency_overrides[get_media_storage] = lambda: media_storage
 
-
+    client = TestClient(app)
+    resp = client.post(f"/api/productions/{test_production.production_id}/release-review", json={})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["release_ready"] is True
+    assert data["release_status"] == "Ready to publish"
+    assert data["review"]["verdict"] == ReleaseVerdict.PASS.value
+    assert data["review"]["approved_for_release"] is True
 def test_release_review_missing_prerequisites(api_client: TestClient, test_production: Production):
     # Missing master
     render_repo = InMemoryRenderRepository()

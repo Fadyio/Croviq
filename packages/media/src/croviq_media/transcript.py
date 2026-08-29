@@ -5,10 +5,13 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+import time
 from typing import Any, Callable
 import uuid
 
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
+from croviq_observability import log_ai_event
+from croviq_observability.events import EventType
 
 GEMINI_TRANSCRIBE_MODEL = "gemini-3.5-transcribe-preview"
 DEFAULT_GEMINI_LOCATION = "global"
@@ -406,25 +409,85 @@ class GeminiTranscriptionService(TranscriptionService):
             audio_transcription_config=transcription_config,
         )
 
-        if self._generate_content_func is not None:
-            response = self._generate_content_func(
-                model=self.model,
-                contents=[part],
-                config=config,
-            )
-        else:
-            client = self._get_client()
-            response = client.models.generate_content(
-                model=self.model,
-                contents=[part],
-                config=config,
-            )
-
-        self.last_request_id = getattr(response, "response_id", None) or f"req_{uuid.uuid4().hex[:8]}"
-
-        return parse_gemini_transcription_response(
-            response=response,
+        start_time = time.perf_counter()
+        req_id = f"req_transcribe_{uuid.uuid4().hex[:8]}"
+        log_ai_event(
+            event_type=EventType.AI_REQUEST_STARTED,
+            agent="transcription",
+            model=self.model,
+            provider="google",
+            backend="vertex_ai",
+            location=self.location,
+            operation="transcribe",
             production_id=production_id,
-            language_code=language_code,
-            source_duration_ms=source_duration_ms,
+            request_id=req_id,
+            audio_duration_ms=source_duration_ms,
+            status="started",
         )
+
+        try:
+            if self._generate_content_func is not None:
+                response = self._generate_content_func(
+                    model=self.model,
+                    contents=[part],
+                    config=config,
+                )
+            else:
+                client = self._get_client()
+                response = client.models.generate_content(
+                    model=self.model,
+                    contents=[part],
+                    config=config,
+                )
+
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            self.last_request_id = getattr(response, "response_id", None) or req_id
+
+            input_tokens = 0
+            output_tokens = 0
+            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+
+            log_ai_event(
+                event_type=EventType.AI_REQUEST_COMPLETED,
+                agent="transcription",
+                model=self.model,
+                provider="google",
+                backend="vertex_ai",
+                location=self.location,
+                operation="transcribe",
+                production_id=production_id,
+                request_id=self.last_request_id,
+                latency_ms=latency_ms,
+                audio_duration_ms=source_duration_ms,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                status="completed",
+            )
+
+            return parse_gemini_transcription_response(
+                response=response,
+                production_id=production_id,
+                language_code=language_code,
+                source_duration_ms=source_duration_ms,
+            )
+        except Exception as exc:
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            log_ai_event(
+                event_type=EventType.AI_REQUEST_FAILED,
+                agent="transcription",
+                model=self.model,
+                provider="google",
+                backend="vertex_ai",
+                location=self.location,
+                operation="transcribe",
+                production_id=production_id,
+                request_id=req_id,
+                latency_ms=latency_ms,
+                audio_duration_ms=source_duration_ms,
+                status="failed",
+                error_code="TRANSCRIPTION_FAILED",
+                message=str(exc),
+            )
+            raise

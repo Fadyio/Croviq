@@ -291,14 +291,6 @@ export interface paths {
       };
     };
   };
-  "/api/productions/{production_id}/package": {
-    post: {
-      responses: {
-        200: components["schemas"]["PackagingDetailResponse"];
-        422: components["schemas"]["HTTPValidationError"];
-      };
-    };
-  };
   "/api/productions/{production_id}/packaging": {
     get: {
       responses: {
@@ -323,14 +315,6 @@ export interface paths {
     get: {
       responses: {
         200: components["schemas"]["ReleaseReviewDetailResponse"];
-        422: components["schemas"]["HTTPValidationError"];
-      };
-    };
-  };
-  "/api/productions/{production_id}/release-review/correct": {
-    post: {
-      responses: {
-        200: components["schemas"]["AutoCorrectQAResponse"];
         422: components["schemas"]["HTTPValidationError"];
       };
     };
@@ -486,7 +470,7 @@ export interface components {
       /** Timestamp when the activity occurred */
       created_at?: string;
     };
-    AgentId: "leo" | "maya" | "alex" | "nina" | "iris";
+    AgentId: "leo" | "maya" | "alex" | "iris";
     AgentMemorySummaryResponse: {
       channel_title: string;
       style_guide: string;
@@ -494,7 +478,7 @@ export interface components {
       lessons?: components["schemas"]["MemoryItemResponse"][];
     };
     AgentPromptConfig: {
-      /** Target agent identifier (alex, leo, maya, nina, or iris) */
+      /** Target agent identifier (alex, leo, maya, or iris) */
       agent_id: components["schemas"]["AgentId"];
       /** Complete agent working prompt text */
       prompt_text: string;
@@ -509,7 +493,7 @@ export interface components {
       leo_prompt: components["schemas"]["AgentPromptConfig"];
       maya_prompt: components["schemas"]["AgentPromptConfig"];
       alex_prompt: components["schemas"]["AgentPromptConfig"];
-      nina_prompt: components["schemas"]["AgentPromptConfig"];
+      iris_prompt: components["schemas"]["AgentPromptConfig"];
       voice_settings: components["schemas"]["VoiceSettingsConfig"];
       voices: components["schemas"]["VoiceCatalogItem"][];
     };
@@ -530,7 +514,14 @@ export interface components {
       completed_at?: string | null;
     };
     ArtifactStatus: "pending" | "rendering" | "completed" | "failed";
-    ArtifactType: "PREVIEW" | "MASTER" | "SHORT" | "STUDIO_VOICE_PREVIEW" | "STUDIO_VOICE_MASTER";
+    ArtifactType:
+      | "PREVIEW"
+      | "MASTER"
+      | "SHORT"
+      | "STUDIO_VOICE_PREVIEW"
+      | "STUDIO_VOICE_MASTER"
+      | "BROLL_PREVIEW"
+      | "BROLL_MASTER";
     AssembleEDLResponse: {
       /** Unique identifier for the assembled Edit Decision List */
       edl_id: string;
@@ -591,22 +582,6 @@ export interface components {
       git_sha?: string | null;
       event_type: "auth.token.refreshed";
     };
-    AutoCorrectQARequest: {
-      /** Optional specific review ID to correct */
-      review_id?: string | null;
-    };
-    AutoCorrectQAResponse: {
-      /** Unique production identifier */
-      production_id: string;
-      /** Corrected Nina packaging proposal */
-      revised_proposal?: components["schemas"]["PackagingProposal"] | null;
-      /** Fresh Iris QA review after correction */
-      new_review: components["schemas"]["ReleaseReview"];
-      /** Whether output is now ready to publish */
-      release_ready?: boolean;
-      /** Summary of applied corrections */
-      message: string;
-    };
     BRollArtifact: {
       /** Unique artifact identifier */
       artifact_id: string;
@@ -625,10 +600,32 @@ export interface components {
       status?: components["schemas"]["BRollArtifactStatus"];
       /** Human summary of B-roll visual intent */
       prompt_summary?: string;
+      /** Generation quality mode */
+      quality_mode?: components["schemas"]["BRollQualityMode"];
+      /** Requested output resolution: 360p, 720p, 1080p, 4k */
+      requested_resolution?: string;
       /** Output resolution: 360p, 720p, 1080p, 4k */
       resolution?: string;
+      /** Actual output video width in pixels */
+      actual_width?: number | null;
+      /** Actual output video height in pixels */
+      actual_height?: number | null;
+      /** Requested generation duration in ms (3000-10000ms) */
+      requested_duration_ms?: number;
+      /** Actual generated video duration in ms from Omni */
+      generated_duration_ms?: number | null;
+      /** Exact target EDL placement duration in ms */
+      placement_duration_ms?: number;
+      /** Whether the generated Omni asset contains an audio stream */
+      has_generated_audio?: boolean;
+      /** Whether generated Omni audio enters master mix (default: False / video-only) */
+      audio_used_in_master?: boolean;
+      /** SHA256 hex digest of the raw generated video bytes */
+      sha256?: string | null;
       /** Model ID */
       model?: string;
+      /** Interactions video generation task */
+      task?: string;
       /** True if generated at 360p draft resolution */
       is_draft?: boolean;
       /** Initial keyframe URI for transition interpolation */
@@ -637,17 +634,26 @@ export interface components {
       last_frame_uri?: string | null;
       /** Optional video reference URI */
       reference_video_uri?: string | null;
+      /** Interaction ID returned by Google Interactions API */
+      interaction_id?: string | null;
+      /** Previous interaction ID for scene extension or continuation */
+      previous_interaction_id?: string | null;
       /** Scene extension prior context in ms */
       scene_extension_prior_context_ms?: number | null;
+      /** Whether raw Omni source asset contains C2PA/JUMBF credentials */
+      source_c2pa_present?: boolean;
+      /** C2PA provenance status of the final composed master */
+      master_c2pa_status?: string;
       created_at: string;
     };
-    BRollArtifactStatus: "pending" | "accepted" | "rejected" | "failed";
+    BRollArtifactStatus: "pending" | "planned" | "accepted" | "rejected" | "failed";
     BRollListResponse: {
       /** Unique production identifier */
       production_id: string;
       /** List of generated B-roll clips */
       artifacts?: components["schemas"]["BRollArtifact"][];
     };
+    BRollQualityMode: "draft" | "standard" | "finishing" | "4k";
     BrandKit: {
       /** Tone adjectives or stylistic descriptors (e.g. ['concise', 'informative']) */
       tone?: string[];
@@ -1127,10 +1133,6 @@ export interface components {
     EvidenceKind: "FACT" | "INFERENCE" | "RESEARCH" | "RECOMMENDATION";
     ExperimentStatus: "PROPOSED" | "ACTIVE" | "COMPLETED" | "INCONCLUSIVE";
     FindingLifecycle: "NEW" | "UPDATED" | "SEEN" | "EXPIRED";
-    GeneratePackagingRequest: {
-      /** Whether to bypass cached proposal and generate a fresh packaging proposal */
-      force_regenerate?: boolean;
-    };
     GenerateReleaseReviewRequest: {
       /** Whether to bypass cached review and execute a fresh Iris QA pass */
       force_regenerate?: boolean;
@@ -1238,14 +1240,14 @@ export interface components {
     PackagingDetailResponse: {
       /** Unique production identifier */
       production_id: string;
-      /** Latest Nina packaging proposal */
+      /** Latest packaging proposal if present */
       proposal?: components["schemas"]["PackagingProposal"] | null;
       /** Creator-defined package overrides */
       overrides?: components["schemas"]["CreatorPackageOverrides"] | null;
-      /** Active title to publish (overridden or primary recommendation) */
+      /** Active title to publish */
       effective_title: string;
       /** Active description to publish */
-      effective_description: string;
+      effective_description?: string;
       /** Active canonical video chapters */
       effective_chapters?: components["schemas"]["PackagingChapter"][];
       /** Active vertical Short packaging */
@@ -1385,7 +1387,7 @@ export interface components {
       master_duration_ms?: number | null;
       /** Master video title */
       master_title: string;
-      /** Active Nina title candidate or creator override */
+      /** Active title candidate or creator override */
       suggested_title: string;
       /** Active description with embedded chapters */
       suggested_description: string;
@@ -1397,7 +1399,7 @@ export interface components {
       suggested_category_id?: string;
       /** Suggested synthetic media disclosure based on Studio Voice/BRoll */
       suggested_synthetic_media?: boolean;
-      /** Nina verified thumbnail frame candidates */
+      /** Verified thumbnail frame candidates */
       verified_thumbnail_frames?: Record<string, unknown>[];
       /** Whether an approved vertical Short artifact exists */
       has_short?: boolean;
@@ -1561,7 +1563,7 @@ export interface components {
       has_master?: boolean;
       /** Whether vertical Short video artifact exists */
       has_short?: boolean;
-      /** Whether Nina packaging proposal exists */
+      /** Whether packaging proposal exists */
       has_packaging?: boolean;
       /** UTC timestamp of review generation */
       generated_at?: string | null;

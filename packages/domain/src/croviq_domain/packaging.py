@@ -385,3 +385,50 @@ class CreatorPackageOverrides(BaseModel):
     @classmethod
     def validate_updated_at(cls, v: datetime) -> datetime:
         return validate_timezone_aware(v)
+
+
+class PublishMetadata(BaseModel):
+    """Creator-owned publish metadata for video release."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Video title",
+    )
+    description: str = Field(
+        default="",
+        max_length=5000,
+        description="Video description",
+    )
+    privacy: str = Field(
+        default="private",
+        description="YouTube video privacy status ('private', 'unlisted', or 'public')",
+    )
+    thumbnail_frame_ms: int | None = Field(
+        default=None,
+        description="Optional frame offset in milliseconds to extract as custom thumbnail",
+    )
+    made_for_kids: bool = Field(
+        default=False,
+        description="Whether the video is designated as made for kids",
+    )
+    synthetic_media: bool = Field(
+        default=False,
+        description="Whether altered/synthetic media disclosure is required",
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Timestamp of last metadata update (UTC)",
+    )
+
+    @field_validator("updated_at", mode="after")
+    @classmethod
+    def validate_updated_at(cls, v: datetime) -> datetime:
+        return validate_timezone_aware(v)

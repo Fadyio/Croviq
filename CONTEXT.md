@@ -24,28 +24,23 @@ _Avoid_: Execution, Build, Job Run, Attempt
 
 ---
 
-### Visible Production Team (Agents)
-
-**Director (Maya)**:
-The senior production lead agent who interprets creator intent, reads Channel Memory, inspects raw footage, sets editorial strategy, delegates dialogue passes to Leo, reviews batches, requests corrections, and approves masters.
-_Avoid_: Master Agent, Manager, Orchestrator, Supervisor
-
-**Editor (Leo)**:
-The dialogue and narrative editing agent who performs semantic dialogue passes, cleans transcript/timeline segments, eliminates filler/dead air/redundancy, applies natural cut safety, reports batch edits, and renders the master and one Short.
-_Avoid_: Post-Production, Cutter, Video Processor
+### Production Team (Agents)
 
 **Data Scientist (Alex)**:
 The statistical intelligence agent who evaluates channel baselines, detects retention change points, analyzes CTR/traffic, designs experiments, and writes evidence-backed lessons into Channel Memory.
 _Avoid_: Analytics Narrator, Reporting Bot, Dashboard Summarizer
 
-**Packaging (Nina)**:
-The audience-facing packaging agent responsible for title candidates, thumbnail concepts, descriptions, chapters, and metadata consistency.
-_Avoid_: Marketing Bot, Metadata Generator, Copywriter
+**Editor (Leo)**:
+The dialogue and narrative editing agent who performs semantic dialogue passes, cleans transcript/timeline segments, eliminates filler/dead air/redundancy, applies natural cut safety, reports batch edits, and renders the master and vertical Short.
+_Avoid_: Post-Production, Cutter, Video Processor
 
-**Quality Assurance / QA (Iris)**:
-The independent verification agent responsible for factual consistency, citation verification, caption accuracy, timestamp alignment, and publishing readiness.
+**Quality Control / QA (Iris)**:
+The independent verification agent responsible for factual consistency, caption accuracy, audio loudness/sync, video continuity, and publishing readiness on the rendered output.
 _Avoid_: Reviewer, Linter, Inspector, Fact Checker
 
+**Director (Maya — Internal Review)**:
+The internal director agent who reviews Leo's proposed edit decisions against raw footage and Channel Memory before deterministic Edit Decision List (EDL) compilation.
+_Avoid_: Master Agent, Manager, Orchestrator, Supervisor
 ---
 
 ### Channel Intelligence & Memory

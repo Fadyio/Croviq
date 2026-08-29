@@ -55,6 +55,12 @@ class EventType(StrEnum):
     AI_CALL_STARTED = "ai.call.started"
     AI_CALL_COMPLETED = "ai.call.completed"
     AI_CALL_FAILED = "ai.call.failed"
+    AI_REQUEST_STARTED = "ai.request.started"
+    AI_REQUEST_COMPLETED = "ai.request.completed"
+    AI_REQUEST_FAILED = "ai.request.failed"
+    BROLL_GENERATION_STARTED = "broll.generation.started"
+    BROLL_GENERATION_COMPLETED = "broll.generation.completed"
+    BROLL_GENERATION_FAILED = "broll.generation.failed"
 
     # Agent Tool lifecycle events
     AGENT_TOOL_STARTED = "agent.tool.started"

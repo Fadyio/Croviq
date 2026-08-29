@@ -13,9 +13,8 @@ from typing import Any, Sequence
 from croviq_agents.client import AgentUsageMetadata, GenAIClient
 from croviq_domain.channel_intelligence import ResearchFinding
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile
-from croviq_domain.packaging import CreatorPackageOverrides, PackagingProposal
+from croviq_domain.packaging import CreatorPackageOverrides, PackagingProposal, PublishMetadata
 from croviq_domain.release_review import (
-    ReleaseChecklist,
     ReleaseIssue,
     ReleaseIssueSeverity,
     ReleaseIssueType,
@@ -49,8 +48,9 @@ class IrisQAAgent:
         production_id: str,
         master_artifact: RenderArtifact,
         transcript: Transcript,
-        proposal: PackagingProposal,
+        proposal: PackagingProposal | None = None,
         short_artifact: RenderArtifact | None = None,
+        publish_metadata: PublishMetadata | None = None,
         overrides: CreatorPackageOverrides | None = None,
         render_review: RenderReview | None = None,
         channel_profile: ChannelMemoryProfile | None = None,
@@ -121,6 +121,7 @@ class IrisQAAgent:
                 master_mime_type="video/mp4",
                 transcript=transcript,
                 proposal=proposal,
+                publish_metadata=publish_metadata,
                 production_id=production_id,
                 short_video_uri=short_uri,
                 short_mime_type="video/mp4",

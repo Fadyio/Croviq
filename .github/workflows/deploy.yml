@@ -176,6 +176,14 @@ jobs:
       - name: Set up Cloud SDK for Read-Only Inspection
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Configure Vertex AI Publisher Model Observability Logging
+        run: |
+          python3 scripts/configure_vertex_publisher_logging.py \
+            --project-id="croviq-506602" \
+            --location="global" \
+            --dataset-id="croviq_ai_observability" \
+            --table-id="gemini_requests"
+
       - name: Verify Production Health via Load Balancer
         run: |
           echo "Testing production health endpoint: https://app.croviq.app/api/health"

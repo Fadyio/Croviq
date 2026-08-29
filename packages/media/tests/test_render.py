@@ -446,3 +446,59 @@ def test_render_studio_voice_preview(synthetic_5s_video: Path, tmp_path: Path):
     assert res.duration_ms >= 4800
     assert res.video_codec == "h264"
     assert res.audio_codec == "aac"
+
+def test_render_broll_placement_isolates_audio_and_trims_duration(synthetic_5s_video: Path, tmp_path: Path):
+    """Verify B-roll visual placement trims asset to interval, isolates audio, and preserves EDL timeline."""
+    renderer = FFmpegRenderService()
+    now = datetime.now(timezone.utc)
+    edl = EditDecisionList(
+        edl_id="edl_broll_test",
+        production_id="prod_broll",
+        source_duration_ms=5000,
+        cuts=[],
+        coverage_markers=[
+            CoverageMarker(
+                marker_id="cov_01",
+                decision_id="dec_01",
+                source_start_ms=1000,
+                source_end_ms=3500,
+                coverage_type=CoverageType.BROLL_CANDIDATE,
+                reason="Visual coverage",
+            )
+        ],
+        created_at=now,
+    )
+    # Create 10s B-roll with distinct audio (e.g. 1000Hz tone) to prove audio is stripped
+    broll_video = tmp_path / "omni_broll_10s.mp4"
+    _create_synthetic_video(broll_video, duration_sec=10, size="640x360")
+
+    out_path = tmp_path / "broll_master.mp4"
+    res = renderer.render_broll_placement(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        broll_path=broll_video,
+        coverage_start_ms=1000,
+        coverage_end_ms=3500,
+        output_path=out_path,
+        is_master=True,
+    )
+
+    assert res.output_path.exists()
+    assert res.artifact_type == ArtifactType.BROLL_MASTER
+    # Duration matches EDL target duration (5s), not the 10s B-roll duration!
+    assert abs(res.duration_ms - 5000) <= 200
+    assert res.video_codec == "h264"
+    assert res.audio_codec == "aac"
+
+    # Verify with FakeRenderService as well
+    fake = FakeRenderService()
+    fake_res = fake.render_broll_placement(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        broll_path=broll_video,
+        coverage_start_ms=1000,
+        coverage_end_ms=3500,
+        is_master=False,
+    )
+    assert fake_res.artifact_type == ArtifactType.BROLL_PREVIEW
+    assert fake_res.duration_ms == 5000

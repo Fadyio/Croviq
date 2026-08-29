@@ -24,6 +24,8 @@ locals {
     "cloudkms.googleapis.com",
     "youtube.googleapis.com",
     "youtubeanalytics.googleapis.com",
+    "bigquery.googleapis.com",
+    "logging.googleapis.com",
   ]
 }
 
@@ -1192,5 +1194,70 @@ resource "google_compute_global_forwarding_rule" "app_http_forwarding_rule" {
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
   depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 16. Agent Platform / Vertex AI Data Access Audit Logging
+# -----------------------------------------------------------------------------
+
+resource "google_project_iam_audit_config" "aiplatform_audit" {
+  project = var.project_id
+  service = "aiplatform.googleapis.com"
+
+  audit_log_config {
+    log_type = "ADMIN_READ"
+  }
+
+  audit_log_config {
+    log_type = "DATA_READ"
+  }
+
+  audit_log_config {
+    log_type = "DATA_WRITE"
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+# -----------------------------------------------------------------------------
+# 17. AI Observability BigQuery Dataset & Access
+# -----------------------------------------------------------------------------
+
+resource "google_bigquery_dataset" "ai_observability" {
+  project                    = var.project_id
+  dataset_id                 = "croviq_ai_observability"
+  friendly_name              = "Croviq AI Observability"
+  description                = "Dedicated dataset for Vertex AI / Gemini request and response logs"
+  location                   = "US"
+  delete_contents_on_destroy = false
+
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+# Allow Vertex AI Service Agent to write request/response logs into BigQuery dataset
+resource "google_bigquery_dataset_iam_member" "aiplatform_sa_bq_editor" {
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.ai_observability.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:service-705994694330@gcp-sa-aiplatform.iam.gserviceaccount.com"
+}
+
+# Allow API Runtime Service Account to read/query request/response logs from BigQuery dataset
+resource "google_bigquery_dataset_iam_member" "api_runtime_bq_viewer" {
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.ai_observability.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
+resource "google_project_iam_member" "api_runtime_bq_job_user" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.api_runtime.email}"
 }
 

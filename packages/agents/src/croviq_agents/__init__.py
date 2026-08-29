@@ -1,6 +1,5 @@
-"""Croviq autonomous production agents: Leo (Dialogue Editor) and Maya (Director)."""
+"""Croviq autonomous production agents: Alex (Data Scientist), Leo (Video Editor), Maya (Director), Iris (Quality Control)."""
 from croviq_agents.alex import AlexDataScientist
-from croviq_agents.nina import NinaPackagingAgent
 from croviq_agents.iris import IrisQAAgent
 from croviq_agents.client import (
     AgentUsageMetadata,
@@ -21,7 +20,6 @@ from croviq_agents.tools import (
     ToolRegistry,
     ToolResult,
     build_default_editor_tool_registry,
-    build_default_packaging_tool_registry,
     build_default_iris_tool_registry,
 )
 from croviq_agents.voice import (
@@ -31,10 +29,8 @@ from croviq_agents.voice import (
     VoiceFitAttempt,
 )
 from croviq_agents.prompts import (
-    DEFAULT_NINA_PROMPT,
     build_director_prompt,
     build_editor_prompt,
-    build_packaging_prompt,
     build_release_qa_prompt,
     DEFAULT_IRIS_PROMPT,
     format_channel_memory_summary,
@@ -43,14 +39,11 @@ from croviq_agents.prompts import (
 
 __all__ = [
     "AlexDataScientist",
-    "NinaPackagingAgent",
     "IrisQAAgent",
     "DEFAULT_IRIS_PROMPT",
     "build_release_qa_prompt",
     "reconcile_release_review",
     "build_default_iris_tool_registry",
-    "DEFAULT_NINA_PROMPT",
-    "build_packaging_prompt",
     "reconcile_packaging_proposal",
     "FakeGenAIClient",
     "GenAIClient",
@@ -66,8 +59,6 @@ __all__ = [
     "ToolRegistry",
     "ToolResult",
     "build_default_editor_tool_registry",
-    "build_default_packaging_tool_registry",
-    "GOOGLE_GEMINI_VOICES",
     "StudioVoiceSynthesizer",
     "VoiceCatalog",
     "VoiceFitAttempt",

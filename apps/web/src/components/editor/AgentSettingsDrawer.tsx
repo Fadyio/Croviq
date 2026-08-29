@@ -14,8 +14,8 @@ import {
 } from "lucide-react";
 import leoAvatar from "../../assets/agents/leo.webp";
 import mayaAvatar from "../../assets/agents/maya.webp";
-import ninaAvatar from "../../assets/agents/Nina.png";
 import irisAvatar from "../../assets/agents/Iris.png";
+import alexAvatar from "../../assets/agents/alex.webp";
 import type { components } from "../../api/generated";
 import { useAuth } from "../../auth/AuthContext";
 
@@ -27,7 +27,7 @@ type NarrationMode = "original" | "enhanced_original" | "studio_voice" | "my_voi
 
 interface AgentSettingsDrawerProps {
   isOpen: boolean;
-  agentId: "leo" | "maya" | "nina" | "iris";
+  agentId: "leo" | "maya" | "iris" | "alex";
   onClose: () => void;
 }
 
@@ -71,17 +71,17 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
 
   const isLeo = agentId === "leo";
   const isMaya = agentId === "maya";
-  const isNina = agentId === "nina";
   const isIris = agentId === "iris";
-  const agentName = isLeo ? "Leo" : isMaya ? "Maya" : isNina ? "Nina" : "Iris";
+  const isAlex = agentId === "alex";
+  const agentName = isLeo ? "Leo" : isMaya ? "Maya" : isIris ? "Iris" : "Alex";
   const agentRole = isLeo
     ? "Video Editor"
     : isMaya
       ? "Director"
-      : isNina
-        ? "Packaging Agent"
-        : "Quality Assurance Gate";
-  const avatarSrc = isLeo ? leoAvatar : isMaya ? mayaAvatar : isNina ? ninaAvatar : irisAvatar;
+      : isIris
+        ? "Quality Control"
+        : "Data Scientist";
+  const avatarSrc = isLeo ? leoAvatar : isMaya ? mayaAvatar : isIris ? irisAvatar : alexAvatar;
 
   // If non-Leo is selected and tab is voice, reset to prompt tab
   useEffect(() => {
@@ -100,7 +100,13 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
         const res = await fetch("/api/workspace/agent-settings", { headers });
         if (res.ok) {
           const data = await res.json();
-          const p = isLeo ? data.leo_prompt : isMaya ? data.maya_prompt : data.nina_prompt;
+          const p = isLeo
+            ? data.leo_prompt
+            : isMaya
+              ? data.maya_prompt
+              : isIris
+                ? data.iris_prompt
+                : data.alex_prompt;
           if (p) {
             setPromptText(p.prompt_text || "");
             setPromptVersion(p.version ?? 1);

@@ -1442,7 +1442,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByTestId("agent-presence-leo").locator("img")).toBeVisible();
     await expect(page.getByTestId("agent-presence-maya").locator("img")).toBeVisible();
 
-    // Capture screenshot at 1440x900
+    // Capture screenshots at 1440x900
     await page.screenshot({ path: "e2e/screenshots/editor-1440x900.png" });
   });
   test("verifies bounded 100dvh desktop layout at 1600x900 without document scroll", async ({

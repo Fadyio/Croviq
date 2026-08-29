@@ -275,77 +275,71 @@ def app_and_repos(
     }
 
 
-def test_packaging_missing_master_fails(app_and_repos):
-    client = app_and_repos["client"]
-    prod = app_and_repos["test_production"]
-
-    # No master artifact in render_repo
-    response = client.post(f"/api/productions/{prod.production_id}/package", json={})
-    assert response.status_code == 400
-    assert "Master video must be rendered" in response.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_packaging_generation_success_and_caching(app_and_repos):
-    client = app_and_repos["client"]
-    prod = app_and_repos["test_production"]
-    render_repo = app_and_repos["render_repo"]
-    master_art = app_and_repos["test_master_artifact"]
-    short_art = app_and_repos["test_short_artifact"]
-    fake_client = app_and_repos["fake_client"]
-
-    # Seed master and short
-    await render_repo.save_render_artifact(master_art)
-    await render_repo.save_render_artifact(short_art)
-
-    # First generation pass
-    res1 = client.post(f"/api/productions/{prod.production_id}/package", json={"force_regenerate": False})
-    assert res1.status_code == 200
-    data1 = res1.json()
-
-    assert data1["production_id"] == prod.production_id
-    assert data1["has_master"] is True
-    assert data1["has_short"] is True
-    assert data1["status"] == "completed"
-    assert data1["proposal"] is not None
-    assert len(data1["proposal"]["title_candidates"]) >= 3
-    assert len(data1["proposal"]["thumbnail_concepts"]) == 3
-    assert data1["proposal"]["thumbnail_concepts"][0]["frame_verified"] is True
-    assert data1["effective_title"] == data1["proposal"]["primary_title"]
-    assert "Inside the Most Repairable Modern Smartphone" in data1["effective_title"]
-    assert len(fake_client.call_history) == 1
-
-    # Second call without force_regenerate -> Idempotent, uses cached proposal without calling GenAIClient
-    res2 = client.post(f"/api/productions/{prod.production_id}/package", json={"force_regenerate": False})
-    assert res2.status_code == 200
-    data2 = res2.json()
-    assert data2["proposal"]["proposal_id"] == data1["proposal"]["proposal_id"]
-    assert len(fake_client.call_history) == 1  # No additional model call!
-
-    # Third call with force_regenerate=True -> Regenerates new proposal version
-    res3 = client.post(f"/api/productions/{prod.production_id}/package", json={"force_regenerate": True})
-    assert res3.status_code == 200
-    assert len(fake_client.call_history) == 2  # New model call triggered
-
-
 @pytest.mark.asyncio
 async def test_get_and_patch_packaging_overrides(app_and_repos):
     client = app_and_repos["client"]
     prod = app_and_repos["test_production"]
     render_repo = app_and_repos["render_repo"]
+    packaging_repo = app_and_repos["packaging_repo"]
     master_art = app_and_repos["test_master_artifact"]
     await render_repo.save_render_artifact(master_art)
 
-    # 1. Generate initial package
-    client.post(f"/api/productions/{prod.production_id}/package", json={})
+    # 1. Seed initial package proposal
+    proposal = PackagingProposal(
+        proposal_id="pkg_test_01",
+        production_id=prod.production_id,
+        agent="iris",
+        model="gemini-3.7-flash",
+        primary_title="Fairphone 6 Plus Teardown",
+        title_candidates=[
+            TitleCandidate(
+                text="Fairphone 6 Plus Teardown",
+                angle=TitleAngle.DIRECT_VALUE,
+                why_it_works="Direct",
+                confidence=0.95,
+            )
+        ],
+        description="Original description",
+        chapters=[],
+        keywords=[],
+        thumbnail_concepts=[
+            ThumbnailConcept(
+                concept_id="th_01",
+                headline="THUMB",
+                visual_subject="Subject",
+                composition="Close up",
+                emotion="Curiosity",
+                supporting_frame_ms=10000,
+                reason="Reason",
+                confidence=0.9,
+                frame_verified=True,
+            ),
+            ThumbnailConcept(
+                concept_id="th_02",
+                headline="THUMB2",
+                visual_subject="Subject2",
+                composition="Close up",
+                emotion="Curiosity",
+                supporting_frame_ms=20000,
+                reason="Reason2",
+                confidence=0.9,
+                frame_verified=True,
+            ),
+        ],
+        packaging_summary="Summary",
+        channel_evidence="Evidence",
+        confidence=0.95,
+        created_at=datetime.now(timezone.utc),
+        master_artifact_id=master_art.artifact_id,
+    )
+    await packaging_repo.save_packaging_proposal(proposal)
 
     # 2. Get packaging details
     get_res = client.get(f"/api/productions/{prod.production_id}/packaging")
     assert get_res.status_code == 200
     get_data = get_res.json()
-    assert get_data["effective_title"] != ""
+    assert get_data["effective_title"] == "Fairphone 6 Plus Teardown"
     assert get_data["overrides"] is None
-
     # 3. Patch user overrides (select a candidate, custom description)
     patch_payload = {
         "selected_title": "Fairphone 6 Plus Is the Phone Everyone Says They Want",
@@ -382,9 +376,6 @@ async def test_packaging_ownership_enforcement(app_and_repos, other_user):
     app.dependency_overrides[get_current_user] = lambda: other_user
     intruder_client = TestClient(app)
 
-    res_post = intruder_client.post(f"/api/productions/{prod.production_id}/package", json={})
-    assert res_post.status_code == 403
-
     res_get = intruder_client.get(f"/api/productions/{prod.production_id}/packaging")
     assert res_get.status_code == 403
 
@@ -401,13 +392,10 @@ async def test_delete_production_cleans_up_packaging(app_and_repos):
     master_art = app_and_repos["test_master_artifact"]
     await render_repo.save_render_artifact(master_art)
 
-    # Generate and patch
-    client.post(f"/api/productions/{prod.production_id}/package", json={})
+    # Patch overrides
     client.patch(f"/api/productions/{prod.production_id}/packaging", json={"custom_title": "To be deleted"})
 
-    assert (await packaging_repo.get_latest_packaging_proposal(prod.production_id)) is not None
     assert (await packaging_repo.get_package_overrides(prod.production_id)) is not None
-
     # Delete production
     del_res = client.delete(f"/api/productions/{prod.production_id}")
     assert del_res.status_code == 200

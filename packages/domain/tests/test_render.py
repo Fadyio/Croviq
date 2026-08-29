@@ -18,12 +18,16 @@ def test_artifact_type_values():
     assert ArtifactType.SHORT == "SHORT"
     assert ArtifactType.STUDIO_VOICE_PREVIEW == "STUDIO_VOICE_PREVIEW"
     assert ArtifactType.STUDIO_VOICE_MASTER == "STUDIO_VOICE_MASTER"
+    assert ArtifactType.BROLL_PREVIEW == "BROLL_PREVIEW"
+    assert ArtifactType.BROLL_MASTER == "BROLL_MASTER"
     assert set(ArtifactType) == {
         ArtifactType.PREVIEW,
         ArtifactType.MASTER,
         ArtifactType.SHORT,
         ArtifactType.STUDIO_VOICE_PREVIEW,
         ArtifactType.STUDIO_VOICE_MASTER,
+        ArtifactType.BROLL_PREVIEW,
+        ArtifactType.BROLL_MASTER,
     }
 def test_artifact_status_values():
     assert ArtifactStatus.pending == "pending"

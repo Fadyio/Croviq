@@ -127,9 +127,10 @@ def get_genai_client(
 
 def set_genai_client(client: GenAIClient | None) -> None:
     """Override GenAIClient instance for unit testing and test isolation."""
-    global _custom_genai_client
+    global _custom_genai_client, _default_genai_client
     _custom_genai_client = client
-
+    if client is None:
+        _default_genai_client = None
 
 def get_editorial_service(
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],

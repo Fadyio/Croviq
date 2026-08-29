@@ -482,153 +482,27 @@ AVAILABLE TIME BUDGET: {available_duration_s:.2f} seconds
 REWRITTEN SPOKEN TEXT:"""
 
 
-DEFAULT_NINA_PROMPT = (
-    "You are Nina, Croviq's Packaging Agent for YouTube creators.\n"
-    "Your role is to turn the approved Master video into a high-converting, publish-ready YouTube package.\n\n"
-    "Packaging Principles:\n"
-    "1. Multimodal Video Grounding: Inspect both what the video says (transcript) and what it visually demonstrates (screen, hardware, code, action).\n"
-    "2. Channel-Aware Positioning: Utilize Alex channel intelligence, historical retention/CTR baselines, and Memory Bank lessons. Do not fabricate metrics.\n"
-    "3. Packaging Rigor: Generate distinct, high-impact title candidates representing genuinely different strategic angles (DIRECT_VALUE, CURIOSITY, PROBLEM_SOLUTION, etc.).\n"
-    "4. Publish-Ready Description: Accurately describe the video, preserve technical terminology, include polished chapters, and avoid AI fluff.\n"
-    "5. Canonical Chapters: Anchor chapter timestamps to verified Master timeline boundaries starting at 0:00.\n"
-    "6. Visual Thumbnail Concepts: Identify 3 distinct visual moments from actual video frames with exact millisecond timestamps, subject, composition, and emotional hook.\n"
-    "7. Short Packaging: Provide separate, punchy vertical Short packaging when a Short exists.\n"
-    "8. Packaging Truth: Distinguish FACT from RECOMMENDATION. Frame future CTR expectations as hypotheses grounded in channel evidence."
-)
-
-
-def format_research_findings_for_packaging(findings: Sequence[ResearchFinding] | None) -> str:
-    """Format relevant research findings into packaging context."""
-    if not findings:
-        return "Research Findings: None available."
-    lines = ["Relevant Research Findings & Topic Opportunities:"]
-    for f in findings[:5]:
-        lines.append(f"- {f.title}: {f.why_it_matters} (Relevance: {f.relevance_score:.2f}, Freshness: {f.freshness_score:.2f})")
-    return "\n".join(lines)
-
-
-def format_chapters_for_packaging(chapters: Sequence[ChapterMarker] | None) -> str:
-    """Format Leo's semantic chapters into baseline chapter list."""
-    if not chapters:
-        return "Persisted Chapter Markers: None defined."
-    lines = ["Leo's Canonical Semantic Chapters:"]
-    for idx, c in enumerate(chapters):
-        start_str = format_ms_as_timestamp(c.source_start_ms)
-        end_str = format_ms_as_timestamp(c.source_end_ms)
-        lines.append(f"- [{start_str} - {end_str}] {c.title} ({c.summary})")
-    return "\n".join(lines)
-
-
-def build_packaging_prompt(
-    transcript: Transcript,
-    channel_profile: ChannelMemoryProfile | None,
-    lessons: list[ChannelLesson] | None,
-    production_id: str,
-    chapters: Sequence[ChapterMarker] | None = None,
-    research_findings: Sequence[ResearchFinding] | None = None,
-    short_candidate: ShortCandidate | None = None,
-    has_short_artifact: bool = False,
-    custom_prompt: str | None = None,
-) -> str:
-    """Construct the structured packaging prompt for Nina (Packaging Agent)."""
-    memory_context = format_channel_memory_summary(channel_profile, lessons)
-    formatted_transcript = format_transcript_for_prompt(transcript, max_words=300)
-    research_context = format_research_findings_for_packaging(research_findings)
-    chapters_context = format_chapters_for_packaging(chapters)
-
-    short_context = ""
-    if short_candidate or has_short_artifact:
-        hook = short_candidate.hook_title if short_candidate else "Vertical Short"
-        reason = short_candidate.concise_reason if short_candidate else "Selected social excerpt"
-        short_context = f"\nVERTICAL SHORT ARTIFACT CONTEXT:\n- Hook: {hook}\n- Rationale: {reason}\n- Generate dedicated Short packaging (title, hook, description, hashtags).\n"
-
-    system_role = custom_prompt if (custom_prompt and custom_prompt.strip()) else DEFAULT_NINA_PROMPT
-
-    return f"""{system_role}
-
-MANDATORY PRINCIPLE: MULTIMODAL VIDEO UNDERSTANDING
-You are inspecting the approved Master video directly alongside the canonical transcript.
-You must ground your packaging in what the video VISUALLY demonstrates and what is SPOKEN.
-
-PACKAGING MISSION:
-1. TITLE GENERATION:
-   - Generate approximately 5 distinct title candidates representing genuinely different strategic packaging angles.
-   - Allowed angles: DIRECT_VALUE, CURIOSITY, PROBLEM_SOLUTION, CONTRARIAN, HOW_TO, COMPARISON, NEWS_RELEVANT.
-   - Do not produce trivial word substitutions; each candidate should represent a distinct angle.
-   - Select one recommended primary title and explain why it works for this channel.
-
-2. PUBLISH-READY DESCRIPTION:
-   - Write a clear, engaging YouTube description matching the creator's voice.
-   - Accurately describe the video content and preserve technical terminology.
-   - Include timestamps and chapter titles.
-   - Avoid empty AI marketing buzzwords.
-
-3. CHAPTERS:
-   - Reuse Leo's persisted chapter time boundaries as canonical timecodes (starting at 0:00).
-   - Rewrite chapter titles for maximum publishing quality and readability.
-   - Ensure all timestamps correspond to the final Master video.
-
-4. THUMBNAIL CONCEPTS:
-   - Identify 3 distinct visual moments from actual video frames.
-   - For each concept, provide:
-     * concept_id (e.g. "th_01")
-     * headline (short overlay text, 2-4 words)
-     * visual_subject (what is clearly visible in the frame)
-     * composition (framing, crop, rule of thirds, contrast)
-     * emotion (viewer emotion/intrigue)
-     * supporting_frame_ms (exact millisecond location in the Master video)
-     * reason (why this thumbnail concept drives CTR for this audience)
-     * confidence (0.0 - 1.0)
-     * frame_verified (true)
-
-5. SHORT PACKAGE:
-   - Provide dedicated title, description, hook framing, and hashtags for vertical Short if applicable.
-
-6. PACKAGING RATIONALE & CHANNEL EVIDENCE:
-   - Provide a safe, product-facing summary of why this packaging was chosen.
-   - In `channel_evidence`, reference real historical trends (e.g. practical demonstration vs generic specs).
-   - If no specific historical signal exists, state: "No strong historical packaging signal; recommendation is based primarily on video content."
-   - Never fabricate YouTube metrics or assert future performance as absolute fact.
-
-PRODUCTION IDENTITY:
-Production ID: {production_id}
-
-CHANNEL INTELLIGENCE (MEMORY BANK & ALEX DATA):
-{memory_context}
-
-{research_context}
-
-{chapters_context}
-{short_context}
-TRANSCRIPT EXCERPT & CONTEXT:
-{formatted_transcript}
-
-Output a strictly compliant PackagingProposal matching the requested schema.
-"""
 
 
 DEFAULT_IRIS_PROMPT = (
-    "You are Iris, Croviq's Quality Assurance (QA) Agent and final Release Gatekeeper for YouTube creators.\n"
-    "Your mission is to evaluate the ACTUAL finished production (Master video, Short video, transcript, captions, chapters, packaging proposal, and claims) before Croviq calls it 'Ready to publish'.\n\n"
-    "You are the independent release gate. You evaluate actual media and packaging truth.\n"
-    "Key QA Criteria:\n"
-    "1. Master Video: Visual continuity, edit pacing, transitions, black frames, encoding glitches, screen/cursor discontinuities, accidental content loss.\n"
-    "2. Audio Quality: Integrated loudness target (~ -16 LUFS, -1 dBTP), clipping, pops/clicks, speech intelligibility, audio/video sync.\n"
-    "3. Captions: Timing alignment, missing/wrong words, caption overflow, active highlighting.\n"
-    "4. Chapters: Correct final master timestamps, accurate topic titles, monotonic order, no source-time leak beyond duration.\n"
-    "5. Claims Verification: Review factual claims in video, title, description, chapters, and Short. Separate source-supported claims from external factual claims. Do NOT manufacture citations or hallucinate fact-checking. Flag unsupported claims or manual review if unverified.\n"
-    "Specifically scrutinize any future commitments or review promises: If there is no evidence of a planned future review (e.g. 'Stay tuned for the upcoming full Fairphone 6+ review!'), flag it as an unsupported claim with severity HIGH.\n"
-    "6. Packaging Consistency: Verify title, description, and thumbnail concepts accurately match the actual video content. Thumbnails must reference clear, sharp, visible frames from this production.\n"
-    "7. Short QA: If Short is present, evaluate vertical framing (9:16), caption crop/sync, hook, visual focus, audio, duration (20-60s), and title match.\n"
-    "Output Verdict: PASS (approved_for_release=True), FIX_REQUIRED (actionable defect), or MANUAL_REVIEW (unresolvable or creator confirmation needed)."
+    "You are Iris, Croviq's Quality Control (QC) and Verification Agent for video creators.\n"
+    "Your mission is to inspect the ACTUAL current rendered output (Master video, Short video, and audio) alongside transcript and captions.\n\n"
+    "You are the independent quality gate. You evaluate actual media quality:\n"
+    "1. Video & Edit Continuity: Visual continuity, bad cuts, dead air/pauses, transitions, black/glitched frames, B-roll placement, screen discontinuities.\n"
+    "2. Audio Quality: Speech clarity, loudness target (~ -16 LUFS, -1 dBTP), clipping, pops/clicks, audio/video sync.\n"
+    "3. Captions & Transcript: Timing alignment, dropped/mismatched words, caption overflow.\n"
+    "4. Short Vertical Quality: If Short artifact is provided, verify vertical framing (9:16 crop), visual subject framing, caption crop/sync, and audio.\n"
+    "5. Factual Consistency: Audit any explicit on-screen or spoken factual claims and metadata consistency.\n"
+    "Output Verdict: PASS (approved_for_release=True) if video is clean and ready, or FIX_REQUIRED (actionable defect with exact timestamp) if defects exist."
 )
 
 
 def build_release_qa_prompt(
     transcript: Transcript,
-    master_artifact: Any,
-    proposal: Any,
+    master_artifact: Any = None,
+    proposal: Any = None,
     short_artifact: Any = None,
+    publish_metadata: Any = None,
     overrides: Any = None,
     render_review: Any = None,
     channel_profile: ChannelMemoryProfile | None = None,
@@ -638,84 +512,44 @@ def build_release_qa_prompt(
     custom_prompt: str | None = None,
     production_id: str = "unknown",
 ) -> str:
-    """Construct the comprehensive Quality Assurance and Release Gate prompt for Iris."""
+    """Construct the Quality Assurance and Verification prompt for Iris."""
     formatted_transcript = format_transcript_for_prompt(transcript, max_words=300)
     memory_context = format_channel_memory_summary(channel_profile, lessons)
 
-    # Packaging proposal details
-    title = getattr(proposal, "primary_title", "Untitled")
-    description = getattr(proposal, "description", "")
-    chapters = getattr(proposal, "chapters", [])
-    thumbnails = getattr(proposal, "thumbnail_concepts", [])
-    short_pkg = getattr(proposal, "short_package", None)
-
-    chapters_lines = []
-    for ch in chapters:
-        formatted_time = getattr(ch, "formatted_time", "0:00")
-        ch_title = getattr(ch, "title", "Chapter")
-        chapters_lines.append(f"- {formatted_time} {ch_title}")
-    chapters_text = "\n".join(chapters_lines) if chapters_lines else "No chapters provided."
-
-    thumb_lines = []
-    for idx, th in enumerate(thumbnails):
-        hl = getattr(th, "headline", "")
-        subj = getattr(th, "visual_subject", "")
-        frame_ms = getattr(th, "supporting_frame_ms", 0)
-        thumb_lines.append(f"- Concept {idx + 1}: '{hl}' | Subject: {subj} | Supporting Frame: {frame_ms}ms")
-    thumbnails_text = "\n".join(thumb_lines) if thumb_lines else "No thumbnails provided."
+    title = getattr(publish_metadata, "title", None) or getattr(proposal, "primary_title", "Technical Walkthrough")
+    description = getattr(publish_metadata, "description", None) or getattr(proposal, "description", "")
 
     short_text = "No vertical Short artifact provided."
-    if short_artifact or short_pkg:
-        st_title = getattr(short_pkg, "title", "Short") if short_pkg else "Short"
-        st_desc = getattr(short_pkg, "description", "") if short_pkg else ""
-        short_text = f"Short Title: {st_title}\nShort Description: {st_desc}\nShort Artifact Present: {bool(short_artifact)}"
+    if short_artifact:
+        short_text = f"Vertical Short Artifact: Present ({getattr(short_artifact, 'duration_ms', 0)}ms). Verify 9:16 vertical crop and caption sync."
 
-    deterministic_text = "Deterministic Checks: Pending or None."
+    deterministic_text = "Deterministic Checks: None."
     if deterministic_results:
-        parts = []
-        for k, v in deterministic_results.items():
-            parts.append(f"- {k}: {v}")
+        parts = [f"- {k}: {v}" for k, v in deterministic_results.items()]
         deterministic_text = "\n".join(parts)
 
     system_role = custom_prompt if (custom_prompt and custom_prompt.strip()) else DEFAULT_IRIS_PROMPT
 
     return f"""{system_role}
 
-IRIS — QUALITY ASSURANCE RELEASE GATE AUDIT
+IRIS — QUALITY CONTROL & RELEASE VERIFICATION
 Production ID: {production_id}
 
 EVALUATION CRITERIA:
-1. MASTER VIDEO CONTINUITY & EDIT QUALITY
-2. AUDIO QUALITY & LOUDNESS CONFORMANCE (-16 LUFS target)
-3. CAPTION TIMING & TRANSCRIPT ALIGNMENT
-4. CHAPTER TIMESTAMPS & ORDERING
-5. THUMBNAIL CONCEPTS & SUPPORTING FRAME VERIFICATION
-6. SHORT VERTICAL FRAMING (9:16) & CAPTION SYNC
-7. CLAIM AUDIT & FACT CHECKING:
-   - Verify all claims in title, description, and Short against the actual video footage.
-   - Specifically audit technical claims:
-     * '12 user-replaceable parts'
-     * 'Snapdragon' internals
-     * 'Android' / 'microSD'
-     * 'Sony' camera
-   - Scrutinize future review promises: E.g., 'Stay tuned for the upcoming full Fairphone 6+ review!'. If Croviq has no evidence of a planned future review, flag as UNSUPPORTED_CLAIM and set verdict to FIX_REQUIRED.
+1. MASTER VIDEO CONTINUITY & EDIT QUALITY (bad cuts, dead air, glitched frames, transitions, pacing)
+2. AUDIO QUALITY & LOUDNESS CONFORMANCE (-16 LUFS target, audio/video sync, clipping, clarity)
+3. CAPTION TIMING & TRANSCRIPT ALIGNMENT (accurate timestamps, no word drop, active highlighting)
+4. SHORT VERTICAL FRAMING (9:16 crop, visual framing, caption visibility)
+5. FACTUAL CONSISTENCY & CLAIM AUDIT:
+   - Verify all explicit claims against the actual video footage.
+   - Scrutinize unsupported promises or future commitments without evidence (flag as UNSUPPORTED_CLAIM).
 
-CURRENT PACKAGING PROPOSAL:
-Primary Title: {title}
+VIDEO METADATA:
+Title: {title}
+Description: {description}
+Short Context: {short_text}
 
-Description:
-{description}
-
-Chapters:
-{chapters_text}
-
-Thumbnail Concepts:
-{thumbnails_text}
-
-Short Packaging:
-{short_text}
-
-CHANNEL MEMORY & CONTEXT:
+CHANNEL CONTEXT:
 {memory_context}
 
 DETERMINISTIC PRE-CHECK FINDINGS:
@@ -724,5 +558,5 @@ DETERMINISTIC PRE-CHECK FINDINGS:
 TRANSCRIPT EXCERPT:
 {formatted_transcript}
 
-Output a strictly compliant ReleaseReview structured object with review_id, verdict (PASS, FIX_REQUIRED, MANUAL_REVIEW), summary, issues, approved_for_release, checklist, claim_verifications, and thumbnail_evaluations.
+Output a strictly compliant ReleaseReview structured object with review_id, verdict (PASS, FIX_REQUIRED, MANUAL_REVIEW), summary, issues, approved_for_release, checklist, and claim_verifications.
 """

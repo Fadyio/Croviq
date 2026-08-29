@@ -19,6 +19,8 @@ from croviq_domain.agent_config import (
 )
 from croviq_domain.narration import NarrationSegment, NarrationSegmentStatus
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
+from unittest.mock import AsyncMock, MagicMock, patch
+from croviq_agents.client import FakeGenAIClient, GoogleGenAIClient
 
 def test_voice_catalog_contains_standard_google_voices():
     catalog = VoiceCatalog.list_voices()
@@ -123,6 +125,92 @@ async def test_tts_fit_loop_fails_gracefully_after_max_attempts():
     assert segment.attempts == 3
     # Hard timing rule: Never lengthen video!
     assert segment.available_duration_ms == 4000
+@pytest.mark.asyncio
+async def test_tts_fit_loop_with_audio_returns_pcm_bytes():
+    synthesizer = StudioVoiceSynthesizer()
+    expected_pcm = b"\x01\x02\x03\x04" * 100
+
+    async def mock_tts(text: str, voice_id: str) -> tuple[int, bytes]:
+        return 3500, expected_pcm
+
+    async def mock_rewrite(text: str, max_dur_s: float, attempt: int) -> str:
+        return text
+
+    segment, pcm_bytes = await synthesizer.fit_narration_segment_with_audio(
+        segment_id="seg_test_audio",
+        production_id="prod_test",
+        source_start_ms=0,
+        source_end_ms=4000,
+        available_duration_ms=4000,
+        original_text="Testing audio byte persistence across the fit loop.",
+        voice_id="Charon",
+        tts_fn=mock_tts,
+        rewrite_fn=mock_rewrite,
+    )
+    assert segment.status == NarrationSegmentStatus.ACCEPTED
+    assert segment.generated_duration_ms == 3500
+    assert pcm_bytes == expected_pcm
+
+
+@pytest.mark.asyncio
+async def test_fake_genai_client_synthesizes_studio_voice():
+    client = FakeGenAIClient()
+    dur_ms, pcm_bytes = await client.synthesize_studio_voice(
+        text="Welcome back to Croviq studio voice narration test.",
+        voice_id="Puck",
+        production_id="prod_fake_1",
+    )
+    assert dur_ms > 0
+    assert len(pcm_bytes) == dur_ms * 48
+    assert len(client.call_history) == 1
+    assert client.call_history[0]["method"] == "synthesize_studio_voice"
+    assert client.call_history[0]["voice_id"] == "Puck"
+
+
+@pytest.mark.asyncio
+async def test_google_genai_client_synthesize_studio_voice_targets_gemini_31_tts():
+    google_client = GoogleGenAIClient(project_id="test-proj", location="global")
+    mock_raw_client = MagicMock()
+    mock_candidate = MagicMock()
+    mock_part = MagicMock()
+    # 24000 samples * 2 bytes * 2 seconds = 96000 bytes
+    fake_audio_pcm = b"\x00" * 96000
+    mock_part.inline_data.data = fake_audio_pcm
+    mock_candidate.content.parts = [mock_part]
+    mock_response = MagicMock()
+    mock_response.candidates = [mock_candidate]
+
+    mock_raw_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+    google_client._client = mock_raw_client
+
+    with patch("croviq_agents.client.log_ai_event") as mock_log:
+        dur_ms, pcm_bytes = await google_client.synthesize_studio_voice(
+            text="Narration test",
+            voice_id="Aoede",
+            production_id="prod_live_test",
+            request_id="req_123",
+        )
+        assert dur_ms == 2000
+        assert pcm_bytes == fake_audio_pcm
+
+        # Verify direct call parameters to generate_content
+        mock_raw_client.aio.models.generate_content.assert_awaited_once()
+        call_kwargs = mock_raw_client.aio.models.generate_content.call_args.kwargs
+        assert call_kwargs["model"] == "gemini-3.1-flash-tts-preview"
+        assert call_kwargs["contents"] == "Narration test"
+        config = call_kwargs["config"]
+        assert config.response_modalities == ["AUDIO"]
+        assert config.speech_config.voice_config.prebuilt_voice_config.voice_name == "Aoede"
+
+        # Verify first-party telemetry events logged
+        assert mock_log.call_count == 2
+        start_call = mock_log.call_args_list[0].kwargs
+        assert start_call["model"] == "gemini-3.1-flash-tts-preview"
+        assert start_call["status"] == "started"
+        completed_call = mock_log.call_args_list[1].kwargs
+        assert completed_call["model"] == "gemini-3.1-flash-tts-preview"
+        assert completed_call["status"] == "success"
+        assert completed_call["audio_duration_ms"] == 2000
 def test_voice_replication_capability_blocked_when_not_allowlisted():
     service = VoiceReplicationService(allowlist_enabled=False)
     config = service.check_replication_capability()

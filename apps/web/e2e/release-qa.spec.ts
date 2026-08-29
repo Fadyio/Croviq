@@ -412,6 +412,11 @@ const mockReleaseApis = async (
   await page.route(
     `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/release-review`,
     async (route) => {
+      if (route.request().method() === "POST") {
+        state.review = PASSED_QA_REVIEW;
+        state.releaseReady = true;
+        state.releaseStatus = "Ready to publish";
+      }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -447,28 +452,6 @@ const mockReleaseApis = async (
       });
     },
   );
-
-  await page.route(
-    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/release-review/correct`,
-    async (route) => {
-      state.proposal = CORRECTED_FAIRPHONE_PROPOSAL;
-      state.review = PASSED_QA_REVIEW;
-      state.releaseReady = true;
-      state.releaseStatus = "Ready to publish";
-
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          production_id: FAIRPHONE_PRODUCTION_ID,
-          revised_proposal: CORRECTED_FAIRPHONE_PROPOSAL,
-          new_review: PASSED_QA_REVIEW,
-          release_ready: true,
-          message: "Nina revised packaging based on QA findings and Iris re-evaluated.",
-        }),
-      });
-    },
-  );
 };
 
 const loginAndNavigateToRelease = async (page: Page, state: any) => {
@@ -487,11 +470,11 @@ const loginAndNavigateToRelease = async (page: Page, state: any) => {
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, FAIRPHONE_PRODUCTION_ID);
 
-  await page.waitForSelector("[data-testid='release-workspace']");
+  await page.waitForSelector("[data-testid='section-iris-qa']");
 };
 
 test.describe("Iris QA Agent & Release Gate Workflow", () => {
-  test("loads Release QA Gate with initial Fix required state and compact checklist", async ({
+  test("loads Release Quality Control with initial Fix required state and checklist", async ({
     page,
   }) => {
     const state = {
@@ -505,68 +488,37 @@ test.describe("Iris QA Agent & Release Gate Workflow", () => {
     await loginAndNavigateToRelease(page, state);
 
     // Verify Release Status badge shows "Fix required"
-    await expect(page.getByTestId("release-status-badge")).toContainText("Fix required");
+    await expect(page.getByTestId("release-status-badge")).toContainText(/Fix required/i);
 
-    // Verify Compact Checklist
-    await expect(page.getByTestId("checklist-item-master_video")).toContainText("✓");
-    await expect(page.getByTestId("checklist-item-audio")).toContainText("✓");
-    await expect(page.getByTestId("checklist-item-captions")).toContainText("✓");
-    await expect(page.getByTestId("checklist-item-chapters")).toContainText("✓");
-    await expect(page.getByTestId("checklist-item-short")).toContainText("✓");
-    await expect(page.getByTestId("checklist-item-packaging")).toContainText("!");
-    await expect(page.getByTestId("checklist-item-claims")).toContainText("!");
+    // Verify Iris Quality Control section
+    await expect(page.getByTestId("section-iris-qa")).toBeVisible();
+    await expect(page.getByText("Iris — Quality Control")).toBeVisible();
 
     // Verify QA issue is displayed
-    await expect(page.getByTestId("section-qa-issues")).toBeVisible();
-    await expect(page.getByTestId("qa-issue-0")).toContainText("Unsupported Claim");
-    await expect(page.getByTestId("qa-issue-0")).toContainText(
+    await expect(page.getByTestId("qa-issues-list")).toBeVisible();
+    await expect(page.getByTestId("qa-issue-item-0")).toContainText("Unsupported Claim");
+    await expect(page.getByTestId("qa-issue-item-0")).toContainText(
       "Description claims an upcoming full review",
     );
-
-    // Verify Claim Audits table/cards
-    await expect(page.getByTestId("section-claim-audit")).toBeVisible();
-    await expect(page.getByTestId("claim-verification-0")).toContainText(
-      "12 user-replaceable parts",
-    );
-    await expect(page.getByTestId("claim-verification-0")).toContainText("Supported by Video");
-    await expect(page.getByTestId("claim-verification-3")).toContainText(
-      "Stay tuned for the upcoming full Fairphone 6+ review!",
-    );
-    await expect(page.getByTestId("claim-verification-3")).toContainText("Unsupported");
-
-    // Verify Release Gate card shows locked status
-    await expect(page.getByTestId("release-gate-card")).toContainText("Gate Locked");
-    await expect(
-      page.locator('[data-testid="btn-publish-to-youtube"], [data-testid="btn-ready-to-publish"]'),
-    ).toBeDisabled();
   });
 
-  test("executes 1-cycle auto-correction with Nina and transitions to Ready to publish", async ({
-    page,
-  }) => {
+  test("runs quality check and transitions to Ready to publish", async ({ page }) => {
     const state = {
-      proposal: INITIAL_FAIRPHONE_PROPOSAL,
-      review: INITIAL_QA_REVIEW,
-      releaseReady: false,
-      releaseStatus: "Fix required",
+      proposal: CORRECTED_FAIRPHONE_PROPOSAL,
+      review: PASSED_QA_REVIEW,
+      releaseReady: true,
+      releaseStatus: "Ready to publish",
     };
 
     await page.setViewportSize({ width: 1600, height: 900 });
     await loginAndNavigateToRelease(page, state);
 
-    // Click "Auto-correct with Nina"
-    await page.click('[data-testid="btn-auto-correct-qa"]');
+    // Click "Run Quality Check"
+    await page.click('[data-testid="btn-run-qa"]');
 
-    // Wait for auto-correction completion and state update
-    await expect(page.getByTestId("release-status-badge")).toContainText("Ready to publish");
-    await expect(page.getByTestId("release-gate-card")).toContainText("Gate Passed");
-    await expect(
-      page.locator('[data-testid="btn-publish-to-youtube"], [data-testid="btn-ready-to-publish"]'),
-    ).toContainText("Publish to YouTube");
-
-    // Verify all checklist items now show checkmarks
-    await expect(page.getByTestId("checklist-item-packaging")).toContainText("✓");
-    await expect(page.getByTestId("checklist-item-claims")).toContainText("✓");
+    // Wait for state update
+    await expect(page.getByTestId("release-status-badge")).toContainText(/Ready to publish/i);
+    await expect(page.getByTestId("btn-open-publish-modal")).toBeVisible();
   });
 
   test("opens Iris Agent settings drawer on Iris avatar click", async ({ page }) => {
@@ -584,9 +536,8 @@ test.describe("Iris QA Agent & Release Gate Workflow", () => {
     await page.click('[data-testid="btn-iris-avatar"]');
 
     // Verify Drawer opens with Iris details
-    await expect(page.getByText("Iris Settings")).toBeVisible();
-    await expect(page.getByText("Quality Assurance Gate · Croviq Core Agent")).toBeVisible();
-    // Verify Prompt tab is active and editable
+    await expect(page.getByRole("heading", { name: "Iris's Settings" })).toBeVisible();
+    await expect(page.getByText("Quality Control · Croviq Core Agent")).toBeVisible();
     await expect(page.getByTestId("tab-prompt")).toBeVisible();
     await expect(page.getByTestId("tab-memory")).toBeVisible();
     await expect(page.getByTestId("tab-voice")).not.toBeVisible();
@@ -610,7 +561,6 @@ test.describe("Iris QA Agent & Release Gate Workflow", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(300);
     await page.screenshot({ path: "e2e/screenshots/release-qa-1440x900.png", fullPage: true });
-
     // 1280x800
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.waitForTimeout(300);

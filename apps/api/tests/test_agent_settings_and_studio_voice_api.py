@@ -286,3 +286,84 @@ async def test_studio_voice_generation_endpoint(api_test_context):
     assert playback_data["production_id"] == prod_id
     assert playback_data["playback_url"] is not None
     assert playback_data["studio_voice_preview_url"] is not None
+
+@pytest.mark.asyncio
+async def test_studio_voice_generation_marks_failed_when_no_audio_synthesized(api_test_context):
+    client = api_test_context["client"]
+    prod_repo = api_test_context["prod_repo"]
+    transcript_repo = api_test_context["transcript_repo"]
+    edl_repo = api_test_context["edl_repo"]
+    user = api_test_context["user"]
+
+    prod_id = "prod_sv_fail_test"
+    now = datetime.now(timezone.utc)
+    prod = Production(
+        production_id=prod_id,
+        owner_user_id=user.user_id,
+        workspace_id="ws_user_sv_test",
+        channel_id="croviq_syn_ai_eng_01",
+        status=ProductionStatus.UPLOADED,
+        source_media=SourceMedia(
+            upload_id="up_sv_02",
+            original_filename="fail_demo.mp4",
+            content_type="video/mp4",
+            size_bytes=5000000,
+            gcs_bucket="test-bucket",
+            gcs_object="workspaces/ws_user_sv_test/productions/prod_sv_fail_test/source/fail_demo.mp4",
+            status=SourceMediaStatus.UPLOADED,
+            uploaded_at=now,
+            created_at=now,
+        ),
+        created_at=now,
+        updated_at=now,
+    )
+    await prod_repo.create_production(prod)
+
+    # 1 segment with very short available window (500ms) that will fail to fit
+    transcript = Transcript(
+        transcript_id="tr_sv_fail",
+        production_id=prod_id,
+        language_code="en",
+        duration_ms=1000,
+        words=[TranscriptWord(index=0, text="Impossible", start_ms=0, end_ms=500, confidence=0.99)],
+        segments=[
+            TranscriptSegment(
+                segment_id="seg_fail_01",
+                start_ms=0,
+                end_ms=500,
+                text="This is an exceedingly long sentence that cannot possibly fit into a 500ms window.",
+                word_start_index=0,
+                word_end_index=0,
+            ),
+        ],
+        created_at=now,
+    )
+    await transcript_repo.save_transcript(transcript)
+
+    edl = EditDecisionList(
+        edl_id="edl_sv_fail",
+        production_id=prod_id,
+        source_duration_ms=1000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=now,
+    )
+    await edl_repo.save_edl(edl)
+
+    # Create fake genai client where TTS returns 10,000ms audio (exceeds 500ms budget)
+    from croviq_agents.client import FakeGenAIClient
+    class AlwaysOverbudgetClient(FakeGenAIClient):
+        async def synthesize_studio_voice(self, text: str, voice_id: str = "Puck", production_id: str = "unknown", request_id: str = "unknown"):
+            return 10000, b"\x00" * 480000
+
+        async def generate_narration_rewrite(self, original_text: str, available_duration_s: float, attempt: int = 1, production_id: str = "unknown", request_id: str = "unknown"):
+            return original_text
+
+    from croviq_api.productions.dependencies import get_genai_client
+    app.dependency_overrides[get_genai_client] = lambda: AlwaysOverbudgetClient()
+
+    gen_resp = client.post(f"/api/productions/{prod_id}/studio-voice")
+    assert gen_resp.status_code == 200
+    gen_data = gen_resp.json()
+    assert gen_data["result"]["accepted_segments"] == 0
+    assert gen_data["result"]["status"] == "failed"

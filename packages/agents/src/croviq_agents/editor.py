@@ -178,6 +178,7 @@ class LeoVideoEditor:
             channel_profile=channel_profile,
             lessons=lessons,
             terminal_runner=self._terminal_runner,
+            genai_client=self._client,
         )
 
         activities: list[AgentActivity] = []

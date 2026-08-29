@@ -230,28 +230,23 @@ class YouTubePublishService:
         release_ready = False
         if release_review and release_review.verdict == ReleaseVerdict.PASS and release_review.approved_for_release:
             matching_master = bool(master_artifact and release_review.master_artifact_id == master_artifact.artifact_id)
-            matching_pkg = bool(proposal and release_review.packaging_proposal_id == proposal.proposal_id)
-            package_ver_valid = bool(proposal and release_review.package_version >= package_ver)
             matching_short = bool(
                 (not has_short and not release_review.short_artifact_id)
                 or (has_short and short_artifact and release_review.short_artifact_id == short_artifact.artifact_id)
             )
             fingerprint_valid = bool(
-                release_review.release_fingerprint is None or release_review.release_fingerprint == calculated_fp
+                release_review.release_fingerprint is None or calculated_fp is None or release_review.release_fingerprint == calculated_fp
             )
             release_ready = bool(
                 has_master
-                and has_packaging
                 and matching_master
-                and matching_pkg
-                and package_ver_valid
                 and matching_short
                 and fingerprint_valid
             )
             if has_short and release_review.checklist and not release_review.checklist.short:
                 release_ready = False
 
-        suggested_title = ""
+        suggested_title = getattr(production, "title", None) or (production.source_media.original_filename if production.source_media and production.source_media.original_filename else "Master Video")
         suggested_description = ""
         suggested_chapters: list[dict[str, Any]] = []
         suggested_tags: list[str] = []
@@ -280,8 +275,6 @@ class YouTubePublishService:
 
         short_title = proposal.short_package.title if (proposal and proposal.short_package) else "Short"
         short_description = proposal.short_package.description if (proposal and proposal.short_package) else ""
-
-        # Synthetic Media Detection deterministically derived strictly from Master artifact lineage
         contains_synthetic_media_suggested = derive_synthetic_media_status(
             master_artifact=master_artifact,
             edl=edl,

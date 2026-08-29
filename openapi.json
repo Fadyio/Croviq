@@ -1628,69 +1628,6 @@
         }
       }
     },
-    "/api/productions/{production_id}/package": {
-      "post": {
-        "tags": ["Productions & Uploads"],
-        "summary": "Generate Packaging Proposal",
-        "description": "Invoke Nina (Packaging Agent) to generate title candidates, descriptions, chapters, thumbnail concepts, and Short packaging for an approved Master video.",
-        "operationId": "generate_packaging_api_productions__production_id__package_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "production_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Production Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/GeneratePackagingRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Payload"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PackagingDetailResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/productions/{production_id}/packaging": {
       "get": {
         "tags": ["Productions & Uploads"],
@@ -1881,69 +1818,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReleaseReviewDetailResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/productions/{production_id}/release-review/correct": {
-      "post": {
-        "tags": ["Productions & Uploads"],
-        "summary": "Execute 1-Cycle QA Auto-Correction",
-        "description": "Perform bounded 1-cycle auto-correction routing flagged packaging/claim issues to Nina and re-evaluating with Iris.",
-        "operationId": "auto_correct_qa_api_productions__production_id__release_review_correct_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "production_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Production Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/AutoCorrectQARequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Payload"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoCorrectQAResponse"
                 }
               }
             }
@@ -2748,7 +2622,7 @@
       },
       "AgentId": {
         "type": "string",
-        "enum": ["leo", "maya", "alex", "nina", "iris"],
+        "enum": ["leo", "maya", "alex", "iris"],
         "title": "AgentId",
         "description": "Supported Croviq agents."
       },
@@ -2787,7 +2661,7 @@
         "properties": {
           "agent_id": {
             "$ref": "#/components/schemas/AgentId",
-            "description": "Target agent identifier (alex, leo, maya, nina, or iris)"
+            "description": "Target agent identifier (alex, leo, maya, or iris)"
           },
           "prompt_text": {
             "type": "string",
@@ -2832,7 +2706,7 @@
           "alex_prompt": {
             "$ref": "#/components/schemas/AgentPromptConfig"
           },
-          "nina_prompt": {
+          "iris_prompt": {
             "$ref": "#/components/schemas/AgentPromptConfig"
           },
           "voice_settings": {
@@ -2852,7 +2726,7 @@
           "leo_prompt",
           "maya_prompt",
           "alex_prompt",
-          "nina_prompt",
+          "iris_prompt",
           "voice_settings",
           "voices"
         ],
@@ -2933,7 +2807,15 @@
       },
       "ArtifactType": {
         "type": "string",
-        "enum": ["PREVIEW", "MASTER", "SHORT", "STUDIO_VOICE_PREVIEW", "STUDIO_VOICE_MASTER"],
+        "enum": [
+          "PREVIEW",
+          "MASTER",
+          "SHORT",
+          "STUDIO_VOICE_PREVIEW",
+          "STUDIO_VOICE_MASTER",
+          "BROLL_PREVIEW",
+          "BROLL_MASTER"
+        ],
         "title": "ArtifactType",
         "description": "Supported render artifact types."
       },
@@ -3287,66 +3169,6 @@
         "required": ["event_type"],
         "title": "AuthTokenRefreshedEvent"
       },
-      "AutoCorrectQARequest": {
-        "properties": {
-          "review_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Review Id",
-            "description": "Optional specific review ID to correct"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "AutoCorrectQARequest",
-        "description": "Request payload to perform 1-cycle auto-correction on QA issues."
-      },
-      "AutoCorrectQAResponse": {
-        "properties": {
-          "production_id": {
-            "type": "string",
-            "title": "Production Id",
-            "description": "Unique production identifier"
-          },
-          "revised_proposal": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PackagingProposal"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Corrected Nina packaging proposal"
-          },
-          "new_review": {
-            "$ref": "#/components/schemas/ReleaseReview",
-            "description": "Fresh Iris QA review after correction"
-          },
-          "release_ready": {
-            "type": "boolean",
-            "title": "Release Ready",
-            "description": "Whether output is now ready to publish",
-            "default": false
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "description": "Summary of applied corrections"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": ["production_id", "new_review", "message"],
-        "title": "AutoCorrectQAResponse",
-        "description": "Response from executing bounded QA auto-correction."
-      },
       "BRollArtifact": {
         "properties": {
           "artifact_id": {
@@ -3411,17 +3233,106 @@
             "description": "Human summary of B-roll visual intent",
             "default": ""
           },
+          "quality_mode": {
+            "$ref": "#/components/schemas/BRollQualityMode",
+            "description": "Generation quality mode",
+            "default": "draft"
+          },
+          "requested_resolution": {
+            "type": "string",
+            "title": "Requested Resolution",
+            "description": "Requested output resolution: 360p, 720p, 1080p, 4k",
+            "default": "360p"
+          },
           "resolution": {
             "type": "string",
             "title": "Resolution",
             "description": "Output resolution: 360p, 720p, 1080p, 4k",
             "default": "360p"
           },
+          "actual_width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Width",
+            "description": "Actual output video width in pixels"
+          },
+          "actual_height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Height",
+            "description": "Actual output video height in pixels"
+          },
+          "requested_duration_ms": {
+            "type": "integer",
+            "title": "Requested Duration Ms",
+            "description": "Requested generation duration in ms (3000-10000ms)",
+            "default": 3000
+          },
+          "generated_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated Duration Ms",
+            "description": "Actual generated video duration in ms from Omni"
+          },
+          "placement_duration_ms": {
+            "type": "integer",
+            "title": "Placement Duration Ms",
+            "description": "Exact target EDL placement duration in ms",
+            "default": 3000
+          },
+          "has_generated_audio": {
+            "type": "boolean",
+            "title": "Has Generated Audio",
+            "description": "Whether the generated Omni asset contains an audio stream",
+            "default": true
+          },
+          "audio_used_in_master": {
+            "type": "boolean",
+            "title": "Audio Used In Master",
+            "description": "Whether generated Omni audio enters master mix (default: False / video-only)",
+            "default": false
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256",
+            "description": "SHA256 hex digest of the raw generated video bytes"
+          },
           "model": {
             "type": "string",
             "title": "Model",
             "description": "Model ID",
             "default": "gemini-omni-1.1-flash-preview"
+          },
+          "task": {
+            "type": "string",
+            "title": "Task",
+            "description": "Interactions video generation task",
+            "default": "text_to_video"
           },
           "is_draft": {
             "type": "boolean",
@@ -3465,6 +3376,30 @@
             "title": "Reference Video Uri",
             "description": "Optional video reference URI"
           },
+          "interaction_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Id",
+            "description": "Interaction ID returned by Google Interactions API"
+          },
+          "previous_interaction_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Interaction Id",
+            "description": "Previous interaction ID for scene extension or continuation"
+          },
           "scene_extension_prior_context_ms": {
             "anyOf": [
               {
@@ -3476,6 +3411,18 @@
             ],
             "title": "Scene Extension Prior Context Ms",
             "description": "Scene extension prior context in ms"
+          },
+          "source_c2pa_present": {
+            "type": "boolean",
+            "title": "Source C2Pa Present",
+            "description": "Whether raw Omni source asset contains C2PA/JUMBF credentials",
+            "default": true
+          },
+          "master_c2pa_status": {
+            "type": "string",
+            "title": "Master C2Pa Status",
+            "description": "C2PA provenance status of the final composed master",
+            "default": "NOT PRESERVED / UNVERIFIED"
           },
           "created_at": {
             "type": "string",
@@ -3496,13 +3443,13 @@
           "created_at"
         ],
         "title": "BRollArtifact",
-        "description": "Minimal canonical B-roll artifact generated by Leo via Gemini Omni 1.1 Flash preview."
+        "description": "Canonical B-roll planning, media generation, and coverage recommendation artifact."
       },
       "BRollArtifactStatus": {
         "type": "string",
-        "enum": ["pending", "accepted", "rejected", "failed"],
+        "enum": ["pending", "planned", "accepted", "rejected", "failed"],
         "title": "BRollArtifactStatus",
-        "description": "Lifecycle status of a generated B-roll asset."
+        "description": "Lifecycle status of a B-roll planning or media asset."
       },
       "BRollListResponse": {
         "properties": {
@@ -3525,6 +3472,12 @@
         "required": ["production_id"],
         "title": "BRollListResponse",
         "description": "Response listing generated B-roll artifacts for a production."
+      },
+      "BRollQualityMode": {
+        "type": "string",
+        "enum": ["draft", "standard", "finishing", "4k"],
+        "title": "BRollQualityMode",
+        "description": "Explicit quality modes for Gemini Omni video generation."
       },
       "BrandKit": {
         "properties": {
@@ -5635,20 +5588,6 @@
         "enum": ["NEW", "UPDATED", "SEEN", "EXPIRED"],
         "title": "FindingLifecycle"
       },
-      "GeneratePackagingRequest": {
-        "properties": {
-          "force_regenerate": {
-            "type": "boolean",
-            "title": "Force Regenerate",
-            "description": "Whether to bypass cached proposal and generate a fresh packaging proposal",
-            "default": false
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "GeneratePackagingRequest",
-        "description": "Request payload to generate packaging proposal for a production."
-      },
       "GenerateReleaseReviewRequest": {
         "properties": {
           "force_regenerate": {
@@ -6109,7 +6048,7 @@
                 "type": "null"
               }
             ],
-            "description": "Latest Nina packaging proposal"
+            "description": "Latest packaging proposal if present"
           },
           "overrides": {
             "anyOf": [
@@ -6125,12 +6064,13 @@
           "effective_title": {
             "type": "string",
             "title": "Effective Title",
-            "description": "Active title to publish (overridden or primary recommendation)"
+            "description": "Active title to publish"
           },
           "effective_description": {
             "type": "string",
             "title": "Effective Description",
-            "description": "Active description to publish"
+            "description": "Active description to publish",
+            "default": ""
           },
           "effective_chapters": {
             "items": {
@@ -6243,9 +6183,9 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["production_id", "effective_title", "effective_description"],
+        "required": ["production_id", "effective_title"],
         "title": "PackagingDetailResponse",
-        "description": "Publish-ready packaging details including Nina proposal, creator overrides, and media references."
+        "description": "Publish-ready packaging details including creator metadata and media references."
       },
       "PackagingProposal": {
         "properties": {
@@ -6706,7 +6646,7 @@
           "suggested_title": {
             "type": "string",
             "title": "Suggested Title",
-            "description": "Active Nina title candidate or creator override"
+            "description": "Active title candidate or creator override"
           },
           "suggested_description": {
             "type": "string",
@@ -6748,7 +6688,7 @@
             },
             "type": "array",
             "title": "Verified Thumbnail Frames",
-            "description": "Nina verified thumbnail frame candidates"
+            "description": "Verified thumbnail frame candidates"
           },
           "has_short": {
             "type": "boolean",
@@ -7379,7 +7319,7 @@
           "has_packaging": {
             "type": "boolean",
             "title": "Has Packaging",
-            "description": "Whether Nina packaging proposal exists",
+            "description": "Whether packaging proposal exists",
             "default": false
           },
           "generated_at": {

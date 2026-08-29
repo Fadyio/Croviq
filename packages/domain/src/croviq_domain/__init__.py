@@ -86,6 +86,13 @@ from croviq_domain.narration import (
     NarrationSegmentStatus,
     StudioVoiceResult,
 )
+from croviq_domain.model_registry import (
+    CANONICAL_MODEL_REGISTRY,
+    ModelCapabilityEntry,
+    ModelImplementationStatus,
+    UpstreamVerificationStatus,
+    get_model_capability,
+)
 from croviq_domain.agent_config import (
     GOOGLE_VOICE_CONSENT_PHRASE_EN,
     AgentId,
@@ -102,6 +109,7 @@ from croviq_domain.packaging import (
     CreatorPackageOverrides,
     PackagingChapter,
     PackagingProposal,
+    PublishMetadata,
     ShortPackage,
     ThumbnailConcept,
     TitleAngle,
@@ -210,6 +218,11 @@ __all__ = [
     "NarrationSegment",
     "NarrationSegmentStatus",
     "StudioVoiceResult",
+    "CANONICAL_MODEL_REGISTRY",
+    "ModelCapabilityEntry",
+    "ModelImplementationStatus",
+    "UpstreamVerificationStatus",
+    "get_model_capability",
     "AgentId",
     "AgentPromptConfig",
     "NarrationMode",
@@ -220,6 +233,7 @@ __all__ = [
     "CreatorPackageOverrides",
     "PackagingChapter",
     "PackagingProposal",
+    "PublishMetadata",
     "ShortPackage",
     "ThumbnailConcept",
     "TitleAngle",

@@ -27,7 +27,7 @@ const FAIRPHONE_PRODUCTION_ID = "prod_0b7657f515ae";
 const FAIRPHONE_PROPOSAL = {
   proposal_id: "pkg_fairphone6p_001",
   production_id: FAIRPHONE_PRODUCTION_ID,
-  agent: "nina",
+  agent: "iris",
   model: "gemini-3.7-flash",
   primary_title: "Fairphone 6 Plus: The Modular Smartphone That Actually Makes Sense",
   title_candidates: [
@@ -298,9 +298,9 @@ const mockPublishApis = async (
           updated_at: "2026-08-28T00:00:00Z",
           version: 1,
         },
-        nina_prompt: {
-          agent_id: "nina",
-          prompt_text: "Packaging and title generation.",
+        leo_prompt: {
+          agent_id: "leo",
+          prompt_text: "Dialogue editing.",
           updated_at: "2026-08-28T00:00:00Z",
           version: 1,
         },
@@ -507,7 +507,7 @@ const loginAndNavigateToRelease = async (
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, FAIRPHONE_PRODUCTION_ID);
 
-  await page.waitForSelector("[data-testid='release-workspace']");
+  await page.waitForSelector("[data-testid='section-iris-qa']");
 };
 
 test.describe("YouTube Publishing Workflow", () => {
@@ -537,7 +537,7 @@ test.describe("YouTube Publishing Workflow", () => {
     const modal = page.getByTestId("publish-confirmation-modal");
     await expect(modal).toBeVisible();
     await expect(page.getByTestId("section-channel-status")).toContainText("Dave's Tech Hardware");
-    await expect(page.getByTestId("input-publish-title")).toHaveValue(
+    await expect(modal.getByTestId("input-publish-title")).toHaveValue(
       FAIRPHONE_PROPOSAL.primary_title,
     );
     await expect(page.getByTestId("section-privacy-selection")).toBeVisible();

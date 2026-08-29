@@ -8,6 +8,7 @@ from croviq_domain.agent_config import AgentId
 from croviq_domain.packaging import (
     PackagingChapter,
     PackagingProposal,
+    PublishMetadata,
     ShortPackage,
     ThumbnailConcept,
     TitleAngle,
@@ -128,6 +129,20 @@ def test_packaging_proposal_validation_errors():
         )
 
 
-def test_agent_id_contains_nina():
-    assert AgentId.NINA.value == "nina"
-    assert AgentId("nina") == AgentId.NINA
+def test_publish_metadata_creation():
+    meta = PublishMetadata(
+        title="Fairphone 6 Plus Teardown",
+        description="A full teardown of the Fairphone 6 Plus.",
+        privacy="private",
+        thumbnail_frame_ms=15000,
+    )
+    assert meta.title == "Fairphone 6 Plus Teardown"
+    assert meta.privacy == "private"
+    assert meta.thumbnail_frame_ms == 15000
+
+
+def test_agent_id_contains_supported_agents():
+    assert AgentId.LEO.value == "leo"
+    assert AgentId.MAYA.value == "maya"
+    assert AgentId.ALEX.value == "alex"
+    assert AgentId.IRIS.value == "iris"

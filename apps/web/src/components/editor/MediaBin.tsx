@@ -21,6 +21,8 @@ export interface BRollAssetItem {
   sourceEndMs: number;
   durationMs: number;
   promptSummary: string;
+  status?: string;
+  isGenerated?: boolean;
 }
 
 interface MediaBinProps {
@@ -227,38 +229,85 @@ export const MediaBin: React.FC<MediaBinProps> = ({
           </div>
         </div>
 
-        {/* GENERATED ASSETS GROUP (Only rendered if assets exist) */}
-        {brollAssets.length > 0 && (
+        {/* GENERATED B-ROLL GROUP (Rendered when actual video media artifacts exist) */}
+        {brollAssets.filter((a) => a.status === "accepted" || a.isGenerated).length > 0 && (
           <div className="p-2">
-            <p className="px-1.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-              GENERATED
+            <p className="px-1.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted flex items-center justify-between">
+              <span>GENERATED B-ROLL</span>
+              <span className="text-[9px] px-1.5 py-0.2 bg-success/20 text-success rounded font-medium">
+                Ready
+              </span>
             </p>
             <div className="flex flex-col gap-1">
-              {brollAssets.map((asset, idx) => (
-                <div
-                  key={asset.artifactId || idx}
-                  onClick={() => onSeek && onSeek(asset.sourceStartMs)}
-                  className="p-2 rounded-lg border border-border-subtle/50 bg-surface-2/30 hover:bg-surface-2 cursor-pointer transition-colors flex flex-col gap-1"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-text-primary flex items-center gap-1.5 truncate">
-                      <Layers className="w-3 h-3 text-info shrink-0" />
-                      <span className="truncate text-[11px]">B-Roll {idx + 1}</span>
-                    </span>
-                    <span className="text-[10px] font-mono text-text-muted tabular-nums shrink-0">
-                      {formatDuration(asset.durationMs)}
+              {brollAssets
+                .filter((a) => a.status === "accepted" || a.isGenerated)
+                .map((asset, idx) => (
+                  <div
+                    key={asset.artifactId || idx}
+                    onClick={() => onSeek && onSeek(asset.sourceStartMs)}
+                    className="p-2 rounded-lg border border-info/40 bg-info/10 hover:bg-info/20 cursor-pointer transition-colors flex flex-col gap-1"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-text-primary flex items-center gap-1.5 truncate">
+                        <Video className="w-3.5 h-3.5 text-info shrink-0" />
+                        <span className="truncate text-[11px]">Generated B-Roll {idx + 1}</span>
+                      </span>
+                      <span className="text-[10px] font-mono text-text-muted tabular-nums shrink-0">
+                        {formatDuration(asset.durationMs)}
+                      </span>
+                    </div>
+                    {asset.promptSummary && (
+                      <p className="text-[10px] text-text-secondary line-clamp-2 italic">
+                        "{asset.promptSummary}"
+                      </p>
+                    )}
+                    <span className="text-[9px] font-mono text-text-muted">
+                      At {formatTimecode(asset.sourceStartMs)}
                     </span>
                   </div>
-                  {asset.promptSummary && (
-                    <p className="text-[10px] text-text-secondary line-clamp-2 italic">
-                      "{asset.promptSummary}"
-                    </p>
-                  )}
-                  <span className="text-[9px] font-mono text-text-muted">
-                    At {formatTimecode(asset.sourceStartMs)}
-                  </span>
-                </div>
-              ))}
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* B-ROLL PLANS GROUP (Rendered when planning recommendations exist) */}
+        {brollAssets.filter(
+          (a) => a.status === "planned" || (!a.isGenerated && a.status !== "accepted"),
+        ).length > 0 && (
+          <div className="p-2">
+            <p className="px-1.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              B-ROLL PLANS
+            </p>
+            <div className="flex flex-col gap-1">
+              {brollAssets
+                .filter(
+                  (a) => a.status === "planned" || (!a.isGenerated && a.status !== "accepted"),
+                )
+                .map((asset, idx) => (
+                  <div
+                    key={asset.artifactId || idx}
+                    onClick={() => onSeek && onSeek(asset.sourceStartMs)}
+                    className="p-2 rounded-lg border border-border-subtle/50 bg-surface-2/30 hover:bg-surface-2 cursor-pointer transition-colors flex flex-col gap-1"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-text-primary flex items-center gap-1.5 truncate">
+                        <Layers className="w-3 h-3 text-info shrink-0" />
+                        <span className="truncate text-[11px]">B-Roll Plan {idx + 1}</span>
+                      </span>
+                      <span className="text-[10px] font-mono text-text-muted tabular-nums shrink-0">
+                        {formatDuration(asset.durationMs)}
+                      </span>
+                    </div>
+                    {asset.promptSummary && (
+                      <p className="text-[10px] text-text-secondary line-clamp-2 italic">
+                        "{asset.promptSummary}"
+                      </p>
+                    )}
+                    <span className="text-[9px] font-mono text-text-muted">
+                      At {formatTimecode(asset.sourceStartMs)}
+                    </span>
+                  </div>
+                ))}
             </div>
           </div>
         )}

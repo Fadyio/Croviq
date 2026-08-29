@@ -126,7 +126,7 @@ class StudioVoiceSynthesizer:
     def __init__(self, max_tempo_stretch: float = 1.05) -> None:
         self.max_tempo_stretch = max_tempo_stretch
 
-    async def fit_narration_segment(
+    async def fit_narration_segment_with_audio(
         self,
         segment_id: str,
         production_id: str,
@@ -138,20 +138,22 @@ class StudioVoiceSynthesizer:
         tts_fn: Callable[[str, str], Awaitable[tuple[int, bytes]]],
         rewrite_fn: Callable[[str, float, int], Awaitable[str]],
         max_attempts: int = 3,
-    ) -> NarrationSegment:
-        """Execute TTS fit loop with up to max_attempts rewrites to strictly enforce duration ceiling."""
+    ) -> tuple[NarrationSegment, bytes]:
+        """Execute TTS fit loop with up to max_attempts rewrites to strictly enforce duration ceiling and return synthesized audio bytes."""
         current_text = original_text
         max_dur_s = available_duration_ms / 1000.0
+        last_audio_bytes: bytes = b""
 
         for attempt in range(1, max_attempts + 1):
             # Ask Leo to rewrite into natural English adhering to duration budget
             current_text = await rewrite_fn(original_text, max_dur_s, attempt)
             measured_duration_ms, audio_bytes = await tts_fn(current_text, voice_id)
+            last_audio_bytes = audio_bytes
 
             # Check hard duration budget
             if measured_duration_ms <= available_duration_ms:
                 # Perfectly within budget
-                return NarrationSegment(
+                seg = NarrationSegment(
                     segment_id=segment_id,
                     production_id=production_id,
                     source_start_ms=source_start_ms,
@@ -165,12 +167,13 @@ class StudioVoiceSynthesizer:
                     attempts=attempt,
                     tempo_adjustment=1.0,
                 )
+                return seg, audio_bytes
 
             # Check if slight micro tempo stretch (3-5%) can bring it safely into budget
             stretch_ratio = measured_duration_ms / max(1, available_duration_ms)
             if stretch_ratio <= self.max_tempo_stretch:
                 adjusted_duration = int(measured_duration_ms / stretch_ratio)
-                return NarrationSegment(
+                seg = NarrationSegment(
                     segment_id=segment_id,
                     production_id=production_id,
                     source_start_ms=source_start_ms,
@@ -184,6 +187,7 @@ class StudioVoiceSynthesizer:
                     attempts=attempt,
                     tempo_adjustment=round(stretch_ratio, 3),
                 )
+                return seg, audio_bytes
 
             # Audio exceeds budget: reject take and retry if attempts remain
             logger.info(
@@ -201,7 +205,7 @@ class StudioVoiceSynthesizer:
             available_duration_ms,
             max_attempts,
         )
-        return NarrationSegment(
+        seg = NarrationSegment(
             segment_id=segment_id,
             production_id=production_id,
             source_start_ms=source_start_ms,
@@ -215,6 +219,35 @@ class StudioVoiceSynthesizer:
             attempts=max_attempts,
             tempo_adjustment=1.0,
         )
+        return seg, last_audio_bytes
+
+    async def fit_narration_segment(
+        self,
+        segment_id: str,
+        production_id: str,
+        source_start_ms: int,
+        source_end_ms: int,
+        available_duration_ms: int,
+        original_text: str,
+        voice_id: str,
+        tts_fn: Callable[[str, str], Awaitable[tuple[int, bytes]]],
+        rewrite_fn: Callable[[str, float, int], Awaitable[str]],
+        max_attempts: int = 3,
+    ) -> NarrationSegment:
+        """Execute TTS fit loop with up to max_attempts rewrites to strictly enforce duration ceiling."""
+        seg, _ = await self.fit_narration_segment_with_audio(
+            segment_id=segment_id,
+            production_id=production_id,
+            source_start_ms=source_start_ms,
+            source_end_ms=source_end_ms,
+            available_duration_ms=available_duration_ms,
+            original_text=original_text,
+            voice_id=voice_id,
+            tts_fn=tts_fn,
+            rewrite_fn=rewrite_fn,
+            max_attempts=max_attempts,
+        )
+        return seg
 
     def generate_sample_audio_payload(
         self,

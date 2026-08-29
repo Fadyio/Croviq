@@ -573,15 +573,15 @@ class UpdatePackagingOverridesRequest(BaseModel):
 
 
 class PackagingDetailResponse(BaseModel):
-    """Publish-ready packaging details including Nina proposal, creator overrides, and media references."""
+    """Publish-ready packaging details including creator metadata and media references."""
 
     model_config = ConfigDict(extra="forbid")
 
     production_id: str = Field(..., description="Unique production identifier")
-    proposal: PackagingProposal | None = Field(default=None, description="Latest Nina packaging proposal")
+    proposal: PackagingProposal | None = Field(default=None, description="Latest packaging proposal if present")
     overrides: CreatorPackageOverrides | None = Field(default=None, description="Creator-defined package overrides")
-    effective_title: str = Field(..., description="Active title to publish (overridden or primary recommendation)")
-    effective_description: str = Field(..., description="Active description to publish")
+    effective_title: str = Field(..., description="Active title to publish")
+    effective_description: str = Field(default="", description="Active description to publish")
     effective_chapters: list[PackagingChapter] = Field(default_factory=list, description="Active canonical video chapters")
     effective_short_package: ShortPackage | None = Field(default=None, description="Active vertical Short packaging")
     effective_thumbnail_concept_id: str | None = Field(default=None, description="Active selected thumbnail concept ID")
@@ -622,29 +622,10 @@ class ReleaseReviewDetailResponse(BaseModel):
     short_url: str | None = Field(default=None, description="Signed playback URL for short video")
     has_master: bool = Field(default=False, description="Whether approved Master video artifact exists")
     has_short: bool = Field(default=False, description="Whether vertical Short video artifact exists")
-    has_packaging: bool = Field(default=False, description="Whether Nina packaging proposal exists")
+    has_packaging: bool = Field(default=False, description="Whether packaging proposal exists")
     generated_at: datetime | None = Field(default=None, description="UTC timestamp of review generation")
     release_fingerprint: str | None = Field(default=None, description="SHA-256 cryptographic release fingerprint locking immutable pipeline inputs")
 
-
-class AutoCorrectQARequest(BaseModel):
-    """Request payload to perform 1-cycle auto-correction on QA issues."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    review_id: str | None = Field(default=None, description="Optional specific review ID to correct")
-
-
-class AutoCorrectQAResponse(BaseModel):
-    """Response from executing bounded QA auto-correction."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    production_id: str = Field(..., description="Unique production identifier")
-    revised_proposal: PackagingProposal | None = Field(default=None, description="Corrected Nina packaging proposal")
-    new_review: ReleaseReview = Field(..., description="Fresh Iris QA review after correction")
-    release_ready: bool = Field(default=False, description="Whether output is now ready to publish")
-    message: str = Field(..., description="Summary of applied corrections")
 
 
 class PublishPreparationResponse(BaseModel):
@@ -660,13 +641,13 @@ class PublishPreparationResponse(BaseModel):
     has_upload_access: bool = Field(default=False, description="True if youtube.upload OAuth scope is granted")
     master_duration_ms: int | None = Field(default=None, description="Master video duration in milliseconds")
     master_title: str = Field(..., description="Master video title")
-    suggested_title: str = Field(..., description="Active Nina title candidate or creator override")
+    suggested_title: str = Field(..., description="Active title candidate or creator override")
     suggested_description: str = Field(..., description="Active description with embedded chapters")
     suggested_chapters: list[PackagingChapter] = Field(default_factory=list, description="Verified YouTube chapters")
     suggested_tags: list[str] = Field(default_factory=list, description="Keywords for YouTube tags")
     suggested_category_id: str = Field(default="28", description="Default category ID (28 = Science & Technology)")
     suggested_synthetic_media: bool = Field(default=False, description="Suggested synthetic media disclosure based on Studio Voice/BRoll")
-    verified_thumbnail_frames: list[dict[str, Any]] = Field(default_factory=list, description="Nina verified thumbnail frame candidates")
+    verified_thumbnail_frames: list[dict[str, Any]] = Field(default_factory=list, description="Verified thumbnail frame candidates")
     has_short: bool = Field(default=False, description="Whether an approved vertical Short artifact exists")
     short_title: str | None = Field(default=None, description="Short title candidate")
     short_description: str | None = Field(default=None, description="Short description candidate")

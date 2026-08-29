@@ -119,7 +119,94 @@ Use these canonical filter queries in Google Cloud Logs Explorer (Project: `crov
   jsonPayload.request_id="<REQUEST_ID>"
   ```
 
----
+### 4.8 AI Observability & Independent Google-Side Proof
+
+Croviq establishes a multi-layered, incontrovertible AI observability architecture to independently prove every model call on Google Cloud:
+
+1. **Authentication Model**:
+   - Application Default Credentials (ADC) bound to the Cloud Run API runtime service account identity:
+     `croviq-api-runtime@croviq-506602.iam.gserviceaccount.com`
+   - Zero API keys used for GenAI/Vertex. Zero fallback to Gemini Developer API or mock clients in production.
+
+2. **Vertex AI / Agent Platform Endpoint**:
+   - Service: `aiplatform.googleapis.com`
+   - Global Foundation Model resource names: `projects/croviq-506602/locations/global/publishers/google/models/<MODEL_ID>`
+
+3. **Google Cloud Data Access Audit Logging**:
+   - Declared in Terraform via `google_project_iam_audit_config.aiplatform_audit` for service `aiplatform.googleapis.com`.
+   - Captures `ADMIN_READ`, `DATA_READ`, `DATA_WRITE` without exemption.
+   - Emits authoritative audit log entries under `cloudaudit.googleapis.com/data_access`.
+
+4. **Gemini Request/Response BigQuery Logging Management**:
+   - **Dataset & Storage**: `croviq-506602.croviq_ai_observability` (Terraform managed in `infra/main.tf` with location `US`).
+   - **Table**: `gemini_requests` (time-partitioned by `logging_time`).
+   - **IAM Permissions**: `google_bigquery_dataset_iam_member` and `google_project_iam_member` (Terraform managed in `infra/main.tf`).
+   - **Publisher Model Configuration**: Configured via idempotent deployment script `scripts/configure_vertex_publisher_logging.py` invoking Vertex AI REST API `setPublisherModelConfig` across active Croviq models (`gemini-3.7-flash`, `gemini-3.5-transcribe-preview`, `gemini-3.1-flash-tts-preview`, `gemini-omni-1.1-flash-preview`).
+
+5. **Safe First-Party Telemetry**:
+   - Structured operational events: `ai.request.started`, `ai.request.completed`, `ai.request.failed`.
+   - Metadata: `provider="google"`, `backend="vertex_ai"`, `location="global"`, `model`, `operation`, `production_id`, `run_id`, `agent`, `latency_ms`, `input_tokens`, `output_tokens`, `audio_duration_ms`, `status`.
+
+6. **Canonical Logs Explorer Queries**:
+   - **All Croviq AI Calls (Audit Log)**:
+     ```text
+     protoPayload.serviceName="aiplatform.googleapis.com"
+     protoPayload.methodName="google.cloud.aiplatform.v1beta1.PredictionService.GenerateContent"
+     protoPayload.authenticationInfo.principalEmail="croviq-api-runtime@croviq-506602.iam.gserviceaccount.com"
+     ```
+   - **Transcription Calls (Gemini 3.5 Transcribe Preview)**:
+     ```text
+     protoPayload.serviceName="aiplatform.googleapis.com"
+     protoPayload.resourceName:"gemini-3.5-transcribe-preview"
+     ```
+   - **Studio Voice Synthesis Calls (Gemini 3.1 Flash TTS Preview)**:
+     ```text
+     protoPayload.serviceName="aiplatform.googleapis.com"
+     protoPayload.resourceName:"gemini-3.1-flash-tts-preview"
+     ```
+   - **Reasoning Calls (Gemini 3.7 Flash: Leo, Maya, Alex, Nina, Iris)**:
+     ```text
+     protoPayload.serviceName="aiplatform.googleapis.com"
+     protoPayload.resourceName:"gemini-3.7-flash"
+     ```
+
+7. **Safe BigQuery Metadata Inspection Query (Privacy-Preserving Default)**:
+   ```sql
+   SELECT
+     logging_time,
+     model,
+     api_method,
+     metadata
+   FROM `croviq-506602.croviq_ai_observability.gemini_requests`
+   ORDER BY logging_time DESC
+   LIMIT 50;
+   ```
+
+8. **Privileged Forensic Inspection Query (Restricted Access Only)**:
+   ```sql
+   -- Privileged forensic investigation only: exposes prompt, reasoning, and response payloads.
+   SELECT
+     logging_time,
+     model,
+     api_method,
+     metadata,
+     request_payload,
+     response_payload
+   FROM `croviq-506602.croviq_ai_observability.gemini_requests`
+   WHERE logging_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)
+   ORDER BY logging_time DESC
+   LIMIT 10;
+   ```
+
+9. **Privacy Warning & Compliance**:
+   - Deep request-response payloads contain prompts, raw transcripts, and model reasoning text. The default judge/inspection queries select only operational metadata (`logging_time`, `model`, `api_method`, `metadata`). Full payload access is strictly restricted to authorized forensic personnel.
+   - First-party telemetry logs strictly exclude authorization tokens, bearer headers, API keys, and signed GCS URLs.
+
+10. **End-to-End Proof Verification Procedure**:
+   - Step A: Initiate operation in Croviq (e.g. `POST /api/productions/{id}/transcribe` or `POST /api/productions/{id}/studio-voice`).
+   - Step B: Check Croviq structured operational log for `ai.request.started` and `ai.request.completed` with `request_id`.
+   - Step C: Check Google Cloud Logging `cloudaudit.googleapis.com/data_access` for matching timestamp and `protoPayload.resourceName`.
+   - Step D: Query BigQuery table `croviq_ai_observability.gemini_requests` using the safe metadata query.
 
 ## 5. Testing Seams
 

@@ -18,8 +18,8 @@ Croviq is "DevOps for YouTube Creators": an autonomous, visible production works
 ## Positioning
 
 Unlike generic auto-cutters, silence-strippers, or opaque black-box video generators:
-- **Visible, Autonomous Production Team**: Implemented production agents (Alex as Data Scientist, Maya as Director, Leo as Video Editor) and planned release agents (Nina as Packaging, Iris as QA) with distinct operational roles, explicit reasoning logs, and observable handoffs.
-- **Deterministic, Non-Destructive Editing**: All edits compile into typed Edit Decision Lists (EDLs) previewed via interactive multi-track timelines (Twick) and synchronized transcript overlays, rendered deterministically with FFmpeg.
+- **Visible Autonomous Production Team**: Implemented visible team (Alex as Data Scientist, Leo as Video Editor, Iris as Quality Control) with distinct operational roles, explicit reasoning logs, and observable handoffs.
+- **Deterministic Non-Destructive Editing**: All edits compile into typed Edit Decision Lists (EDLs) previewed via interactive multi-track timelines (Twick) and synchronized transcript overlays, rendered deterministically with FFmpeg.
 - **Natural Cut Safety**: Automatic speech boundary detection, micro-crossfades, room-tone bridging, and screen coverage markers to eliminate jarring jump cuts.
 - **Long-Term Channel Memory**: Falsifiable production lessons and retention change points stored in Google Agent Platform Memory Bank that dynamically guide future edits.
 - **Human-in-the-Loop Governance**: Strict approval gates before any external side effects (e.g., YouTube publishing).
@@ -41,15 +41,14 @@ Unlike generic auto-cutters, silence-strippers, or opaque black-box video genera
   - Word-level timestamped transcript synchronization with bidirectional timeline seeking.
   - Visual transcript styling for semantic edit states (removed red strikethrough, suggested amber underline, preserved green tint, active blue processing).
   - Multi-track timeline (Video V1, Audio A1, Annotation TX) powered by `@twick/timeline`.
-  - Live agent decision inspection (Maya's editorial direction, Leo's dialogue decisions, Alex's retention metrics, Nina's packaging concepts, Iris's QA compliance report).
+  - Live agent decision inspection (Leo's dialogue decisions, Alex's retention metrics, Iris's QA compliance report).
   - Fast preview toggle (Raw vs Edited EDL playback).
 - **Technical Stack & Constraints**:
   - Frontend: React 19, TypeScript, Vite, Tailwind CSS, Motion for React (`motion/react`), Lucide icons.
   - Backend: Python 3.12, FastAPI, Pydantic v2 on Google Cloud Run.
   - Storage & Media: Google Cloud Storage (GCS), Firestore Native Mode, FFmpeg deterministic render pipelines.
   - Reasoning & Memory: Gemini 3.7 Flash via Google GenAI SDK, Google Agent Platform Memory Bank.
-  - Domain Language: Strictly follow `CONTEXT.md` terms (`Workspace`, `Production`, `Run`, `Director (Maya)`, `Editor (Leo)`, `Data Scientist (Alex)`, `Packaging (Nina)`, `QA (Iris)`, `Timeline`, `Transcript`, `Edit Decision List (EDL)`, `Master`, `Short`, `Approval Gate`).
-
+  - Domain Language: Strictly follow `CONTEXT.md` terms (`Workspace`, `Production`, `Run`, `Editor (Leo)`, `Data Scientist (Alex)`, `QA (Iris)`, `Director (Maya)`, `Timeline`, `Transcript`, `Edit Decision List (EDL)`, `Master`, `Short`, `Approval Gate`).
 ## Brand Commitments
 
 - **Brand Name**: Croviq
@@ -57,12 +56,10 @@ Unlike generic auto-cutters, silence-strippers, or opaque black-box video genera
 - **Golden Rule**: Media is the most colorful element on screen; UI surfaces recede into neutral deep graphite (`#101214` base, `#16191C` / `#1C2024` panels).
 - **Logos & Assets**: `brandkit/croviq-logo-horizontal.svg` (primary top bar), `brandkit/croviq-symbol.svg` (emblem/favicon), `brandkit/croviq-logo-stacked.svg` (sign-in screen).
 - **Team Personas**:
-  - Maya (`Clapperboard`): Senior Production Lead / Director
-  - Leo (`Scissors`): Video Editor
   - Alex (`TrendingUp`): Statistical Intelligence & Data Scientist
-  - Nina (`Sparkles`): Packaging & Presentation
+  - Leo (`Scissors`): Video Editor
   - Iris (`ShieldCheck`): Quality Assurance & Compliance
-
+  - Maya: Director (Internal Review)
 ## Evidence on Hand
 
 - Deterministic synthetic sample channel (`croviq_syn_ai_eng_01`) with ~50k subscribers, 100 historical videos, and 18 months of realistic analytics curves (retention drops, CTR baselines).

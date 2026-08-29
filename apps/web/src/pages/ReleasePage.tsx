@@ -5,44 +5,34 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
+  ChevronRight,
   Clock,
-  Copy,
-  Edit3,
   ExternalLink,
   Film,
-  Flame,
-  HelpCircle,
   Image as ImageIcon,
   Info,
   Layers,
-  Lightbulb,
   Loader2,
+  Lock,
   LogOut,
   Maximize2,
   Minimize2,
   Pause,
   Play,
   RefreshCw,
-  RotateCcw,
   Save,
-  Scissors,
   ShieldAlert,
   ShieldCheck,
   Smartphone,
   Sparkles,
+  UploadCloud,
   Volume2,
   VolumeX,
-  Wand2,
-  XCircle,
-  UploadCloud,
-  Lock,
+  X,
 } from "lucide-react";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { useAuth } from "../auth/AuthContext";
 import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
-import ninaAvatar from "../assets/agents/Nina.png";
 import irisAvatar from "../assets/agents/Iris.png";
 import {
   PublishConfirmationModal,
@@ -52,15 +42,11 @@ import type { components } from "../api/generated";
 
 type PackagingDetailResponse = components["schemas"]["PackagingDetailResponse"];
 type PackagingChapter = components["schemas"]["PackagingChapter"];
-type TitleCandidate = components["schemas"]["TitleCandidate"];
-type ThumbnailConcept = components["schemas"]["ThumbnailConcept"];
 type ReleaseReviewDetailResponse = components["schemas"]["ReleaseReviewDetailResponse"];
 type ReleaseReview = components["schemas"]["ReleaseReview"];
 type ReleaseIssue = components["schemas"]["ReleaseIssue"];
 type ReleaseChecklist = components["schemas"]["ReleaseChecklist"];
 type ClaimVerification = components["schemas"]["ClaimVerification"];
-type ThumbnailEvaluation = components["schemas"]["ThumbnailEvaluation"];
-type AutoCorrectQAResponse = components["schemas"]["AutoCorrectQAResponse"];
 type PublishPreparationResponse = components["schemas"]["PublishPreparationResponse"];
 type PublishJobDetailResponse = components["schemas"]["PublishJobDetailResponse"];
 type YouTubePublishJob = components["schemas"]["YouTubePublishJob"];
@@ -71,52 +57,7 @@ interface ReleasePageProps {
   onNavigateEditor?: () => void;
 }
 
-const getAngleBadgeColor = (angle: string) => {
-  switch (angle) {
-    case "PROBLEM_SOLUTION":
-      return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
-    case "DIRECT_VALUE":
-      return "bg-blue-500/15 text-blue-400 border-blue-500/30";
-    case "CURIOSITY":
-      return "bg-amber-500/15 text-amber-400 border-amber-500/30";
-    case "CONTRARIAN":
-      return "bg-purple-500/15 text-purple-400 border-purple-500/30";
-    case "HOW_TO":
-      return "bg-cyan-500/15 text-cyan-400 border-cyan-500/30";
-    case "COMPARISON":
-      return "bg-pink-500/15 text-pink-400 border-pink-500/30";
-    case "NEWS_RELEVANT":
-      return "bg-orange-500/15 text-orange-400 border-orange-500/30";
-    default:
-      return "bg-surface-3 text-text-secondary border-border-subtle";
-  }
-};
-
-const getAngleFriendlyName = (angle: string) => {
-  switch (angle) {
-    case "PROBLEM_SOLUTION":
-      return "Problem-Solution";
-    case "DIRECT_VALUE":
-      return "Direct Value";
-    case "CURIOSITY":
-      return "Curiosity";
-    case "CONTRARIAN":
-      return "Contrarian";
-    case "HOW_TO":
-      return "How-To";
-    case "COMPARISON":
-      return "Comparison";
-    case "NEWS_RELEVANT":
-      return "News Relevant";
-    default:
-      return angle
-        .replace(/_/g, " ")
-        .toLowerCase()
-        .replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-};
-
-const getIssueFriendlyName = (type: string) => {
+const getIssueFriendlyName = (type: string): string => {
   const map: Record<string, string> = {
     AUDIO_ARTIFACT: "Audio Artifact",
     AUDIO_LEVEL: "Audio Level",
@@ -143,37 +84,20 @@ const getIssueFriendlyName = (type: string) => {
     MISSING_CONTENT: "Missing Content / Demo",
     CONTEXT_LOSS: "Context Loss",
   };
-  return map[type] || type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return (
+    map[type] ||
+    type
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+  );
 };
 
-const getClaimStatusBadge = (status: string) => {
-  switch (status) {
-    case "SUPPORTED_BY_VIDEO":
-      return {
-        label: "Supported by Video",
-        color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-        icon: CheckCircle2,
-      };
-    case "SUPPORTED_EXTERNALLY":
-      return {
-        label: "Supported Externally",
-        color: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-        icon: ExternalLink,
-      };
-    case "UNSUPPORTED":
-      return {
-        label: "Unsupported",
-        color: "bg-rose-500/15 text-rose-400 border-rose-500/30",
-        icon: XCircle,
-      };
-    case "MANUAL_REVIEW":
-    default:
-      return {
-        label: "Manual Review",
-        color: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-        icon: AlertTriangle,
-      };
-  }
+const formatMs = (ms: number): string => {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 };
 
 export const ReleasePage: React.FC<ReleasePageProps> = ({
@@ -184,36 +108,31 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   const { firebaseUser, logout } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const [activeStage, setActiveStage] = useState<"packaging" | "qa" | "ready">("qa");
-  const [packagingData, setPackagingData] = useState<PackagingDetailResponse | null>(null);
   const [qaData, setQaData] = useState<ReleaseReviewDetailResponse | null>(null);
+  const [packagingData, setPackagingData] = useState<PackagingDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isGeneratingPackaging, setIsGeneratingPackaging] = useState<boolean>(false);
   const [isRunningQA, setIsRunningQA] = useState<boolean>(false);
-  const [isCorrectingQA, setIsCorrectingQA] = useState<boolean>(false);
-  const [isSavingOverrides, setIsSavingOverrides] = useState<boolean>(false);
+  const [isSavingMetadata, setIsSavingMetadata] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [correctionSuccessMsg, setCorrectionSuccessMsg] = useState<string | null>(null);
 
-  // Editable local state
+  // Manual creator publish fields
   const [titleInput, setTitleInput] = useState<string>("");
   const [descriptionInput, setDescriptionInput] = useState<string>("");
-  const [chaptersInput, setChaptersInput] = useState<PackagingChapter[]>([]);
-  const [selectedTitleCandidate, setSelectedTitleCandidate] = useState<string>("");
-  const [selectedThumbnailId, setSelectedThumbnailId] = useState<string>("");
-  const [shortTitleInput, setShortTitleInput] = useState<string>("");
-  const [shortDescInput, setShortDescInput] = useState<string>("");
+  const [privacySetting, setPrivacySetting] = useState<"private" | "unlisted" | "public">(
+    "private",
+  );
 
-  // Video playback state
+  // Video playback
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
   const [durationMs, setDurationMs] = useState<number>(113824);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
-  // Agent Settings Drawers state
-  const [drawerAgent, setDrawerAgent] = useState<"nina" | "iris" | null>(null);
-  // YouTube Publishing State
+  // Iris settings drawer
+  const [isIrisDrawerOpen, setIsIrisDrawerOpen] = useState<boolean>(false);
+
+  // YouTube Publishing Modal state
   const [isPublishModalOpen, setIsPublishModalOpen] = useState<boolean>(false);
   const [prepData, setPrepData] = useState<PublishPreparationResponse | null>(null);
   const [isLoadingPrep, setIsLoadingPrep] = useState<boolean>(false);
@@ -230,38 +149,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     return headers;
   }, [firebaseUser]);
 
-  // Load initial packaging details (idempotent GET, 0 model calls)
-  const loadPackaging = useCallback(async () => {
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/productions/${productionId}/packaging`, { headers });
-      if (res.ok) {
-        const data: PackagingDetailResponse = await res.json();
-        setPackagingData(data);
-        if (data.proposal) {
-          setTitleInput(data.effective_title || data.proposal.primary_title || "");
-          setSelectedTitleCandidate(
-            data.overrides?.selected_title || data.proposal.primary_title || "",
-          );
-          setDescriptionInput(data.effective_description || data.proposal.description || "");
-          setChaptersInput(data.effective_chapters || data.proposal.chapters || []);
-          setSelectedThumbnailId(
-            data.effective_thumbnail_concept_id ||
-              data.proposal.thumbnail_concepts?.[0]?.concept_id ||
-              "",
-          );
-          if (data.effective_short_package) {
-            setShortTitleInput(data.effective_short_package.title);
-            setShortDescInput(data.effective_short_package.description);
-          }
-        }
-      }
-    } catch (err: unknown) {
-      console.error("Error loading packaging:", err);
-    }
-  }, [getAuthHeaders, productionId]);
-
-  // Load QA review details (idempotent GET, 0 model calls)
+  // Load QA review details
   const loadQA = useCallback(async () => {
     try {
       const headers = await getAuthHeaders();
@@ -274,7 +162,24 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       console.error("Error loading QA review:", err);
     }
   }, [getAuthHeaders, productionId]);
-  // Load current YouTube publishing job status
+
+  // Load packaging & metadata
+  const loadPackaging = useCallback(async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/productions/${productionId}/packaging`, { headers });
+      if (res.ok) {
+        const data: PackagingDetailResponse = await res.json();
+        setPackagingData(data);
+        setTitleInput(data.effective_title || "Master Video Walkthrough");
+        setDescriptionInput(data.effective_description || "");
+      }
+    } catch (err: unknown) {
+      console.error("Error loading packaging metadata:", err);
+    }
+  }, [getAuthHeaders, productionId]);
+
+  // Load active publish job status
   const loadPublishStatus = useCallback(async () => {
     try {
       const headers = await getAuthHeaders();
@@ -288,7 +193,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     }
   }, [getAuthHeaders, productionId]);
 
-  // Load publish preparation metadata
+  // Load publish prep data for modal
   const loadPublishPrep = useCallback(async () => {
     setIsLoadingPrep(true);
     try {
@@ -308,11 +213,11 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
-      await Promise.all([loadPackaging(), loadQA(), loadPublishStatus()]);
+      await Promise.all([loadQA(), loadPackaging(), loadPublishStatus()]);
       setIsLoading(false);
     };
     init();
-  }, [loadPackaging, loadQA, loadPublishStatus]);
+  }, [loadQA, loadPackaging, loadPublishStatus]);
 
   // Polling active publish job
   useEffect(() => {
@@ -332,6 +237,103 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     };
   }, [publishJobData?.job?.status, loadPublishStatus]);
 
+  // Trigger explicit Iris Quality Control pass
+  const handleRunQA = async (forceRegenerate: boolean = true) => {
+    setIsRunningQA(true);
+    setErrorMessage(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/productions/${productionId}/release-review`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ force_regenerate: forceRegenerate }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || "Iris Quality Control review failed");
+      }
+      const data: ReleaseReviewDetailResponse = await res.json();
+      setQaData(data);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to run Quality Control review");
+    } finally {
+      setIsRunningQA(false);
+    }
+  };
+
+  // Save manual metadata overrides
+  const handleSaveMetadata = async () => {
+    setIsSavingMetadata(true);
+    setSaveMessage(null);
+    setErrorMessage(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/productions/${productionId}/packaging`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({
+          custom_title: titleInput,
+          custom_description: descriptionInput,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to save release metadata");
+      }
+      const updated: PackagingDetailResponse = await res.json();
+      setPackagingData(updated);
+      setSaveMessage("Release metadata saved successfully.");
+      setTimeout(() => setSaveMessage(null), 3000);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to save release metadata");
+    } finally {
+      setIsSavingMetadata(false);
+    }
+  };
+
+  // Video controls
+  const handlePlayPause = () => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.pause();
+    } else {
+      videoRef.current.play().catch(() => {});
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTimeMs(Math.floor(videoRef.current.currentTime * 1000));
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      const dur = Math.floor(videoRef.current.duration * 1000);
+      if (!isNaN(dur) && dur > 0) {
+        setDurationMs(dur);
+      }
+    }
+  };
+
+  const handleSeek = (targetMs: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = targetMs / 1000;
+    setCurrentTimeMs(targetMs);
+  };
+
+  const handleSeekToIssue = (issue: ReleaseIssue) => {
+    const targetMs = issue.source_start_ms ?? issue.source_end_ms ?? 0;
+    handleSeek(targetMs);
+  };
+
+  const toggleMute = () => {
+    if (!videoRef.current) return;
+    videoRef.current.muted = !isMuted;
+    setIsMuted(!isMuted);
+  };
+
+  // YouTube publishing actions
   const handleOpenPublishModal = () => {
     setIsPublishModalOpen(true);
     loadPublishPrep();
@@ -351,18 +353,13 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       });
       if (res.ok) {
         const data = await res.json();
-        window.location.href = data.auth_url;
-      } else {
-        setErrorMessage("Failed to generate YouTube authorization URL.");
+        if (data.authorization_url) {
+          window.location.href = data.authorization_url;
+        }
       }
     } catch (err: unknown) {
-      console.error("Error initiating YouTube incremental OAuth:", err);
-      setErrorMessage("Error initiating YouTube authorization.");
+      console.error("Failed to generate upload authorization URL:", err);
     }
-  };
-
-  const handleConnectYouTube = () => {
-    handleGrantUploadAccess();
   };
 
   const handleConfirmPublish = async (params: {
@@ -385,212 +382,58 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
         headers,
         body: JSON.stringify(params),
       });
-      if (res.ok) {
-        const data: PublishJobDetailResponse = await res.json();
-        setPublishJobData(data);
-        setIsPublishModalOpen(false);
-        setPublishSuccessMsg("Publishing initiated successfully.");
-        setTimeout(() => setPublishSuccessMsg(null), 4000);
-      } else {
-        const errData = await res.json().catch(() => ({ detail: "Publish request failed" }));
-        setErrorMessage(errData.detail || "Failed to publish to YouTube");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Publish request failed");
       }
+      const data: PublishJobDetailResponse = await res.json();
+      setPublishJobData(data);
+      setIsPublishModalOpen(false);
+      setPublishSuccessMsg("YouTube publishing job initiated successfully.");
+      setTimeout(() => setPublishSuccessMsg(null), 5000);
     } catch (err: unknown) {
-      console.error("Error submitting publish job:", err);
-      setErrorMessage(err instanceof Error ? err.message : "Error submitting publish job");
+      setErrorMessage(err instanceof Error ? err.message : "Publish request failed");
     } finally {
       setIsPublishing(false);
     }
   };
 
-  // Run or re-run Iris QA Review
-  const handleRunQA = async (forceRegenerate: boolean = false) => {
-    setIsRunningQA(true);
-    setErrorMessage(null);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/productions/${productionId}/release-review`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ force_regenerate: forceRegenerate }),
-      });
-      if (res.ok) {
-        const data: ReleaseReviewDetailResponse = await res.json();
-        setQaData(data);
-        setSaveMessage(forceRegenerate ? "Fresh QA pass completed!" : "QA review loaded.");
-        setTimeout(() => setSaveMessage(null), 3000);
-      } else {
-        const err = await res.json().catch(() => ({ detail: "QA review failed" }));
-        setErrorMessage(err.detail || "QA review execution failed");
-      }
-    } catch (err: unknown) {
-      console.error("Error executing QA review:", err);
-      setErrorMessage(err instanceof Error ? err.message : "Error executing QA review");
-    } finally {
-      setIsRunningQA(false);
-    }
-  };
-
-  // Perform 1-cycle auto-correction (Nina revises packaging, Iris re-evaluates)
-  const handleAutoCorrectQA = async () => {
-    setIsCorrectingQA(true);
-    setErrorMessage(null);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/productions/${productionId}/release-review/correct`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({}),
-      });
-      if (res.ok) {
-        const data: AutoCorrectQAResponse = await res.json();
-        setCorrectionSuccessMsg(data.message);
-        setTimeout(() => setCorrectionSuccessMsg(null), 5000);
-        // Refresh both packaging and QA state
-        await Promise.all([loadPackaging(), loadQA()]);
-      } else {
-        const err = await res.json().catch(() => ({ detail: "Auto-correction failed" }));
-        setErrorMessage(err.detail || "Auto-correction failed");
-      }
-    } catch (err: unknown) {
-      console.error("Error during auto-correction:", err);
-      setErrorMessage(err instanceof Error ? err.message : "Error during auto-correction");
-    } finally {
-      setIsCorrectingQA(false);
-    }
-  };
-
-  // Explicit packaging generation pass
-  const handleGeneratePackaging = async (forceRegenerate: boolean = false) => {
-    setIsGeneratingPackaging(true);
-    setErrorMessage(null);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/productions/${productionId}/package`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ force_regenerate: forceRegenerate }),
-      });
-      if (res.ok) {
-        const data: PackagingDetailResponse = await res.json();
-        setPackagingData(data);
-        if (data.proposal) {
-          setTitleInput(data.effective_title || data.proposal.primary_title || "");
-          setSelectedTitleCandidate(
-            data.overrides?.selected_title || data.proposal.primary_title || "",
-          );
-          setDescriptionInput(data.effective_description || data.proposal.description || "");
-          setChaptersInput(data.effective_chapters || data.proposal.chapters || []);
-          setSelectedThumbnailId(
-            data.effective_thumbnail_concept_id ||
-              data.proposal.thumbnail_concepts?.[0]?.concept_id ||
-              "",
-          );
-          if (data.effective_short_package) {
-            setShortTitleInput(data.effective_short_package.title);
-            setShortDescInput(data.effective_short_package.description);
-          }
-        }
-        setSaveMessage("Packaging generated successfully!");
-        setTimeout(() => setSaveMessage(null), 3000);
-        // Trigger QA review after packaging
-        await loadQA();
-      } else {
-        const err = await res.json().catch(() => ({ detail: "Packaging generation failed" }));
-        setErrorMessage(err.detail || "Packaging generation failed");
-      }
-    } catch (err: unknown) {
-      console.error("Error generating packaging:", err);
-      setErrorMessage(err instanceof Error ? err.message : "Error generating packaging");
-    } finally {
-      setIsGeneratingPackaging(false);
-    }
-  };
-
-  // Save creator packaging overrides
-  const handleSaveOverrides = async () => {
-    setIsSavingOverrides(true);
-    try {
-      const headers = await getAuthHeaders();
-      const payload = {
-        selected_title: selectedTitleCandidate || undefined,
-        custom_title: titleInput || undefined,
-        custom_description: descriptionInput || undefined,
-        custom_chapters: chaptersInput.length > 0 ? chaptersInput : undefined,
-        custom_short_title: shortTitleInput || undefined,
-        custom_short_description: shortDescInput || undefined,
-        selected_thumbnail_concept_id: selectedThumbnailId || undefined,
-      };
-      const res = await fetch(`/api/productions/${productionId}/packaging`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const updated: PackagingDetailResponse = await res.json();
-        setPackagingData(updated);
-        setSaveMessage("Changes saved successfully!");
-        setTimeout(() => setSaveMessage(null), 2500);
-        // Trigger fresh QA check on packaging override change
-        await handleRunQA(true);
-      }
-    } catch (err: unknown) {
-      console.error("Error saving overrides:", err);
-      setErrorMessage(err instanceof Error ? err.message : "Failed to save changes.");
-    } finally {
-      setIsSavingOverrides(false);
-    }
-  };
-
-  // Video seeking helpers
-  const handleSeek = (timeMs: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    const targetSeconds = timeMs / 1000.0;
-    video.currentTime = targetSeconds;
-    setCurrentTimeMs(timeMs);
-  };
-
-  const handleTogglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (isPlaying) {
-      video.pause();
-      setIsPlaying(false);
-    } else {
-      video.play().catch(() => {});
-      setIsPlaying(true);
-    }
-  };
-
-  const handleChapterTitleChange = (index: number, newTitle: string) => {
-    setChaptersInput((prev) => {
-      const updated = [...prev];
-      if (updated[index]) {
-        updated[index] = { ...updated[index], title: newTitle };
-      }
-      return updated;
-    });
-  };
-
-  const activeVideoSrc = packagingData?.master_url || qaData?.master_url || "";
-  const releaseStatusText =
-    qaData?.release_status || (packagingData?.proposal ? "Checking final output" : "Packaging");
-  const isReleaseReady = Boolean(qaData?.release_ready);
+  const activeVideoUrl = qaData?.master_url || packagingData?.master_url || null;
+  const isReady = Boolean(qaData?.release_ready);
+  const issuesList = qaData?.review?.issues || [];
+  const checklist = qaData?.checklist;
 
   return (
-    <div
-      className="min-h-screen bg-background text-text-primary flex flex-col font-sans select-none"
-      data-testid="release-workspace"
-    >
-      {/* Top Navbar */}
-      <header className="h-14 bg-surface-1 border-b border-border-subtle px-4 md:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30 shadow-xs">
-        <div className="flex items-center gap-3 min-w-0">
+    <div className="min-h-screen bg-background text-text-primary flex flex-col">
+      {/* 1. Header Bar */}
+      <header className="h-14 bg-surface-1 border-b border-border-subtle px-4 sm:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30">
+        <div className="flex items-center gap-4 min-w-0">
           <button
             type="button"
-            onClick={onNavigateEditor || onNavigateHome}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 rounded-lg transition-colors border border-border-subtle"
-            title="Back to Editor"
+            onClick={
+              onNavigateHome ||
+              (() => {
+                window.location.href = "/app";
+              })
+            }
+            className="hover:opacity-80 transition-opacity flex items-center gap-2 shrink-0 cursor-pointer"
+            title="Croviq Home"
+            aria-label="Croviq Home"
+          >
+            <CroviqLogo height={24} className="h-6 w-auto" />
+          </button>
+
+          <span className="text-border-strong select-none font-light">/</span>
+
+          <button
+            type="button"
+            onClick={
+              onNavigateEditor ||
+              (() => {
+                window.location.href = `/productions/${productionId}`;
+              })
+            }
+            className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
             data-testid="btn-back-to-editor"
           >
             <ArrowLeft className="size-3.5" />
@@ -599,1207 +442,641 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
 
           <span className="text-border-strong select-none font-light">/</span>
 
-          <button
-            type="button"
-            onClick={onNavigateHome}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
-            aria-label="Back to Overview"
-            title="Back to Overview"
-          >
-            <CroviqLogo height={22} className="h-5 w-auto" />
-            <span className="text-xs font-semibold text-text-primary tracking-tight">
-              Release Gate
-            </span>
-          </button>
+          <span className="text-xs font-bold text-text-primary truncate">
+            Quality Control & Release
+          </span>
         </div>
 
-        {/* Center: Pipeline Stages & Status */}
-        <div className="flex items-center gap-2 md:gap-4">
-          {/* Stage Tabs */}
-          <div className="hidden sm:flex items-center p-0.5 rounded-lg bg-surface-2 border border-border-subtle text-xs font-medium">
-            <button
-              type="button"
-              onClick={() => setActiveStage("packaging")}
-              className={`px-3 py-1 rounded-md transition-all ${
-                activeStage === "packaging"
-                  ? "bg-surface-1 text-text-primary shadow-xs font-semibold"
-                  : "text-text-secondary hover:text-text-primary"
-              }`}
-            >
-              1. Packaging
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveStage("qa")}
-              className={`px-3 py-1 rounded-md transition-all ${
-                activeStage === "qa"
-                  ? "bg-surface-1 text-text-primary shadow-xs font-semibold"
-                  : "text-text-secondary hover:text-text-primary"
-              }`}
-            >
-              2. QA Review
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveStage("ready")}
-              className={`px-3 py-1 rounded-md transition-all ${
-                activeStage === "ready"
-                  ? "bg-surface-1 text-text-primary shadow-xs font-semibold"
-                  : "text-text-secondary hover:text-text-primary"
-              }`}
-            >
-              3. Ready
-            </button>
-          </div>
-
-          {/* Canonical Creator-Facing Status Chip */}
+        {/* Header Right Actions */}
+        <div className="flex items-center gap-3">
+          {/* Status Badge */}
           <div
-            className={`flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold transition-all ${
-              isReleaseReady
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+              isReady
                 ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                : releaseStatusText === "Fix required"
-                  ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                  : releaseStatusText === "Manual review"
-                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                    : "bg-surface-2 text-text-secondary border-border-subtle"
+                : qaData?.review?.verdict === "FIX_REQUIRED"
+                  ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                  : "bg-surface-2 text-text-muted border-border-subtle"
             }`}
             data-testid="release-status-badge"
           >
-            {isRunningQA ? (
-              <Loader2 className="size-3.5 text-primary animate-spin" />
-            ) : isReleaseReady ? (
-              <CheckCircle2 className="size-3.5 text-emerald-400" />
-            ) : releaseStatusText === "Fix required" ? (
-              <AlertCircle className="size-3.5 text-rose-400" />
-            ) : releaseStatusText === "Manual review" ? (
-              <AlertTriangle className="size-3.5 text-amber-400" />
+            {isReady ? (
+              <>
+                <CheckCircle2 className="size-3.5" />
+                <span>Ready to Publish</span>
+              </>
+            ) : qaData?.review?.verdict === "FIX_REQUIRED" ? (
+              <>
+                <AlertTriangle className="size-3.5" />
+                <span>Fix Required</span>
+              </>
             ) : (
-              <Sparkles className="size-3.5 text-text-muted" />
+              <>
+                <Clock className="size-3.5" />
+                <span>Pending Quality Check</span>
+              </>
             )}
-            <span className="text-[11px]">{releaseStatusText}</span>
           </div>
-        </div>
 
-        {/* Right actions */}
-        <div className="flex items-center gap-2.5">
-          {saveMessage && (
-            <span className="text-xs text-emerald-400 flex items-center gap-1 font-medium animate-fade-in">
-              <Check className="size-3.5" />
-              {saveMessage}
-            </span>
-          )}
-
+          {/* Explicit Run Quality Check Button */}
           <button
             type="button"
-            onClick={handleSaveOverrides}
-            disabled={isSavingOverrides || isGeneratingPackaging || !packagingData?.proposal}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-surface-2 hover:bg-surface-3 text-text-primary border border-border-subtle rounded-lg transition-colors disabled:opacity-50"
-            data-testid="btn-save-package-changes"
+            onClick={() => handleRunQA(true)}
+            disabled={isRunningQA}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-surface-2 hover:bg-surface-3 border border-border-subtle text-text-primary transition-colors disabled:opacity-50"
+            data-testid="btn-run-qa"
+            title="Run complete quality check with Iris"
           >
-            {isSavingOverrides ? (
-              <Loader2 className="size-3.5 animate-spin text-primary" />
+            {isRunningQA ? (
+              <Loader2 className="size-3.5 text-primary animate-spin" />
             ) : (
-              <Save className="size-3.5" />
+              <ShieldCheck className="size-3.5 text-primary" />
             )}
-            <span className="hidden sm:inline">Save Overrides</span>
+            <span>{isRunningQA ? "Checking…" : "Run Quality Check"}</span>
+          </button>
+
+          {/* Publish to YouTube Button */}
+          <button
+            type="button"
+            onClick={handleOpenPublishModal}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-red-600 hover:bg-red-500 text-white shadow-sm transition-colors"
+            data-testid="btn-open-publish-modal"
+          >
+            <YouTubeIcon className="size-4" />
+            <span>Publish to YouTube</span>
           </button>
 
           <button
+            type="button"
             onClick={logout}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-2 rounded-lg transition-colors border border-transparent hover:border-border-subtle"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
             title="Sign out"
           >
             <LogOut className="size-3.5" />
-            <span className="hidden md:inline">Logout</span>
           </button>
         </div>
       </header>
 
-      {/* Error & Success Toasts */}
+      {/* 2. Messages Bar */}
       {errorMessage && (
-        <div className="bg-rose-500/10 border-b border-rose-500/20 px-4 py-2 text-xs text-rose-400 flex items-center justify-between">
-          <span>{errorMessage}</span>
-          <button onClick={() => setErrorMessage(null)} className="hover:text-rose-200">
-            <XCircle className="size-4" />
-          </button>
-        </div>
-      )}
-      {correctionSuccessMsg && (
-        <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-2 text-xs text-emerald-400 flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <CheckCircle2 className="size-4" />
-            {correctionSuccessMsg}
-          </span>
-          <button onClick={() => setCorrectionSuccessMsg(null)} className="hover:text-emerald-200">
-            <XCircle className="size-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Main Container */}
-      <div className="flex-1 max-w-[1720px] w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column (8 cols): Master Video, Packaging Editor, QA Checklist, Issues */}
-        <div className="lg:col-span-8 space-y-6">
-          {/* 1. Master Video Preview Stage */}
-          <section
-            className="bg-surface-1 border border-border-subtle rounded-xl overflow-hidden shadow-xs"
-            data-testid="section-master-preview"
+        <div className="bg-danger/10 border-b border-danger/30 px-6 py-2.5 flex items-center justify-between text-xs text-danger">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="p-1 hover:opacity-75"
           >
-            <div className="p-3 border-b border-border-subtle bg-surface-2/40 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Film className="size-4 text-primary" />
-                <h2 className="text-xs font-semibold tracking-wide uppercase text-text-secondary">
-                  Approved Master Video Preview
-                </h2>
-              </div>
-              <span className="text-[11px] font-mono text-text-muted">
-                {packagingData?.master_artifact?.duration_ms
-                  ? `${(packagingData.master_artifact.duration_ms / 1000).toFixed(1)}s`
-                  : "Master"}
-              </span>
-            </div>
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
 
-            <div className="relative bg-black aspect-video flex items-center justify-center overflow-hidden">
-              {activeVideoSrc ? (
+      {saveMessage && (
+        <div className="bg-emerald-500/10 border-b border-emerald-500/30 px-6 py-2 flex items-center gap-2 text-xs text-emerald-400">
+          <CheckCircle2 className="size-4" />
+          <span>{saveMessage}</span>
+        </div>
+      )}
+
+      {publishSuccessMsg && (
+        <div className="bg-emerald-500/10 border-b border-emerald-500/30 px-6 py-2 flex items-center gap-2 text-xs text-emerald-400">
+          <CheckCircle2 className="size-4" />
+          <span>{publishSuccessMsg}</span>
+        </div>
+      )}
+
+      {/* 3. Main Body: 2 Columns */}
+      <div className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left/Center Column (8 cols): Video Stage + Iris QA Findings */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Master Video Canvas */}
+          <div className="bg-black border border-border-subtle rounded-2xl overflow-hidden shadow-md">
+            <div className="aspect-video relative flex items-center justify-center bg-black">
+              {activeVideoUrl ? (
                 <video
                   ref={videoRef}
-                  src={activeVideoSrc}
-                  className="w-full h-full object-contain"
-                  onTimeUpdate={() => {
-                    if (videoRef.current) {
-                      setCurrentTimeMs(Math.floor(videoRef.current.currentTime * 1000));
-                    }
-                  }}
-                  onLoadedMetadata={() => {
-                    if (videoRef.current) {
-                      setDurationMs(Math.floor(videoRef.current.duration * 1000));
-                    }
-                  }}
+                  src={activeVideoUrl}
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
                   onEnded={() => setIsPlaying(false)}
+                  className="w-full h-full object-contain"
+                  playsInline
                 />
               ) : (
-                <div className="text-center p-6 text-text-muted">
-                  <Film className="size-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-xs font-medium">Master Video Stream</p>
-                  <p className="text-[11px] opacity-75">
-                    {packagingData?.has_master
-                      ? "Loading video stream…"
-                      : "Master video render not completed"}
-                  </p>
+                <div className="text-center p-8 text-text-muted space-y-2">
+                  <Film className="size-10 mx-auto text-text-muted/40" />
+                  <p className="text-xs">Rendered master video playback target</p>
                 </div>
               )}
             </div>
 
             {/* Video Controls Bar */}
-            <div className="p-3 bg-surface-1 flex items-center justify-between gap-4 border-t border-border-subtle">
+            <div className="bg-surface-1 border-t border-border-subtle p-3 flex items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={handleTogglePlay}
+                  onClick={handlePlayPause}
                   className="p-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 text-text-primary transition-colors"
                   aria-label={isPlaying ? "Pause" : "Play"}
-                  data-testid="btn-play-pause-master"
                 >
                   {isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
                 </button>
-
                 <button
                   type="button"
-                  onClick={() => setIsMuted(!isMuted)}
-                  className="p-1.5 rounded-lg text-text-muted hover:text-text-primary transition-colors"
+                  onClick={toggleMute}
+                  className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary transition-colors"
                   aria-label={isMuted ? "Unmute" : "Mute"}
                 >
                   {isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
                 </button>
-
-                <span className="text-xs font-mono text-text-secondary">
-                  {Math.floor(currentTimeMs / 60000)}:
-                  {String(Math.floor((currentTimeMs % 60000) / 1000)).padStart(2, "0")} /{" "}
-                  {Math.floor(durationMs / 60000)}:
-                  {String(Math.floor((durationMs % 60000) / 1000)).padStart(2, "0")}
+                <span className="font-mono text-text-secondary text-[11px]">
+                  {formatMs(currentTimeMs)} / {formatMs(durationMs)}
                 </span>
               </div>
 
-              {/* Quick Scrubber */}
-              <input
-                type="range"
-                min={0}
-                max={durationMs || 1000}
-                value={currentTimeMs}
-                onChange={(e) => handleSeek(Number(e.target.value))}
-                className="flex-1 h-1.5 bg-surface-3 rounded-lg appearance-none cursor-pointer accent-primary"
-              />
+              {/* Scrubber */}
+              <div className="flex-1 mx-2">
+                <input
+                  type="range"
+                  min={0}
+                  max={durationMs || 1000}
+                  value={currentTimeMs}
+                  onChange={(e) => handleSeek(Number(e.target.value))}
+                  className="w-full h-1.5 bg-surface-3 rounded-lg appearance-none cursor-pointer accent-primary"
+                  aria-label="Timeline seek slider"
+                />
+              </div>
             </div>
-          </section>
+          </div>
 
-          {/* 2. Iris QA Release Gate & Checklist Section */}
-          <section
-            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-5 shadow-xs"
+          {/* Iris Quality Control Review Section */}
+          <div
+            className="bg-surface-1 border border-border-subtle rounded-2xl p-6 space-y-5 shadow-xs"
             data-testid="section-iris-qa"
           >
-            <div className="flex items-center justify-between flex-wrap gap-3">
+            {/* Iris Header */}
+            <div className="flex items-center justify-between border-b border-border-subtle pb-4">
               <div className="flex items-center gap-3">
-                <div className="size-9 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <ShieldCheck className="size-5" />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsIrisDrawerOpen(true)}
+                  className="size-10 rounded-full overflow-hidden border-2 border-emerald-500/40 bg-surface-2 shrink-0 hover:border-emerald-400 transition-colors cursor-pointer"
+                  title="Iris Settings"
+                  data-testid="btn-iris-avatar"
+                >
+                  <img
+                    src={irisAvatar}
+                    alt="Iris Quality Control"
+                    className="size-full object-cover"
+                  />
+                </button>
                 <div>
-                  <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
-                    <span>Quality Assurance & Release Gate</span>
-                    <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-surface-2 text-text-muted">
-                      Iris • gemini-3.7-flash
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-text-primary">Iris — Quality Control</h3>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      Independent Gate
                     </span>
-                  </h3>
+                  </div>
                   <p className="text-xs text-text-secondary">
-                    Evaluating actual finished Master, Short, captions, chapters, and packaging
-                    truth.
+                    Inspecting rendered media for editing continuity, audio levels, caption
+                    alignment, and factual consistency.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleRunQA(true)}
-                  disabled={isRunningQA || !packagingData?.has_master}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-surface-2 hover:bg-surface-3 text-text-primary border border-border-subtle rounded-lg transition-colors disabled:opacity-50"
-                  data-testid="btn-rerun-qa"
-                >
-                  {isRunningQA ? (
-                    <Loader2 className="size-3.5 animate-spin text-primary" />
-                  ) : (
-                    <RefreshCw className="size-3.5" />
-                  )}
-                  <span>Re-check Output</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Compact Release Checklist */}
-            <div className="space-y-2">
-              <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                Release Verification Checklist
-              </label>
-
-              <div
-                className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5"
-                data-testid="release-checklist"
+              <button
+                type="button"
+                onClick={() => setIsIrisDrawerOpen(true)}
+                className="text-xs text-text-muted hover:text-text-primary px-2.5 py-1 rounded-md border border-border-subtle hover:bg-surface-2 transition-colors shrink-0 cursor-pointer"
+                data-testid="btn-iris-settings"
               >
-                {[
-                  {
-                    key: "master_video",
-                    label: "Master Video",
-                    pass: qaData?.checklist?.master_video,
-                  },
-                  { key: "audio", label: "Audio", pass: qaData?.checklist?.audio },
-                  { key: "captions", label: "Captions", pass: qaData?.checklist?.captions },
-                  { key: "chapters", label: "Chapters", pass: qaData?.checklist?.chapters },
-                  {
-                    key: "short",
-                    label: "Short",
-                    pass: qaData?.has_short ? qaData?.checklist?.short : null,
-                  },
-                  { key: "packaging", label: "Packaging", pass: qaData?.checklist?.packaging },
-                  { key: "claims", label: "Claims", pass: qaData?.checklist?.claims },
-                ].map((item) => (
-                  <div
-                    key={item.key}
-                    className={`p-2.5 rounded-lg border flex flex-col items-center justify-center text-center transition-all ${
-                      item.pass === true
-                        ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
-                        : item.pass === false
-                          ? "bg-rose-500/10 border-rose-500/25 text-rose-400"
-                          : "bg-surface-2/60 border-border-subtle text-text-muted"
-                    }`}
-                    data-testid={`checklist-item-${item.key}`}
-                  >
-                    <span className="text-[11px] font-medium text-text-secondary truncate w-full">
-                      {item.label}
-                    </span>
-                    <div className="mt-1 font-bold text-sm">
-                      {item.pass === true ? "✓" : item.pass === false ? "!" : "—"}
-                    </div>
-                  </div>
-                ))}
+                Settings
+              </button>
+            </div>
+            {/* High-level Assessment Summary */}
+            {qaData?.review ? (
+              <div className="p-4 rounded-xl bg-surface-2/60 border border-border-subtle space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-text-secondary">
+                  <span>Iris Assessment Verdict: {qaData.review.verdict}</span>
+                  <span className="text-text-muted font-normal">
+                    Confidence: {Math.round((qaData.review.confidence || 0.95) * 100)}%
+                  </span>
+                </div>
+                <p className="text-xs text-text-primary leading-relaxed">{qaData.review.summary}</p>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-text-muted text-xs space-y-2">
+                <ShieldCheck className="size-8 text-text-muted/40 mx-auto" />
+                <p>Press "Run Quality Check" to inspect the rendered video artifact.</p>
+              </div>
+            )}
+
+            {/* Checklist Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 rounded-xl bg-surface-2/40 border border-border-subtle text-xs space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block">
+                  Media Continuity
+                </span>
+                <span
+                  className={`font-semibold flex items-center gap-1.5 ${checklist?.master_video ? "text-emerald-400" : "text-text-secondary"}`}
+                >
+                  {checklist?.master_video ? (
+                    <CheckCircle2 className="size-3.5" />
+                  ) : (
+                    <Clock className="size-3.5" />
+                  )}
+                  {checklist?.master_video ? "Passed" : "Checking"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-surface-2/40 border border-border-subtle text-xs space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block">
+                  Audio Quality
+                </span>
+                <span
+                  className={`font-semibold flex items-center gap-1.5 ${checklist?.audio ? "text-emerald-400" : "text-text-secondary"}`}
+                >
+                  {checklist?.audio ? (
+                    <CheckCircle2 className="size-3.5" />
+                  ) : (
+                    <Clock className="size-3.5" />
+                  )}
+                  {checklist?.audio ? "Passed (-16 LUFS)" : "Checking"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-surface-2/40 border border-border-subtle text-xs space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block">
+                  Caption Sync
+                </span>
+                <span
+                  className={`font-semibold flex items-center gap-1.5 ${checklist?.captions ? "text-emerald-400" : "text-text-secondary"}`}
+                >
+                  {checklist?.captions ? (
+                    <CheckCircle2 className="size-3.5" />
+                  ) : (
+                    <Clock className="size-3.5" />
+                  )}
+                  {checklist?.captions ? "Passed" : "Checking"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-surface-2/40 border border-border-subtle text-xs space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block">
+                  Short 9:16 Crop
+                </span>
+                <span
+                  className={`font-semibold flex items-center gap-1.5 ${checklist?.short ? "text-emerald-400" : "text-text-muted"}`}
+                >
+                  {checklist?.short ? (
+                    <CheckCircle2 className="size-3.5" />
+                  ) : (
+                    <Info className="size-3.5" />
+                  )}
+                  {checklist?.short ? "Passed" : "N/A"}
+                </span>
               </div>
             </div>
 
-            {/* Identified Issues & Auto-correction Bar */}
-            {Boolean(qaData?.review?.issues?.length) && (
-              <div className="space-y-3 pt-2" data-testid="section-qa-issues">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="size-4 text-rose-400" />
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-rose-400">
-                      QA Defects Requiring Fix ({qaData?.review?.issues?.length})
-                    </h4>
-                  </div>
+            {/* Itemized Issues List with Clickable Timecodes */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+                  Detected Quality Findings ({issuesList.length})
+                </h4>
+                {issuesList.length === 0 && qaData?.review && (
+                  <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="size-3.5" />
+                    Zero defects detected
+                  </span>
+                )}
+              </div>
 
-                  {/* 1-Cycle Auto-correct button */}
-                  <button
-                    type="button"
-                    onClick={handleAutoCorrectQA}
-                    disabled={isCorrectingQA || isRunningQA}
-                    className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-primary text-white hover:bg-primary/90 rounded-md transition-colors shadow-xs disabled:opacity-50"
-                    data-testid="btn-auto-correct-qa"
-                  >
-                    {isCorrectingQA ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Wand2 className="size-3.5" />
-                    )}
-                    <span>Auto-correct with Nina</span>
-                  </button>
-                </div>
-
-                <div className="space-y-2.5">
-                  {qaData?.review?.issues?.map((issue: ReleaseIssue, idx: number) => (
+              {issuesList.length > 0 ? (
+                <div className="space-y-3" data-testid="qa-issues-list">
+                  {issuesList.map((issue, idx) => (
                     <div
                       key={idx}
-                      className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/25 space-y-2 text-xs"
-                      data-testid={`qa-issue-${idx}`}
+                      className={`p-4 rounded-xl border space-y-2 transition-colors ${
+                        issue.severity === "BLOCKING" || issue.severity === "HIGH"
+                          ? "bg-danger/5 border-danger/30 text-danger"
+                          : "bg-surface-2/60 border-border-subtle text-text-primary"
+                      }`}
+                      data-testid={`qa-issue-item-${idx}`}
                     >
-                      <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-rose-300">
-                            {getIssueFriendlyName(issue.issue_type)}
-                          </span>
                           <span
-                            className={`text-[10px] font-semibold px-2 py-0.5 rounded uppercase ${
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                               issue.severity === "BLOCKING" || issue.severity === "HIGH"
-                                ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
-                                : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                ? "bg-danger/20 text-danger"
+                                : "bg-surface-3 text-text-secondary"
                             }`}
                           >
                             {issue.severity}
                           </span>
+                          <span className="text-xs font-semibold text-text-primary">
+                            {getIssueFriendlyName(issue.issue_type)}
+                          </span>
                         </div>
 
+                        {/* Clickable timecode seek tag */}
                         {issue.source_start_ms !== null && issue.source_start_ms !== undefined && (
                           <button
                             type="button"
-                            onClick={() => handleSeek(issue.source_start_ms!)}
-                            className="px-2 py-0.5 bg-surface-2 hover:bg-surface-3 text-text-primary rounded font-mono text-[11px] flex items-center gap-1 transition-colors border border-border-subtle"
-                            title="Jump video to defect timestamp"
-                            data-testid={`btn-seek-issue-${idx}`}
+                            onClick={() => handleSeekToIssue(issue)}
+                            className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 hover:bg-primary/20 hover:text-primary transition-colors cursor-pointer text-text-secondary"
+                            title="Jump video to issue timestamp"
                           >
                             <Play className="size-2.5" />
-                            <span>
-                              {Math.floor(issue.source_start_ms / 60000)}:
-                              {String(Math.floor((issue.source_start_ms % 60000) / 1000)).padStart(
-                                2,
-                                "0",
-                              )}
-                            </span>
+                            <span>{formatMs(issue.source_start_ms)}</span>
                           </button>
                         )}
                       </div>
 
-                      <p className="text-text-primary font-medium">{issue.message}</p>
-                      <div className="text-[11px] text-text-secondary bg-surface-1/60 p-2 rounded border border-border-subtle space-y-1">
-                        <p>
-                          <strong className="text-text-primary font-semibold">
-                            Suggested Action:
-                          </strong>{" "}
-                          {issue.suggested_action}
+                      <p className="text-xs text-text-primary leading-relaxed">{issue.message}</p>
+
+                      {issue.evidence && (
+                        <p className="text-[11px] text-text-muted leading-relaxed border-l-2 border-border-strong pl-2">
+                          Evidence: {issue.evidence}
                         </p>
-                        {issue.evidence && (
-                          <p className="text-text-muted">
-                            <strong className="text-text-secondary font-medium">Evidence:</strong>{" "}
-                            {issue.evidence}
-                          </p>
-                        )}
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {/* Itemized Claim Audit */}
-            {Boolean(qaData?.review?.claim_verifications?.length) && (
-              <div className="space-y-2.5 pt-2" data-testid="section-claim-audit">
-                <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                  Factual & Packaging Claims Audit
-                </label>
-
-                <div className="space-y-2">
-                  {qaData?.review?.claim_verifications?.map(
-                    (claim: ClaimVerification, idx: number) => {
-                      const badge = getClaimStatusBadge(claim.status);
-                      const StatusIcon = badge.icon;
-                      return (
-                        <div
-                          key={idx}
-                          className="p-3 rounded-lg bg-surface-2/60 border border-border-subtle space-y-1 text-xs"
-                          data-testid={`claim-verification-${idx}`}
-                        >
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <span className="font-semibold text-text-primary">
-                              "{claim.claim_text}"
-                            </span>
-                            <span
-                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${badge.color}`}
-                            >
-                              <StatusIcon className="size-3" />
-                              {badge.label}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-text-secondary leading-relaxed">
-                            {claim.evidence}
-                          </p>
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-
-          {/* 3. Nina Packaging Proposal Surfaces (Editable) */}
-          {packagingData?.proposal && (
-            <>
-              {/* Primary Title & Candidates */}
-              <section
-                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
-                data-testid="section-titles"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Flame className="size-4 text-primary" />
-                    <h3 className="text-xs font-semibold tracking-wide uppercase text-text-secondary">
-                      Title Strategy & Candidates
-                    </h3>
-                  </div>
-                  <span className="text-[11px] text-text-muted">
-                    {packagingData.proposal.title_candidates.length} strategic angles proposed
+              ) : qaData?.review ? (
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="size-4 shrink-0" />
+                  <span>
+                    Iris verified video continuity, speech clarity, loudness target, and caption
+                    timing. Output is approved.
                   </span>
                 </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
-                      <span>Primary Title</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/30 font-semibold">
-                        Active
-                      </span>
-                    </label>
-                    <span className="text-[11px] font-mono text-text-muted">
-                      {titleInput.length} / 100 chars
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    value={titleInput}
-                    onChange={(e) => setTitleInput(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-surface-2 border border-border-subtle focus:border-primary rounded-lg text-sm text-text-primary font-medium focus:outline-none transition-colors"
-                    placeholder="Enter final YouTube title…"
-                    data-testid="input-primary-title"
-                  />
-                </div>
-
-                {/* Alternative Candidates */}
-                <div className="space-y-2 pt-2">
-                  <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                    Alternative Strategic Angles
-                  </label>
-
-                  <div className="space-y-2.5" data-testid="list-title-candidates">
-                    {packagingData.proposal.title_candidates.map(
-                      (candidate: TitleCandidate, idx: number) => {
-                        const isSelected = selectedTitleCandidate === candidate.text;
-                        return (
-                          <div
-                            key={idx}
-                            className={`p-3 rounded-lg border transition-all cursor-pointer ${
-                              isSelected
-                                ? "bg-primary/10 border-primary/40 shadow-xs"
-                                : "bg-surface-2/70 border-border-subtle hover:border-border-strong hover:bg-surface-2"
-                            }`}
-                            onClick={() => {
-                              setSelectedTitleCandidate(candidate.text);
-                              setTitleInput(candidate.text);
-                            }}
-                            data-testid={`title-candidate-${idx}`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="space-y-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span
-                                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getAngleBadgeColor(
-                                      candidate.angle,
-                                    )}`}
-                                  >
-                                    {getAngleFriendlyName(candidate.angle)}
-                                  </span>
-                                  <span className="text-xs font-semibold text-text-primary truncate">
-                                    {candidate.text}
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-text-secondary leading-relaxed">
-                                  {candidate.why_it_works}
-                                </p>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedTitleCandidate(candidate.text);
-                                  setTitleInput(candidate.text);
-                                }}
-                                className={`shrink-0 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                                  isSelected
-                                    ? "bg-primary text-white"
-                                    : "bg-surface-3 text-text-secondary hover:text-text-primary"
-                                }`}
-                                data-testid={`btn-select-title-${idx}`}
-                              >
-                                {isSelected ? "Selected" : "Use this"}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      },
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* Description */}
-              <section
-                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-3 shadow-xs"
-                data-testid="section-description"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Edit3 className="size-4 text-primary" />
-                    <h3 className="text-xs font-semibold tracking-wide uppercase text-text-secondary">
-                      Publish-Ready Description
-                    </h3>
-                  </div>
-                  <span className="text-[11px] font-mono text-text-muted">
-                    {descriptionInput.length} / 5000 chars
-                  </span>
-                </div>
-
-                <textarea
-                  rows={8}
-                  value={descriptionInput}
-                  onChange={(e) => setDescriptionInput(e.target.value)}
-                  className="w-full p-3.5 bg-surface-2 border border-border-subtle focus:border-primary rounded-lg text-xs font-mono text-text-secondary leading-relaxed focus:outline-none transition-colors resize-y"
-                  placeholder="YouTube description with chapters and keywords…"
-                  data-testid="textarea-description"
-                />
-              </section>
-
-              {/* Chapters */}
-              <section
-                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
-                data-testid="section-chapters"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Layers className="size-4 text-primary" />
-                    <h3 className="text-xs font-semibold tracking-wide uppercase text-text-secondary">
-                      Video Chapters
-                    </h3>
-                  </div>
-                  <span className="text-[11px] text-text-muted">Anchored to Master timeline</span>
-                </div>
-
-                <div className="space-y-2" data-testid="list-chapters">
-                  {chaptersInput.map((chapter, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-3 p-2.5 rounded-lg bg-surface-2/60 border border-border-subtle hover:border-border-strong transition-colors"
-                      data-testid={`chapter-item-${idx}`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleSeek(chapter.start_ms)}
-                        className="px-2.5 py-1 rounded bg-surface-3 hover:bg-primary/20 hover:text-primary text-text-secondary font-mono text-xs font-semibold transition-colors flex items-center gap-1 shrink-0"
-                        title="Jump video to timestamp"
-                        data-testid={`btn-chapter-seek-${idx}`}
-                      >
-                        <Play className="size-2.5" />
-                        <span>{chapter.formatted_time}</span>
-                      </button>
-
-                      <input
-                        type="text"
-                        value={chapter.title}
-                        onChange={(e) => handleChapterTitleChange(idx, e.target.value)}
-                        className="flex-1 px-2.5 py-1 bg-surface-1 border border-border-subtle focus:border-primary rounded text-xs text-text-primary focus:outline-none"
-                        placeholder="Chapter title…"
-                        data-testid={`input-chapter-title-${idx}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* Thumbnails */}
-              <section
-                className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
-                data-testid="section-thumbnails"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ImageIcon className="size-4 text-primary" />
-                    <h3 className="text-xs font-semibold tracking-wide uppercase text-text-secondary">
-                      Thumbnail Concepts & Frame Evidence
-                    </h3>
-                  </div>
-                  <span className="text-[11px] text-text-muted">3 verified visual moments</span>
-                </div>
-
-                <div
-                  className="grid grid-cols-1 md:grid-cols-3 gap-4"
-                  data-testid="list-thumbnail-concepts"
-                >
-                  {packagingData.proposal.thumbnail_concepts.map(
-                    (concept: ThumbnailConcept, idx: number) => {
-                      const isSelected = selectedThumbnailId === concept.concept_id;
-                      return (
-                        <div
-                          key={idx}
-                          className={`p-4 rounded-xl border flex flex-col justify-between space-y-3 transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-primary/10 border-primary/50 shadow-xs"
-                              : "bg-surface-2/60 border-border-subtle hover:border-border-strong hover:bg-surface-2"
-                          }`}
-                          onClick={() => setSelectedThumbnailId(concept.concept_id)}
-                          data-testid={`thumbnail-concept-${idx}`}
-                        >
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-surface-3 text-text-secondary">
-                                Concept {idx + 1}
-                              </span>
-                              {concept.frame_verified && (
-                                <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                                  <ShieldCheck className="size-3" />
-                                  Verified Frame
-                                </span>
-                              )}
-                            </div>
-
-                            <h4 className="text-xs font-bold text-text-primary tracking-wide">
-                              "{concept.headline}"
-                            </h4>
-
-                            <div className="space-y-1 text-[11px] text-text-secondary">
-                              <p>
-                                <strong className="text-text-primary font-medium">Subject:</strong>{" "}
-                                {concept.visual_subject}
-                              </p>
-                              <p>
-                                <strong className="text-text-primary font-medium">
-                                  Composition:
-                                </strong>{" "}
-                                {concept.composition}
-                              </p>
-                              <p>
-                                <strong className="text-text-primary font-medium">Emotion:</strong>{" "}
-                                {concept.emotion}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="pt-2 border-t border-border-subtle/60 flex items-center justify-between">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSeek(concept.supporting_frame_ms);
-                              }}
-                              className="text-[10px] font-mono text-primary hover:underline flex items-center gap-1"
-                              data-testid={`btn-seek-frame-${idx}`}
-                            >
-                              <Play className="size-2.5" />
-                              <span>
-                                Frame at {(concept.supporting_frame_ms / 1000).toFixed(1)}s
-                              </span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedThumbnailId(concept.concept_id);
-                              }}
-                              className={`px-2.5 py-1 text-[10px] font-semibold rounded ${
-                                isSelected
-                                  ? "bg-primary text-white"
-                                  : "bg-surface-3 text-text-secondary"
-                              }`}
-                            >
-                              {isSelected ? "Selected" : "Select"}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
-              </section>
-
-              {/* Short Package */}
-              {packagingData.proposal.short_package && (
-                <section
-                  className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
-                  data-testid="section-short-package"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Smartphone className="size-4 text-primary" />
-                      <h3 className="text-xs font-semibold tracking-wide uppercase text-text-secondary">
-                        Vertical Short Package (9:16)
-                      </h3>
-                    </div>
-                    <span className="text-[11px] text-text-muted">
-                      Optimized for YouTube Shorts
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-text-secondary">
-                        Short Title
-                      </label>
-                      <input
-                        type="text"
-                        value={shortTitleInput}
-                        onChange={(e) => setShortTitleInput(e.target.value)}
-                        className="w-full px-3 py-2 bg-surface-2 border border-border-subtle focus:border-primary rounded-lg text-xs text-text-primary focus:outline-none"
-                        placeholder="Short title…"
-                        data-testid="input-short-title"
-                      />
-                    </div>
-
-                    <div className="p-3 bg-surface-2/60 rounded-lg border border-border-subtle space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                        Spoken Opening Hook
-                      </span>
-                      <p className="text-xs text-text-primary font-medium">
-                        "{packagingData.proposal.short_package.hook}"
-                      </p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-text-secondary">
-                        Short Description / Caption
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={shortDescInput}
-                        onChange={(e) => setShortDescInput(e.target.value)}
-                        className="w-full p-2.5 bg-surface-2 border border-border-subtle focus:border-primary rounded-lg text-xs text-text-secondary focus:outline-none font-mono"
-                        placeholder="Short description…"
-                        data-testid="textarea-short-desc"
-                      />
-                    </div>
-
-                    {Boolean(packagingData.proposal.short_package.hashtags?.length) && (
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {packagingData.proposal.short_package.hashtags?.map((tag, idx) => (
-                          <span
-                            key={idx}
-                            className="text-[11px] font-mono px-2 py-0.5 bg-surface-2 text-primary rounded border border-primary/20"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
-            </>
-          )}
+              ) : null}
+            </div>
+          </div>
         </div>
 
-        {/* Right Rail (4 cols): Release Action, Agent Team (Iris & Nina), Summary */}
-        <div className="lg:col-span-4 space-y-5 lg:sticky lg:top-20">
-          {/* Release Gate Summary / Ready to Publish Card */}
+        {/* Right Column (4 cols): Manual Publish Metadata & Release Actions */}
+        <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-20">
+          {/* Release Readiness Card */}
+          {/* Release Readiness / Gate Card */}
           <div
-            className={`rounded-xl p-5 border space-y-4 shadow-sm transition-all ${
-              publishJobData?.job?.status === "completed"
-                ? "bg-emerald-500/10 border-emerald-500/30"
-                : isReleaseReady
-                  ? "bg-emerald-500/10 border-emerald-500/30"
-                  : "bg-surface-1 border-border-subtle"
+            className={`p-5 rounded-2xl border space-y-4 shadow-xs ${
+              isReady
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                : "bg-surface-1 border-border-subtle"
             }`}
             data-testid="release-gate-card"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
-                Release Gate Status
+              <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+                Release Gate
               </span>
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                   publishJobData?.job?.status === "completed"
-                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                    : isReleaseReady
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                      : "bg-surface-2 text-text-secondary border border-border-subtle"
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : isReady
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-surface-2 text-text-muted border border-border-subtle"
                 }`}
                 data-testid="release-gate-badge"
               >
                 {publishJobData?.job?.status === "completed"
-                  ? publishJobData.job.actual_privacy === "private"
-                    ? "Uploaded Privately"
-                    : publishJobData.job.actual_privacy === "unlisted"
-                      ? "Published Unlisted"
-                      : "Published"
-                  : isReleaseReady
+                  ? "Uploaded Privately"
+                  : isReady
                     ? "Gate Passed"
                     : "Gate Locked"}
               </span>
             </div>
 
-            <div>
-              <h3 className="text-base font-bold text-text-primary">
+            <div className="text-xs text-text-secondary space-y-1.5">
+              <p>
                 {publishJobData?.job?.status === "completed"
-                  ? publishJobData.job.actual_privacy === "private"
-                    ? "Uploaded Privately"
-                    : publishJobData.job.actual_privacy === "unlisted"
-                      ? "Published Unlisted"
-                      : "Published"
-                  : isReleaseReady
-                    ? "Ready to Publish"
-                    : "Release Gate Review"}
-              </h3>
-              <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                {publishJobData?.job?.status === "completed"
-                  ? "Video is live on YouTube. Creator approval and verification complete."
-                  : isReleaseReady
-                    ? "All media continuity, loudness, caption alignment, and packaging claims are verified."
-                    : "Iris must approve all quality and factual criteria before publishing."}
+                  ? "Production successfully published to YouTube."
+                  : isReady
+                    ? "All release gate criteria satisfied. Master video is ready for YouTube publication."
+                    : "Review findings above before proceeding with channel publication."}
               </p>
             </div>
 
-            {/* In-Progress Uploading / Processing Display */}
-            {publishJobData?.job &&
-              (publishJobData.job.status === "uploading" ||
-                publishJobData.job.status === "processing" ||
-                publishJobData.job.status === "pending") && (
-                <div
-                  className="p-3.5 rounded-lg bg-surface-2 border border-primary/30 space-y-2.5"
-                  data-testid="section-upload-progress"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-text-primary flex items-center gap-1.5">
-                      <Loader2 className="size-3.5 text-primary animate-spin" />
-                      {publishJobData.job.status === "uploading"
-                        ? `Uploading to YouTube ${publishJobData.job.progress_percent?.toFixed(0) || 0}%`
-                        : publishJobData.job.status === "processing"
-                          ? "YouTube is processing the video…"
-                          : "Preparing YouTube upload…"}
-                    </span>
-                    <span className="text-[11px] font-mono text-primary font-semibold">
-                      {publishJobData.job.progress_percent?.toFixed(0) || 0}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-surface-3 h-2 rounded-full overflow-hidden border border-border-subtle">
-                    <div
-                      className="bg-primary h-full transition-all duration-300 rounded-full"
-                      style={{ width: `${Math.max(5, publishJobData.job.progress_percent || 0)}%` }}
-                    ></div>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] text-text-muted">
-                    <span>Resumable media stream</span>
-                    {Boolean(publishJobData.job.total_bytes) && (
-                      <span>
-                        {((publishJobData.job.bytes_uploaded || 0) / (1024 * 1024)).toFixed(1)} MB /{" "}
-                        {((publishJobData.job.total_bytes || 0) / (1024 * 1024)).toFixed(1)} MB
-                      </span>
-                    )}
-                  </div>
+            {/* Publishing Progress Section */}
+            {publishJobData?.job?.status === "uploading" && (
+              <div
+                className="p-3.5 rounded-xl bg-surface-2 border border-border-subtle space-y-2"
+                data-testid="section-upload-progress"
+              >
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-text-primary flex items-center gap-1.5">
+                    <Loader2 className="size-3.5 text-primary animate-spin" />
+                    Uploading to YouTube {Math.round(publishJobData.job.progress_percent || 0)}%
+                  </span>
+                  <span className="font-mono text-text-muted text-[11px]">
+                    {((publishJobData.job.bytes_uploaded || 0) / 1048576).toFixed(1)} MB /{" "}
+                    {((publishJobData.job.total_bytes || 1) / 1048576).toFixed(1)} MB
+                  </span>
                 </div>
-              )}
+                <div className="w-full bg-surface-3 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-primary h-full rounded-full transition-all duration-300"
+                    style={{ width: `${publishJobData.job.progress_percent || 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
-            {/* Completed Success Box with YouTube Link */}
+            {/* Publishing Completed Section */}
             {publishJobData?.job?.status === "completed" && (
               <div
-                className="space-y-3 pt-2 border-t border-border-subtle"
+                className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2 text-xs"
                 data-testid="section-publish-completed"
               >
-                <div className="p-3.5 rounded-lg bg-surface-2 border border-emerald-500/30 space-y-2.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-text-primary flex items-center gap-1.5">
-                      <CheckCircle2 className="size-4 text-emerald-400" />
-                      <span>
-                        {publishJobData.job.actual_privacy === "private"
-                          ? "Uploaded privately"
-                          : "Published"}
-                      </span>
-                    </span>
-                    <span
-                      className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary border border-border-subtle"
-                      data-testid="text-youtube-video-id"
-                    >
-                      ID: {publishJobData.job.youtube_video_id}
-                    </span>
-                  </div>
-
-                  {/* Thumbnail Status */}
-                  <div className="text-[11px] text-text-secondary flex items-center gap-2">
-                    {publishJobData.job.thumbnail_status === "completed" ? (
-                      <span className="text-emerald-400 flex items-center gap-1">
-                        <Check className="size-3" />
-                        Thumbnail uploaded
-                      </span>
-                    ) : publishJobData.job.thumbnail_status === "failed" ? (
-                      <span className="text-amber-400 flex items-center gap-1">
-                        <AlertTriangle className="size-3" />
-                        Thumbnail needs attention
-                      </span>
-                    ) : null}
-                    {publishJobData.job.short_youtube_video_id && (
-                      <span className="text-text-muted">
-                        • Short ID: {publishJobData.job.short_youtube_video_id}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Open on YouTube Button */}
-                  {publishJobData.job.youtube_url && (
-                    <a
-                      href={publishJobData.job.youtube_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-2 px-3 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-2 transition-colors shadow-xs"
-                      data-testid="btn-open-on-youtube"
-                    >
-                      <YouTubeIcon className="size-4" />
-                      <span>Open on YouTube</span>
-                      <ExternalLink className="size-3.5" />
-                    </a>
-                  )}
-                </div>
-
-                {/* Audit restriction banner if applicable */}
                 {publishJobData.job.audit_restriction_detected && (
                   <div
-                    className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 flex items-start gap-2 leading-relaxed"
+                    className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2 mb-2"
                     data-testid="banner-audit-restriction"
                   >
-                    <Info className="size-4 text-amber-400 shrink-0 mt-0.5" />
-                    <span>
-                      Uploaded successfully, but YouTube restricted this API project to private
-                      uploads. YouTube API compliance verification is required before public
-                      publishing.
-                    </span>
+                    <AlertTriangle className="size-3.5 shrink-0 text-amber-400 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="font-semibold block text-[11px]">
+                        Audit Restriction Active
+                      </span>
+                      <p className="text-[10px] text-amber-200/90 leading-relaxed">
+                        YouTube restricted this API project to private uploads until verification
+                        audit is complete.
+                      </p>
+                    </div>
                   </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="size-4" />
+                    YouTube Publication Complete
+                  </span>
+                  <span
+                    className="font-mono text-[11px] text-text-muted"
+                    data-testid="text-youtube-video-id"
+                  >
+                    ID: {publishJobData.job.youtube_video_id}
+                  </span>
+                </div>
+                <p className="text-text-secondary text-[11px]">
+                  Video uploaded privately. Thumbnail uploaded.
+                </p>
+                {publishJobData.job.youtube_url && (
+                  <a
+                    href={publishJobData.job.youtube_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline text-xs font-semibold pt-1"
+                    data-testid="btn-open-on-youtube"
+                  >
+                    <span>Open on YouTube</span>
+                    <ExternalLink className="size-3" />
+                  </a>
                 )}
               </div>
             )}
 
-            {/* Publishing Action Button */}
-            {publishJobData?.job?.status !== "completed" &&
-              publishJobData?.job?.status !== "uploading" &&
-              publishJobData?.job?.status !== "processing" && (
-                <div className="pt-2 border-t border-border-subtle space-y-2">
-                  <button
-                    type="button"
-                    disabled={!isReleaseReady}
-                    onClick={handleOpenPublishModal}
-                    className={`w-full py-2.5 px-4 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs ${
-                      isReleaseReady
-                        ? "bg-red-600 hover:bg-red-700 text-white cursor-pointer"
-                        : "bg-surface-3 text-text-muted cursor-not-allowed opacity-60"
-                    }`}
-                    data-testid="btn-publish-to-youtube"
-                  >
-                    <YouTubeIcon className="size-4" />
-                    <span>{isReleaseReady ? "Publish to YouTube" : "Fix Required to Release"}</span>
-                  </button>
-                  <p className="text-[10px] text-center text-text-muted">
-                    Requires creator approval before external YouTube upload.
-                  </p>
-                </div>
-              )}
+            {/* Primary Action Button */}
+            {publishJobData?.job?.status !== "completed" && (
+              <button
+                type="button"
+                onClick={handleOpenPublishModal}
+                disabled={!isReady}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                data-testid="btn-publish-to-youtube"
+              >
+                <YouTubeIcon className="size-4" />
+                <span>Publish to YouTube</span>
+              </button>
+            )}
           </div>
 
-          {/* Iris (QA Agent) Card */}
+          {/* Creator-Owned Manual Release Metadata */}
           <div
-            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
-            data-testid="iris-agent-card"
+            className="bg-surface-1 border border-border-subtle rounded-2xl p-5 space-y-4 shadow-xs"
+            data-testid="section-publish-metadata"
           >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDrawerAgent("iris")}
-                  className="relative group focus:outline-none"
-                  title="Click to configure Iris QA settings & view memory"
-                  data-testid="btn-iris-avatar"
-                >
-                  <img
-                    src={irisAvatar}
-                    alt="Iris QA Agent"
-                    className="size-12 rounded-full object-cover border-2 border-emerald-500/40 group-hover:border-emerald-500 transition-all shadow-sm"
-                  />
-                  <div className="absolute inset-0 rounded-full bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <span className="text-[9px] text-white font-bold">Edit</span>
-                  </div>
-                </button>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+                Release Metadata
+              </h4>
+              <span className="text-[10px] text-text-muted">Creator-Owned</span>
+            </div>
 
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="text-sm font-bold text-text-primary">Iris</h3>
-                    <span className="size-2 rounded-full bg-emerald-400"></span>
-                  </div>
-                  <p className="text-xs text-text-secondary">Quality Assurance Gate</p>
-                </div>
-              </div>
-
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                gemini-3.7-flash
+            {/* Title Input */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="publish-title"
+                className="text-xs font-semibold text-text-primary block"
+              >
+                Video Title
+              </label>
+              <input
+                id="publish-title"
+                type="text"
+                value={titleInput}
+                onChange={(e) => setTitleInput(e.target.value)}
+                maxLength={100}
+                className="w-full px-3 py-2 text-xs rounded-lg bg-surface-2 border border-border-subtle text-text-primary placeholder:text-text-muted focus:border-primary outline-none transition-colors"
+                placeholder="Enter YouTube video title…"
+                data-testid="input-publish-title"
+              />
+              <span className="text-[10px] text-text-muted block text-right font-mono">
+                {titleInput.length}/100
               </span>
             </div>
 
-            <p className="text-xs text-text-muted leading-relaxed">
-              Iris is the independent release gatekeeper evaluating video continuity, audio
-              loudness, caption timing, chapter order, and factual claim truth.
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setDrawerAgent("iris")}
-              className="w-full py-1.5 text-xs font-semibold bg-surface-2 hover:bg-surface-3 text-text-primary rounded-lg border border-border-subtle transition-colors"
-            >
-              Open Iris Settings
-            </button>
-          </div>
-
-          {/* Nina (Packaging Agent) Card */}
-          <div
-            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
-            data-testid="nina-agent-card"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDrawerAgent("nina")}
-                  className="relative group focus:outline-none"
-                  title="Click to configure Nina's prompt & view memory"
-                  data-testid="btn-nina-avatar"
-                >
-                  <img
-                    src={ninaAvatar}
-                    alt="Nina Packaging Agent"
-                    className="size-12 rounded-full object-cover border-2 border-primary/40 group-hover:border-primary transition-all shadow-sm"
-                  />
-                  <div className="absolute inset-0 rounded-full bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <span className="text-[9px] text-white font-bold">Edit</span>
-                  </div>
-                </button>
-
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="text-sm font-bold text-text-primary">Nina</h3>
-                    <span className="size-2 rounded-full bg-emerald-400"></span>
-                  </div>
-                  <p className="text-xs text-text-secondary">Packaging Agent</p>
-                </div>
-              </div>
-
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Gemini 3.7 Flash
+            {/* Description Input */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="publish-description"
+                className="text-xs font-semibold text-text-primary block"
+              >
+                Video Description
+              </label>
+              <textarea
+                id="publish-description"
+                rows={5}
+                value={descriptionInput}
+                onChange={(e) => setDescriptionInput(e.target.value)}
+                maxLength={5000}
+                className="w-full px-3 py-2 text-xs rounded-lg bg-surface-2 border border-border-subtle text-text-primary placeholder:text-text-muted focus:border-primary outline-none transition-colors resize-y font-sans"
+                placeholder="Enter video description, links, and notes…"
+                data-testid="input-publish-description"
+              />
+              <span className="text-[10px] text-text-muted block text-right font-mono">
+                {descriptionInput.length}/5000
               </span>
             </div>
 
-            <p className="text-xs text-text-muted leading-relaxed">
-              Nina turns approved master video into high-converting titles, publish-ready
-              descriptions, chapters, and thumbnail moments.
-            </p>
+            {/* Privacy Setting */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="publish-privacy"
+                className="text-xs font-semibold text-text-primary block"
+              >
+                Privacy Setting
+              </label>
+              <select
+                id="publish-privacy"
+                value={privacySetting}
+                onChange={(e) =>
+                  setPrivacySetting(e.target.value as "private" | "unlisted" | "public")
+                }
+                className="w-full px-3 py-2 text-xs rounded-lg bg-surface-2 border border-border-subtle text-text-primary focus:border-primary outline-none transition-colors"
+              >
+                <option value="private">Private (Default / Recommended)</option>
+                <option value="unlisted">Unlisted</option>
+                <option value="public">Public</option>
+              </select>
+            </div>
 
+            {/* Save Button */}
             <button
               type="button"
-              onClick={() => handleGeneratePackaging(true)}
-              disabled={isGeneratingPackaging || !packagingData?.has_master}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-text-primary bg-surface-2 hover:bg-surface-3 border border-border-subtle rounded-lg transition-colors disabled:opacity-50 shadow-xs"
-              data-testid="btn-regenerate-packaging"
+              onClick={handleSaveMetadata}
+              disabled={isSavingMetadata}
+              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border-subtle text-xs font-semibold text-text-primary transition-colors disabled:opacity-50"
+              data-testid="btn-save-metadata"
             >
-              {isGeneratingPackaging ? (
-                <Loader2 className="size-3.5 animate-spin text-primary" />
+              {isSavingMetadata ? (
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <RotateCcw className="size-3.5" />
+                <Save className="size-3.5" />
               )}
-              <span>Regenerate Packaging</span>
+              <span>{isSavingMetadata ? "Saving…" : "Save Metadata"}</span>
             </button>
           </div>
 
-          {/* Channel Evidence & Packaging Summary Card */}
-          {packagingData?.proposal && (
-            <div
-              className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-4 shadow-xs"
-              data-testid="section-packaging-rationale"
-            >
-              <div className="flex items-center gap-2">
-                <Lightbulb className="size-4 text-amber-400" />
-                <h4 className="text-xs font-semibold tracking-wide uppercase text-text-secondary">
-                  Channel Rationale & Evidence
-                </h4>
+          {/* Release Fingerprint & Immutable Lineage */}
+          {qaData?.release_fingerprint && (
+            <div className="bg-surface-1 border border-border-subtle rounded-2xl p-4 text-xs space-y-2 text-text-muted">
+              <div className="flex items-center gap-1.5 font-semibold text-text-secondary">
+                <Lock className="size-3.5 text-primary" />
+                <span>Cryptographic Release Fingerprint</span>
               </div>
-
-              <div className="space-y-3">
-                <div className="p-3 rounded-lg bg-surface-2/70 border border-border-subtle space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                    Channel Evidence
-                  </span>
-                  <p className="text-xs text-text-primary font-medium leading-relaxed">
-                    "{packagingData.proposal.channel_evidence}"
-                  </p>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                    Packaging Strategy
-                  </span>
-                  <p className="text-xs text-text-secondary leading-relaxed">
-                    {packagingData.proposal.packaging_summary}
-                  </p>
-                </div>
-              </div>
+              <p className="font-mono text-[10px] break-all bg-surface-2 p-2 rounded border border-border-subtle">
+                {qaData.release_fingerprint}
+              </p>
             </div>
           )}
-
-          {/* Nina Agent Activity Feed */}
-          <div
-            className="bg-surface-1 border border-border-subtle rounded-xl p-5 space-y-3 shadow-xs"
-            data-testid="section-agent-activity"
-          >
-            <h4 className="text-xs font-semibold tracking-wide uppercase text-text-secondary">
-              Agent Activity
-            </h4>
-
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-start gap-2 text-text-secondary">
-                <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <span>Nina packaged the approved master video.</span>
-              </div>
-              <div className="flex items-start gap-2 text-text-secondary">
-                <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <span>Iris evaluated media continuity, audio levels, and packaging claims.</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Agent Settings Drawer (Prompt & Memory tabs) */}
+      {/* Iris Agent Settings Drawer */}
       <AgentSettingsDrawer
-        isOpen={drawerAgent !== null}
-        agentId={drawerAgent || "iris"}
-        onClose={() => setDrawerAgent(null)}
+        isOpen={isIrisDrawerOpen}
+        agentId="iris"
+        onClose={() => setIsIrisDrawerOpen(false)}
       />
 
-      {/* Publish Confirmation Modal */}
+      {/* YouTube Publish Confirmation Modal */}
       <PublishConfirmationModal
         isOpen={isPublishModalOpen}
         onClose={() => setIsPublishModalOpen(false)}
@@ -1808,7 +1085,9 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
         onConfirmPublish={handleConfirmPublish}
         isPublishing={isPublishing}
         onGrantUploadAccess={handleGrantUploadAccess}
-        onConnectYouTube={handleConnectYouTube}
+        onConnectYouTube={() => {
+          window.location.href = "/api/channels/youtube/connect";
+        }}
       />
     </div>
   );

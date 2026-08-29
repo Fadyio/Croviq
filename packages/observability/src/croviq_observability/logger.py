@@ -289,32 +289,51 @@ def log_error(
 
 
 def log_ai_event(
-    event_type: str,
-    agent: str,
-    model: str,
+    event_type: str | EventType,
+    agent: str | None = None,
+    model: str | None = None,
     status: str = "success",
+    provider: str = "google",
+    backend: str = "vertex_ai",
+    location: str = "global",
+    operation: str | None = None,
+    production_id: str | None = None,
     run_id: str | None = None,
     job_id: str | None = None,
     input_tokens: int | None = None,
     output_tokens: int | None = None,
     latency_ms: float | None = None,
+    audio_duration_ms: int | None = None,
+    request_id: str | None = None,
+    trace_id: str | None = None,
     error_code: str | None = None,
     message: str | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    severity: LogSeverity = "ERROR" if status == "failed" else "INFO"
+    """Emit a canonical structured AI model telemetry log event."""
+    ev_str = event_type.value if isinstance(event_type, EventType) else str(event_type)
+    severity: LogSeverity = "ERROR" if status in ("failed", "error") else "INFO"
     return _default_logger.log(
-        event_type=event_type,
+        event_type=ev_str,
         severity=severity,
+        provider=provider,
+        backend=backend,
+        location=location,
+        operation=operation or (ev_str.split(".")[-1] if "." in ev_str else "generate_content"),
         agent=agent,
         model=model,
+        production_id=production_id,
         run_id=run_id,
         job_id=job_id,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         latency_ms=latency_ms,
+        audio_duration_ms=audio_duration_ms,
+        request_id=request_id,
+        trace_id=trace_id,
         error_code=error_code,
-        message=message,
+        message=message or f"AI request {ev_str} model={model} status={status}",
+        status=status,
         **kwargs,
     )
 

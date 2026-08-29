@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import type { components } from "../api/generated";
 import alexAvatar from "../assets/agents/alex.webp";
+import leoAvatar from "../assets/agents/leo.webp";
+import irisAvatar from "../assets/agents/Iris.png";
 import { useAuth } from "../auth/AuthContext";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { AlexSettingsDrawer } from "../components/dashboard/AlexSettingsDrawer";
@@ -57,10 +59,11 @@ export const AppPage: React.FC<AppPageProps> = ({
   const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
   const [evidenceModalInsight, setEvidenceModalInsight] = useState<Insight | null>(null);
   const [allFindingsDrawerOpen, setAllFindingsDrawerOpen] = useState(false);
+  const [teamSelectorOpen, setTeamSelectorOpen] = useState(false);
 
   const selectorRef = useRef<HTMLDivElement>(null);
+  const teamSelectorRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
-
   // Derive active tab directly from URL route
   const activeTab: DashboardTab =
     currentRoute === "/app/performance"
@@ -153,6 +156,9 @@ export const AppPage: React.FC<AppPageProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
         setChannelSelectorOpen(false);
+      }
+      if (teamSelectorRef.current && !teamSelectorRef.current.contains(event.target as Node)) {
+        setTeamSelectorOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -259,7 +265,13 @@ export const AppPage: React.FC<AppPageProps> = ({
         <div className="flex min-w-0 items-center gap-5">
           <button
             type="button"
-            onClick={() => handleTabClick("overview")}
+            onClick={() => {
+              if (onNavigateRoute) {
+                onNavigateRoute("/app");
+              } else {
+                handleTabClick("overview");
+              }
+            }}
             className="flex items-center hover:opacity-80 transition-opacity cursor-pointer shrink-0"
             aria-label="Croviq Home"
             title="Croviq Home"
@@ -402,14 +414,15 @@ export const AppPage: React.FC<AppPageProps> = ({
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-left transition-colors hover:border-border-strong hover:bg-surface-2"
+            className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-left transition-colors hover:border-border-strong hover:bg-surface-2 cursor-pointer"
             aria-label="Open Alex settings"
             title="Alex · Data Scientist"
+            data-testid="btn-alex-settings-chip"
           >
             <img
               src={alexAvatar}
               alt="Alex"
-              className="h-6 w-6 rounded-full object-cover ring-1 ring-border-subtle"
+              className="h-6 w-6 rounded-full object-cover ring-1 ring-primary/40"
             />
             <div className="hidden sm:block">
               <span className="block text-xs font-semibold leading-tight text-text-primary">
@@ -420,6 +433,120 @@ export const AppPage: React.FC<AppPageProps> = ({
               </span>
             </div>
           </button>
+
+          {/* Global Agent Team Selector Dropdown */}
+          <div className="relative" ref={teamSelectorRef}>
+            <button
+              type="button"
+              onClick={() => setTeamSelectorOpen((prev) => !prev)}
+              className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2/60 px-2.5 py-1 text-left transition-colors hover:border-border-strong hover:bg-surface-2 cursor-pointer"
+              aria-label="Select production agent"
+              aria-expanded={teamSelectorOpen}
+              title="Production Team: Alex, Leo, Iris"
+              data-testid="btn-team-selector"
+            >
+              <div className="flex -space-x-1.5 overflow-hidden">
+                <img
+                  src={alexAvatar}
+                  alt="Alex"
+                  className="inline-block h-5 w-5 rounded-full ring-1 ring-surface-1 object-cover"
+                />
+                <img
+                  src={leoAvatar}
+                  alt="Leo"
+                  className="inline-block h-5 w-5 rounded-full ring-1 ring-surface-1 object-cover"
+                />
+                <img
+                  src={irisAvatar}
+                  alt="Iris"
+                  className="inline-block h-5 w-5 rounded-full ring-1 ring-surface-1 object-cover"
+                />
+              </div>
+              <div className="hidden sm:block">
+                <span className="block text-xs font-semibold leading-tight text-text-primary">
+                  Team
+                </span>
+              </div>
+              <ChevronDown className="h-3 w-3 text-text-muted" />
+            </button>
+
+            {teamSelectorOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border-strong bg-surface-2 p-1.5 shadow-2xl backdrop-blur-md">
+                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  Autonomous Production Team
+                </p>
+
+                {/* Alex */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTeamSelectorOpen(false);
+                    setSettingsOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer"
+                >
+                  <img
+                    src={alexAvatar}
+                    alt="Alex"
+                    className="h-6 w-6 rounded-full object-cover ring-1 ring-primary/40"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="block font-semibold text-text-primary">Alex</span>
+                    <span className="block text-[10px] text-text-muted truncate">
+                      Data Scientist · Channel intelligence
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono text-primary font-semibold">Active</span>
+                </button>
+
+                {/* Leo */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTeamSelectorOpen(false);
+                    onNavigateNewProject();
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer"
+                >
+                  <img
+                    src={leoAvatar}
+                    alt="Leo"
+                    className="h-6 w-6 rounded-full object-cover ring-1 ring-border-subtle"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="block font-semibold text-text-primary">Leo</span>
+                    <span className="block text-[10px] text-text-muted truncate">
+                      Video Editor · Timeline editing
+                    </span>
+                  </div>
+                  <ChevronRight className="h-3.5 w-3.5 text-text-muted" />
+                </button>
+
+                {/* Iris */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTeamSelectorOpen(false);
+                    setSettingsOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer"
+                >
+                  <img
+                    src={irisAvatar}
+                    alt="Iris"
+                    className="h-6 w-6 rounded-full object-cover ring-1 ring-emerald-500/40"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="block font-semibold text-text-primary">Iris</span>
+                    <span className="block text-[10px] text-text-muted truncate">
+                      Quality Control · Release gatekeeper
+                    </span>
+                  </div>
+                  <ChevronRight className="h-3.5 w-3.5 text-text-muted" />
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="hidden md:flex items-center gap-3 border-l border-border-subtle pl-3">
             <span className="max-w-[130px] truncate text-xs text-text-secondary">
