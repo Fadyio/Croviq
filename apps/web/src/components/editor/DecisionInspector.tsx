@@ -11,11 +11,17 @@ interface DecisionInspectorProps {
 }
 
 const decisionLabel = (decisionType: string): string => {
-  if (decisionType === "BROLL_COVER_CANDIDATE") return "Visual coverage";
-  if (decisionType === "KEEP_FOR_CLARITY") return "Preserved for clarity";
-  if (decisionType === "KEEP") return "Preserved";
+  if (decisionType === "BROLL_COVER_CANDIDATE" || decisionType === "BROLL_COVER")
+    return "Visual coverage";
+  if (decisionType === "KEEP_FOR_CLARITY" || decisionType === "KEEP")
+    return "Preserved for clarity";
+  if (decisionType === "REMOVE_SILENCE" || decisionType === "TRIM_PAUSE") return "Silence removed";
+  if (decisionType === "TIGHTEN_PAUSE" || decisionType === "TIGHTEN_EXPLANATION")
+    return "Pause tightened";
+  if (decisionType === "REMOVE_FALSE_START") return "False start removed";
+  if (decisionType === "REMOVE_REPETITION") return "Repetition removed";
+  if (decisionType === "REMOVE_FILLER") return "Filler removed";
   if (decisionType.startsWith("REMOVE_")) return "Dialogue removal";
-  if (decisionType === "TRIM_PAUSE") return "Pause tightened";
   return decisionType
     .toLowerCase()
     .replaceAll("_", " ")

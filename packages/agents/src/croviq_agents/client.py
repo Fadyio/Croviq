@@ -115,15 +115,20 @@ def reconcile_editor_proposal_with_transcript(
         start_idx = max(0, min(d.transcript_start_word, max_word_idx))
         end_idx = max(start_idx, min(d.transcript_end_word, max_word_idx))
 
-        # Strict word timing truth from canonical transcript
-        start_word = transcript.words[start_idx]
-        end_word = transcript.words[end_idx]
-        source_start_ms = start_word.start_ms
-        source_end_ms = max(end_word.end_ms, source_start_ms + 10)
+        if d.decision_id.startswith("silence_cut_") or d.original_text.startswith("[Silence:"):
+            source_start_ms = d.source_start_ms
+            source_end_ms = d.source_end_ms
+            original_text = d.original_text
+        else:
+            # Strict word timing truth from canonical transcript
+            start_word = transcript.words[start_idx]
+            end_word = transcript.words[end_idx]
+            source_start_ms = start_word.start_ms
+            source_end_ms = max(end_word.end_ms, source_start_ms + 10)
 
-        # Slice original spoken text from transcript
-        text_words = transcript.words[start_idx : end_idx + 1]
-        original_text = " ".join(w.text for w in text_words) or d.original_text
+            # Slice original spoken text from transcript
+            text_words = transcript.words[start_idx : end_idx + 1]
+            original_text = " ".join(w.text for w in text_words) or d.original_text
 
         reconciled_decisions.append(
             EditorDecision(

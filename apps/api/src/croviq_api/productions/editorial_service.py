@@ -27,6 +27,8 @@ from croviq_domain.editorial import (
     EditorProposal,
     EditorialRun,
     EditorialRunStatus,
+    SectionAction,
+    VideoSectionDecision,
 )
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile, ChannelProfileBuilder
@@ -157,7 +159,7 @@ class EditorialService:
                 request_id=request_id,
             )
             decisions, system_activities = self._merge_silence_decisions(
-                production_id, run.run_id, silence_decisions, raw_proposal.decisions
+                production_id, run.run_id, silence_decisions, raw_proposal.decisions, raw_proposal.section_plan
             )
             proposal = EditorProposal(
                 production_id=raw_proposal.production_id,
@@ -296,6 +298,7 @@ class EditorialService:
         run_id: str,
         silence_decisions: list[EditorDecision],
         leo_decisions: list[EditorDecision],
+        section_plan: list[VideoSectionDecision] | None = None,
     ) -> tuple[list[EditorDecision], list[AgentActivity]]:
         merged: list[EditorDecision] = []
         removed_ms = 0
@@ -309,11 +312,24 @@ class EditorialService:
                 ),
                 None,
             )
-            if overlap is None or overlap.decision_type == EditorDecisionType.TRIM_PAUSE:
+            if overlap is not None and overlap.decision_type in (
+                EditorDecisionType.KEEP,
+                EditorDecisionType.KEEP_FOR_CLARITY,
+            ):
+                continue
+            if overlap is None or overlap.decision_type in (
+                EditorDecisionType.TRIM_PAUSE,
+                EditorDecisionType.REMOVE_SILENCE,
+                EditorDecisionType.TIGHTEN_PAUSE,
+            ):
                 merged.append(silence)
                 removed_ms += silence.source_end_ms - silence.source_start_ms
         for decision in leo_decisions:
-            if decision.decision_type == EditorDecisionType.TRIM_PAUSE and any(
+            if decision.decision_type in (
+                EditorDecisionType.TRIM_PAUSE,
+                EditorDecisionType.REMOVE_SILENCE,
+                EditorDecisionType.TIGHTEN_PAUSE,
+            ) and any(
                 max(decision.source_start_ms, silence.source_start_ms)
                 < min(decision.source_end_ms, silence.source_end_ms)
                 for silence in merged

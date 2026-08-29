@@ -1,10 +1,12 @@
 """Canonical Edit Decision List (EDL) domain models for deterministic media rendering."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
+import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from croviq_domain.editorial import EditorDecisionType
+from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
 from croviq_domain.validators import validate_timezone_aware
 
 
@@ -324,3 +326,84 @@ def map_source_time_to_edited(
         accumulated_ms += (seg_end - seg_start)
 
     return accumulated_ms
+
+
+def derive_edited_transcript(
+    transcript: Transcript,
+    edl: EditDecisionList,
+) -> Transcript:
+    """Derive an edited transcript aligned strictly to the rendered video timeline."""
+    active_cuts = sorted(edl.active_cuts, key=lambda c: c.safe_start_ms)
+    keep_segments = derive_keep_segments(edl)
+    target_duration_ms = sum(end - start for start, end in keep_segments)
+
+    def is_in_cut(start_ms: int, end_ms: int) -> bool:
+        mid_ms = (start_ms + end_ms) // 2
+        for cut in active_cuts:
+            if cut.safe_start_ms <= mid_ms <= cut.safe_end_ms:
+                return True
+        return False
+
+    edited_words: list[TranscriptWord] = []
+    idx = 0
+    for w in transcript.words:
+        if is_in_cut(w.start_ms, w.end_ms):
+            continue
+        new_start = map_source_time_to_edited(w.start_ms, keep_segments)
+        new_end = map_source_time_to_edited(w.end_ms, keep_segments)
+        if new_end <= new_start:
+            new_end = new_start + max(1, w.end_ms - w.start_ms)
+        edited_words.append(
+            TranscriptWord(
+                index=idx,
+                text=w.text,
+                start_ms=new_start,
+                end_ms=new_end,
+                confidence=w.confidence,
+                speaker_id=w.speaker_id,
+            )
+        )
+        idx += 1
+
+    edited_segments: list[TranscriptSegment] = []
+    if edited_words:
+        cur_seg_words = [edited_words[0]]
+        for w in edited_words[1:]:
+            prev = cur_seg_words[-1]
+            if w.start_ms - prev.end_ms > 1500 or len(cur_seg_words) >= 20:
+                seg_text = " ".join(sw.text for sw in cur_seg_words)
+                edited_segments.append(
+                    TranscriptSegment(
+                        segment_id=f"seg_{len(edited_segments) + 1:03d}",
+                        text=seg_text,
+                        start_ms=cur_seg_words[0].start_ms,
+                        end_ms=cur_seg_words[-1].end_ms,
+                        word_start_index=cur_seg_words[0].index,
+                        word_end_index=cur_seg_words[-1].index,
+                    )
+                )
+                cur_seg_words = [w]
+            else:
+                cur_seg_words.append(w)
+        if cur_seg_words:
+            seg_text = " ".join(sw.text for sw in cur_seg_words)
+            edited_segments.append(
+                TranscriptSegment(
+                    segment_id=f"seg_{len(edited_segments) + 1:03d}",
+                    text=seg_text,
+                    start_ms=cur_seg_words[0].start_ms,
+                    end_ms=cur_seg_words[-1].end_ms,
+                    word_start_index=cur_seg_words[0].index,
+                    word_end_index=cur_seg_words[-1].index,
+                )
+            )
+    return Transcript(
+        transcript_id=f"tr_ed_{uuid.uuid4().hex[:8]}",
+        production_id=transcript.production_id,
+        language_code=transcript.language_code,
+        duration_ms=target_duration_ms,
+        words=edited_words,
+        segments=edited_segments,
+        silence_intervals=[],
+        created_at=datetime.now(timezone.utc),
+    )

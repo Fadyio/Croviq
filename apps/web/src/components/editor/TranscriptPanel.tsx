@@ -143,10 +143,14 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                     const isDecisionStart = decision?.transcript_start_word === word.index;
                     const isCoverage = decision?.decision_type === "BROLL_COVER_CANDIDATE";
                     const isProtected = decision?.decision_type === "KEEP_FOR_CLARITY";
-                    const isSilenceCut = decision?.decision_type === "TRIM_PAUSE";
+                    const isSilenceCut =
+                      decision?.decision_type === "TRIM_PAUSE" ||
+                      decision?.decision_type === "REMOVE_SILENCE" ||
+                      decision?.decision_type === "TIGHTEN_PAUSE";
                     const isWordRemoved =
-                      decision?.decision_type.startsWith("REMOVE_") ||
-                      decision?.decision_type === "TIGHTEN_EXPLANATION";
+                      (decision?.decision_type.startsWith("REMOVE_") &&
+                        decision?.decision_type !== "REMOVE_SILENCE") ||
+                      decision?.decision_type.startsWith("TIGHTEN_");
                     return (
                       <React.Fragment key={word.index}>
                         {isDecisionStart && isCoverage && (

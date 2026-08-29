@@ -103,6 +103,36 @@ def test_reconcile_editor_proposal_clamps_out_of_bounds_words() -> None:
     assert d.original_text == "First second third fourth"
 
 
+def test_reconcile_editor_proposal_preserves_silence_cuts() -> None:
+    tr = _sample_transcript()
+    silence_cut = EditorDecision(
+        decision_id="silence_cut_001",
+        decision_type=EditorDecisionType.TRIM_PAUSE,
+        transcript_start_word=1,
+        transcript_end_word=2,
+        source_start_ms=350,
+        source_end_ms=550,
+        original_text="[Silence: second ... third]",
+        action="trim",
+        concise_reason="Deterministic silence trim",
+        confidence=1.0,
+    )
+    proposal = EditorProposal(
+        production_id="prod_123",
+        agent="leo",
+        model="gemini-3.7-flash",
+        summary="Test proposal",
+        decisions=[silence_cut],
+        section_plan=[],
+        chapters=[],
+        overall_confidence=1.0,
+    )
+    reconciled = reconcile_editor_proposal_with_transcript(proposal, tr)
+    rec_dec = reconciled.decisions[0]
+    assert rec_dec.source_start_ms == 350
+    assert rec_dec.source_end_ms == 550
+    assert rec_dec.original_text == "[Silence: second ... third]"
+
 @pytest.mark.asyncio
 async def test_fake_genai_client_deterministic_flow() -> None:
     client = FakeGenAIClient()

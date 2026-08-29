@@ -26,11 +26,14 @@ MIN_CUT_DURATION_MS = 120
 DEFAULT_NATURAL_PAUSE_BREATH_MS = 200
 
 DESTRUCTIVE_DECISION_TYPES = frozenset({
+    EditorDecisionType.REMOVE_SILENCE,
     EditorDecisionType.REMOVE_FILLER,
     EditorDecisionType.REMOVE_FALSE_START,
     EditorDecisionType.REMOVE_REPETITION,
     EditorDecisionType.TRIM_PAUSE,
+    EditorDecisionType.TIGHTEN_PAUSE,
     EditorDecisionType.TIGHTEN_EXPLANATION,
+    EditorDecisionType.REMOVE_LOW_VALUE_SECTION,
 })
 
 
@@ -135,7 +138,7 @@ class CutSafetyAnalyzer:
         req_start_ms = start_word.start_ms
         req_end_ms = end_word.end_ms
 
-        if decision.decision_type == EditorDecisionType.TRIM_PAUSE:
+        if decision.decision_type in (EditorDecisionType.TRIM_PAUSE, EditorDecisionType.REMOVE_SILENCE, EditorDecisionType.TIGHTEN_PAUSE) and decision.original_text.startswith("[Silence:"):
             left_anchor = start_word.text
             right_anchor = end_word.text
         else:
@@ -190,22 +193,18 @@ class CutSafetyAnalyzer:
                         )
 
         # 8. Boundary Snapping & Safety Assessment
-        if decision.decision_type == EditorDecisionType.TRIM_PAUSE:
+        if decision.decision_type in (EditorDecisionType.TRIM_PAUSE, EditorDecisionType.REMOVE_SILENCE, EditorDecisionType.TIGHTEN_PAUSE) and (decision.decision_id.startswith("silence_cut_") or decision.original_text.startswith("[Silence:")):
             # Special case for pause trimming: deterministic silence cleanup already retains natural pause padding
-            if decision.decision_id.startswith("silence_cut_") or decision.original_text.startswith("[Silence:"):
-                safe_start_ms = decision.source_start_ms
-                safe_end_ms = decision.source_end_ms
-            else:
-                raw_start = decision.source_start_ms
-                raw_end = decision.source_end_ms
-                pause_duration = raw_end - raw_start
-                if pause_duration > (self.natural_pause_breath_ms * 2):
-                    safe_start_ms = raw_start + self.natural_pause_breath_ms
-                    safe_end_ms = raw_end - self.natural_pause_breath_ms
-                else:
-                    safe_start_ms = raw_start
-                    safe_end_ms = raw_end
-
+            safe_start_ms = decision.source_start_ms
+            safe_end_ms = decision.source_end_ms
+            safety_status = CutSafetyStatus.SAFE
+            safety_reason = "Natural pause trimming leaving comfortable breath padding."
+        elif decision.decision_type in (EditorDecisionType.TRIM_PAUSE, EditorDecisionType.REMOVE_SILENCE, EditorDecisionType.TIGHTEN_PAUSE) and decision.transcript_start_word == decision.transcript_end_word and (decision.source_end_ms - decision.source_start_ms > self.natural_pause_breath_ms * 2):
+            raw_start = decision.source_start_ms
+            raw_end = decision.source_end_ms
+            pause_duration = raw_end - raw_start
+            safe_start_ms = raw_start + self.natural_pause_breath_ms
+            safe_end_ms = raw_end - self.natural_pause_breath_ms
             safety_status = CutSafetyStatus.SAFE
             safety_reason = "Natural pause trimming leaving comfortable breath padding."
         else:
