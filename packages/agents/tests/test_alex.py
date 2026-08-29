@@ -16,6 +16,8 @@ from croviq_domain.channel_intelligence import (
     SourceCitation,
 )
 from croviq_domain.memory import ChannelLesson, TargetAgent
+from croviq_domain.channel_provider import SampleChannelDataProvider
+
 
 
 def test_alex_labels_grounded_web_research_provenance_truthfully() -> None:
@@ -410,3 +412,39 @@ async def test_alex_research_fails_closed_without_gcp_configuration_in_productio
         ),
     ):
         await alex.run_grounded_research(prompts=[prompt], force_mock=True)
+
+
+@pytest.mark.asyncio
+async def test_alex_chat_resolves_latest_video_from_shuffled_list() -> None:
+    alex = AlexDataScientist()
+    sample_provider = SampleChannelDataProvider()
+    videos = await sample_provider.get_videos(limit=100)
+    
+    # Deliberately reverse and shuffle the video list so vid_syn_100 is at the beginning or middle
+    shuffled = list(reversed(videos))
+    assert shuffled[0].video_id == "vid_syn_100"
+    
+    # Put the oldest video first
+    shuffled_oldest_first = list(videos)
+    assert shuffled_oldest_first[0].video_id == "vid_syn_001"
+
+    res1 = await alex.chat(
+        message="How did my last video perform?",
+        videos=shuffled,
+        channel=await sample_provider.get_channel(),
+    )
+    res2 = await alex.chat(
+        message="How did my last video perform?",
+        videos=shuffled_oldest_first,
+        channel=await sample_provider.get_channel(),
+    )
+
+    # Both must identify vid_syn_100 as the latest published video regardless of array ordering
+    tool1 = next(t for t in res1["tool_executions"] if t["tool_name"] == "channel_analytics_inspection")
+    tool2 = next(t for t in res2["tool_executions"] if t["tool_name"] == "channel_analytics_inspection")
+    assert tool1["video_id"] == "vid_syn_100"
+    assert tool2["video_id"] == "vid_syn_100"
+    assert "Google GenAI SDK Tutorial for Beginners (Part 5)" in tool1["title"]
+    assert "Google GenAI SDK Tutorial for Beginners (Part 5)" in tool2["title"]
+    assert "Google GenAI SDK Tutorial for Beginners (Part 5)" in res1["reply"]
+    assert "Google GenAI SDK Tutorial for Beginners (Part 5)" in res2["reply"]

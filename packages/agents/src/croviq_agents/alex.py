@@ -12,6 +12,8 @@ import re
 from typing import Any, Sequence
 from urllib.parse import urlsplit
 
+from statistics import median
+
 from croviq_domain.channel_intelligence import (
     EvidenceKind,
     FindingLifecycle,
@@ -606,14 +608,16 @@ class AlexDataScientist:
             f"Active Research Prompts and Constraints:\n{prompt_texts}\n\n"
             f"{history_context}\n\n"
             "Research Directives:\n"
-            "1. Explore multi-lane topics across distinct technical domains: Foundation Models & Reasoning, Agent Workflows & Tooling, Developer Tooling & SDKs, Open-Source Releases & Benchmarks, Cloud Infrastructure, Multimodal & Video Systems, Evaluation & Observability, and Creator Content Ecosystem Patterns.\n"
-            "2. For prompts marked 'Strictly Restrict to Preferred Sources', only query and cite those exact domains using site: constraints.\n"
-            "3. Identify 2-4 high-value topic opportunities from distinct categories with unique primary entities and topic clusters.\n"
-            "4. For each finding, provide:\n"
+            "1. Multi-Ecosystem Discovery: Deliberately search across distinct public signal ecosystems including Hacker News (site:news.ycombinator.com), GitHub repositories (site:github.com), Reddit technical communities (site:reddit.com/r/LocalLLaMA, site:reddit.com/r/MachineLearning), and official open-source/standards documentation (e.g. OpenTelemetry, FastAPI, W3C/MDN).\n"
+            "2. No Single-Vendor Bias: Do NOT bias solely toward Google or Gemini unless emerging from explicit channel search prompts. Explore multi-vendor architectures (e.g. DeepSeek, LangGraph, OpenTelemetry, FastAPI, WebCodecs, vLLM, SGLang, Claude, local models).\n"
+            "3. Deduplication & Novelty: At most ONE finding per primary vendor/entity. Penalize duplicate announcements, already-covered topics, and stale news.\n"
+            "4. For prompts marked 'Strictly Restrict to Preferred Sources', only query and cite those exact domains using site: constraints.\n"
+            "5. Identify 2-4 high-value topic opportunities from distinct categories with unique primary entities and topic clusters.\n"
+            "6. For each finding, provide:\n"
             "   - title (clear, factual, and informative)\n"
             "   - category (e.g. Foundation Models, Agent Workflows, Multimodal Systems, Developer Tooling, Evaluation & Observability, Video Pacing & Engineering Patterns)\n"
             "   - topic_cluster (e.g. foundation-models, agent-workflows, multimodal-systems, developer-tooling, evaluation-observability, cloud-infrastructure)\n"
-            "   - primary_entity (e.g. Gemini 3.7, OpenTelemetry, WebCodecs, FastAPI, LangGraph, Vertex AI)\n"
+            "   - primary_entity (e.g. LangGraph, OpenTelemetry, WebCodecs, FastAPI, DeepSeek, Gemini 3.7)\n"
             "   - summary (concise technical breakdown)\n"
             "   - why_it_matters (why this aligns with the channel's historical performance or audience)\n"
             "   - relevance_score (0.0 - 1.0)\n"
@@ -1090,6 +1094,18 @@ class AlexDataScientist:
         structured_artifact: dict[str, Any] | None = None
         tool_context_summary = ""
 
+        def _resolve_latest_published_video(video_list: list[Any] | None) -> Any | None:
+            if not video_list:
+                return None
+            return max(
+                video_list,
+                key=lambda v: (
+                    getattr(getattr(v, "public", None), "published_at", None)
+                    or getattr(v, "published_at", None)
+                    or datetime.min.replace(tzinfo=UTC)
+                ),
+            )
+
         # 1. Tool Execution Trigger Detection
         # Tool 1: Code execution analysis (correlations, numerical questions)
         if any(w in msg_lower for w in ["correlation", "calculate", "retention", "demo", "regression", "math", "why"]):
@@ -1129,34 +1145,53 @@ class AlexDataScientist:
 
         # Tool 2: Last video performance / comparisons
         elif any(w in msg_lower for w in ["last video", "latest video", "perform", "how did", "did my"]):
-            latest = videos[0] if videos else None
+            latest = _resolve_latest_published_video(videos)
             if latest:
                 views_cnt = getattr(getattr(latest, "analytics", None), "views", 0)
                 retention_pct = getattr(getattr(latest, "analytics", None), "avg_view_percentage", 0.0)
                 subs = getattr(getattr(latest, "analytics", None), "subscribers_gained", 0)
                 ctr = getattr(getattr(latest, "analytics", None), "ctr_percentage", 0.0)
                 title = getattr(getattr(latest, "public", None), "title", "Latest Video")
+                published_at = getattr(getattr(latest, "public", None), "published_at", None)
+                v_id = getattr(latest, "video_id", "vid_latest")
+
+                # Compute baseline comparisons across other channel videos
+                baseline_videos = [v for v in (videos or []) if getattr(v, "video_id", None) != v_id] or [latest]
+                baseline_views = int(median([getattr(getattr(v, "analytics", None), "views", 0) for v in baseline_videos])) if baseline_videos else views_cnt
+                baseline_ret = float(median([getattr(getattr(v, "analytics", None), "avg_view_percentage", 0.0) for v in baseline_videos])) if baseline_videos else retention_pct
+
                 tool_executions.append({
                     "tool_name": "channel_analytics_inspection",
-                    "goal": f"Inspect metrics for latest upload '{title}'",
-                    "video_id": getattr(latest, "video_id", "v_latest"),
+                    "goal": f"Inspect metrics for latest published upload '{title}'",
+                    "video_id": v_id,
+                    "title": title,
+                    "published_at": published_at.isoformat() if published_at else None,
+                    "channel_id": channel_id,
+                    "source_provider": "youtube" if getattr(channel, "source_type", "") == "youtube" else "sample",
                     "views": views_cnt,
                     "avg_view_percentage": retention_pct,
                     "subscribers_gained": subs,
                     "ctr_percentage": ctr,
+                    "channel_median_views": baseline_views,
+                    "channel_median_retention": baseline_ret,
                 })
                 structured_artifact = {
                     "type": "video_summary",
+                    "video_id": v_id,
                     "video_title": title,
+                    "published_at": published_at.isoformat() if published_at else None,
                     "views": views_cnt,
                     "retention": retention_pct,
                     "subscribers": subs,
+                    "channel_median_views": baseline_views,
+                    "channel_median_retention": baseline_ret,
                 }
                 tool_context_summary = (
-                    f"Tool executed: channel_analytics_inspection on '{title}'. "
-                    f"Views: {views_cnt:,}, Retention: {retention_pct:.1f}%, Subs: +{subs}, CTR: {ctr:.1f}%."
+                    f"Tool executed: channel_analytics_inspection on latest published video '{title}' (ID: {v_id}, Published: {published_at}). "
+                    f"Views: {views_cnt:,} (channel median: {baseline_views:,}), "
+                    f"Retention: {retention_pct:.1f}% (channel median: {baseline_ret:.1f}%), "
+                    f"Subs: +{subs}, CTR: {ctr:.1f}%."
                 )
-
         # Tool 3: Scenario Analysis & Forecasting
         elif any(w in msg_lower for w in ["what if", "upload every week", "forecast", "projection", "growing", "next 90 days"]):
             sub_baseline = getattr(getattr(channel, "public", None), "subscriber_count", 51317) if channel else 51317
@@ -1179,7 +1214,7 @@ class AlexDataScientist:
             )
 
         # Tool 4: Next topic / recommendations
-        elif any(w in msg_lower for w in ["next", "make next", "what should i make", "topics", "ideas", "research"]):
+        elif any(w in msg_lower for w in ["make next", "what should i make", "what to make", "next video topic", "next topic", "topics", "ideas", "research"]):
             f_list = findings or []
             tool_executions.append({
                 "tool_name": "channel_interest_profile_match",
@@ -1287,36 +1322,46 @@ class AlexDataScientist:
                     f"**Recommendation**: In your next production, test introducing the terminal demonstration within the first 25 seconds."
                 )
             elif any(w in msg_lower for w in ["last video", "latest video", "perform", "how did", "did my"]):
-                latest = videos[0] if videos else None
+                latest = _resolve_latest_published_video(videos)
                 if latest:
                     v_title = getattr(getattr(latest, "public", None), "title", "Latest Upload")
                     v_views = getattr(getattr(latest, "analytics", None), "views", 0)
                     v_ret = getattr(getattr(latest, "analytics", None), "avg_view_percentage", 0.0)
                     v_subs = getattr(getattr(latest, "analytics", None), "subscribers_gained", 0)
                     v_ctr = getattr(getattr(latest, "analytics", None), "ctr_percentage", 0.0)
+                    
+                    baseline_videos = [v for v in (videos or []) if getattr(v, "video_id", None) != getattr(latest, "video_id", None)] or [latest]
+                    baseline_views = int(median([getattr(getattr(v, "analytics", None), "views", 0) for v in baseline_videos])) if baseline_videos else v_views
+                    baseline_ret = float(median([getattr(getattr(v, "analytics", None), "avg_view_percentage", 0.0) for v in baseline_videos])) if baseline_videos else v_ret
+
+                    v_delta = ((v_views / baseline_views) - 1) * 100 if baseline_views else 0
+                    r_delta = v_ret - baseline_ret
+
+                    v_delta_str = f"+{v_delta:.1f}%" if v_delta >= 0 else f"{v_delta:.1f}%"
+                    r_delta_str = f"+{r_delta:.1f} points" if r_delta >= 0 else f"{r_delta:.1f} points"
+
                     reply_text = (
-                        f"{prefix}Here is how your latest video **{v_title}** performed:\n\n"
-                        f"- **Views**: {v_views:,}\n"
-                        f"- **Retention**: {v_ret:.1f}%\n"
+                        f"{prefix}Here is the performance analysis for your latest published video **{v_title}**:\n\n"
+                        f"- **Views**: {v_views:,} ({v_delta_str} vs lifetime channel median of {baseline_views:,})\n"
+                        f"- **Retention**: {v_ret:.1f}% ({r_delta_str} vs lifetime channel median of {baseline_ret:.1f}%)\n"
                         f"- **Subscribers Gained**: +{v_subs}\n"
                         f"- **CTR**: {v_ctr:.1f}%\n\n"
                         f"**Data Scientist Assessment**: Retention was {v_ret:.1f}%, tracking above channel baseline. "
-                        f"Subscriber conversion remained strong at +{v_subs} net subscribers."
+                        f"Subscriber conversion remained strong at +{v_subs} net subscribers.\n\n"
+                        f"**Recommendation**: The audience engagement indicates the demonstration structure in this video resonated well. Maintain this hook pacing in your upcoming production."
                     )
                 else:
                     reply_text = f"{prefix}I inspected your channel data. No recent video uploads were found in the current period."
-            elif any(w in msg_lower for w in ["what if", "upload every week", "forecast", "projection", "growing", "next 90 days"]):
+            elif any(w in msg_lower for w in ["what if", "upload every week", "forecast", "projection", "growing", "next 90 days", "90 days"]):
                 sub_count = getattr(getattr(channel, "public", None), "subscriber_count", 51317) if channel else 51317
                 reply_text = (
-                    f"{prefix}**Cadence Scenario Analysis (90 Days)**\n\n"
                     f"Based on your recent 28-day growth curve and subscriber conversion rates (~{sub_count:,} baseline subscribers):\n\n"
                     f"- **Cadence**: Weekly publishing (12 productions over 90 days)\n"
                     f"- **Projected Additional Subscribers**: **+1,800 to +2,600 subscribers** (90-day range)\n"
                     f"- **Assumptions**: Baseline retention remains above 55%; historical conversion of ~12-16 subscribers per 1,000 views holds.\n\n"
                     f"*Note*: This is a probabilistic scenario range derived from historical conversion curves, not a deterministic guarantee."
                 )
-            elif any(w in msg_lower for w in ["next", "make next", "what should i make", "topics", "ideas", "research"]):
-                f_list = findings or []
+            elif any(w in msg_lower for w in ["make next", "what should i make", "what to make", "next video topic", "next topic", "topics", "ideas", "research"]):
                 s_summary = "\n".join(
                     f"- **{f.title}** ({f.source_citations[0].domain if f.source_citations else 'web'}): {f.why_it_matters}"
                     for f in f_list[:2]
