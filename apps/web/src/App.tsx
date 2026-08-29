@@ -27,8 +27,12 @@ const parseAgentRoute = (pathname: string): AgentId | null => {
 const normalizePath = (pathname: string): string => {
   if (pathname === "" || pathname === "/") return "/";
   if (pathname === "/app" || pathname === "/app/") return "/app";
-  if (pathname.startsWith("/app/performance")) return "/app/performance";
-  if (pathname.startsWith("/app/experiments")) return "/app/experiments";
+  if (pathname.startsWith("/app/performance") || pathname.startsWith("/app/experiments")) {
+    if (typeof window !== "undefined" && window.location.pathname !== "/app") {
+      window.history.replaceState(null, "", "/app");
+    }
+    return "/app";
+  }
   const agentId = parseAgentRoute(pathname);
   if (agentId) return `/app/agents/${agentId}`;
   if (pathname.startsWith("/login")) return "/login";
@@ -111,16 +115,10 @@ const AppRoutes: React.FC = () => {
       </AuthGuard>
     );
   }
-
-  if (
-    currentPath === "/app" ||
-    currentPath === "/app/performance" ||
-    currentPath === "/app/experiments"
-  ) {
+  if (currentPath === "/app") {
     return (
       <AuthGuard onRedirectToLogin={() => navigate("/login")}>
         <AppPage
-          currentRoute={currentPath as "/app" | "/app/performance" | "/app/experiments"}
           onNavigateRoute={(route) => navigate(route)}
           onNavigateNewProject={() => navigate("/projects/new")}
         />

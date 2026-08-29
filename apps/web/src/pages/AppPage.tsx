@@ -1,17 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import {
-  BarChart3,
-  Beaker,
-  Check,
-  ChevronDown,
-  LayoutDashboard,
-  LogOut,
-  Plus,
-  RefreshCw,
-  TrendingUp,
-  X,
-} from "lucide-react";
+import { Check, ChevronDown, LogOut, Plus, RefreshCw, TrendingUp, X } from "lucide-react";
 import type { components } from "../api/generated";
 import alexAvatar from "../assets/agents/alex.webp";
 import { useAuth } from "../auth/AuthContext";
@@ -20,8 +9,6 @@ import { AgentTeamSelector } from "../components/AgentTeamSelector";
 import { AlexSettingsDrawer } from "../components/dashboard/AlexSettingsDrawer";
 import { AlexRail } from "../components/dashboard/AlexRail";
 import { OverviewView } from "../components/dashboard/OverviewView";
-import { PerformanceView } from "../components/dashboard/PerformanceView";
-import { ExperimentsView } from "../components/dashboard/ExperimentsView";
 import { WorthWatchingFindingsDrawer } from "../components/dashboard/WorthWatchingFindingsDrawer";
 
 type ChannelDashboard = components["schemas"]["ChannelDashboard"];
@@ -29,23 +16,18 @@ type ResearchFinding = components["schemas"]["ResearchFinding"];
 type YouTubeConnection = components["schemas"]["YouTubeConnectionPublicSummary"];
 type Insight = components["schemas"]["ChannelInsight"];
 type ChannelMode = "sample" | "youtube";
-export type DashboardTab = "overview" | "performance" | "experiments";
-
 interface AppPageProps {
-  currentRoute?: "/app" | "/app/performance" | "/app/experiments";
   onNavigateRoute?: (route: string) => void;
   onNavigateNewProject: () => void;
 }
 
 export const AppPage: React.FC<AppPageProps> = ({
-  currentRoute = "/app",
   onNavigateRoute,
   onNavigateNewProject,
 }) => {
   const { user, firebaseUser, logout } = useAuth();
   const [period, setPeriod] = useState<28 | 90 | 365>(28);
   const [channelMode, setChannelMode] = useState<ChannelMode>("sample");
-  const [isInitializingMode, setIsInitializingMode] = useState<boolean>(true);
   const [dashboard, setDashboard] = useState<ChannelDashboard | null>(null);
   const [findings, setFindings] = useState<ResearchFinding[]>([]);
   const [youtubeConnection, setYoutubeConnection] = useState<YouTubeConnection | null>(null);
@@ -58,27 +40,8 @@ export const AppPage: React.FC<AppPageProps> = ({
   const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
   const [evidenceModalInsight, setEvidenceModalInsight] = useState<Insight | null>(null);
   const [allFindingsDrawerOpen, setAllFindingsDrawerOpen] = useState(false);
-
   const selectorRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
-  // Derive active tab directly from URL route
-  const activeTab: DashboardTab =
-    currentRoute === "/app/performance"
-      ? "performance"
-      : currentRoute === "/app/experiments"
-        ? "experiments"
-        : "overview";
-
-  const handleTabClick = (tab: DashboardTab) => {
-    if (!onNavigateRoute) return;
-    if (tab === "performance") {
-      onNavigateRoute("/app/performance");
-    } else if (tab === "experiments") {
-      onNavigateRoute("/app/experiments");
-    } else {
-      onNavigateRoute("/app");
-    }
-  };
 
   const loadFindings = useCallback(async () => {
     if (!firebaseUser) return;
@@ -95,117 +58,28 @@ export const AppPage: React.FC<AppPageProps> = ({
     }
   }, [firebaseUser]);
 
-  // 1. Initial connection status check determines initial channel mode deterministically
+  // Unified deterministic connection & dashboard loading
   useEffect(() => {
-    let cancelled = false;
-    const initializeMode = async () => {
-      if (!firebaseUser) return;
-      try {
-        const token = await firebaseUser.getIdToken();
-        const response = await fetch("/api/channels/youtube/connection", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (response.ok && !cancelled) {
-          const data = (await response.json()) as YouTubeConnection;
-          setYoutubeConnection(data);
-          if (data.connected) {
-            setChannelMode("youtube");
-          }
-        }
-      } catch {
-        // Non-blocking connection check
-      } finally {
-        if (!cancelled) {
-          setIsInitializingMode(false);
-        }
-      }
-    };
-
-    void initializeMode();
-    void loadFindings();
-    return () => {
-      cancelled = true;
-    };
-  }, [firebaseUser, loadFindings]);
-
-  // 2. Load dashboard data for the active mode without stale cache or race conditions
-  useEffect(() => {
-    if (isInitializingMode || !firebaseUser) return;
+    if (!firebaseUser) return;
     let cancelled = false;
     setIsLoading(true);
     setError(null);
 
-    const fetchDashboard = async () => {
+    const load = async () => {
       try {
         const token = await firebaseUser.getIdToken();
-        const endpoint =
-          channelMode === "youtube"
-            ? `/api/channels/youtube/dashboard?days=${period}`
-            : `/api/channels/sample/dashboard?days=${period}`;
-        const response = await fetch(endpoint, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) {
-          if (!cancelled) {
-            setDashboard(null);
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(
-              (errorData as { detail?: string }).detail ||
-                "Channel intelligence could not be loaded",
-            );
-          }
-          return;
-        }
-        const data = (await response.json()) as ChannelDashboard;
-        if (!cancelled) {
-          setDashboard(data);
-        }
-      } catch (reason) {
-        if (!cancelled) {
-          setDashboard(null);
-          setError(
-            reason instanceof Error ? reason.message : "Channel intelligence could not be loaded",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        const state = params.get("state");
+        const errorParam = params.get("error");
 
-    void fetchDashboard();
-    return () => {
-      cancelled = true;
-    };
-  }, [firebaseUser, period, channelMode, refreshKey, isInitializingMode]);
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
-        setChannelSelectorOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+        let activeMode: ChannelMode = channelMode;
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const state = params.get("state");
-    const errorParam = params.get("error");
-
-    if (errorParam) {
-      setError(`YouTube OAuth authorization was cancelled or denied: ${errorParam}`);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-
-    if (code && state && firebaseUser) {
-      setIsConnectingYt(true);
-      void (async () => {
-        try {
-          const token = await firebaseUser.getIdToken();
+        if (errorParam) {
+          setError(`YouTube OAuth authorization was cancelled or denied: ${errorParam}`);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (code && state) {
+          setIsConnectingYt(true);
           const callbackResp = await fetch("/api/channels/youtube/callback", {
             method: "POST",
             headers: {
@@ -218,25 +92,76 @@ export const AppPage: React.FC<AppPageProps> = ({
               redirect_uri: window.location.origin + "/app",
             }),
           });
-          if (!callbackResp.ok) {
-            const errData = await callbackResp.json().catch(() => ({}));
+          window.history.replaceState({}, document.title, window.location.pathname);
+          if (callbackResp.ok && !cancelled) {
+            const connSummary = (await callbackResp.json()) as YouTubeConnection;
+            setYoutubeConnection(connSummary);
+            if (connSummary.connected) {
+              activeMode = "youtube";
+              if (channelMode !== "youtube") {
+                setChannelMode("youtube");
+              }
+            }
+          }
+        } else {
+          const connResp = await fetch("/api/channels/youtube/connection", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (connResp.ok && !cancelled) {
+            const connData = (await connResp.json()) as YouTubeConnection;
+            setYoutubeConnection(connData);
+            if (connData.connected) {
+              activeMode = "youtube";
+              if (channelMode !== "youtube") {
+                setChannelMode("youtube");
+              }
+            }
+          }
+        }
+
+        const endpoint =
+          activeMode === "youtube"
+            ? `/api/channels/youtube/dashboard?days=${period}`
+            : `/api/channels/sample/dashboard?days=${period}`;
+        const dashResp = await fetch(endpoint, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!dashResp.ok) {
+          if (!cancelled) {
+            setDashboard(null);
+            const errData = await dashResp.json().catch(() => ({}));
             throw new Error(
-              (errData as { detail?: string }).detail || "Could not authorize YouTube channel",
+              (errData as { detail?: string }).detail || "Channel intelligence could not be loaded",
             );
           }
-          const connSummary = (await callbackResp.json()) as YouTubeConnection;
-          setYoutubeConnection(connSummary);
-          setChannelMode("youtube");
-          setRefreshKey((k) => k + 1);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "YouTube connection failed");
-        } finally {
-          setIsConnectingYt(false);
-          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
         }
-      })();
-    }
-  }, [firebaseUser]);
+        const dashData = (await dashResp.json()) as ChannelDashboard;
+        if (!cancelled) {
+          setDashboard(dashData);
+        }
+      } catch (reason) {
+        if (!cancelled) {
+          setDashboard(null);
+          setError(
+            reason instanceof Error ? reason.message : "Channel intelligence could not be loaded",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsConnectingYt(false);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void load();
+    void loadFindings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser, period, channelMode, refreshKey, loadFindings]);
 
   const startYouTubeConnect = async () => {
     if (!firebaseUser) return;
@@ -289,13 +214,7 @@ export const AppPage: React.FC<AppPageProps> = ({
         <div className="flex min-w-0 items-center gap-5">
           <button
             type="button"
-            onClick={() => {
-              if (onNavigateRoute) {
-                onNavigateRoute("/app");
-              } else {
-                handleTabClick("overview");
-              }
-            }}
+            onClick={() => onNavigateRoute?.("/app")}
             className="flex items-center hover:opacity-80 transition-opacity cursor-pointer shrink-0"
             aria-label="Croviq Home"
             title="Croviq Home"
@@ -571,48 +490,13 @@ export const AppPage: React.FC<AppPageProps> = ({
                 </div>
               </div>
 
-              {/* URL-Backed Navigation Tabs */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle pb-3">
-                <nav className="flex items-center gap-1" aria-label="Dashboard sections">
-                  {[
-                    { id: "overview", label: "Overview", icon: LayoutDashboard },
-                    { id: "performance", label: "Performance", icon: BarChart3 },
-                    { id: "experiments", label: "Experiments", icon: Beaker },
-                  ].map((tab) => {
-                    const Icon = tab.icon;
-                    const isActive = activeTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => handleTabClick(tab.id as DashboardTab)}
-                        className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                          isActive
-                            ? "bg-surface-2 text-text-primary font-semibold shadow-sm"
-                            : "text-text-muted hover:bg-surface-2/50 hover:text-text-secondary"
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </nav>
-              </div>
             </header>
 
-            {/* Dynamic View Rendering */}
+            {/* Single Unified Channel Intelligence Dashboard */}
             {isLoading || !dashboard ? (
               <DashboardSkeleton />
-            ) : activeTab === "overview" ? (
-              <OverviewView
-                dashboard={dashboard}
-                onNavigateToExperiments={() => handleTabClick("experiments")}
-              />
-            ) : activeTab === "performance" ? (
-              <PerformanceView dashboard={dashboard} />
             ) : (
-              <ExperimentsView dashboard={dashboard} />
+              <OverviewView dashboard={dashboard} />
             )}
           </main>
 

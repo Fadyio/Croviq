@@ -382,13 +382,8 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
         await page.setViewportSize(vp);
         await signInAndGoTo(page, route);
 
-        if (route === "/app") {
-          await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
-        } else if (route === "/app/performance") {
-          await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
-        } else {
-          await expect(page.getByRole("heading", { name: "Proposed Experiments" })).toBeVisible();
-        }
+        await expect(page).toHaveURL(/\/app$/);
+        await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
 
         const alexRail = page.locator("aside");
         await expect(alexRail).toBeVisible();
@@ -475,21 +470,18 @@ test.describe("Right Rail / Scrollbar Gap Regression (Bug #1)", () => {
     // 3. bug01-overview-1280x800.png
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.waitForTimeout(400);
-    await page.screenshot({ path: "e2e/screenshots/bug01-overview-1280x800.png" });
-
-    // 4. bug01-performance-1440x900.png
-    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/app/performance");
-    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
     await page.screenshot({ path: "e2e/screenshots/bug01-performance-1440x900.png" });
 
     // 5. bug01-experiments-1440x900.png
     await page.goto("/app/experiments");
-    await expect(page.getByRole("heading", { name: "Proposed Experiments" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
     await page.screenshot({ path: "e2e/screenshots/bug01-experiments-1440x900.png" });
-
     // 6. Scrolled screenshot where sticky rail is visible
     await page.goto("/app");
     await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();

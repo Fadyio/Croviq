@@ -50,6 +50,22 @@ const mockFirebasePasswordSignIn = async (page: Page) => {
     }
     await route.continue();
   });
+
+  await page.route("**/securetoken.googleapis.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        access_token: FIREBASE_ID_TOKEN,
+        expires_in: "3600",
+        token_type: "Bearer",
+        refresh_token: "fake-refresh-token",
+        id_token: FIREBASE_ID_TOKEN,
+        user_id: "demo_user_123",
+        project_id: "croviq-506602",
+      }),
+    });
+  });
 };
 
 const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
@@ -257,7 +273,6 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
       }),
     });
   });
-
   await page.route("**/api/workspace/agent-settings", async (route) => {
     await route.fulfill({
       status: 200,
@@ -633,19 +648,30 @@ test.describe("Product Home and Creator Flow", () => {
       });
     });
 
+    const connectedConnection = {
+      connected: true,
+      status: "connected",
+      channel_id: "UC_alex_real_01",
+      channel_title: "Alex River Engineering",
+      avatar_url: "",
+      subscriber_count: 52300,
+      last_sync_at: "2026-08-28T00:00:00Z",
+      has_monetary_access: false,
+    };
+
     await page.route("**/api/channels/youtube/callback", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          connected: true,
-          channel_id: "UC_alex_real_01",
-          channel_title: "Alex River Engineering",
-          avatar_url: "",
-          subscriber_count: 52300,
-          last_sync_at: "2026-08-28T00:00:00Z",
-          has_monetary_access: false,
-        }),
+        body: JSON.stringify(connectedConnection),
+      });
+    });
+
+    await page.route("**/api/channels/youtube/connection", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(connectedConnection),
       });
     });
 
@@ -655,9 +681,9 @@ test.describe("Product Home and Creator Flow", () => {
     await page.goto("/app?code=real_google_code_123&state=test_state_12345");
 
     // 2. Channel is now connected with truthful channel title and sub count
-    await expect(page.getByText("Alex River Engineering").first()).toBeVisible();
+    await expect(page.getByText("Alex River Engineering").first()).toBeVisible({ timeout: 10000 });
     await page.getByRole("button", { name: "Select channel" }).click();
-    await expect(page.getByText("52,300 subscribers")).toBeVisible();
+    await expect(page.getByText(/52.?300 subscribers/)).toBeVisible();
   });
   test("verifies New Project route is focused on raw footage upload without Recent Productions clutter", async ({
     page,

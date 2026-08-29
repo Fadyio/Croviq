@@ -421,7 +421,8 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.waitForURL("**/app*");
 
     await page.goto("/app/performance");
-    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: "e2e/screenshots/performance-1440x900.png" });
@@ -438,7 +439,8 @@ test.describe("Visual Screenshot Acceptance", () => {
     await page.waitForURL("**/app*");
 
     await page.goto("/app/experiments");
-    await expect(page.getByRole("heading", { name: "Proposed Experiments" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await page.waitForTimeout(500);
 
     await page.screenshot({ path: "e2e/screenshots/experiments-1440x900.png" });

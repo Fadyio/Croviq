@@ -417,16 +417,9 @@ const signInAndGoTo = async (page: Page, path: string = "/app") => {
   await mockFirebasePasswordSignIn(page);
   await mockBackendApis(page);
   await page.goto("/login");
-  try {
-    const emailInput = page.getByLabel("Email");
-    if (await emailInput.isVisible({ timeout: 1500 })) {
-      await emailInput.fill(DEMO_EMAIL);
-      await page.getByLabel("Password").fill("valid-password");
-      await page.getByRole("button", { name: "Sign in" }).click();
-    }
-  } catch {
-    // Already authenticated or navigated
-  }
+  await page.getByLabel("Email").fill(DEMO_EMAIL);
+  await page.getByLabel("Password").fill("valid-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL("**/app*");
   if (path !== "/app" && !page.url().endsWith(path)) {
     await page.goto(path);
@@ -434,17 +427,13 @@ const signInAndGoTo = async (page: Page, path: string = "/app") => {
 };
 
 test.describe("Home / Channel Intelligence Redesign", () => {
-  test("Overview route /app renders 4 KPIs, compact trend chart, latest video summary, and Alex rail", async ({
+  test("Single unified Home dashboard on /app renders KPIs, dominant trend chart, and Alex rail", async ({
     page,
   }) => {
     await signInAndGoTo(page, "/app");
 
     // Check header & channel title
     await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
-
-    // Check Overview tab is active
-    const overviewTab = page.getByRole("button", { name: /Overview/i });
-    await expect(overviewTab).toHaveClass(/bg-surface-2/);
 
     // Check 4 KPIs
     await expect(page.getByText("Here's what changed")).toBeVisible();
@@ -453,9 +442,13 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await expect(kpiSection.getByText("Watch time", { exact: true })).toBeVisible();
     await expect(kpiSection.getByText("Net subscribers", { exact: true })).toBeVisible();
     await expect(kpiSection.getByText("Average retention", { exact: true })).toBeVisible();
+
     // Check latest video summary
     await expect(page.getByText("Since your last upload")).toBeVisible();
     await expect(page.getByText("Google GenAI SDK Tutorial for Beginners (Part 5)")).toBeVisible();
+
+    // Check dominant trend chart
+    await expect(page.getByRole("heading", { name: "Channel Performance" })).toBeVisible();
 
     // Check Alex rail is present on the right
     await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
@@ -463,84 +456,19 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await expect(page.getByText("Worth watching")).toBeVisible();
   });
 
-  test("Performance route /app/performance renders Video Quadrant, Video Catalog Table, and Traffic Sources", async ({
-    page,
-  }) => {
-    await signInAndGoTo(page, "/app/performance");
-
-    // Check URL
-    await expect(page).toHaveURL(/\/app\/performance$/);
-
-    // Check Performance tab is active
-    const perfTab = page.getByRole("button", { name: /Performance/i });
-    await expect(perfTab).toHaveClass(/bg-surface-2/);
-
-    // Check Video Performance Ranked Chart section
-    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
-
-    // Check Video Catalog Table section
-    await expect(page.getByRole("heading", { name: "Video Catalog Performance" })).toBeVisible();
-    await expect(
-      page.getByRole("table").getByText("LangGraph Multi-Agent Architecture"),
-    ).toBeVisible();
-
-    // Check Traffic Sources section
-    await expect(page.getByRole("heading", { name: "Traffic Sources" })).toBeVisible();
-
-    // Check Alex rail persists on performance route
-    await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
-  });
-
-  test("Experiments route /app/experiments renders Active, Proposed, and Completed experiments", async ({
-    page,
-  }) => {
-    await signInAndGoTo(page, "/app/experiments");
-
-    // Check URL
-    await expect(page).toHaveURL(/\/app\/experiments$/);
-
-    // Check Experiments tab is active
-    const expTab = page.getByRole("button", { name: /Experiments/i });
-    await expect(expTab).toHaveClass(/bg-surface-2/);
-
-    // Check sections
-    await expect(page.getByRole("heading", { name: "Proposed Experiments" })).toBeVisible();
-    await expect(
-      page.getByText("Showing the first practical demonstration before 00:30"),
-    ).toBeVisible();
-
-    // Check Alex rail persists on experiments route
-    await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
-  });
-
-  test("Navigation tabs change URL and support browser Back/Forward navigation", async ({
+  test("Legacy /app/performance and /app/experiments routes redirect cleanly to canonical /app", async ({
     page,
   }) => {
     await signInAndGoTo(page, "/app");
-
-    // Click Performance tab
-    await page.getByRole("button", { name: /Performance/i }).click();
-    await expect(page).toHaveURL(/\/app\/performance$/);
-    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
-
-    // Click Experiments tab
-    await page.getByRole("button", { name: /Experiments/i }).click();
-    await expect(page).toHaveURL(/\/app\/experiments$/);
-    await expect(page.getByRole("heading", { name: "Proposed Experiments" })).toBeVisible();
-
-    // Browser Back to /app/performance
-    await page.goBack();
-    await expect(page).toHaveURL(/\/app\/performance$/);
-    await expect(page.getByRole("heading", { name: "Video Performance" })).toBeVisible();
-
-    // Browser Back to /app
-    await page.goBack();
     await expect(page).toHaveURL(/\/app$/);
-    await expect(page.getByText("Here's what changed")).toBeVisible();
 
-    // Browser Forward to /app/performance
-    await page.goForward();
-    await expect(page).toHaveURL(/\/app\/performance$/);
+    await page.goto("/app/performance");
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
+
+    await page.goto("/app/experiments");
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
   });
 
   test("Layout consumes full width with zero right-side dead gap at 1600x900, 1440x900, and 1280x800", async ({

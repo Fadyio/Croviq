@@ -8,7 +8,7 @@ type DashboardKpi = components["schemas"]["DashboardKpi"];
 
 interface OverviewViewProps {
   dashboard: ChannelDashboard;
-  onNavigateToExperiments: () => void;
+  onNavigateToExperiments?: () => void;
 }
 
 const compactNumber = new Intl.NumberFormat("en", {
@@ -180,14 +180,16 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 </span>
               </span>
             </div>
-            <button
-              type="button"
-              onClick={onNavigateToExperiments}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-            >
-              <span>Open Experiments</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
+            {onNavigateToExperiments && (
+              <button
+                type="button"
+                onClick={onNavigateToExperiments}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              >
+                <span>Open Experiments</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </section>
       )}
