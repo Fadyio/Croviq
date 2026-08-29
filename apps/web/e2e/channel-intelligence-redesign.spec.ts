@@ -580,6 +580,51 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await page.getByRole("button", { name: "Close" }).last().click();
   });
 
+  test("team selector preserves distinct agent routes across navigation and refresh", async ({
+    page,
+  }) => {
+    await signInAndGoTo(page, "/app");
+
+    const openAgent = async (agent: "Alex" | "Leo" | "Iris", route: string) => {
+      await page.getByTestId("btn-team-selector").click();
+      await page
+        .getByText("Autonomous Production Team", { exact: true })
+        .locator("..")
+        .getByRole("button", { name: new RegExp(`^${agent} `) })
+        .click();
+      await expect(page).toHaveURL(new RegExp(`${route}$`));
+      await expect(page.getByRole("heading", { name: agent, exact: true })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Chat" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    };
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await openAgent("Alex", "/app/agents/alex");
+    await page.screenshot({ path: "e2e/screenshots/bug02-alex-1600x900.png" });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openAgent("Leo", "/app/agents/leo");
+    await page.screenshot({ path: "e2e/screenshots/bug02-leo-1440x900.png" });
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openAgent("Iris", "/app/agents/iris");
+    await page.screenshot({ path: "e2e/screenshots/bug02-iris-1280x800.png" });
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/agents\/iris$/);
+    await expect(page.getByRole("heading", { name: "Iris", exact: true })).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/app\/agents\/leo$/);
+    await expect(page.getByRole("heading", { name: "Leo", exact: true })).toBeVisible();
+
+    await page.goForward();
+    await expect(page).toHaveURL(/\/app\/agents\/iris$/);
+    await expect(page.getByRole("heading", { name: "Iris", exact: true })).toBeVisible();
+  });
+
   test("New Project page includes Back button, upload card, and Recent Projects list", async ({
     page,
   }) => {
