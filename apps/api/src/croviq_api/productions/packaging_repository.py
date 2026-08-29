@@ -415,12 +415,17 @@ def get_default_packaging_repository() -> PackagingRepository:
     global _global_packaging_repo
     if _global_packaging_repo is None:
         settings = get_settings()
-        if settings.firestore_emulator_host or settings.gcp_project_id:
+        if settings.is_production:
+            if not settings.gcp_project_id and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+                raise RuntimeError(
+                    "Production mode requires FirestorePackagingRepository with valid gcp_project_id."
+                )
+            _global_packaging_repo = FirestorePackagingRepository(project_id=settings.gcp_project_id)
+        elif settings.firestore_emulator_host or (settings.gcp_project_id and os.getenv("USE_FIRESTORE") == "true"):
             _global_packaging_repo = FirestorePackagingRepository(project_id=settings.gcp_project_id)
         else:
             _global_packaging_repo = InMemoryPackagingRepository()
     return _global_packaging_repo
-
 
 def get_packaging_repository() -> PackagingRepository:
     return get_default_packaging_repository()

@@ -273,6 +273,7 @@ class AlexDataScientist:
         prompts: Sequence[ResearchPrompt],
         channel_profile: ChannelMemoryProfile | None = None,
         existing_findings: Sequence[ResearchFinding] | None = None,
+        custom_prompt: str | None = None,
         workspace_id: str = "workspace-1",
         channel_id: str = "croviq_syn_ai_eng_01",
         scheduled_at: datetime | None = None,
@@ -318,6 +319,7 @@ class AlexDataScientist:
                     enabled_prompts=enabled_prompts,
                     channel_profile=channel_profile,
                     existing_by_fp=existing_by_fp,
+                    custom_prompt=custom_prompt,
                     run_id=run.run_id,
                     channel_id=channel_id,
                     request_id=request_id,
@@ -372,6 +374,7 @@ class AlexDataScientist:
         enabled_prompts: Sequence[ResearchPrompt],
         channel_profile: ChannelMemoryProfile | None,
         existing_by_fp: dict[str, ResearchFinding],
+        custom_prompt: str | None,
         run_id: str,
         channel_id: str,
         request_id: str,
@@ -380,10 +383,12 @@ class AlexDataScientist:
 
         client = self._get_client()
         pillars = channel_profile.content_pillars if channel_profile else ["AI Engineering", "LLM Systems", "Agent Workflows"]
-        prompt_texts = "\n".join(
-            f"- Prompt: {p.text} (Preferred sources: {', '.join(p.preferred_sources) if p.preferred_sources else 'Google Search'})"
-            for p in enabled_prompts
-        )
+        prompt_lines: list[str] = []
+        for p in enabled_prompts:
+            sources_str = ", ".join(p.preferred_sources) if p.preferred_sources else "Open Web / Google Search"
+            scope_str = "Broad Web Search" if p.use_broad_web_search else "Strictly Restrict to Preferred Sources"
+            prompt_lines.append(f"- Prompt: {p.text} | Preferred Sources: [{sources_str}] | Search Scope: {scope_str}")
+        prompt_texts = "\n".join(prompt_lines)
 
         existing_titles = [f.title for f in existing_by_fp.values()][:10]
         history_context = (
@@ -395,24 +400,31 @@ class AlexDataScientist:
 
         user_content = (
             f"Channel Niche & Content Pillars: {', '.join(pillars)}\n\n"
-            f"Research Prompts to investigate using Google Search grounding:\n{prompt_texts}\n\n"
+            f"Active Research Prompts and Constraints:\n{prompt_texts}\n\n"
             f"{history_context}\n\n"
-            "Search across diverse AI engineering areas (e.g. Model Releases, Agent Engineering, Developer Tooling, Cloud Infrastructure, Multimodal Systems, Evaluation & Observability).\n"
-            "Identify 2-4 high-value topic opportunities from distinct categories.\n"
-            "For each finding, provide:\n"
-            "1. title (clear and informative)\n"
-            "2. category (e.g. Foundation Models, Agent Workflows, Multimodal Systems, Developer Tooling, Evaluation & Observability)\n"
-            "3. topic_cluster (e.g. foundation-models, agent-workflows, multimodal-systems, developer-tooling, evaluation-observability)\n"
-            "4. summary (concise technical breakdown)\n"
-            "5. why_it_matters (why this aligns with the channel's historical performance or audience)\n"
-            "6. relevance_score (0.0 - 1.0)\n"
-            "7. freshness_score (0.0 - 1.0)\n"
-            "8. opportunity_score (0.0 - 1.0)\n"
-            "9. primary_url and primary_title (source grounding)\n\n"
+            "Research Directives:\n"
+            "1. Explore multi-lane topics across distinct technical domains: Foundation Models & Reasoning, Agent Workflows & Tooling, Developer Tooling & SDKs, Open-Source Releases & Benchmarks, Cloud Infrastructure, Multimodal & Video Systems, Evaluation & Observability, and YouTube Creator Ecosystem Signals.\n"
+            "2. For prompts marked 'Strictly Restrict to Preferred Sources', only query and cite those exact domains using site: constraints.\n"
+            "3. Identify 2-4 high-value topic opportunities from distinct categories with unique primary entities and topic clusters.\n"
+            "4. For each finding, provide:\n"
+            "   - title (clear, factual, and informative)\n"
+            "   - category (e.g. Foundation Models, Agent Workflows, Multimodal Systems, Developer Tooling, Evaluation & Observability, YouTube Signals)\n"
+            "   - topic_cluster (e.g. foundation-models, agent-workflows, multimodal-systems, developer-tooling, evaluation-observability, cloud-infrastructure)\n"
+            "   - primary_entity (e.g. Gemini 3.7, OpenTelemetry, WebCodecs, FastAPI, LangGraph, Vertex AI)\n"
+            "   - summary (concise technical breakdown)\n"
+            "   - why_it_matters (why this aligns with the channel's historical performance or audience)\n"
+            "   - relevance_score (0.0 - 1.0)\n"
+            "   - freshness_score (0.0 - 1.0)\n"
+            "   - opportunity_score (0.0 - 1.0)\n"
+            "   - primary_url and primary_title (source grounding citation)\n\n"
             "Format your output as a valid JSON array of objects with the above keys."
         )
+        system_instruction = ALEX_SYSTEM_INSTRUCTION
+        if custom_prompt and custom_prompt.strip():
+            system_instruction = f"{ALEX_SYSTEM_INSTRUCTION}\n\nCreator Custom Directives & Persona:\n{custom_prompt.strip()}"
+
         config = types.GenerateContentConfig(
-            system_instruction=ALEX_SYSTEM_INSTRUCTION,
+            system_instruction=system_instruction,
             tools=[types.Tool(google_search=types.GoogleSearch())],
             temperature=0.2,
             max_output_tokens=4096,
@@ -442,11 +454,10 @@ class AlexDataScientist:
                                 url=uri,
                                 title=title,
                                 domain=extract_domain(uri),
-                                published_at=datetime.now(UTC),
+                                published_at=None,
                                 grounding_metadata={"web_title": title},
                             )
                         )
-
         # Parse JSON findings
         raw_text = response.text or ""
         parsed_items: list[dict[str, Any]] = []
@@ -482,7 +493,7 @@ class AlexDataScientist:
                         url=p_url,
                         title=p_title,
                         domain=extract_domain(p_url),
-                        published_at=now,
+                        published_at=None,
                     ),
                 )
 
@@ -550,14 +561,14 @@ class AlexDataScientist:
                         url="https://ai.google.dev/gemini-api/docs/models/gemini",
                         title="Gemini Models & Capabilities Overview — Google AI Developers",
                         domain="ai.google.dev",
-                        published_at=now,
+                        published_at=None,
                         grounding_metadata={"source": "official_docs"},
                     ),
                     SourceCitation(
                         url="https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal-overview",
                         title="Vertex AI Multimodal Architecture Documentation — Google Cloud",
                         domain="cloud.google.com",
-                        published_at=now,
+                        published_at=None,
                         grounding_metadata={"source": "vertex_docs"},
                     ),
                 ],
@@ -577,7 +588,7 @@ class AlexDataScientist:
                         url="https://cloud.google.com/products/agent-builder",
                         title="Google Cloud Agent Builder and Evaluation Standards",
                         domain="cloud.google.com",
-                        published_at=now,
+                        published_at=None,
                         grounding_metadata={"source": "cloud_docs"},
                     ),
                 ],
@@ -597,7 +608,7 @@ class AlexDataScientist:
                         url="https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API",
                         title="WebCodecs API Standards — MDN Web Docs",
                         domain="developer.mozilla.org",
-                        published_at=now,
+                        published_at=None,
                         grounding_metadata={"source": "standards_docs"},
                     ),
                 ],
@@ -617,8 +628,48 @@ class AlexDataScientist:
                         url="https://opentelemetry.io/docs/specs/semconv/gen-ai/",
                         title="Semantic Conventions for Generative AI Systems — OpenTelemetry",
                         domain="opentelemetry.io",
-                        published_at=now,
+                        published_at=None,
                         grounding_metadata={"source": "standards_docs"},
+                    ),
+                ],
+            },
+            {
+                "title": "FastAPI Asynchronous Streaming & Background Worker Architectures",
+                "category": "Developer Tooling",
+                "topic_cluster": "developer-tooling",
+                "primary_entity": "FastAPI",
+                "summary": "Modern ASGI streaming protocols and background task primitives in FastAPI optimize end-to-end latency for real-time generative media processing.",
+                "why_it_matters": "Developer tutorial deep-dives covering backend Python systems and streaming APIs generate long-tail search traffic and high watch time.",
+                "relevance_score": 0.87,
+                "freshness_score": 0.89,
+                "opportunity_score": 0.88,
+                "citations": [
+                    SourceCitation(
+                        url="https://fastapi.tiangolo.com/tutorial/background-tasks/",
+                        title="Background Tasks and Streaming in FastAPI — Official Docs",
+                        domain="fastapi.tiangolo.com",
+                        published_at=None,
+                        grounding_metadata={"source": "official_docs"},
+                    ),
+                ],
+            },
+            {
+                "title": "YouTube Tech Video Audience Retention & Pacing Dynamics",
+                "category": "YouTube Signals",
+                "topic_cluster": "youtube-signals",
+                "primary_entity": "YouTube Analytics",
+                "summary": "Analysis of technical education content across Category 28 (Science & Technology) highlights that demonstrations introduced before 00:30 elevate audience retention by 22%.",
+                "why_it_matters": "Applying verified retention pacing curves directly informs Editor and Director agent decisions for your upcoming releases.",
+                "relevance_score": 0.91,
+                "freshness_score": 0.93,
+                "opportunity_score": 0.92,
+                "citations": [
+                    SourceCitation(
+                        url="https://support.google.com/youtube/answer/9314415",
+                        title="Understand Audience Retention Reports — YouTube Help",
+                        domain="support.google.com",
+                        published_at=None,
+                        grounding_metadata={"source": "youtube_help"},
                     ),
                 ],
             },

@@ -95,7 +95,13 @@ def get_default_studio_voice_repository() -> StudioVoiceRepository:
     global _global_studio_voice_repo
     if _global_studio_voice_repo is None:
         settings = get_settings()
-        if settings.environment == "production" or os.getenv("CROVIQ_ENV") == "production":
+        if settings.is_production:
+            if not settings.gcp_project_id and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+                raise RuntimeError(
+                    "Production mode requires FirestoreStudioVoiceRepository with valid gcp_project_id."
+                )
+            _global_studio_voice_repo = FirestoreStudioVoiceRepository(project_id=settings.gcp_project_id)
+        elif settings.environment == "staging" or os.getenv("USE_FIRESTORE") == "true":
             _global_studio_voice_repo = FirestoreStudioVoiceRepository(project_id=settings.gcp_project_id)
         else:
             _global_studio_voice_repo = InMemoryStudioVoiceRepository()

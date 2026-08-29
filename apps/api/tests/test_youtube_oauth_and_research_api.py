@@ -12,6 +12,10 @@ from croviq_api.channels.research_repository import (
     InMemoryResearchRepository,
     get_research_repository,
 )
+from croviq_api.workspaces.agent_config_repository import (
+    InMemoryAgentConfigRepository,
+    get_agent_config_repository,
+)
 from croviq_api.channels.youtube_repository import (
     InMemoryYouTubeConnectionRepository,
     YouTubeConnection,
@@ -57,20 +61,30 @@ def other_user() -> User:
 
 
 @pytest.fixture
-def repos() -> tuple[InMemoryWorkspaceRepository, InMemoryResearchRepository, InMemoryYouTubeConnectionRepository]:
-    return InMemoryWorkspaceRepository(), InMemoryResearchRepository(), InMemoryYouTubeConnectionRepository()
+def repos() -> tuple[
+    InMemoryWorkspaceRepository,
+    InMemoryResearchRepository,
+    InMemoryYouTubeConnectionRepository,
+    InMemoryAgentConfigRepository,
+]:
+    return (
+        InMemoryWorkspaceRepository(),
+        InMemoryResearchRepository(),
+        InMemoryYouTubeConnectionRepository(),
+        InMemoryAgentConfigRepository(),
+    )
 
 
 @pytest.fixture
 def app(user: User, repos: tuple) -> FastAPI:
-    ws_repo, research_repo, yt_repo = repos
+    ws_repo, research_repo, yt_repo, agent_config_repo = repos
     application = create_app()
     application.dependency_overrides[get_current_user] = lambda: user
     application.dependency_overrides[get_workspace_repository] = lambda: ws_repo
     application.dependency_overrides[get_research_repository] = lambda: research_repo
     application.dependency_overrides[get_youtube_connection_repository] = lambda: yt_repo
+    application.dependency_overrides[get_agent_config_repository] = lambda: agent_config_repo
     return application
-
 
 @pytest.fixture
 def client(app: FastAPI) -> TestClient:
@@ -107,7 +121,7 @@ def test_generate_youtube_auth_url_with_upload_scope(client: TestClient) -> None
 
 def test_incremental_youtube_oauth_and_refresh_token_preservation(client: TestClient, repos: tuple) -> None:
     import asyncio
-    _, _, yt_repo = repos
+    ws_repo, research_repo, yt_repo, agent_config_repo = repos
 
     # 1. Initial connect with read-only scopes
     auth_resp1 = client.post(
@@ -186,7 +200,7 @@ def test_handle_youtube_callback_stores_connection(client: TestClient, repos: tu
     assert summary["subscriber_count"] >= 0
 
     # 3. Verify server-side persisted record is encrypted (NO plaintext tokens)
-    _, _, yt_repo = repos
+    ws_repo, research_repo, yt_repo, agent_config_repo = repos
     import asyncio
     raw_record = yt_repo.get_raw_record("ws_usr_creator_01")
     assert raw_record is not None
@@ -226,6 +240,28 @@ def test_youtube_callback_rejects_invalid_or_consumed_state(client: TestClient) 
     assert "CSRF protection" in response.json()["detail"]
 
 
+def test_youtube_callback_real_code_failure_returns_bad_gateway_or_bad_request(client: TestClient) -> None:
+    # 1. Generate auth URL to produce valid CSRF state
+    auth_resp = client.post(
+        "/api/channels/youtube/auth-url",
+        json={"redirect_uri": "http://localhost:5173/app"},
+    )
+    state_token = auth_resp.json()["state_token"]
+
+    # 2. Submit non-mock code when OAuth server is unavailable or returns error
+    callback_resp = client.post(
+        "/api/channels/youtube/callback",
+        json={
+            "code": "real_live_auth_code_99999",
+            "state": state_token,
+            "redirect_uri": "http://localhost:5173/app",
+        },
+    )
+    # Must fail with 502 or 400 (not silently succeed with fake 12500 subs)
+    assert callback_resp.status_code in (400, 502), callback_resp.text
+    detail = callback_resp.json()["detail"]
+    assert "Failed to fetch authentic YouTube" in detail or "Google OAuth token exchange failed" in detail
+
 # -----------------------------------------------------------------------------
 # Alex Grounded Research & Topic Radar Tests
 # -----------------------------------------------------------------------------
@@ -253,7 +289,7 @@ def test_manual_research_run_trigger(client: TestClient) -> None:
 
 
 def test_scheduler_tick_requires_oidc_authorization(client: TestClient, repos: tuple) -> None:
-    _, research_repo, _ = repos
+    ws_repo, research_repo, yt_repo, agent_config_repo = repos
     past = datetime(2026, 8, 27, 0, 0, tzinfo=UTC)
     config = ResearchConfig(
         workspace_id="ws-test-sched",
@@ -327,7 +363,7 @@ def test_alex_code_execution_endpoint(client: TestClient) -> None:
 
 
 def test_distill_research_finding_endpoint(client: TestClient, repos: tuple) -> None:
-    _, research_repo, _ = repos
+    ws_repo, research_repo, yt_repo, agent_config_repo = repos
     now = datetime.now(UTC)
     finding = ResearchFinding(
         finding_id="fnd_test_distill",
@@ -360,3 +396,21 @@ def test_distill_research_finding_endpoint(client: TestClient, repos: tuple) -> 
     assert data["lesson_id"] is not None
     assert "Dynamic Thinking Budgets" in data["directive"]
     assert data["confidence"] == 0.95
+
+
+def test_alex_custom_prompt_persisted_and_passed_to_research(client: TestClient, repos: tuple) -> None:
+    ws_repo, research_repo, yt_repo, agent_config_repo = repos
+    # 1. Update Alex working prompt
+    update_resp = client.put(
+        "/api/workspace/agent-settings/prompts/alex",
+        json={"prompt_text": "Custom focus: prioritise edge computing and small open source vision models."},
+    )
+    assert update_resp.status_code == 200, update_resp.text
+    assert update_resp.json()["is_custom"] is True
+    assert "edge computing" in update_resp.json()["prompt_text"]
+
+    # 2. Trigger research run
+    run_resp = client.post("/api/channels/research/run")
+    assert run_resp.status_code == 200, run_resp.text
+    findings = run_resp.json()
+    assert len(findings) >= 2

@@ -363,11 +363,15 @@ def get_default_workspace_repository() -> WorkspaceRepository:
         return _global_workspace_repo
 
     settings = get_settings()
-    # In cloud environments or if USE_FIRESTORE is set, use Firestore Native repository
-    if settings.environment in ("production", "staging") or os.getenv("USE_FIRESTORE") == "true":
+    if settings.is_production:
+        if not settings.gcp_project_id and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+            raise RuntimeError(
+                "Production mode requires FirestoreWorkspaceRepository with valid gcp_project_id."
+            )
+        _global_workspace_repo = FirestoreWorkspaceRepository(project_id=settings.gcp_project_id)
+    elif settings.environment == "staging" or os.getenv("USE_FIRESTORE") == "true":
         _global_workspace_repo = FirestoreWorkspaceRepository(project_id=settings.gcp_project_id)
     else:
-        # Development / test fallback to in-memory repository
         _global_workspace_repo = InMemoryWorkspaceRepository()
 
     return _global_workspace_repo

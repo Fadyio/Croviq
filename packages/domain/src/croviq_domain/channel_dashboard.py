@@ -202,20 +202,27 @@ async def build_channel_dashboard(
         ),
     ]
 
-    trend = [
-        DashboardTrendPoint(
-            date=current.date,
-            views=current.views,
-            previous_views=previous.views,
-            watch_time_hours=current.watch_time_minutes / 60,
-            previous_watch_time_hours=previous.watch_time_minutes / 60,
-            net_subscribers=current.subscribers_gained - current.subscribers_lost,
-            previous_net_subscribers=(
-                previous.subscribers_gained - previous.subscribers_lost
-            ),
+    trend: list[DashboardTrendPoint] = []
+    for idx, current in enumerate(current_points):
+        previous = previous_points[idx] if idx < len(previous_points) else None
+        prev_views = previous.views if previous else 0
+        prev_watch = (previous.watch_time_minutes / 60) if previous else 0.0
+        prev_net = (
+            (previous.subscribers_gained - previous.subscribers_lost)
+            if previous
+            else 0
         )
-        for current, previous in zip(current_points, previous_points, strict=True)
-    ]
+        trend.append(
+            DashboardTrendPoint(
+                date=current.date,
+                views=current.views,
+                previous_views=prev_views,
+                watch_time_hours=current.watch_time_minutes / 60,
+                previous_watch_time_hours=prev_watch,
+                net_subscribers=current.subscribers_gained - current.subscribers_lost,
+                previous_net_subscribers=prev_net,
+            )
+        )
 
     videos_by_publish_date = sorted(videos, key=lambda video: video.public.published_at)
     latest = videos_by_publish_date[-1]

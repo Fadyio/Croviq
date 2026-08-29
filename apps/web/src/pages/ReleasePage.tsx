@@ -599,12 +599,18 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
 
           <span className="text-border-strong select-none font-light">/</span>
 
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onNavigateHome}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+            aria-label="Back to Overview"
+            title="Back to Overview"
+          >
             <CroviqLogo height={22} className="h-5 w-auto" />
             <span className="text-xs font-semibold text-text-primary tracking-tight">
               Release Gate
             </span>
-          </div>
+          </button>
         </div>
 
         {/* Center: Pipeline Stages & Status */}

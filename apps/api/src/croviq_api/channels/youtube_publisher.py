@@ -428,13 +428,17 @@ _global_youtube_publish_client: YouTubePublishClient | None = None
 
 def get_youtube_publish_client() -> YouTubePublishClient:
     global _global_youtube_publish_client
+    if _global_youtube_publish_client is not None:
+        if get_settings().is_production and isinstance(_global_youtube_publish_client, FakeYouTubePublishClient):
+            raise RuntimeError("Production mode strictly forbids FakeYouTubePublishClient overrides.")
+        return _global_youtube_publish_client
+
     if _global_youtube_publish_client is None:
         if get_settings().is_production:
             _global_youtube_publish_client = GoogleYouTubePublishClient()
         else:
             _global_youtube_publish_client = FakeYouTubePublishClient()
     return _global_youtube_publish_client
-
 
 def set_youtube_publish_client(client: YouTubePublishClient | None) -> None:
     global _global_youtube_publish_client

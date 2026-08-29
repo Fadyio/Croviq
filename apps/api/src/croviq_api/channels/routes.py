@@ -23,11 +23,22 @@ from croviq_api.channels.youtube_repository import (
     YouTubeConnectionRepository,
     get_youtube_connection_repository,
 )
+from croviq_api.channels.token_refresh import (
+    YouTubeReauthRequiredError,
+    refresh_youtube_access_token_if_needed,
+)
 from croviq_api.config import get_settings
+from croviq_api.memory.dependencies import get_memory_store
+from croviq_api.memory.store import ChannelMemoryStore
 from croviq_api.workspaces.repository import (
     WorkspaceRepository,
     get_workspace_repository,
 )
+from croviq_api.workspaces.agent_config_repository import (
+    AgentConfigRepository,
+    get_agent_config_repository,
+)
+from croviq_domain.agent_config import AgentId
 from croviq_domain.channel_dashboard import ChannelDashboard, build_channel_dashboard
 from croviq_domain.channel_intelligence import (
     FindingLifecycle,
@@ -262,43 +273,63 @@ async def handle_youtube_callback(
     if existing_conn and existing_conn.scopes:
         scopes = list(dict.fromkeys(existing_conn.scopes + scopes))
     if client_id and client_secret and not payload.code.startswith("mock-"):
-        try:
-            async with httpx.AsyncClient(timeout=20) as http_client:
-                token_resp = await http_client.post(
-                    YOUTUBE_OAUTH_TOKEN_URL,
-                    data={
-                        "code": payload.code,
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "redirect_uri": payload.redirect_uri,
-                        "grant_type": "authorization_code",
-                    },
+        async with httpx.AsyncClient(timeout=20) as http_client:
+            token_resp = await http_client.post(
+                YOUTUBE_OAUTH_TOKEN_URL,
+                data={
+                    "code": payload.code,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "redirect_uri": payload.redirect_uri,
+                    "grant_type": "authorization_code",
+                },
+            )
+            if token_resp.status_code != 200:
+                error_detail = token_resp.text
+                try:
+                    error_json = token_resp.json()
+                    error_detail = (
+                        error_json.get("error_description")
+                        or error_json.get("error")
+                        or token_resp.text
+                    )
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Google OAuth token exchange failed: {error_detail}",
                 )
-                if token_resp.status_code == 200:
-                    token_data = token_resp.json()
-                    access_token = token_data.get("access_token", access_token)
-                    if "refresh_token" in token_data and token_data["refresh_token"]:
-                        refresh_token = token_data["refresh_token"]
-                    if "scope" in token_data:
-                        granted_scopes = token_data["scope"].split()
-                        scopes = list(dict.fromkeys(scopes + granted_scopes))
-        except Exception as exc:
-            logger.warning("Token exchange fallback used: %s", exc)
-    # Initialize YouTube provider to query channel metadata
-    provider = YouTubeChannelDataProvider(access_token=access_token)
-    try:
-        channel = await provider.get_channel()
-        channel_id = channel.channel_id
-        title = channel.public.title
-        avatar_url = channel.public.avatar_url or ""
-        sub_count = channel.public.subscriber_count
-    except Exception:
-        # Fallback default values for test/mock channels
-        channel_id = "UC_connected_creator"
-        title = "Connected YouTube Channel"
-        avatar_url = ""
-        sub_count = 12500
+            token_data = token_resp.json()
+            access_token = token_data.get("access_token")
+            if not access_token:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Google OAuth token response missing access_token",
+                )
+            if "refresh_token" in token_data and token_data["refresh_token"]:
+                refresh_token = token_data["refresh_token"]
+            if "scope" in token_data:
+                granted_scopes = token_data["scope"].split()
+                scopes = list(dict.fromkeys(scopes + granted_scopes))
 
+    if payload.code.startswith("mock-"):
+        channel_id = "UC_mock_connected_channel"
+        title = "Connected YouTube Channel (Mock)"
+        avatar_url = ""
+        sub_count = 50000
+    else:
+        provider = YouTubeChannelDataProvider(access_token=access_token)
+        try:
+            channel = await provider.get_channel()
+            channel_id = channel.channel_id
+            title = channel.public.title
+            avatar_url = channel.public.avatar_url or ""
+            sub_count = channel.public.subscriber_count
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to fetch authentic YouTube channel metadata: {exc}",
+            )
     now = datetime.now(UTC)
     connection = YouTubeConnection(
         workspace_id=workspace.workspace_id,
@@ -351,9 +382,13 @@ async def get_youtube_connection_status(
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     connection = await youtube_repo.get_connection(workspace.workspace_id)
     if connection is None:
-        return YouTubeConnectionPublicSummary(connected=False)
+        return YouTubeConnectionPublicSummary(connected=False, status="disconnected")
+    now = datetime.now(UTC)
+    is_expired = connection.token_expiry is not None and connection.token_expiry <= now
+    status_str = "reauth_required" if (is_expired and not connection.refresh_token) else "connected"
     return YouTubeConnectionPublicSummary(
         connected=True,
+        status=status_str,
         channel_id=connection.channel_id,
         channel_title=connection.channel_title,
         avatar_url=connection.avatar_url,
@@ -426,8 +461,25 @@ async def get_youtube_channel_dashboard(
         period_days=days,
     )
 
+    try:
+        access_token, connection = await refresh_youtube_access_token_if_needed(
+            connection, youtube_repo
+        )
+    except YouTubeReauthRequiredError as exc:
+        log_event(
+            "youtube.sync.reauth_required",
+            request_id=request_id,
+            user_id=current_user.user_id,
+            workspace_id=workspace.workspace_id,
+            channel_id=connection.channel_id,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"YouTube authorization expired or invalid: {exc}",
+        ) from exc
     provider = YouTubeChannelDataProvider(
-        access_token=connection.access_token,
+        access_token=access_token,
         analytics_start_date=date(2025, 1, 1),
         analytics_end_date=end_date or datetime.now(UTC).date(),
     )
@@ -443,6 +495,7 @@ async def get_youtube_channel_dashboard(
         )
         return dashboard
     except Exception as exc:
+        err_msg = str(exc).lower()
         log_event(
             "youtube.sync.failed",
             request_id=request_id,
@@ -451,10 +504,25 @@ async def get_youtube_channel_dashboard(
             channel_id=connection.channel_id,
             error=str(exc),
         )
+        if "401" in err_msg or "unauthorized" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"YouTube authorization expired or invalid: {exc}",
+            ) from exc
+        if "403" in err_msg or "forbidden" in err_msg or "permission" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"YouTube API permissions required (e.g. Analytics scope): {exc}",
+            ) from exc
+        if "429" in err_msg or "quota" in err_msg or "rate limit" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"YouTube API quota limit exceeded: {exc}",
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to fetch YouTube analytics: {exc}",
-        )
+        ) from exc
 
 
 # -----------------------------------------------------------------------------
@@ -514,6 +582,8 @@ async def get_research_findings(
     current_user: Annotated[User, Depends(get_current_user)],
     workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
     research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
     limit: int = 10,
 ) -> list[ResearchFinding]:
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
@@ -525,18 +595,24 @@ async def get_research_findings(
     )
     if not findings:
         # If no findings yet in repository, execute initial research run
-        alex = AlexDataScientist()
+        alex_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.ALEX)
+        channel_profile = await memory_store.get_profile(config.channel_id)
+        alex = AlexDataScientist(
+            project_id=get_settings().gcp_project_id,
+            location=get_settings().vertexai_location,
+        )
         run, seeded = await alex.run_grounded_research(
             prompts=config.prompts,
+            channel_profile=channel_profile,
+            custom_prompt=alex_prompt.prompt_text if alex_prompt.is_custom else None,
             workspace_id=workspace.workspace_id,
             channel_id=config.channel_id,
-            force_mock=True,
+            force_mock=not get_settings().gcp_project_id,
         )
         await research_repo.save_run(run)
         await research_repo.save_findings(seeded)
         findings = seeded
     return findings
-
 
 @router.post(
     "/research/run",
@@ -548,11 +624,15 @@ async def trigger_manual_research_run(
     current_user: Annotated[User, Depends(get_current_user)],
     workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
     research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
 ) -> list[ResearchFinding]:
     request_id = getattr(request.state, "request_id", "unknown")
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     config = await research_repo.get_config(workspace.workspace_id)
     existing = await research_repo.list_findings(workspace_id=workspace.workspace_id, channel_id=config.channel_id)
+    alex_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.ALEX)
+    channel_profile = await memory_store.get_profile(config.channel_id)
 
     alex = AlexDataScientist(
         project_id=get_settings().gcp_project_id,
@@ -560,14 +640,15 @@ async def trigger_manual_research_run(
     )
     run, findings = await alex.run_grounded_research(
         prompts=config.prompts,
+        channel_profile=channel_profile,
         existing_findings=existing,
+        custom_prompt=alex_prompt.prompt_text if alex_prompt.is_custom else None,
         workspace_id=workspace.workspace_id,
         channel_id=config.channel_id,
         request_id=request_id,
     )
     await research_repo.save_run(run)
     await research_repo.save_findings(findings)
-
     now = datetime.now(UTC)
     updated_config = config.model_copy(
         update={
@@ -579,7 +660,6 @@ async def trigger_manual_research_run(
     await research_repo.save_config(updated_config)
     return findings
 
-
 @router.post(
     "/research/tick",
     response_model=SchedulerTickResponse,
@@ -589,6 +669,8 @@ async def trigger_manual_research_run(
 async def process_scheduler_tick(
     request: Request,
     research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
     scheduler_principal: Annotated[str, Depends(verify_scheduler_identity)],
 ) -> SchedulerTickResponse:
     request_id = getattr(request.state, "request_id", "unknown")
@@ -621,16 +703,18 @@ async def process_scheduler_tick(
         existing_findings = await research_repo.list_findings(
             workspace_id=cfg.workspace_id, channel_id=cfg.channel_id
         )
+        alex_prompt = await agent_config_repo.get_agent_prompt(cfg.workspace_id, AgentId.ALEX)
+        channel_profile = await memory_store.get_profile(cfg.channel_id)
         run, findings = await alex.run_grounded_research(
             prompts=cfg.prompts,
+            channel_profile=channel_profile,
             existing_findings=existing_findings,
+            custom_prompt=alex_prompt.prompt_text if alex_prompt.is_custom else None,
             workspace_id=cfg.workspace_id,
             channel_id=cfg.channel_id,
             scheduled_at=cfg.next_run_at,
             request_id=request_id,
         )
-        await research_repo.save_run(run)
-        await research_repo.save_findings(findings)
         total_findings += len(findings)
         executed += 1
 

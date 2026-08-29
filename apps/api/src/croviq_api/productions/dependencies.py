@@ -96,10 +96,24 @@ def get_genai_client(
     """Resolve active GenAIClient provider based on environment configuration."""
     global _custom_genai_client, _default_genai_client
     if _custom_genai_client is not None:
+        if settings.is_production and isinstance(_custom_genai_client, FakeGenAIClient):
+            raise RuntimeError(
+                "Production mode strictly forbids FakeGenAIClient overrides."
+            )
         return _custom_genai_client
 
     if _default_genai_client is None:
-        if settings.genai_backend_provider == "google" and settings.gcp_project_id:
+        if settings.is_production:
+            if settings.genai_backend_provider != "google" or not settings.gcp_project_id:
+                raise RuntimeError(
+                    "Production mode requires Google GenAI client (genai_backend_provider='google' and valid gcp_project_id). FakeGenAIClient is strictly forbidden in production."
+                )
+            _default_genai_client = GoogleGenAIClient(
+                project_id=settings.gcp_project_id,
+                location=settings.vertexai_location,
+                model_id=settings.gemini_model_id,
+            )
+        elif settings.genai_backend_provider == "google" and settings.gcp_project_id:
             _default_genai_client = GoogleGenAIClient(
                 project_id=settings.gcp_project_id,
                 location=settings.vertexai_location,

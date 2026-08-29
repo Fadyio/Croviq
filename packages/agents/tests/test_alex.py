@@ -220,3 +220,50 @@ async def test_alex_enforces_primary_entity_diversity_in_top_findings() -> None:
     entities = [f.primary_entity for f in top_3]
     # Ensure top 3 findings have distinct primary entities (max 1 per entity)
     assert len(set(entities)) == len(top_3), f"Top 3 findings must have distinct primary entities: {entities}"
+
+
+@pytest.mark.asyncio
+async def test_alex_research_recency_truth_does_not_fabricate_published_at() -> None:
+    alex = AlexDataScientist()
+    prompt = ResearchPrompt(
+        prompt_id="p_recency",
+        text="Investigate emerging foundation models and tooling",
+        enabled=True,
+        use_broad_web_search=True,
+    )
+    now_before = datetime.now(UTC)
+    run, findings = await alex.run_grounded_research(
+        prompts=[prompt],
+        workspace_id="ws-test",
+        channel_id="croviq_syn_ai_eng_01",
+        force_mock=True,
+    )
+    assert len(findings) > 0
+    for finding in findings:
+        assert finding.discovered_at >= now_before
+        assert finding.lifecycle == FindingLifecycle.NEW
+        # Citations without known upstream publish timestamp must be None, not fabricated to now()
+        for citation in finding.source_citations:
+            assert citation.published_at is None
+
+
+@pytest.mark.asyncio
+async def test_alex_research_multi_lane_and_youtube_signals() -> None:
+    alex = AlexDataScientist()
+    prompt = ResearchPrompt(
+        prompt_id="p_multi",
+        text="Comprehensive channel intelligence and YouTube signals",
+        enabled=True,
+        preferred_sources=["support.google.com", "ai.google.dev", "developer.mozilla.org"],
+        use_broad_web_search=True,
+    )
+    run, findings = await alex.run_grounded_research(
+        prompts=[prompt],
+        workspace_id="ws-test",
+        channel_id="croviq_syn_ai_eng_01",
+        force_mock=True,
+    )
+    clusters = {f.topic_cluster for f in findings}
+    assert "foundation-models" in clusters
+    assert "multimodal-systems" in clusters or "agent-workflows" in clusters
+    assert any("youtube" in (f.topic_cluster or "") or f.primary_entity == "YouTube Analytics" for f in findings)

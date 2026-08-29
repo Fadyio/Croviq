@@ -2176,6 +2176,8 @@ export interface components {
     };
     YouTubeConnectionPublicSummary: {
       connected: boolean;
+      status?: string;
+      error_message?: string | null;
       channel_id?: string | null;
       channel_title?: string | null;
       avatar_url?: string | null;

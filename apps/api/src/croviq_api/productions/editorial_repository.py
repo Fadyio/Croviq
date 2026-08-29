@@ -403,13 +403,18 @@ def get_default_editorial_repository() -> EditorialRepository:
     """Factory for default EditorialRepository instance."""
     global _global_editorial_repo
     if _global_editorial_repo is None:
-        env = os.getenv("CROVIQ_ENV") or os.getenv("ENVIRONMENT", "development")
-        if env == "production":
-            _global_editorial_repo = FirestoreEditorialRepository()
+        settings = get_settings()
+        if settings.is_production:
+            if not settings.gcp_project_id and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+                raise RuntimeError(
+                    "Production mode requires FirestoreEditorialRepository with valid gcp_project_id."
+                )
+            _global_editorial_repo = FirestoreEditorialRepository(project_id=settings.gcp_project_id)
+        elif settings.environment == "staging" or os.getenv("USE_FIRESTORE") == "true":
+            _global_editorial_repo = FirestoreEditorialRepository(project_id=settings.gcp_project_id)
         else:
             _global_editorial_repo = InMemoryEditorialRepository()
     return _global_editorial_repo
-
 
 def get_editorial_repository() -> EditorialRepository:
     """FastAPI dependency provider for EditorialRepository."""

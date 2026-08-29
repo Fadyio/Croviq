@@ -159,6 +159,55 @@ export const AppPage: React.FC<AppPageProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    const errorParam = params.get("error");
+
+    if (errorParam) {
+      setError(`YouTube OAuth authorization was cancelled or denied: ${errorParam}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+
+    if (code && state && firebaseUser) {
+      setIsConnectingYt(true);
+      void (async () => {
+        try {
+          const token = await firebaseUser.getIdToken();
+          const callbackResp = await fetch("/api/channels/youtube/callback", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              code,
+              state,
+              redirect_uri: window.location.origin + "/app",
+            }),
+          });
+          if (!callbackResp.ok) {
+            const errData = await callbackResp.json().catch(() => ({}));
+            throw new Error(
+              (errData as { detail?: string }).detail || "Could not authorize YouTube channel",
+            );
+          }
+          const connSummary = (await callbackResp.json()) as YouTubeConnection;
+          setYoutubeConnection(connSummary);
+          setChannelMode("youtube");
+          setRefreshKey((k) => k + 1);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "YouTube connection failed");
+        } finally {
+          setIsConnectingYt(false);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      })();
+    }
+  }, [firebaseUser]);
+
   const startYouTubeConnect = async () => {
     if (!firebaseUser) return;
     setIsConnectingYt(true);
@@ -178,29 +227,10 @@ export const AppPage: React.FC<AppPageProps> = ({
       });
       if (!authUrlResp.ok) throw new Error("Could not initialize YouTube connection");
       const authData = (await authUrlResp.json()) as { auth_url: string; state_token: string };
-
-      const callbackResp = await fetch("/api/channels/youtube/callback", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          code: "mock-youtube-auth-code",
-          state: authData.state_token,
-          redirect_uri: window.location.origin + "/app",
-        }),
-      });
-      if (!callbackResp.ok) throw new Error("Could not authorize YouTube channel");
-      const connSummary = (await callbackResp.json()) as YouTubeConnection;
-      setYoutubeConnection(connSummary);
-      setChannelMode("youtube");
-      setYoutubeModalOpen(false);
-      setChannelSelectorOpen(false);
-      setRefreshKey((k) => k + 1);
+      sessionStorage.setItem("croviq_yt_oauth_state", authData.state_token);
+      window.location.href = authData.auth_url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "YouTube connection failed");
-    } finally {
       setIsConnectingYt(false);
     }
   };
@@ -227,7 +257,15 @@ export const AppPage: React.FC<AppPageProps> = ({
       {/* 1. Top Navigation Navbar: Consistent h-14, logo, channel selector, new project, Alex chip */}
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border-subtle bg-surface-1 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-5">
-          <CroviqLogo height={24} className="h-6 w-auto shrink-0" />
+          <button
+            type="button"
+            onClick={() => handleTabClick("overview")}
+            className="flex items-center hover:opacity-80 transition-opacity cursor-pointer shrink-0"
+            aria-label="Croviq Home"
+            title="Croviq Home"
+          >
+            <CroviqLogo height={24} className="h-6 w-auto" />
+          </button>
 
           {/* Channel Selector Dropdown */}
           <div className="relative" ref={selectorRef}>
@@ -241,7 +279,9 @@ export const AppPage: React.FC<AppPageProps> = ({
               <span
                 className={`flex h-4 w-4 items-center justify-center rounded text-[8px] font-bold ${
                   channelMode === "youtube"
-                    ? "bg-red-500/20 text-red-400"
+                    ? youtubeConnection?.status === "reauth_required"
+                      ? "bg-amber-500/20 text-amber-400"
+                      : "bg-red-500/20 text-red-400"
                     : "bg-primary/20 text-primary"
                 }`}
               >
@@ -253,7 +293,11 @@ export const AppPage: React.FC<AppPageProps> = ({
                   : "Croviq Sample Channel"}
               </span>
               <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[9px] text-text-muted">
-                {channelMode === "youtube" ? "Live" : "Sample"}
+                {channelMode === "youtube"
+                  ? youtubeConnection?.status === "reauth_required"
+                    ? "Action Needed"
+                    : "Live"
+                  : "Sample"}
               </span>
               <ChevronDown className="h-3 w-3 text-text-muted" />
             </button>
@@ -402,17 +446,37 @@ export const AppPage: React.FC<AppPageProps> = ({
             {error && (
               <div
                 role="alert"
-                className="flex items-center justify-between rounded-xl border border-danger/30 bg-danger/10 p-3.5 text-xs text-danger"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger/10 p-3.5 text-xs text-danger"
               >
-                <span>{error}</span>
-                <button
-                  type="button"
-                  onClick={() => setRefreshKey((key) => key + 1)}
-                  className="flex items-center gap-1.5 font-semibold text-danger hover:underline"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Retry
-                </button>
+                <span className="min-w-0 flex-1">{error}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {channelMode === "youtube" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setYoutubeModalOpen(true)}
+                        className="rounded-md bg-danger/20 px-2.5 py-1 font-semibold text-danger hover:bg-danger/30 transition-colors"
+                      >
+                        Reconnect YouTube
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChannelMode("sample")}
+                        className="rounded-md border border-danger/30 px-2.5 py-1 font-medium text-danger hover:bg-danger/10 transition-colors"
+                      >
+                        Switch to Sample
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setRefreshKey((key) => key + 1)}
+                    className="flex items-center gap-1.5 font-semibold text-danger hover:underline"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Retry
+                  </button>
+                </div>
               </div>
             )}
 
@@ -424,8 +488,20 @@ export const AppPage: React.FC<AppPageProps> = ({
                     <h1 className="text-2xl font-bold tracking-tight text-text-primary">
                       {dashboard?.channel.title ?? "Modern AI Engineering"}
                     </h1>
-                    <span className="rounded-full border border-border-subtle bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-text-muted">
-                      {channelMode === "youtube" ? "Connected YouTube" : "Sample channel"}
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                        channelMode === "youtube"
+                          ? youtubeConnection?.status === "reauth_required"
+                            ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                            : "border-green-500/40 bg-green-500/10 text-green-400"
+                          : "border-border-subtle bg-surface-2 text-text-muted"
+                      }`}
+                    >
+                      {channelMode === "youtube"
+                        ? youtubeConnection?.status === "reauth_required"
+                          ? "Reauthorization required"
+                          : "Connected YouTube"
+                        : "Sample channel"}
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-text-secondary">

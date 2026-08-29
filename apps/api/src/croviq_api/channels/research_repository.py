@@ -313,8 +313,13 @@ _global_repository: ResearchRepository | None = None
 def get_research_repository() -> ResearchRepository:
     global _global_repository
     if _global_repository is None:
-        if get_settings().is_production:
-            _global_repository = FirestoreResearchRepository()
+        settings = get_settings()
+        if settings.is_production:
+            if not settings.gcp_project_id and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+                raise RuntimeError(
+                    "Production mode requires FirestoreResearchRepository with valid gcp_project_id."
+                )
+            _global_repository = FirestoreResearchRepository(project_id=settings.gcp_project_id)
         else:
             _global_repository = InMemoryResearchRepository()
     return _global_repository

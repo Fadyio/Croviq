@@ -10014,6 +10014,22 @@
             "type": "boolean",
             "title": "Connected"
           },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "connected"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
           "channel_id": {
             "anyOf": [
               {

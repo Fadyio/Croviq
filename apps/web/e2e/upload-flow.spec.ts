@@ -93,7 +93,7 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
     });
   });
 
-  await page.route("**/api/channels/sample/dashboard?*", async (route) => {
+  await page.route("**/api/channels/*/dashboard*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -651,14 +651,14 @@ test.describe("Product Home and Creator Flow", () => {
 
     await login(page, false);
 
+    // 1. Return from Google OAuth redirect with ?code=...&state=...
+    await page.goto("/app?code=real_google_code_123&state=test_state_12345");
+
+    // 2. Channel is now connected with truthful channel title and sub count
+    await expect(page.getByText("Alex River Engineering").first()).toBeVisible();
     await page.getByRole("button", { name: "Select channel" }).click();
-    await page.getByRole("button", { name: "Connect YouTube Channel" }).click();
-    await expect(page.getByRole("heading", { name: "Connect YouTube Channel" })).toBeVisible();
-    await page.getByRole("button", { name: "Authorize Channel" }).click();
-
-    await expect(page.getByText("Connected YouTube")).toBeVisible();
+    await expect(page.getByText("52,300 subscribers")).toBeVisible();
   });
-
   test("verifies New Project route is focused on raw footage upload without Recent Productions clutter", async ({
     page,
   }) => {

@@ -84,6 +84,8 @@ class YouTubeConnectionPublicSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     connected: bool
+    status: str = "connected"
+    error_message: str | None = None
     channel_id: str | None = None
     channel_title: str | None = None
     avatar_url: str | None = None
@@ -92,7 +94,6 @@ class YouTubeConnectionPublicSummary(BaseModel):
     has_monetary_access: bool = False
     has_upload_access: bool = False
     scopes: list[str] = Field(default_factory=list)
-
 class YouTubeOAuthState(BaseModel):
     """State payload for CSRF protection during OAuth 2.0 authorization code flow."""
 
@@ -371,8 +372,13 @@ _global_youtube_repo: YouTubeConnectionRepository | None = None
 def get_youtube_connection_repository() -> YouTubeConnectionRepository:
     global _global_youtube_repo
     if _global_youtube_repo is None:
-        if get_settings().is_production:
-            _global_youtube_repo = FirestoreYouTubeConnectionRepository()
+        settings = get_settings()
+        if settings.is_production:
+            if not settings.gcp_project_id and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+                raise RuntimeError(
+                    "Production mode requires FirestoreYouTubeConnectionRepository with valid gcp_project_id."
+                )
+            _global_youtube_repo = FirestoreYouTubeConnectionRepository(project_id=settings.gcp_project_id)
         else:
             _global_youtube_repo = InMemoryYouTubeConnectionRepository()
     return _global_youtube_repo

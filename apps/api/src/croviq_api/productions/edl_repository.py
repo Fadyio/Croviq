@@ -265,7 +265,13 @@ def get_default_edl_repository() -> EDLRepository:
     global _global_edl_repo
     if _global_edl_repo is None:
         settings = get_settings()
-        if settings.environment in ("production", "staging") or os.getenv("USE_FIRESTORE") == "true":
+        if settings.is_production:
+            if not settings.gcp_project_id and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+                raise RuntimeError(
+                    "Production mode requires FirestoreEDLRepository with valid gcp_project_id."
+                )
+            _global_edl_repo = FirestoreEDLRepository(project_id=settings.gcp_project_id)
+        elif settings.environment == "staging" or os.getenv("USE_FIRESTORE") == "true":
             _global_edl_repo = FirestoreEDLRepository(project_id=settings.gcp_project_id)
         else:
             _global_edl_repo = InMemoryEDLRepository()

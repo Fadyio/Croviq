@@ -1,8 +1,16 @@
 """Unit tests for YouTube OAuth Token Envelope Encryption using Google Tink AEAD."""
 
 import base64
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import pytest
+
+from unittest.mock import AsyncMock, patch
+import httpx
+
+from croviq_api.channels.token_refresh import (
+    YouTubeReauthRequiredError,
+    refresh_youtube_access_token_if_needed,
+)
 
 from croviq_api.channels.token_encryption import (
     InvertedLocalTinkOAuthTokenEncryptor,
@@ -163,3 +171,169 @@ async def test_in_memory_repository_stores_and_retrieves_encrypted_connection(
     deleted = await repo.delete_connection("ws_mem_01")
     assert deleted is True
     assert await repo.get_connection("ws_mem_01") is None
+
+
+@pytest.mark.asyncio
+async def test_refresh_youtube_access_token_unexpired_returns_current(
+    encryptor: OAuthTokenEncryptor,
+) -> None:
+    repo = InMemoryYouTubeConnectionRepository(encryptor=encryptor)
+    now = datetime.now(UTC)
+    conn = YouTubeConnection(
+        workspace_id="ws_unexpired",
+        user_id="usr_01",
+        channel_id="UC_test",
+        channel_title="Test Channel",
+        subscriber_count=50000,
+        access_token="valid_active_access_token",
+        refresh_token="valid_refresh_token",
+        token_expiry=now + timedelta(hours=1),
+        scopes=["https://www.googleapis.com/auth/youtube.readonly"],
+        connected_at=now,
+        last_sync_at=now,
+    )
+    await repo.save_connection(conn)
+    token, updated_conn = await refresh_youtube_access_token_if_needed(conn, repo)
+    assert token == "valid_active_access_token"
+    assert updated_conn.token_expiry == conn.token_expiry
+
+
+@pytest.mark.asyncio
+async def test_refresh_youtube_access_token_expired_without_credentials_raises_reauth_required(
+    encryptor: OAuthTokenEncryptor,
+) -> None:
+    repo = InMemoryYouTubeConnectionRepository(encryptor=encryptor)
+    now = datetime.now(UTC)
+    conn = YouTubeConnection(
+        workspace_id="ws_expired",
+        user_id="usr_01",
+        channel_id="UC_test",
+        channel_title="Test Channel",
+        subscriber_count=50000,
+        access_token="old_expired_access_token",
+        refresh_token="some_refresh_token",
+        token_expiry=now - timedelta(minutes=10),
+        scopes=["https://www.googleapis.com/auth/youtube.readonly"],
+        connected_at=now - timedelta(days=1),
+        last_sync_at=now - timedelta(days=1),
+    )
+    await repo.save_connection(conn)
+
+    with pytest.raises(YouTubeReauthRequiredError) as exc_info:
+        await refresh_youtube_access_token_if_needed(conn, repo)
+    assert "Google OAuth client credentials are not configured" in str(exc_info.value)
+    assert "Please reconnect" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_refresh_youtube_access_token_expired_without_refresh_token_raises_reauth_required(
+    encryptor: OAuthTokenEncryptor,
+) -> None:
+    repo = InMemoryYouTubeConnectionRepository(encryptor=encryptor)
+    now = datetime.now(UTC)
+    conn = YouTubeConnection(
+        workspace_id="ws_no_refresh",
+        user_id="usr_01",
+        channel_id="UC_test",
+        channel_title="Test Channel",
+        subscriber_count=50000,
+        access_token="old_expired_access_token",
+        refresh_token=None,
+        token_expiry=now - timedelta(minutes=10),
+        scopes=["https://www.googleapis.com/auth/youtube.readonly"],
+        connected_at=now - timedelta(days=1),
+        last_sync_at=now - timedelta(days=1),
+    )
+    await repo.save_connection(conn)
+
+    with pytest.raises(YouTubeReauthRequiredError) as exc_info:
+        await refresh_youtube_access_token_if_needed(conn, repo)
+    assert "no refresh token is stored" in str(exc_info.value)
+    assert "Please reconnect" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_refresh_youtube_access_token_expired_successful_refresh(
+    encryptor: OAuthTokenEncryptor,
+) -> None:
+    repo = InMemoryYouTubeConnectionRepository(encryptor=encryptor)
+    now = datetime.now(UTC)
+    conn = YouTubeConnection(
+        workspace_id="ws_refresh_ok",
+        user_id="usr_01",
+        channel_id="UC_test",
+        channel_title="Test Channel",
+        subscriber_count=50000,
+        access_token="old_expired_access_token",
+        refresh_token="valid_refresh_token_123",
+        token_expiry=now - timedelta(minutes=10),
+        scopes=["https://www.googleapis.com/auth/youtube.readonly"],
+        connected_at=now - timedelta(days=1),
+        last_sync_at=now - timedelta(days=1),
+    )
+    await repo.save_connection(conn)
+
+    mock_response = httpx.Response(
+        status_code=200,
+        json={
+            "access_token": "newly_refreshed_access_token_xyz",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        },
+        request=httpx.Request("POST", "https://oauth2.googleapis.com/token"),
+    )
+
+    with patch("croviq_api.channels.token_refresh.get_settings") as mock_settings:
+        mock_settings.return_value.google_oauth_client_id = "test-client-id"
+        mock_settings.return_value.google_oauth_client_secret = "test-client-secret"
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            new_token, updated_conn = await refresh_youtube_access_token_if_needed(conn, repo)
+
+            assert new_token == "newly_refreshed_access_token_xyz"
+            assert updated_conn.access_token == "newly_refreshed_access_token_xyz"
+            assert updated_conn.token_expiry is not None
+            assert updated_conn.token_expiry > now
+
+            # Verify persistence in encrypted repository
+            persisted = await repo.get_connection("ws_refresh_ok")
+            assert persisted is not None
+            assert persisted.access_token == "newly_refreshed_access_token_xyz"
+
+
+@pytest.mark.asyncio
+async def test_refresh_youtube_access_token_expired_rejected_by_google_raises_reauth_required(
+    encryptor: OAuthTokenEncryptor,
+) -> None:
+    repo = InMemoryYouTubeConnectionRepository(encryptor=encryptor)
+    now = datetime.now(UTC)
+    conn = YouTubeConnection(
+        workspace_id="ws_revoked",
+        user_id="usr_01",
+        channel_id="UC_test",
+        channel_title="Test Channel",
+        subscriber_count=50000,
+        access_token="old_expired_access_token",
+        refresh_token="revoked_refresh_token",
+        token_expiry=now - timedelta(minutes=10),
+        scopes=["https://www.googleapis.com/auth/youtube.readonly"],
+        connected_at=now - timedelta(days=1),
+        last_sync_at=now - timedelta(days=1),
+    )
+    await repo.save_connection(conn)
+
+    mock_response = httpx.Response(
+        status_code=400,
+        json={"error": "invalid_grant", "error_description": "Token has been expired or revoked."},
+        request=httpx.Request("POST", "https://oauth2.googleapis.com/token"),
+    )
+
+    with patch("croviq_api.channels.token_refresh.get_settings") as mock_settings:
+        mock_settings.return_value.google_oauth_client_id = "test-client-id"
+        mock_settings.return_value.google_oauth_client_secret = "test-client-secret"
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            with pytest.raises(YouTubeReauthRequiredError) as exc_info:
+                await refresh_youtube_access_token_if_needed(conn, repo)
+            assert "Token has been expired or revoked" in str(exc_info.value)
+            assert "Please reconnect" in str(exc_info.value)

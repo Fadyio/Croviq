@@ -273,7 +273,13 @@ def get_default_agent_config_repository() -> AgentConfigRepository:
     global _global_agent_config_repo
     if _global_agent_config_repo is None:
         settings = get_settings()
-        if settings.environment == "production" or os.getenv("CROVIQ_ENV") == "production":
+        if settings.is_production:
+            if not settings.gcp_project_id and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+                raise RuntimeError(
+                    "Production mode requires FirestoreAgentConfigRepository with valid gcp_project_id."
+                )
+            _global_agent_config_repo = FirestoreAgentConfigRepository(project_id=settings.gcp_project_id)
+        elif settings.environment in ("staging", "development") and os.getenv("USE_FIRESTORE") == "true":
             _global_agent_config_repo = FirestoreAgentConfigRepository(project_id=settings.gcp_project_id)
         else:
             _global_agent_config_repo = InMemoryAgentConfigRepository()

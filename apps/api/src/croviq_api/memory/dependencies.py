@@ -53,11 +53,17 @@ def get_memory_store(
         return _memory_store_override
 
     if _default_store is None:
+        if settings.is_production and settings.memory_store_provider != "google":
+            raise RuntimeError("Fake memory store provider is strictly forbidden in production.")
         if settings.memory_store_provider == "google" and settings.gcp_project_id:
             _default_store = GoogleMemoryBankStore(
                 project_id=settings.gcp_project_id,
                 location=settings.memory_bank_location,
                 memory_bank_id=settings.memory_bank_id,
+            )
+        elif settings.is_production:
+            raise RuntimeError(
+                "Google Cloud Project ID is required for Google Memory Bank in production."
             )
         else:
             _default_store = FakeChannelMemoryStore()

@@ -196,12 +196,15 @@ def get_oauth_token_encryptor() -> OAuthTokenEncryptor:
     global _global_encryptor
     if _global_encryptor is None:
         settings = get_settings()
-        if settings.is_production or settings.gcp_project_id:
+        if settings.is_production:
+            # Production must strictly use Cloud KMS Tink encryptor and fail closed
+            _global_encryptor = TinkKmsOAuthTokenEncryptor()
+        elif settings.gcp_project_id:
             try:
                 _global_encryptor = TinkKmsOAuthTokenEncryptor()
             except Exception as e:
                 logger.warning(
-                    "Cloud KMS Tink encryptor initialization failed, using local encryptor: %s",
+                    "Cloud KMS Tink encryptor initialization failed, using local encryptor in non-prod: %s",
                     e,
                 )
                 _global_encryptor = LocalTinkOAuthTokenEncryptor()

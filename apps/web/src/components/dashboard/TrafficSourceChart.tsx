@@ -150,12 +150,18 @@ export const TrafficSourceChart: React.FC<TrafficSourceChartProps> = ({ data }) 
         </div>
       </div>
 
-      <div className="h-56 sm:h-64 w-full">
-        <EChartsWrapper
-          option={chartOption}
-          ariaLabel="Traffic sources distribution horizontal bar chart"
-        />
-      </div>
+      {data.length === 0 ? (
+        <div className="flex h-56 sm:h-64 w-full items-center justify-center rounded-lg border border-dashed border-border-subtle bg-surface-2/30 text-xs text-text-muted">
+          Traffic source distribution is unavailable for this period or channel.
+        </div>
+      ) : (
+        <div className="h-56 sm:h-64 w-full">
+          <EChartsWrapper
+            option={chartOption}
+            ariaLabel="Traffic sources distribution horizontal bar chart"
+          />
+        </div>
+      )}
     </section>
   );
 };

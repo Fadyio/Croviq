@@ -99,12 +99,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </span>
               <span className="text-border-strong">·</span>
               <span className="font-mono font-semibold text-text-primary">
-                {dashboard.latest_video.retention_percentage.toFixed(1)}%{" "}
+                {(dashboard.latest_video.retention_percentage ?? 0).toFixed(1)}%{" "}
                 <span className="font-sans font-normal text-text-muted">retention</span>
               </span>
             </div>
           </div>
-
           <div className="flex flex-wrap items-center gap-2 lg:justify-end text-xs">
             <span className="rounded-lg bg-surface-2 px-2.5 py-1.5 font-medium text-text-secondary">
               <span

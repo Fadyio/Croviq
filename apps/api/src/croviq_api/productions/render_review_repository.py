@@ -374,7 +374,15 @@ def get_default_render_review_repository() -> RenderReviewRepository:
     global _global_render_review_repo
     if _global_render_review_repo is None:
         settings = get_settings()
-        if settings.environment in ("production", "staging") or os.getenv("USE_FIRESTORE") == "true":
+        if settings.is_production:
+            if not settings.gcp_project_id and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+                raise RuntimeError(
+                    "Production mode requires FirestoreRenderReviewRepository with valid gcp_project_id."
+                )
+            _global_render_review_repo = FirestoreRenderReviewRepository(
+                project_id=settings.gcp_project_id,
+            )
+        elif settings.environment == "staging" or os.getenv("USE_FIRESTORE") == "true":
             _global_render_review_repo = FirestoreRenderReviewRepository(
                 project_id=settings.gcp_project_id,
             )

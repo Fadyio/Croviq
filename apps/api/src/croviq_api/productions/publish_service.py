@@ -18,6 +18,10 @@ import uuid
 import httpx
 
 from croviq_api.channels.token_encryption import get_oauth_token_encryptor
+from croviq_api.channels.token_refresh import (
+    YouTubeReauthRequiredError,
+    refresh_youtube_access_token_if_needed,
+)
 from croviq_api.channels.youtube_provider import SCOPE_YOUTUBE_UPLOAD, YOUTUBE_OAUTH_TOKEN_URL
 from croviq_api.channels.youtube_publisher import (
     GoogleYouTubePublishClient,
@@ -523,49 +527,10 @@ class YouTubePublishService:
 
     async def _refresh_access_token_if_needed(self, connection: YouTubeConnection) -> str:
         """Verify and refresh YouTube access token if expired, updating secure storage."""
-        now = datetime.now(timezone.utc)
-        if connection.token_expiry and (connection.token_expiry - now).total_seconds() > 300:
-            return connection.access_token
-
-        if not connection.refresh_token:
-            return connection.access_token
-
-        client_id = get_settings().google_oauth_client_id
-        client_secret = get_settings().google_oauth_client_secret
-        if not client_id or not client_secret or connection.refresh_token.startswith("yt_refresh_mock"):
-            return connection.access_token
-
-        try:
-            async with httpx.AsyncClient(timeout=20) as http_client:
-                token_resp = await http_client.post(
-                    YOUTUBE_OAUTH_TOKEN_URL,
-                    data={
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "refresh_token": connection.refresh_token,
-                        "grant_type": "refresh_token",
-                    },
-                )
-                if token_resp.status_code == 200:
-                    token_data = token_resp.json()
-                    new_access = token_data.get("access_token", connection.access_token)
-                    new_refresh = token_data.get("refresh_token") or connection.refresh_token
-                    expires_in = token_data.get("expires_in", 3600)
-                    updated_conn = connection.model_copy(
-                        update={
-                            "access_token": new_access,
-                            "refresh_token": new_refresh,
-                            "token_expiry": now + timedelta(seconds=expires_in),
-                            "last_sync_at": now,
-                        }
-                    )
-                    await self.youtube_repo.save_connection(updated_conn)
-                    return new_access
-        except Exception as exc:
-            logger.warning("Token refresh call failed, attempting with current access token: %s", exc)
-
-        return connection.access_token
-
+        access_token, _ = await refresh_youtube_access_token_if_needed(
+            connection, self.youtube_repo
+        )
+        return access_token
     async def execute_publish_job(
         self,
         publish_job_id: str,
@@ -593,7 +558,13 @@ class YouTubePublishService:
                 job.mark_failed("MASTER_ARTIFACT_NOT_FOUND", "Master media artifact not found.")
             )
             return
-        access_token = await self._refresh_access_token_if_needed(connection)
+        try:
+            access_token = await self._refresh_access_token_if_needed(connection)
+        except YouTubeReauthRequiredError as exc:
+            await self.publish_job_repo.save(
+                job.mark_failed("AUTH_EXPIRED", f"YouTube authorization expired: {exc}. Please reconnect YouTube channel.")
+            )
+            return
 
         temp_dir = tempfile.TemporaryDirectory()
         local_master_path = Path(temp_dir.name) / "master.mp4"

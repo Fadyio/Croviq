@@ -86,3 +86,33 @@ def test_sample_timeseries_does_not_drop_to_zero_at_later_end_date() -> None:
         assert point.views > 500, f"Expected non-zero views on {point.date}, got {point.views}"
         assert point.watch_time_hours > 50.0
         assert point.net_subscribers != 0
+
+
+def test_build_channel_dashboard_handles_sparse_historical_timeseries() -> None:
+    from croviq_domain.channel import ChannelAnalyticsPoint, ChannelAnalyticsTimeSeries
+
+    class SparseTimeseriesProvider(SampleChannelDataProvider):
+        async def get_channel_timeseries(
+            self, *, start_date: date, end_date: date
+        ) -> ChannelAnalyticsTimeSeries:
+            full_series = await super().get_channel_timeseries(start_date=start_date, end_date=end_date)
+            # Truncate points to only the current period (simulating sparse/missing historical days)
+            cutoff = end_date - timedelta(days=28)
+            sparse_points = [p for p in full_series.points if p.date > cutoff]
+            return ChannelAnalyticsTimeSeries(
+                start_date=start_date,
+                end_date=end_date,
+                points=sparse_points,
+                is_modeled=False,
+            )
+
+    from datetime import timedelta
+    dashboard = asyncio.run(
+        build_channel_dashboard(
+            SparseTimeseriesProvider(),
+            days=28,
+            end_date=date(2026, 8, 28),
+        )
+    )
+    assert len(dashboard.trend) == 28
+    assert dashboard.trend[0].views > 0

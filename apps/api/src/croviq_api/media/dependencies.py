@@ -46,10 +46,11 @@ def get_media_storage() -> MediaStorage:
     if _custom_media_storage is not None:
         return _custom_media_storage
     settings = get_settings()
+    if settings.is_production and settings.media_storage_provider != "google":
+        raise RuntimeError("Fake media storage provider is strictly forbidden in production.")
     if settings.media_storage_provider == "google":
         return get_google_media_storage()
     return get_fake_media_storage()
-
 
 def set_media_storage(storage: MediaStorage | None) -> None:
     """Override media storage instance for tests."""
@@ -68,6 +69,8 @@ def get_transcription_service() -> TranscriptionService:
         return _custom_transcription_service
 
     settings = get_settings()
+    if settings.is_production and settings.speech_service_provider not in ("google", "gemini"):
+        raise RuntimeError("Fake transcription service is strictly forbidden in production.")
     if settings.speech_service_provider in ("google", "gemini"):
         return GeminiTranscriptionService(
             project_id=settings.gcp_project_id,
@@ -75,7 +78,6 @@ def get_transcription_service() -> TranscriptionService:
             model=settings.gemini_transcription_model,
         )
     return FakeTranscriptionService()
-
 
 def set_transcription_service(service: TranscriptionService | None) -> None:
     """Override transcription service instance for tests."""
