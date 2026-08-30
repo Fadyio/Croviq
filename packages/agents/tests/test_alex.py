@@ -3,6 +3,10 @@ from datetime import UTC, datetime
 from croviq_agents.alex import (
     ALEX_SYSTEM_INSTRUCTION,
     AlexDataScientist,
+    ResearchPlanIntent,
+    classify_ecosystem,
+    generate_channel_research_plan,
+    apply_research_diversity_and_dedup,
     is_url_allowed_by_sources,
     normalize_topic_fingerprint,
 )
@@ -448,3 +452,131 @@ async def test_alex_chat_resolves_latest_video_from_shuffled_list() -> None:
     assert "Google GenAI SDK Tutorial for Beginners (Part 5)" in tool2["title"]
     assert "Google GenAI SDK Tutorial for Beginners (Part 5)" in res1["reply"]
     assert "Google GenAI SDK Tutorial for Beginners (Part 5)" in res2["reply"]
+
+def test_generate_channel_research_plan_creates_multi_ecosystem_intents() -> None:
+    intents = generate_channel_research_plan()
+    assert len(intents) >= 5
+    ecosystems = {i.ecosystem for i in intents}
+    assert "HACKER_NEWS" in ecosystems
+    assert "REDDIT" in ecosystems
+    assert "GITHUB" in ecosystems
+    assert "PRIMARY_VENDOR" in ecosystems
+    assert "ENGINEERING_DOCS" in ecosystems
+
+    for i in intents:
+        assert i.query != ""
+        assert i.channel_reason != ""
+        assert len(i.query) > 5
+
+
+def test_classify_ecosystem_categories() -> None:
+    assert classify_ecosystem("site:news.ycombinator.com MCP agents") == "HACKER_NEWS"
+    assert classify_ecosystem("https://news.ycombinator.com/item?id=123") == "HACKER_NEWS"
+    assert classify_ecosystem("site:reddit.com/r/LocalLLaMA vLLM benchmarks") == "REDDIT"
+    assert classify_ecosystem("https://www.reddit.com/r/MachineLearning/comments/xyz") == "REDDIT"
+    assert classify_ecosystem("site:github.com/vllm-project/vllm release") == "GITHUB"
+    assert classify_ecosystem("https://github.com/langchain-ai/langgraph") == "GITHUB"
+    assert classify_ecosystem("site:ai.google.dev Gemini 3.7") == "PRIMARY_VENDOR"
+    assert classify_ecosystem("https://cloud.google.com/vertex-ai/docs") == "PRIMARY_VENDOR"
+    assert classify_ecosystem("site:opentelemetry.io specification") == "ENGINEERING_DOCS"
+    assert classify_ecosystem("https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API") == "ENGINEERING_DOCS"
+    assert classify_ecosystem("https://example.com/random") == "GENERAL_WEB"
+
+
+@pytest.mark.asyncio
+async def test_alex_research_run_captures_diverse_ecosystems_and_discovery_signals() -> None:
+    alex = AlexDataScientist()
+    run, findings = await alex.run_grounded_research(
+        workspace_id="ws-multi-eco",
+        channel_id="croviq_syn_ai_eng_01",
+        force_mock=True,
+    )
+    assert run.status == ResearchRunStatus.COMPLETED
+    assert len(run.search_queries) >= 5
+    assert any("ycombinator" in q or "news" in q for q in run.search_queries)
+    assert any("reddit" in q for q in run.search_queries)
+    assert any("github" in q for q in run.search_queries)
+    assert any("google" in q for q in run.search_queries)
+
+    # Check that findings contain citations with community discovery signal and primary source
+    domains = {cite.domain for f in findings for cite in f.source_citations}
+    assert "github.com" in domains
+    assert "news.ycombinator.com" in domains or "reddit.com" in domains
+
+    # Check discovery signals vs primary source roles in metadata
+    roles = [
+        cite.grounding_metadata.get("role")
+        for f in findings
+        for cite in f.source_citations
+        if cite.grounding_metadata
+    ]
+    assert "discovery_signal" in roles
+    assert "primary_source" in roles
+
+
+def test_apply_research_diversity_and_dedup_funnel_stats() -> None:
+    now = datetime.now(UTC)
+    candidates = [
+        ResearchFinding(
+            finding_id=f"fnd_{idx}",
+            run_id="run_test",
+            channel_id="croviq_syn_ai_eng_01",
+            category="Agent Workflows",
+            title=f"Opportunity {idx}",
+            summary=f"Summary {idx}",
+            why_it_matters=f"Why it matters {idx}",
+            relevance_score=0.9,
+            freshness_score=0.9,
+            opportunity_score=0.9,
+            source_citations=[
+                SourceCitation(
+                    url=f"https://example.com/topic_{idx}",
+                    title=f"Source {idx}",
+                    domain="example.com",
+                )
+            ],
+            topic_fingerprint=f"fp_{idx}",
+            topic_cluster="agent-workflows",
+            primary_entity=f"Entity {idx}",
+            discovered_at=now,
+        )
+        for idx in range(5)
+    ]
+    # Add one disallowed citation finding to test low_source_quality_rejected when strict policy applies
+    candidates.append(
+        ResearchFinding(
+            finding_id="fnd_disallowed",
+            run_id="run_test",
+            channel_id="croviq_syn_ai_eng_01",
+            category="Agent Workflows",
+            title="Disallowed Domain Opportunity",
+            summary="Summary disallowed",
+            why_it_matters="Why it matters disallowed",
+            relevance_score=0.9,
+            freshness_score=0.9,
+            opportunity_score=0.9,
+            source_citations=[
+                SourceCitation(
+                    url="https://untrusted-domain.com/article",
+                    title="Untrusted",
+                    domain="untrusted-domain.com",
+                )
+            ],
+            topic_fingerprint="fp_disallowed",
+            topic_cluster="agent-workflows",
+            primary_entity="Untrusted Entity",
+            discovered_at=now,
+        )
+    )
+
+    deduped, funnel = apply_research_diversity_and_dedup(
+        candidates,
+        max_per_cluster=2,
+        allowed_sources=["example.com"],
+        allow_broad_web=False,
+        return_funnel=True,
+    )
+    assert len(deduped) == 2
+    assert funnel["low_source_quality_rejected"] == 1
+    assert funnel["low_novelty_rejected"] == 3
+    assert funnel["final_persisted"] == 2

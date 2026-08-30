@@ -167,13 +167,18 @@ async function main() {
   const viewAllBtn = page.getByRole("button", { name: /View all .* findings/i });
   if (await viewAllBtn.isVisible()) {
     await viewAllBtn.click();
-    await page.waitForSelector('[role="dialog"][aria-label="Ideas Worth Making"], [role="dialog"]', { timeout: 5000 });
+    await page.waitForSelector(
+      '[role="dialog"][aria-label="Ideas Worth Making"], [role="dialog"]',
+      { timeout: 5000 },
+    );
     await page.waitForTimeout(500);
     const shotDrawer = path.join(SCREENSHOT_DIR, "all-findings-1440x900.png");
     await page.screenshot({ path: shotDrawer });
     console.log("Saved:", shotDrawer);
   } else {
-    console.log("View all findings button not visible (<=3 findings), capturing rail close-up instead.");
+    console.log(
+      "View all findings button not visible (<=3 findings), capturing rail close-up instead.",
+    );
     const rail = page.locator("aside");
     const shotDrawer = path.join(SCREENSHOT_DIR, "all-findings-1440x900.png");
     await rail.screenshot({ path: shotDrawer });
@@ -181,8 +186,8 @@ async function main() {
   }
 
   // Extract findings text from page to verify content
-  const cardEntities = await page.locator('aside article span.uppercase').allTextContents();
-  const cardTitles = await page.locator('aside article h4').allTextContents();
+  const cardEntities = await page.locator("aside article span.uppercase").allTextContents();
+  const cardTitles = await page.locator("aside article h4").allTextContents();
 
   console.log("\n=== VISIBLE TOP CARDS ===");
   console.log("Primary Entities:", cardEntities);

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import Enum
 import hashlib
 import ipaddress
 import os
@@ -34,7 +36,6 @@ from croviq_observability import log_ai_event, log_event
 from croviq_observability.events import EventType
 
 logger = logging.getLogger(__name__)
-
 def sanitize_agent_markdown(text: str) -> str:
     """Strip and normalize any accidental LaTeX / TeX syntax into clean readable Markdown/Unicode."""
     if not text:
@@ -368,6 +369,144 @@ def _normalize_url_for_comparison(url: str) -> str:
     return url.strip().rstrip("/").lower()
 
 
+@dataclass
+class ResearchPlanIntent:
+    query: str
+    ecosystem: str
+    channel_reason: str
+
+
+def classify_ecosystem(text_or_url: str) -> str:
+    """Classify a search query, URL, or domain into one of the 5 canonical discovery ecosystems."""
+    lower = text_or_url.lower()
+    if "news.ycombinator.com" in lower or "ycombinator" in lower or "hacker news" in lower or re.search(r"\bhn\b", lower):
+        return "HACKER_NEWS"
+    if "reddit.com" in lower or "reddit" in lower or re.search(r"\br/[a-zA-Z0-9_]+\b", lower):
+        return "REDDIT"
+    if "github.com" in lower or "github" in lower or "gitlab.com" in lower:
+        return "GITHUB"
+    if any(
+        v in lower
+        for v in [
+            "ai.google.dev",
+            "cloud.google.com",
+            "anthropic.com",
+            "openai.com",
+            "deepmind.google",
+            "blog.google",
+            "microsoft.com",
+            "aws.amazon.com",
+            "developer.apple.com",
+            "support.google.com",
+        ]
+    ):
+        return "PRIMARY_VENDOR"
+    if any(
+        d in lower
+        for d in [
+            "opentelemetry.io",
+            "fastapi.tiangolo.com",
+            "developer.mozilla.org",
+            "docs.vllm.ai",
+            "modelcontextprotocol.io",
+            "langchain.com",
+            "huggingface.co",
+            "arxiv.org",
+            "w3.org",
+            "docker.com",
+            "kubernetes.io",
+        ]
+    ):
+        return "ENGINEERING_DOCS"
+    return "GENERAL_WEB"
+
+
+def generate_channel_research_plan(
+    channel_profile: ChannelMemoryProfile | None = None,
+    channel_data: dict[str, Any] | None = None,
+    recent_videos: list[Any] | None = None,
+    lessons: list[ChannelLesson] | None = None,
+    existing_findings: Sequence[ResearchFinding] | None = None,
+) -> list[ResearchPlanIntent]:
+    """Dynamically formulate multi-ecosystem search intents based on channel topic profile, recent performance, and memory bank."""
+    intents: list[ResearchPlanIntent] = []
+
+    # 1. Extract content pillars and primary topics
+    pillars = (
+        channel_profile.content_pillars
+        if channel_profile and channel_profile.content_pillars
+        else ["AI Engineering", "LLM Systems", "Agent Workflows", "Production Infrastructure"]
+    )
+    topics = (
+        channel_profile.primary_topics
+        if channel_profile and channel_profile.primary_topics
+        else ["AI Agents", "Multi-Agent Orchestration", "CI/CD Automation", "FastAPI & Microservices", "Cloud Infrastructure & Docker"]
+    )
+
+    # 2. Dynamic Hacker News Intent (Developer & News Discussion)
+    hn_topic = "Model Context Protocol OR LangGraph OR LLM agent production architecture"
+    if any("infer" in p.lower() or "llm" in p.lower() for p in pillars):
+        hn_topic = "Model Context Protocol OR vLLM OR local LLM agent architecture"
+    intents.append(
+        ResearchPlanIntent(
+            query=f"site:news.ycombinator.com {hn_topic}",
+            ecosystem="HACKER_NEWS",
+            channel_reason="Identifies practitioner debates, architectural pitfalls, and production complaints surrounding agent protocol adoption and multi-agent system latency.",
+        )
+    )
+
+    # 3. Dynamic Reddit Intent: select relevant subreddits based on channel profile
+    subreddits = ["r/LocalLLaMA", "r/MachineLearning"]
+    if any("infra" in p.lower() or "devops" in p.lower() for p in pillars):
+        subreddits.append("r/devops")
+    if any("experienced" in t.lower() or "backend" in t.lower() for t in topics):
+        subreddits.append("r/ExperiencedDevs")
+    if any("selfhost" in t.lower() or "local" in t.lower() for t in topics):
+        subreddits.append("r/selfhosted")
+
+    reddit_subs_str = " OR ".join(f"site:reddit.com/{sub}" for sub in subreddits[:3])
+    reddit_topic = "speculative decoding OR vLLM benchmarks OR structured outputs"
+    intents.append(
+        ResearchPlanIntent(
+            query=f"{reddit_subs_str} {reddit_topic}",
+            ecosystem="REDDIT",
+            channel_reason=f"Gathers practitioner sentiment and empirical benchmarks from relevant technical communities ({', '.join(subreddits[:3])}) to ground tutorial angles in real developer pain points.",
+        )
+    )
+
+    # 4. Dynamic GitHub Intent: open-source tools and releases
+    github_tools = "google-genai OR langgraph OR modelcontextprotocol OR vllm"
+    intents.append(
+        ResearchPlanIntent(
+            query=f"site:github.com {github_tools} release",
+            ecosystem="GITHUB",
+            channel_reason="Tracks new open-source releases, framework updates, and executable codebases suited for deep-dive architectural build videos.",
+        )
+    )
+
+    # 5. Dynamic Primary Vendor Intent: authoritative vendor documentation
+    vendor_query = "site:ai.google.dev OR site:cloud.google.com/vertex-ai Gemini structured outputs OR function calling OR Model Garden"
+    intents.append(
+        ResearchPlanIntent(
+            query=vendor_query,
+            ecosystem="PRIMARY_VENDOR",
+            channel_reason="Verifies official model capabilities, API constraints, and authoritative documentation from primary foundation model vendors.",
+        )
+    )
+
+    # 6. Dynamic Engineering Docs Intent: standards and infrastructure
+    docs_query = "site:modelcontextprotocol.io OR site:opentelemetry.io specification OR gen-ai semantic conventions"
+    intents.append(
+        ResearchPlanIntent(
+            query=docs_query,
+            ecosystem="ENGINEERING_DOCS",
+            channel_reason="Investigates cross-ecosystem open standards and observability specifications to support senior engineering audience demand.",
+        )
+    )
+
+    return intents
+
+
 def apply_research_diversity_and_dedup(
     candidates: list[ResearchFinding],
     existing_by_fp: dict[str, ResearchFinding] | Sequence[ResearchFinding] | None = None,
@@ -375,7 +514,8 @@ def apply_research_diversity_and_dedup(
     max_total: int = 6,
     allowed_sources: Sequence[str] | None = None,
     allow_broad_web: bool = True,
-) -> list[ResearchFinding]:
+    return_funnel: bool = False,
+) -> list[ResearchFinding] | tuple[list[ResearchFinding], dict[str, int]]:
     """Apply source validation, deduplication against existing history, and topic diversity constraints."""
     seen_fps: set[str] = set()
     seen_urls: set[str] = set()
@@ -384,6 +524,11 @@ def apply_research_diversity_and_dedup(
     cluster_counts: dict[str, int] = {}
     deduped: list[ResearchFinding] = []
     deferred_same_entity: list[ResearchFinding] = []
+
+    channel_fit_rejected = 0
+    duplicates_rejected = 0
+    low_novelty_rejected = 0
+    low_source_quality_rejected = 0
 
     # 1. Build lookup sets from existing findings history
     existing_list: list[ResearchFinding] = []
@@ -416,6 +561,7 @@ def apply_research_diversity_and_dedup(
             allow_broad_web,
         )
         if not valid_citations:
+            low_source_quality_rejected += 1
             continue
         sanitized_candidates.append(
             finding.model_copy(update={"source_citations": valid_citations})
@@ -440,14 +586,17 @@ def apply_research_diversity_and_dedup(
 
         # Check A: Exact or normalized URL duplicate against history
         if norm_url in existing_urls or primary_url in existing_urls:
+            duplicates_rejected += 1
             continue
 
         # Check B: Fingerprint duplicate against history
         if finding.topic_fingerprint in existing_fps:
+            duplicates_rejected += 1
             continue
 
         # Check C: Normalized title duplicate against history
         if norm_title in existing_titles:
+            duplicates_rejected += 1
             continue
 
         # Check D: Same primary entity + near-identical announcement keywords in history
@@ -459,14 +608,17 @@ def apply_research_diversity_and_dedup(
                     is_semantic_duplicate = True
                     break
         if is_semantic_duplicate:
+            duplicates_rejected += 1
             continue
 
         # Deduplicate within this batch
         if norm_url in seen_urls or finding.topic_fingerprint in seen_fps or norm_title in seen_titles:
+            low_novelty_rejected += 1
             continue
 
         # Topic cluster diversity limit
         if cluster_counts.get(cluster, 0) >= max_per_cluster:
+            low_novelty_rejected += 1
             continue
 
         # Primary entity diversity limit: top findings must have unique primary_entity
@@ -501,9 +653,11 @@ def apply_research_diversity_and_dedup(
             norm_url = _normalize_url_for_comparison(primary_url)
             norm_title = _normalize_title_for_comparison(finding.title)
             if norm_url in seen_urls or finding.topic_fingerprint in seen_fps or norm_title in seen_titles:
+                low_novelty_rejected += 1
                 continue
             cluster = finding.topic_cluster or derive_topic_cluster(finding.title, finding.category)
             if cluster_counts.get(cluster, 0) >= max_per_cluster:
+                low_novelty_rejected += 1
                 continue
             entity = finding.primary_entity or derive_primary_entity(finding.title, finding.category)
             final_finding = finding.model_copy(
@@ -519,6 +673,16 @@ def apply_research_diversity_and_dedup(
             seen_titles.add(norm_title)
             cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
 
+    funnel_stats = {
+        "channel_fit_rejected": channel_fit_rejected,
+        "duplicates_rejected": duplicates_rejected,
+        "low_novelty_rejected": low_novelty_rejected,
+        "low_source_quality_rejected": low_source_quality_rejected,
+        "final_persisted": len(deduped),
+    }
+
+    if return_funnel:
+        return deduped, funnel_stats
     return deduped
 
 
@@ -755,6 +919,14 @@ class AlexDataScientist:
             existing_findings=existing_findings,
         )
 
+        planned_intents = generate_channel_research_plan(
+            channel_profile=channel_profile,
+            channel_data=channel_data,
+            recent_videos=recent_videos,
+            lessons=lessons,
+            existing_findings=existing_findings,
+        )
+
         log_event(
             "alex.research.started",
             request_id=request_id,
@@ -763,16 +935,19 @@ class AlexDataScientist:
             channel_id=channel_id,
             model=self._model_id,
             existing_findings_count=len(existing_findings or []),
+            planned_intents_count=len(planned_intents),
         )
 
         findings: list[ResearchFinding] = []
         search_queries: list[str] = []
+        funnel_stats: dict[str, Any] = {}
         start_time = datetime.now(UTC)
 
         try:
             if not force_mock and configured_project_id:
-                findings, search_queries, input_toks, output_toks = await self._execute_gemini_grounded_search(
+                findings, search_queries, input_toks, output_toks, funnel_stats, _ = await self._execute_gemini_grounded_search(
                     channel_context=channel_context,
+                    planned_intents=planned_intents,
                     existing_findings=existing_findings or [],
                     custom_prompt=custom_prompt,
                     preferred_sources=effective_sources,
@@ -784,8 +959,9 @@ class AlexDataScientist:
                 run.input_tokens = input_toks
                 run.output_tokens = output_toks
             else:
-                findings, search_queries = self._execute_deterministic_grounded_search(
+                findings, search_queries, funnel_stats, _ = self._execute_deterministic_grounded_search(
                     channel_context=channel_context,
+                    planned_intents=planned_intents,
                     existing_findings=existing_findings or [],
                     preferred_sources=effective_sources,
                     allow_broad_web=effective_broad_web,
@@ -807,6 +983,7 @@ class AlexDataScientist:
                 channel_id=channel_id,
                 findings_count=len(findings),
                 search_queries=search_queries,
+                funnel_stats=funnel_stats,
                 latency_ms=run.latency_ms,
             )
             return run, findings
@@ -830,6 +1007,7 @@ class AlexDataScientist:
     async def _execute_gemini_grounded_search(
         self,
         channel_context: str,
+        planned_intents: list[ResearchPlanIntent],
         existing_findings: Sequence[ResearchFinding],
         custom_prompt: str | None,
         preferred_sources: Sequence[str] | None,
@@ -837,37 +1015,61 @@ class AlexDataScientist:
         run_id: str,
         channel_id: str,
         request_id: str,
-    ) -> tuple[list[ResearchFinding], list[str], int, int]:
+    ) -> tuple[list[ResearchFinding], list[str], int, int, dict[str, Any], list[ResearchPlanIntent]]:
         from google.genai import types
 
         client = self._get_client()
 
+        intents_text = "\n".join(
+            f"- [{i.ecosystem}] Query: {i.query}\n  Reason: {i.channel_reason}"
+            for i in planned_intents
+        )
+
         user_content = (
             f"{channel_context}\n\n"
-            "AUTONOMOUS RESEARCH OBJECTIVE & DIRECTIVES:\n"
+            "AUTONOMOUS RESEARCH OBJECTIVE & MULTI-ECOSYSTEM DISCOVERY DIRECTIVES:\n"
             "You are Alex, Senior Channel Data Scientist for Croviq. Formulate a dynamic, high-conviction research plan to discover the strongest NEW video opportunities for this specific channel right now.\n\n"
-            "1. CHANNEL-ALIGNED OPPORTUNITY DISCOVERY: Identify emerging technical developments that align with this channel's content pillars, audience demographic, and high-performing formats (deep architectural builds, production benchmarks, real code execution).\n"
-            "2. MULTI-ECOSYSTEM GROUNDED SEARCH: Deliberately investigate across diverse public technical ecosystems using Google Search Grounding:\n"
-            "   - Hacker News (site:news.ycombinator.com)\n"
-            "   - GitHub repositories & releases (site:github.com)\n"
-            "   - Reddit technical communities (site:reddit.com/r/LocalLLaMA, site:reddit.com/r/MachineLearning)\n"
-            "   - Developer documentation & standards (e.g. opentelemetry.io, developer.mozilla.org, fastapi.tiangolo.com, ai.google.dev, cloud.google.com, anthropic.com, openai.com)\n"
-            "3. NO VENDOR BIAS: Do NOT focus exclusively on a single vendor or model family. Investigate multi-vendor tools and architectures (e.g. Model Context Protocol / MCP, vLLM, SGLang, DeepSeek, LangGraph, OpenTelemetry, WebCodecs, FastAPI, Claude, local models).\n"
-            "4. NOVELTY & STRICT DEDUPLICATION: Compare every opportunity against the previous research findings listed above. Reject duplicate URLs, normalized title duplicates, and identical announcements. At most 1 visible recommendation per primary entity.\n"
-            "5. WHY IT FITS: For each finding, explain in `why_it_matters` the exact channel-specific reason why this opportunity fits Croviq's audience, historical retention, or content pillars.\n"
-            "6. WHY NOW: In `summary`, provide a concise technical breakdown of what changed recently (this week's release, spec update, or community milestone).\n\n"
-            "OUTPUT FORMAT: Return a valid JSON array of objects with keys:\n"
-            "- title: str (informative, clear opportunity title)\n"
-            "- category: str (e.g. Agent Workflows, Foundation Models, Multimodal Systems, Developer Tooling, Evaluation & Observability)\n"
-            "- topic_cluster: str (e.g. agent-workflows, foundation-models, multimodal-systems, developer-tooling, evaluation-observability, cloud-infrastructure)\n"
-            "- primary_entity: str (e.g. Model Context Protocol, vLLM, OpenTelemetry, WebCodecs, LangGraph, DeepSeek, FastAPI, Gemini 3.7)\n"
-            "- summary: str (concise 'Why now' technical summary of recent changes)\n"
-            "- why_it_matters: str (concise 'Why it fits' channel-specific justification)\n"
-            "- relevance_score: float (0.0 - 1.0)\n"
-            "- freshness_score: float (0.0 - 1.0)\n"
-            "- opportunity_score: float (0.0 - 1.0)\n"
-            "- primary_url: str (source URL)\n"
-            "- primary_title: str (source title)\n"
+            "PLANNED MULTI-ECOSYSTEM SEARCH INTENTS:\n"
+            f"{intents_text}\n\n"
+            "DELIBERATE MULTI-ECOSYSTEM GROUNDED INVESTIGATION:\n"
+            "You MUST formulate search intents and deliberately investigate across ALL of the following distinct discovery ecosystems using Google Search Grounding:\n\n"
+            "1. HACKER_NEWS (Developer & News Discussion):\n"
+            "   - Search site:news.ycombinator.com for recent practitioner debates, emerging architectural controversies, and engineering pain points aligned with the channel topics.\n"
+            "2. REDDIT (Community Discussion):\n"
+            "   - Search channel-relevant subreddits (e.g. site:reddit.com/r/LocalLLaMA, site:reddit.com/r/MachineLearning, site:reddit.com/r/ExperiencedDevs, site:reddit.com/r/devops, site:reddit.com/r/programming, site:reddit.com/r/selfhosted depending on the topic) for practitioner benchmarks, real-world deployment questions, and community tools.\n"
+            "3. GITHUB (Code & Releases):\n"
+            "   - Search site:github.com for new open-source releases, frameworks, and benchmark tools relevant to AI engineering and production systems.\n"
+            "4. PRIMARY_VENDOR (Official Documentation & Announcements):\n"
+            "   - Search official documentation and announcements (e.g. site:ai.google.dev, site:cloud.google.com, site:anthropic.com, site:openai.com) for authoritative specifications and features.\n"
+            "5. ENGINEERING_DOCS (Maintainers Blogs, Standards & Infrastructure):\n"
+            "   - Search standards, documentation, and infrastructure ecosystems (e.g. site:opentelemetry.io, site:developer.mozilla.org, site:fastapi.tiangolo.com, site:docs.vllm.ai, cloud ecosystems).\n\n"
+            "COMMUNITY SIGNAL vs. FACTUAL EVIDENCE:\n"
+            "- Community discussions on Hacker News or Reddit demonstrate INTEREST, PAIN POINTS, and CONTROVERSY, but factual claims should be backed by a primary documentation or GitHub source whenever possible.\n"
+            "- When a finding originates from or is discussed in a community, provide BOTH the discovery signal citation (Hacker News or Reddit) AND the primary factual source (GitHub or official docs).\n\n"
+            "NO VENDOR BIAS: Do NOT focus exclusively on a single vendor or model family. Investigate multi-vendor tools and architectures (e.g. Model Context Protocol / MCP, vLLM, SGLang, DeepSeek, LangGraph, OpenTelemetry, WebCodecs, FastAPI, Claude, local models).\n"
+            "NOVELTY & STRICT DEDUPLICATION: Compare every opportunity against the previous research findings listed above. Reject duplicate URLs, normalized title duplicates, and identical announcements. At most 1 visible recommendation per primary entity.\n"
+            "WHY IT FITS: For each finding, explain in `why_it_matters` the exact channel-specific reason why this opportunity fits Croviq's audience, historical retention, or content pillars.\n"
+            "WHY NOW: In `summary`, provide a concise technical breakdown of what changed recently (this week's release, spec update, or community milestone).\n\n"
+            "OUTPUT FORMAT: Return a valid JSON object with keys:\n"
+            "1. \"search_intents\": array of objects with keys:\n"
+            "   - \"query\": str (the search query)\n"
+            "   - \"ecosystem\": str (HACKER_NEWS, REDDIT, GITHUB, PRIMARY_VENDOR, ENGINEERING_DOCS, GENERAL_WEB)\n"
+            "   - \"channel_reason\": str (why Alex selected this query based on channel context)\n"
+            "2. \"candidates\": array of candidate opportunity objects with keys:\n"
+            "   - \"title\": str (informative, clear opportunity title)\n"
+            "   - \"category\": str (e.g. Agent Workflows, Foundation Models, Multimodal Systems, Developer Tooling, Evaluation & Observability)\n"
+            "   - \"topic_cluster\": str\n"
+            "   - \"primary_entity\": str\n"
+            "   - \"ecosystem\": str (HACKER_NEWS, REDDIT, GITHUB, PRIMARY_VENDOR, ENGINEERING_DOCS, GENERAL_WEB)\n"
+            "   - \"summary\": str (concise 'Why now' technical summary of recent changes)\n"
+            "   - \"why_it_matters\": str (concise 'Why it fits' channel-specific justification)\n"
+            "   - \"relevance_score\": float (0.0 - 1.0)\n"
+            "   - \"freshness_score\": float (0.0 - 1.0)\n"
+            "   - \"opportunity_score\": float (0.0 - 1.0)\n"
+            "   - \"primary_url\": str (factual source URL, e.g. GitHub or official docs)\n"
+            "   - \"primary_title\": str\n"
+            "   - \"discovery_signal_url\": str or null (e.g. Hacker News discussion or Reddit thread URL if applicable)\n"
+            "   - \"discovery_signal_title\": str or null\n"
         )
         system_instruction = ALEX_SYSTEM_INSTRUCTION
         if custom_prompt and custom_prompt.strip():
@@ -878,7 +1080,6 @@ class AlexDataScientist:
             tools=[types.Tool(google_search=types.GoogleSearch())],
             temperature=0.2,
             max_output_tokens=4096,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
 
         response = client.models.generate_content(
@@ -915,15 +1116,38 @@ class AlexDataScientist:
                             )
                         )
 
-        # Parse JSON findings
+        # Parse JSON response
         raw_text = response.text or ""
+        parsed_intents: list[dict[str, Any]] = []
         parsed_items: list[dict[str, Any]] = []
         try:
-            json_match = re.search(r"\[\s*\{.*\}\s*\]", raw_text, re.DOTALL)
-            if json_match:
-                parsed_items = json.loads(json_match.group(0))
+            obj_match = re.search(r"\{[\s\S]*\}", raw_text)
+            if obj_match:
+                data = json.loads(obj_match.group(0))
+                if isinstance(data, dict):
+                    parsed_intents = data.get("search_intents", [])
+                    parsed_items = data.get("candidates", [])
+            if not parsed_items:
+                array_match = re.search(r"\[\s*\{[\s\S]*\}\s*\]", raw_text)
+                if array_match:
+                    parsed_items = json.loads(array_match.group(0))
         except Exception:
             logger.warning("Could not parse structured JSON from Gemini grounded research response", exc_info=True)
+
+        # Collect and merge search intents
+        final_intents: list[ResearchPlanIntent] = list(planned_intents)
+        for pi in parsed_intents:
+            q = str(pi.get("query", "")).strip()
+            eco = str(pi.get("ecosystem", classify_ecosystem(q))).strip()
+            reason = str(pi.get("channel_reason", "")).strip()
+            if q and not any(fi.query.lower() == q.lower() for fi in final_intents):
+                final_intents.append(ResearchPlanIntent(query=q, ecosystem=eco, channel_reason=reason))
+
+        all_search_queries: list[str] = [fi.query for fi in final_intents]
+        if search_queries:
+            for sq in search_queries:
+                if sq not in all_search_queries:
+                    all_search_queries.append(sq)
 
         now = datetime.now(UTC)
         candidates: list[ResearchFinding] = []
@@ -934,28 +1158,47 @@ class AlexDataScientist:
             category = str(item.get("category", "Emerging Technology"))
             cluster = str(item.get("topic_cluster", "")) or derive_topic_cluster(title, category)
             primary_entity = str(item.get("primary_entity", "")) or derive_primary_entity(title, category)
+            cand_eco = str(item.get("ecosystem", ""))
             rel = float(item.get("relevance_score", 0.85))
             fresh = float(item.get("freshness_score", 0.90))
             opp = float(item.get("opportunity_score", 0.88))
 
-            finding_citations = list(citations_pool)
+            finding_citations: list[SourceCitation] = []
+
+            # 1. Primary Factual Source
             if item.get("primary_url"):
-                p_url = str(item["primary_url"])
-                if is_url_allowed_by_sources(
-                    p_url,
-                    preferred_sources,
-                    allow_broad_web,
-                ):
-                    p_title = str(item.get("primary_title", p_url))
-                    finding_citations.insert(
-                        0,
+                p_url = str(item["primary_url"]).strip()
+                if is_url_allowed_by_sources(p_url, preferred_sources, allow_broad_web):
+                    p_title = str(item.get("primary_title", p_url)).strip()
+                    finding_citations.append(
                         SourceCitation(
                             url=p_url,
                             title=p_title,
                             domain=extract_domain(p_url),
                             published_at=None,
-                        ),
+                            grounding_metadata={"role": "primary_source", "ecosystem": cand_eco or classify_ecosystem(p_url)},
+                        )
                     )
+
+            # 2. Discovery Signal Source (e.g. Hacker News or Reddit discussion)
+            if item.get("discovery_signal_url"):
+                d_url = str(item["discovery_signal_url"]).strip()
+                if is_url_allowed_by_sources(d_url, preferred_sources, allow_broad_web) and not any(c.url == d_url for c in finding_citations):
+                    d_title = str(item.get("discovery_signal_title", d_url)).strip()
+                    finding_citations.append(
+                        SourceCitation(
+                            url=d_url,
+                            title=d_title,
+                            domain=extract_domain(d_url),
+                            published_at=None,
+                            grounding_metadata={"role": "discovery_signal", "ecosystem": classify_ecosystem(d_url)},
+                        )
+                    )
+
+            # 3. Additional relevant grounding citations from citations_pool
+            for pool_cite in citations_pool:
+                if pool_cite.url not in [c.url for c in finding_citations] and len(finding_citations) < 4:
+                    finding_citations.append(pool_cite)
 
             if not finding_citations:
                 continue
@@ -982,12 +1225,47 @@ class AlexDataScientist:
             )
             candidates.append(candidate)
 
-        findings = apply_research_diversity_and_dedup(
+        # Count candidate breakdown by ecosystem
+        hn_candidates_count = 0
+        reddit_candidates_count = 0
+        github_candidates_count = 0
+        primary_vendor_candidates_count = 0
+        other_candidates_count = 0
+
+        for c in candidates:
+            domains = [cite.domain.lower() for cite in c.source_citations]
+            if any("news.ycombinator.com" in d or "ycombinator" in d for d in domains):
+                hn_candidates_count += 1
+            elif any("reddit.com" in d for d in domains):
+                reddit_candidates_count += 1
+            elif any("github.com" in d for d in domains):
+                github_candidates_count += 1
+            elif any(v in d for d in domains for v in ["ai.google.dev", "cloud.google.com", "anthropic.com", "openai.com", "deepmind.google"]):
+                primary_vendor_candidates_count += 1
+            else:
+                other_candidates_count += 1
+
+        findings, base_funnel = apply_research_diversity_and_dedup(
             candidates,
             existing_findings,
             allowed_sources=preferred_sources,
             allow_broad_web=allow_broad_web,
+            return_funnel=True,
         )
+
+        full_funnel_stats: dict[str, Any] = {
+            "grounding_results_count": len(citations_pool) + len(search_queries),
+            "hn_candidates": hn_candidates_count,
+            "reddit_candidates": reddit_candidates_count,
+            "github_candidates": github_candidates_count,
+            "primary_source_candidates": primary_vendor_candidates_count,
+            "other_candidates": other_candidates_count,
+            "channel_fit_rejected": base_funnel.get("channel_fit_rejected", 0),
+            "duplicates_rejected": base_funnel.get("duplicates_rejected", 0),
+            "low_novelty_rejected": base_funnel.get("low_novelty_rejected", 0),
+            "low_source_quality_rejected": base_funnel.get("low_source_quality_rejected", 0),
+            "final_persisted": len(findings),
+        }
 
         input_toks = 0
         output_toks = 0
@@ -995,31 +1273,54 @@ class AlexDataScientist:
             input_toks = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
             output_toks = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
 
-        return findings, search_queries, input_toks, output_toks
+        return findings, all_search_queries, input_toks, output_toks, full_funnel_stats, final_intents
 
     def _execute_deterministic_grounded_search(
         self,
         channel_context: str,
-        existing_findings: Sequence[ResearchFinding],
-        preferred_sources: Sequence[str] | None,
-        allow_broad_web: bool,
-        run_id: str,
-        channel_id: str,
-    ) -> tuple[list[ResearchFinding], list[str]]:
+        planned_intents: list[ResearchPlanIntent] | None = None,
+        existing_findings: Sequence[ResearchFinding] | None = None,
+        preferred_sources: Sequence[str] | None = None,
+        allow_broad_web: bool = True,
+        run_id: str = "run-mock",
+        channel_id: str = "croviq_syn_ai_eng_01",
+    ) -> tuple[list[ResearchFinding], list[str], dict[str, Any], list[ResearchPlanIntent]]:
         now = datetime.now(UTC)
-        search_queries = [
-            "site:news.ycombinator.com AI agent architecture production",
-            "site:github.com vllm speculative decoding benchmarks",
-            "site:developer.mozilla.org WebCodecs video frame streaming",
-            "site:opentelemetry.io gen-ai semantic conventions",
-            "site:fastapi.tiangolo.com async background streaming",
+        intents = planned_intents or [
+            ResearchPlanIntent(
+                query="site:news.ycombinator.com Model Context Protocol OR vLLM OR local LLM agent architecture",
+                ecosystem="HACKER_NEWS",
+                channel_reason="Identifies practitioner debates, architectural pitfalls, and production complaints surrounding agent protocol adoption.",
+            ),
+            ResearchPlanIntent(
+                query="site:reddit.com/r/LocalLLaMA OR site:reddit.com/r/MachineLearning speculative decoding OR vLLM benchmarks",
+                ecosystem="REDDIT",
+                channel_reason="Gathers practitioner sentiment and empirical benchmarks from relevant technical communities.",
+            ),
+            ResearchPlanIntent(
+                query="site:github.com google-genai OR langgraph OR modelcontextprotocol release",
+                ecosystem="GITHUB",
+                channel_reason="Tracks new open-source releases, framework updates, and executable codebases.",
+            ),
+            ResearchPlanIntent(
+                query="site:ai.google.dev OR site:cloud.google.com/vertex-ai Gemini structured outputs OR function calling",
+                ecosystem="PRIMARY_VENDOR",
+                channel_reason="Verifies official model capabilities, API constraints, and authoritative documentation.",
+            ),
+            ResearchPlanIntent(
+                query="site:modelcontextprotocol.io OR site:opentelemetry.io specification OR gen-ai semantic conventions",
+                ecosystem="ENGINEERING_DOCS",
+                channel_reason="Investigates cross-ecosystem open standards and observability specifications.",
+            ),
         ]
+        search_queries = [i.query for i in intents]
         candidate_items = [
             {
                 "title": "Gemini 3.7 Flash Hybrid Reasoning and Multimodal Agent Capabilities",
                 "category": "Foundation Models",
                 "topic_cluster": "foundation-models",
                 "primary_entity": "Gemini 3.7",
+                "ecosystem": "PRIMARY_VENDOR",
                 "summary": "Google released Gemini 3.7 Flash featuring dynamic thinking budgets, native multimodal reasoning, and Python code execution tool grounding for real-time applications.",
                 "why_it_matters": "Your tutorial videos on LLM agent architectures and Gemini tooling historically outperform channel baseline retention by 28%.",
                 "relevance_score": 0.94,
@@ -1031,14 +1332,14 @@ class AlexDataScientist:
                         title="Gemini Models & Capabilities Overview — Google AI Developers",
                         domain="ai.google.dev",
                         published_at=None,
-                        grounding_metadata={"source": "official_docs"},
+                        grounding_metadata={"role": "primary_source", "ecosystem": "PRIMARY_VENDOR"},
                     ),
                     SourceCitation(
                         url="https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal-overview",
                         title="Vertex AI Multimodal Architecture Documentation — Google Cloud",
                         domain="cloud.google.com",
                         published_at=None,
-                        grounding_metadata={"source": "vertex_docs"},
+                        grounding_metadata={"role": "primary_source", "ecosystem": "PRIMARY_VENDOR"},
                     ),
                 ],
             },
@@ -1047,6 +1348,7 @@ class AlexDataScientist:
                 "category": "Creator Ecosystem & Video Engineering",
                 "topic_cluster": "video-pacing-audience-retention",
                 "primary_entity": "Video Pacing & Audience Retention Dynamics",
+                "ecosystem": "PRIMARY_VENDOR",
                 "summary": "YouTube's official audience-retention reporting guidance explains how to inspect viewer attention across moments in a video and compare a video's segments against typical retention.",
                 "why_it_matters": "Combining that reporting methodology with the channel's own analytics can guide evidence-based pacing and demonstration-placement decisions.",
                 "relevance_score": 0.91,
@@ -1058,7 +1360,7 @@ class AlexDataScientist:
                         title="Understand Audience Retention Reports — YouTube Help",
                         domain="support.google.com",
                         published_at=None,
-                        grounding_metadata={"source": "youtube_help"},
+                        grounding_metadata={"role": "primary_source", "ecosystem": "PRIMARY_VENDOR"},
                     ),
                 ],
             },
@@ -1067,6 +1369,7 @@ class AlexDataScientist:
                 "category": "Agent Workflows",
                 "topic_cluster": "agent-workflows",
                 "primary_entity": "Model Context Protocol",
+                "ecosystem": "HACKER_NEWS",
                 "summary": "Anthropic and Cloud Run published standardized authentication patterns and server configurations for Model Context Protocol agents in production environments.",
                 "why_it_matters": "Your deployment and agent-infrastructure videos outperform channel baseline retention by 34%, making MCP production architecture a high-conviction deep dive.",
                 "relevance_score": 0.96,
@@ -1078,14 +1381,14 @@ class AlexDataScientist:
                         title="Model Context Protocol Servers and Reference Architectures — GitHub",
                         domain="github.com",
                         published_at=None,
-                        grounding_metadata={"source": "github_repo"},
+                        grounding_metadata={"role": "primary_source", "ecosystem": "GITHUB"},
                     ),
                     SourceCitation(
                         url="https://news.ycombinator.com/item?id=42300010",
                         title="Discussion: Production Security and Auth for MCP Agent Servers — Hacker News",
                         domain="news.ycombinator.com",
                         published_at=None,
-                        grounding_metadata={"source": "hacker_news"},
+                        grounding_metadata={"role": "discovery_signal", "ecosystem": "HACKER_NEWS"},
                     ),
                 ],
             },
@@ -1094,6 +1397,7 @@ class AlexDataScientist:
                 "category": "Foundation Models",
                 "topic_cluster": "foundation-models",
                 "primary_entity": "vLLM",
+                "ecosystem": "REDDIT",
                 "summary": "vLLM v0.7 introduced chunked prefill pipelining and automated speculative decoding benchmarks for low-latency local inference.",
                 "why_it_matters": "Engineering viewers on your channel show 41% higher subscriber conversion on architectural deep-dives with reproducible local inference benchmarks.",
                 "relevance_score": 0.93,
@@ -1105,14 +1409,14 @@ class AlexDataScientist:
                         title="vLLM: Easy, Fast, and Cheap LLM Serving for All — GitHub",
                         domain="github.com",
                         published_at=None,
-                        grounding_metadata={"source": "github_repo"},
+                        grounding_metadata={"role": "primary_source", "ecosystem": "GITHUB"},
                     ),
                     SourceCitation(
                         url="https://www.reddit.com/r/LocalLLaMA/comments/1vllm_benchmarks",
                         title="Speculative Decoding and Chunked Prefill Latency Numbers — r/LocalLLaMA",
                         domain="reddit.com",
                         published_at=None,
-                        grounding_metadata={"source": "reddit_community"},
+                        grounding_metadata={"role": "discovery_signal", "ecosystem": "REDDIT"},
                     ),
                 ],
             },
@@ -1121,6 +1425,7 @@ class AlexDataScientist:
                 "category": "Multimodal Systems",
                 "topic_cluster": "multimodal-systems",
                 "primary_entity": "WebCodecs",
+                "ecosystem": "ENGINEERING_DOCS",
                 "summary": "Hardware-accelerated browser video frame decoding with WebCodecs enables real-time LLM video frame sampling and zero-latency timeline previews.",
                 "why_it_matters": "Video creator workflows combining high-speed browser rendering with AI models drive high engagement and retention on deep-dive tutorials.",
                 "relevance_score": 0.90,
@@ -1132,14 +1437,14 @@ class AlexDataScientist:
                         title="WebCodecs API Standards and Browser Implementation — MDN Web Docs",
                         domain="developer.mozilla.org",
                         published_at=None,
-                        grounding_metadata={"source": "standards_docs"},
+                        grounding_metadata={"role": "primary_source", "ecosystem": "ENGINEERING_DOCS"},
                     ),
                     SourceCitation(
                         url="https://github.com/ggerganov/llama.cpp",
                         title="llama.cpp: Fast Multimodal and LLM Inference in C/C++ — GitHub",
                         domain="github.com",
                         published_at=None,
-                        grounding_metadata={"source": "github_repo"},
+                        grounding_metadata={"role": "primary_source", "ecosystem": "GITHUB"},
                     ),
                 ],
             },
@@ -1148,6 +1453,7 @@ class AlexDataScientist:
                 "category": "Evaluation & Observability",
                 "topic_cluster": "evaluation-observability",
                 "primary_entity": "OpenTelemetry",
+                "ecosystem": "ENGINEERING_DOCS",
                 "summary": "Standardized OpenTelemetry semantic conventions for GenAI systems track tool invocation spans, token budgets, and step latency across distributed agents.",
                 "why_it_matters": "Production engineering teams look for structured telemetry patterns; architectural videos covering observability benchmarks attract senior viewers.",
                 "relevance_score": 0.88,
@@ -1159,95 +1465,14 @@ class AlexDataScientist:
                         title="Semantic Conventions for Generative AI Systems — OpenTelemetry",
                         domain="opentelemetry.io",
                         published_at=None,
-                        grounding_metadata={"source": "standards_docs"},
+                        grounding_metadata={"role": "primary_source", "ecosystem": "ENGINEERING_DOCS"},
                     ),
                     SourceCitation(
                         url="https://github.com/open-telemetry/opentelemetry-python",
                         title="OpenTelemetry Python SDK — GitHub",
                         domain="github.com",
                         published_at=None,
-                        grounding_metadata={"source": "github_repo"},
-                    ),
-                ],
-            },
-            {
-                "title": "FastAPI Asynchronous Streaming & Background Worker Architectures",
-                "category": "Developer Tooling",
-                "topic_cluster": "developer-tooling",
-                "primary_entity": "FastAPI",
-                "summary": "Modern ASGI streaming protocols and background task primitives in FastAPI optimize end-to-end latency for real-time generative media processing.",
-                "why_it_matters": "Developer tutorial deep-dives covering backend Python systems and streaming APIs generate long-tail search traffic and high watch time.",
-                "relevance_score": 0.87,
-                "freshness_score": 0.89,
-                "opportunity_score": 0.88,
-                "citations": [
-                    SourceCitation(
-                        url="https://fastapi.tiangolo.com/tutorial/background-tasks/",
-                        title="Background Tasks and Streaming in FastAPI — Official Docs",
-                        domain="fastapi.tiangolo.com",
-                        published_at=None,
-                        grounding_metadata={"source": "official_docs"},
-                    ),
-                    SourceCitation(
-                        url="https://github.com/tiangolo/fastapi",
-                        title="FastAPI Framework — GitHub",
-                        domain="github.com",
-                        published_at=None,
-                        grounding_metadata={"source": "github_repo"},
-                    ),
-                ],
-            },
-            {
-                "title": "LangGraph Human-in-the-Loop Checkpoint State Persistence Patterns",
-                "category": "Agent Workflows",
-                "topic_cluster": "agent-workflows",
-                "primary_entity": "LangGraph",
-                "summary": "LangGraph released durable state checkpoints for long-running agent workflows with async human review approvals and rollback safety.",
-                "why_it_matters": "Your audience shows high engagement with resilient orchestration systems featuring rollback and human verification safeguards.",
-                "relevance_score": 0.89,
-                "freshness_score": 0.91,
-                "opportunity_score": 0.90,
-                "citations": [
-                    SourceCitation(
-                        url="https://github.com/langchain-ai/langgraph",
-                        title="LangGraph: Build Resilient Agentic Workflows — GitHub",
-                        domain="github.com",
-                        published_at=None,
-                        grounding_metadata={"source": "github_repo"},
-                    ),
-                    SourceCitation(
-                        url="https://news.ycombinator.com/item?id=39501234",
-                        title="Discussion: Failure Modes and Evaluation in Production Agent Swarms — Hacker News",
-                        domain="news.ycombinator.com",
-                        published_at=None,
-                        grounding_metadata={"source": "hacker_news"},
-                    ),
-                ],
-            },
-            {
-                "title": "DeepSeek-V3 Multi-Head Latent Attention Architecture Breakdown",
-                "category": "Foundation Models",
-                "topic_cluster": "foundation-models",
-                "primary_entity": "DeepSeek",
-                "summary": "DeepSeek published architectural details on Multi-Head Latent Attention (MLA) and DeepSeekMoE load balancing for sparse inference.",
-                "why_it_matters": "Transformer architecture breakdowns and attention mechanism optimizations achieve high watch time and comment engagement on this channel.",
-                "relevance_score": 0.91,
-                "freshness_score": 0.93,
-                "opportunity_score": 0.92,
-                "citations": [
-                    SourceCitation(
-                        url="https://github.com/deepseek-ai/DeepSeek-V3",
-                        title="DeepSeek-V3 Model Architecture and Technical Report — GitHub",
-                        domain="github.com",
-                        published_at=None,
-                        grounding_metadata={"source": "github_repo"},
-                    ),
-                    SourceCitation(
-                        url="https://www.reddit.com/r/LocalLLaMA/comments/1deepseek_mla",
-                        title="DeepSeek Multi-Head Latent Attention Analysis — r/LocalLLaMA",
-                        domain="reddit.com",
-                        published_at=None,
-                        grounding_metadata={"source": "reddit_community"},
+                        grounding_metadata={"role": "primary_source", "ecosystem": "GITHUB"},
                     ),
                 ],
             },
@@ -1255,43 +1480,54 @@ class AlexDataScientist:
 
         candidates: list[ResearchFinding] = []
         for idx, item in enumerate(candidate_items):
-            valid_citations = _filter_citations_by_source_policy(
-                item["citations"],
-                preferred_sources,
-                allow_broad_web,
-            )
-            if not valid_citations:
-                continue
-            fp = normalize_topic_fingerprint(item["title"], valid_citations[0].domain)
+            title = str(item["title"])
+            fp = normalize_topic_fingerprint(title, item["citations"][0].domain)
+            cluster = str(item["topic_cluster"])
+            primary_entity = str(item["primary_entity"])
             candidate = ResearchFinding(
                 finding_id=f"fnd_{fp[:12]}_{idx}",
                 run_id=run_id,
                 channel_id=channel_id,
-                category=item["category"],
-                title=item["title"],
-                summary=item["summary"],
-                why_it_matters=item["why_it_matters"],
-                relevance_score=item["relevance_score"],
-                freshness_score=item["freshness_score"],
-                opportunity_score=item["opportunity_score"],
-                source_citations=valid_citations,
+                category=str(item["category"]),
+                title=title,
+                summary=str(item["summary"]),
+                why_it_matters=str(item["why_it_matters"]),
+                relevance_score=float(item["relevance_score"]),
+                freshness_score=float(item["freshness_score"]),
+                opportunity_score=float(item["opportunity_score"]),
+                source_citations=item["citations"],
                 topic_fingerprint=fp,
-                topic_cluster=item["topic_cluster"],
-                primary_entity=item["primary_entity"],
+                topic_cluster=cluster,
+                primary_entity=primary_entity,
                 discovered_at=now,
                 updated_at=now,
                 lifecycle=FindingLifecycle.NEW,
             )
             candidates.append(candidate)
 
-        findings = apply_research_diversity_and_dedup(
+        findings, base_funnel = apply_research_diversity_and_dedup(
             candidates,
             existing_findings,
             allowed_sources=preferred_sources,
             allow_broad_web=allow_broad_web,
+            return_funnel=True,
         )
 
-        return findings, search_queries
+        funnel_stats: dict[str, Any] = {
+            "grounding_results_count": len(search_queries),
+            "hn_candidates": 1,
+            "reddit_candidates": 1,
+            "github_candidates": 1,
+            "primary_source_candidates": 2,
+            "other_candidates": 1,
+            "channel_fit_rejected": base_funnel.get("channel_fit_rejected", 0),
+            "duplicates_rejected": base_funnel.get("duplicates_rejected", 0),
+            "low_novelty_rejected": base_funnel.get("low_novelty_rejected", 0),
+            "low_source_quality_rejected": base_funnel.get("low_source_quality_rejected", 0),
+            "final_persisted": len(findings),
+        }
+
+        return findings, search_queries, funnel_stats, intents
 
     async def run_code_execution_analysis(
         self,
