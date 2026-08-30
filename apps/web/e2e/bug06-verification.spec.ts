@@ -353,9 +353,9 @@ test.describe("Bug 6 Verification: Diverse Ecosystem Grounded Research in UI", (
 
     await page.waitForURL("**/app*");
     await page.waitForSelector("aside");
-    await expect(page.locator("aside article").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("aside article:has(h4)").first()).toBeVisible({ timeout: 10000 });
     const findingArticles = page.locator("aside article:has(h4)");
-    expect(await findingArticles.count()).toBe(3);
+    await expect(findingArticles).toHaveCount(3);
     await page.screenshot({ path: "docs/screenshots/acceptance/home-1280x800.png" });
 
     expect(consoleErrors).toEqual([]);

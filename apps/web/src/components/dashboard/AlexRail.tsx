@@ -1,8 +1,8 @@
 import { ChevronDown, ChevronRight, ExternalLink, Sparkles, TrendingUp } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import type { components } from "../../api/generated";
+import { getResolvedProvenance } from "../../lib/provenance";
 import { AgentActionMenu } from "../AgentActionMenu";
-
 type ChannelInsight = components["schemas"]["ChannelInsight"];
 type ResearchFinding = components["schemas"]["ResearchFinding"];
 
@@ -188,44 +188,112 @@ export const AlexRail: React.FC<AlexRailProps> = ({
                   )}
 
                   {/* Sources Pill & Popover */}
-                  {finding.source_citations && finding.source_citations.length > 0 && (
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={() => toggleSources(finding.finding_id)}
-                        className="inline-flex items-center gap-1 rounded bg-surface-3 px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-                      >
-                        <span className="truncate max-w-[150px]">
-                          {finding.source_citations[0]?.domain || "Source"}
-                          {finding.source_citations.length > 1
-                            ? ` (+${finding.source_citations.length - 1})`
-                            : ""}
-                        </span>
-                        <ChevronDown
-                          className={`h-3 w-3 transition-transform ${
-                            openSourcesMap[finding.finding_id] ? "rotate-180" : ""
-                          }`}
-                        />
-                      </button>
+                  {(() => {
+                    const prov = getResolvedProvenance(finding);
+                    const totalCount =
+                      (prov.discovery_signal ? 1 : 0) +
+                      prov.primary_sources.length +
+                      prov.supporting_sources.length;
+                    if (totalCount === 0) return null;
 
-                      {openSourcesMap[finding.finding_id] && (
-                        <div className="mt-2 space-y-1.5 rounded-md bg-surface-1 p-2.5 border border-border-subtle">
-                          {finding.source_citations.map((cite) => (
-                            <a
-                              key={cite.url}
-                              href={cite.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center justify-between rounded px-2 py-1 text-xs text-text-secondary hover:bg-surface-2 hover:text-primary transition-colors"
-                            >
-                              <span className="truncate max-w-[200px]">{cite.domain}</span>
-                              <ExternalLink className="h-3 w-3 shrink-0" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    const leadLabel = prov.discovery_signal
+                      ? `Spotted on ${prov.discovery_signal.source_type}`
+                      : (prov.primary_sources[0]?.domain || prov.supporting_sources[0]?.domain || "Source");
+
+                    const extraCount = totalCount - 1;
+
+                    return (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleSources(finding.finding_id)}
+                          className="inline-flex items-center gap-1 rounded bg-surface-3 px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+                        >
+                          <span className="truncate max-w-[160px]">
+                            {leadLabel}
+                            {extraCount > 0 ? ` (+${extraCount})` : ""}
+                          </span>
+                          <ChevronDown
+                            className={`h-3 w-3 transition-transform ${
+                              openSourcesMap[finding.finding_id] ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {openSourcesMap[finding.finding_id] && (
+                          <div className="mt-2 space-y-2 rounded-md bg-surface-1 p-2.5 border border-border-subtle text-xs">
+                            {prov.discovery_signal && (
+                              <div className="space-y-1">
+                                <p className="text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+                                  Discovered on {prov.discovery_signal.source_type}
+                                </p>
+                                <a
+                                  href={prov.discovery_signal.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center justify-between rounded px-2 py-1 text-xs text-text-secondary hover:bg-surface-2 hover:text-primary transition-colors"
+                                >
+                                  <span className="truncate max-w-[140px] font-medium">
+                                    {prov.discovery_signal.title || prov.discovery_signal.domain}
+                                  </span>
+                                  <div className="flex items-center gap-1 shrink-0 text-text-muted text-[10px]">
+                                    <span>{prov.discovery_signal.domain}</span>
+                                    <ExternalLink className="h-3 w-3 shrink-0" />
+                                  </div>
+                                </a>
+                              </div>
+                            )}
+
+                            {prov.primary_sources.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+                                  Primary Source
+                                </p>
+                                {prov.primary_sources.map((p) => (
+                                  <a
+                                    key={p.url}
+                                    href={p.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-between rounded px-2 py-1 text-xs text-text-secondary hover:bg-surface-2 hover:text-primary transition-colors"
+                                  >
+                                    <span className="truncate max-w-[140px] font-medium">{p.title || p.domain}</span>
+                                    <div className="flex items-center gap-1 shrink-0 text-text-muted text-[10px]">
+                                      <span>{p.domain}</span>
+                                      <ExternalLink className="h-3 w-3 shrink-0" />
+                                    </div>
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+
+                            {prov.supporting_sources.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+                                  Supporting Evidence
+                                </p>
+                                {prov.supporting_sources.map((s) => (
+                                  <a
+                                    key={s.url}
+                                    href={s.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-between rounded px-2 py-1 text-xs text-text-secondary hover:bg-surface-2 hover:text-primary transition-colors"
+                                  >
+                                    <span className="truncate max-w-[140px] font-medium">{s.title || s.domain}</span>
+                                    <div className="flex items-center gap-1 shrink-0 text-text-muted text-[10px]">
+                                      <span>{s.domain}</span>
+                                      <ExternalLink className="h-3 w-3 shrink-0" />
+                                    </div>
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </article>
               ))}
 

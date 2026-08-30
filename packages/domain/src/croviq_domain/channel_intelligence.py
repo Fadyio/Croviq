@@ -170,6 +170,177 @@ class ResearchRun(BaseModel):
             model=model,
         )
 
+class DiscoverySignal(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    source_type: str = Field(..., min_length=1, max_length=100)
+    title: str = Field(..., min_length=1, max_length=500)
+    url: str
+    domain: str = Field(..., min_length=1, max_length=253)
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        validated = _validate_public_source(value)
+        if "://" not in validated:
+            raise ValueError("citation must contain a full HTTP(S) URL")
+        return validated
+
+
+class PrimarySourceCitation(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    title: str = Field(..., min_length=1, max_length=500)
+    url: str
+    domain: str = Field(..., min_length=1, max_length=253)
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        validated = _validate_public_source(value)
+        if "://" not in validated:
+            raise ValueError("citation must contain a full HTTP(S) URL")
+        return validated
+
+
+class SupportingSourceCitation(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    title: str = Field(..., min_length=1, max_length=500)
+    url: str
+    domain: str = Field(..., min_length=1, max_length=253)
+    source_type: str = Field(default="Independent Benchmark / Analysis", min_length=1, max_length=100)
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        validated = _validate_public_source(value)
+        if "://" not in validated:
+            raise ValueError("citation must contain a full HTTP(S) URL")
+        return validated
+
+
+class FindingProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    discovery_signal: DiscoverySignal | None = None
+    primary_sources: list[PrimarySourceCitation] = Field(default_factory=list)
+    supporting_sources: list[SupportingSourceCitation] = Field(default_factory=list)
+
+
+def classify_url_provenance_role(url: str, title: str | None = None) -> tuple[str, str]:
+    """Classify a URL into (role, human_source_type).
+    Roles:
+      - COMMUNITY_SIGNAL (Hacker News, Reddit, Twitter/X, developer forums)
+      - PRIMARY (official repo on github/gitlab, official specs, primary vendor docs)
+      - SUPPORTING (independent engineering blogs, benchmarks, tutorials)
+    """
+    candidate = url.strip()
+    parsed = urlparse(candidate if "://" in candidate else f"https://{candidate}")
+    domain = (parsed.hostname or "").rstrip(".").lower()
+    t_lower = (title or "").lower()
+
+    # Community signals: ONLY if URL domain is an actual community discussion platform
+    if domain in {"news.ycombinator.com", "hacker-news.firebaseio.com"}:
+        return ("COMMUNITY_SIGNAL", "Hacker News")
+    if domain == "reddit.com" or domain.endswith(".reddit.com"):
+        return ("COMMUNITY_SIGNAL", "Reddit")
+    if domain in {"x.com", "twitter.com"}:
+        return ("COMMUNITY_SIGNAL", "X (Twitter)")
+    if domain.startswith("forum.") or domain.startswith("discourse."):
+        return ("COMMUNITY_SIGNAL", "Developer Community")
+
+    # Primary sources: official repositories, official specs, official vendor docs
+    if domain in {"github.com", "gitlab.com"}:
+        return ("PRIMARY", "GitHub Repository")
+    if domain in {
+        "modelcontextprotocol.io",
+        "opentelemetry.io",
+        "w3.org",
+        "ietf.org",
+        "iso.org",
+        "peps.python.org",
+    }:
+        return ("PRIMARY", "Official Specification")
+    if any(
+        domain == v or domain.endswith(f".{v}")
+        for v in [
+            "ai.google.dev",
+            "cloud.google.com",
+            "blog.google",
+            "deepmind.google",
+            "support.google.com",
+            "anthropic.com",
+            "openai.com",
+            "developer.apple.com",
+            "aws.amazon.com",
+            "microsoft.com",
+            "azure.microsoft.com",
+            "docs.python.org",
+            "developer.mozilla.org",
+            "fastapi.tiangolo.com",
+            "docs.vllm.ai",
+            "sgl-project.github.io",
+            "pypi.org",
+            "docker.com",
+            "kubernetes.io",
+        ]
+    ):
+        return ("PRIMARY", "Official Documentation")
+
+    # Supporting sources: blogs, benchmark articles, engineering tutorials
+    if any(term in t_lower or term in url.lower() for term in ["benchmark", "benchmarks", "vs", "latency", "throughput", "comparison"]):
+        return ("SUPPORTING", "Independent Benchmark")
+    if any(term in t_lower or term in url.lower() for term in ["tutorial", "guide", "walkthrough", "how-to", "deploying"]):
+        return ("SUPPORTING", "Engineering Tutorial")
+    return ("SUPPORTING", "Independent Analysis")
+
+
+def derive_truthful_provenance_from_citations(
+    citations: list[SourceCitation],
+    topic_title: str = "",
+    primary_entity: str | None = None,
+) -> FindingProvenance:
+    discovery_signal: DiscoverySignal | None = None
+    primary_sources: list[PrimarySourceCitation] = []
+    supporting_sources: list[SupportingSourceCitation] = []
+
+    for cite in citations:
+        role, source_type = classify_url_provenance_role(cite.url, cite.title)
+        if role == "COMMUNITY_SIGNAL":
+            if discovery_signal is None:
+                discovery_signal = DiscoverySignal(
+                    source_type=source_type,
+                    title=cite.title,
+                    url=cite.url,
+                    domain=cite.domain,
+                )
+        elif role == "PRIMARY":
+            if not any(p.url == cite.url for p in primary_sources):
+                primary_sources.append(
+                    PrimarySourceCitation(
+                        title=cite.title,
+                        url=cite.url,
+                        domain=cite.domain,
+                    )
+                )
+        else:
+            if not any(s.url == cite.url for s in supporting_sources):
+                supporting_sources.append(
+                    SupportingSourceCitation(
+                        title=cite.title,
+                        url=cite.url,
+                        domain=cite.domain,
+                        source_type=source_type,
+                    )
+                )
+
+    return FindingProvenance(
+        discovery_signal=discovery_signal,
+        primary_sources=primary_sources,
+        supporting_sources=supporting_sources,
+    )
+
 
 class SourceCitation(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -193,7 +364,6 @@ class SourceCitation(BaseModel):
     def validate_published_at(cls, value: datetime | None) -> datetime | None:
         return validate_timezone_aware(value) if value is not None else None
 
-
 class ResearchFinding(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
@@ -208,6 +378,7 @@ class ResearchFinding(BaseModel):
     freshness_score: float = Field(..., ge=0, le=1)
     opportunity_score: float = Field(..., ge=0, le=1)
     source_citations: list[SourceCitation] = Field(..., min_length=1)
+    provenance: FindingProvenance | None = None
     topic_fingerprint: str = Field(..., min_length=1)
     topic_cluster: str | None = None
     primary_entity: str | None = None
@@ -221,6 +392,16 @@ class ResearchFinding(BaseModel):
     @classmethod
     def validate_timestamps(cls, value: datetime | None) -> datetime | None:
         return validate_timezone_aware(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def ensure_provenance(self) -> "ResearchFinding":
+        if self.provenance is None:
+            self.provenance = derive_truthful_provenance_from_citations(
+                self.source_citations,
+                topic_title=self.title,
+                primary_entity=self.primary_entity,
+            )
+        return self
 
 
 class InsightEvidence(BaseModel):

@@ -17,10 +17,13 @@ from urllib.parse import urlsplit
 from statistics import median
 
 from croviq_domain.channel_intelligence import (
+    DiscoverySignal,
     EvidenceKind,
     FindingLifecycle,
+    FindingProvenance,
     InsightEvidence,
     InsightType,
+    PrimarySourceCitation,
     ResearchCadence,
     ResearchConfig,
     ResearchFinding,
@@ -28,6 +31,9 @@ from croviq_domain.channel_intelligence import (
     ResearchRun,
     ResearchRunStatus,
     SourceCitation,
+    SupportingSourceCitation,
+    classify_url_provenance_role,
+    derive_truthful_provenance_from_citations,
 )
 from croviq_domain.channel_dashboard import LatestVideoAnalysis, compute_latest_video_analysis
 from croviq_domain.channel_provider import SampleChannelDataProvider
@@ -374,6 +380,23 @@ class ResearchPlanIntent:
     query: str
     ecosystem: str
     channel_reason: str
+
+ENTITY_PRIMARY_SOURCES: dict[str, tuple[str, str]] = {
+    "sglang": ("https://github.com/sgl-project/sglang", "SGLang: Fast and Expressive Serving Framework for LLMs — GitHub"),
+    "vllm": ("https://github.com/vllm-project/vllm", "vLLM: High-Throughput and Memory-Efficient LLM Serving — GitHub"),
+    "model context protocol": ("https://modelcontextprotocol.io/specification/architecture", "Model Context Protocol Architecture and Transports Specification"),
+    "mcp": ("https://modelcontextprotocol.io/specification/architecture", "Model Context Protocol Architecture and Transports Specification"),
+    "github actions": ("https://github.com/google-github-actions/deploy-cloudrun", "Deploy to Cloud Run GitHub Action — GitHub"),
+    "opentelemetry": ("https://opentelemetry.io/docs/specs/semconv/gen-ai/", "GenAI Semantic Conventions — OpenTelemetry"),
+    "webcodecs": ("https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API", "WebCodecs API Standards and Browser Implementation — MDN Web Docs"),
+    "fastapi": ("https://fastapi.tiangolo.com/", "FastAPI Documentation — tiangolo"),
+    "langgraph": ("https://github.com/langchain-ai/langgraph", "LangGraph: Build Resilient Language Agents — GitHub"),
+    "gemini": ("https://ai.google.dev/gemini-api/docs/models/gemini", "Gemini Models Documentation — Google AI"),
+    "deepseek": ("https://github.com/deepseek-ai/DeepSeek-V3", "DeepSeek-V3 Repository — GitHub"),
+    "llama.cpp": ("https://github.com/ggerganov/llama.cpp", "llama.cpp: Fast Multimodal and LLM Inference in C/C++ — GitHub"),
+    "ollama": ("https://github.com/ollama/ollama", "Ollama: Get Up and Running with Large Language Models — GitHub"),
+}
+
 
 
 def classify_ecosystem(text_or_url: str) -> str:
@@ -1044,8 +1067,10 @@ class AlexDataScientist:
             "5. ENGINEERING_DOCS (Maintainers Blogs, Standards & Infrastructure):\n"
             "   - Search standards, documentation, and infrastructure ecosystems (e.g. site:opentelemetry.io, site:developer.mozilla.org, site:fastapi.tiangolo.com, site:docs.vllm.ai, cloud ecosystems).\n\n"
             "COMMUNITY SIGNAL vs. FACTUAL EVIDENCE:\n"
-            "- Community discussions on Hacker News or Reddit demonstrate INTEREST, PAIN POINTS, and CONTROVERSY, but factual claims should be backed by a primary documentation or GitHub source whenever possible.\n"
-            "- When a finding originates from or is discussed in a community, provide BOTH the discovery signal citation (Hacker News or Reddit) AND the primary factual source (GitHub or official docs).\n\n"
+            "- Community discussions on Hacker News (news.ycombinator.com) or Reddit (reddit.com) demonstrate INTEREST, PAIN POINTS, and CONTROVERSY.\n"
+            "- Only provide a `discovery_signal_url` if an ACTUAL discussion URL from Hacker News (news.ycombinator.com) or Reddit (reddit.com) was returned in grounding.\n"
+            "- Factual claims MUST be backed by a primary documentation (official vendor docs, specs) or GitHub repository release URL in `primary_url`.\n"
+            "- Independent engineering blogs, benchmark articles, and tutorials belong in `supporting_urls`.\n\n"
             "NO VENDOR BIAS: Do NOT focus exclusively on a single vendor or model family. Investigate multi-vendor tools and architectures (e.g. Model Context Protocol / MCP, vLLM, SGLang, DeepSeek, LangGraph, OpenTelemetry, WebCodecs, FastAPI, Claude, local models).\n"
             "NOVELTY & STRICT DEDUPLICATION: Compare every opportunity against the previous research findings listed above. Reject duplicate URLs, normalized title duplicates, and identical announcements. At most 1 visible recommendation per primary entity.\n"
             "WHY IT FITS: For each finding, explain in `why_it_matters` the exact channel-specific reason why this opportunity fits Croviq's audience, historical retention, or content pillars.\n"
@@ -1066,10 +1091,11 @@ class AlexDataScientist:
             "   - \"relevance_score\": float (0.0 - 1.0)\n"
             "   - \"freshness_score\": float (0.0 - 1.0)\n"
             "   - \"opportunity_score\": float (0.0 - 1.0)\n"
-            "   - \"primary_url\": str (factual source URL, e.g. GitHub or official docs)\n"
+            "   - \"primary_url\": str (authoritative official source URL, e.g. GitHub repo or official docs/spec)\n"
             "   - \"primary_title\": str\n"
-            "   - \"discovery_signal_url\": str or null (e.g. Hacker News discussion or Reddit thread URL if applicable)\n"
+            "   - \"discovery_signal_url\": str or null (MUST be an actual Hacker News or Reddit discussion URL, otherwise null)\n"
             "   - \"discovery_signal_title\": str or null\n"
+            "   - \"supporting_urls\": array of strings or objects [{url, title, source_type}]\n"
         )
         system_instruction = ALEX_SYSTEM_INSTRUCTION
         if custom_prompt and custom_prompt.strip():
@@ -1158,52 +1184,192 @@ class AlexDataScientist:
             category = str(item.get("category", "Emerging Technology"))
             cluster = str(item.get("topic_cluster", "")) or derive_topic_cluster(title, category)
             primary_entity = str(item.get("primary_entity", "")) or derive_primary_entity(title, category)
-            cand_eco = str(item.get("ecosystem", ""))
             rel = float(item.get("relevance_score", 0.85))
             fresh = float(item.get("freshness_score", 0.90))
             opp = float(item.get("opportunity_score", 0.88))
 
-            finding_citations: list[SourceCitation] = []
+            # Typed Provenance Structures
+            discovery_signal: DiscoverySignal | None = None
+            primary_sources: list[PrimarySourceCitation] = []
+            supporting_sources: list[SupportingSourceCitation] = []
 
-            # 1. Primary Factual Source
-            if item.get("primary_url"):
-                p_url = str(item["primary_url"]).strip()
-                if is_url_allowed_by_sources(p_url, preferred_sources, allow_broad_web):
-                    p_title = str(item.get("primary_title", p_url)).strip()
-                    finding_citations.append(
-                        SourceCitation(
+            # 1. Evaluate primary_url
+            p_url = str(item.get("primary_url", "")).strip() if item.get("primary_url") else ""
+            p_title = str(item.get("primary_title", p_url)).strip()
+            if p_url and is_url_allowed_by_sources(p_url, preferred_sources, allow_broad_web):
+                role, stype = classify_url_provenance_role(p_url, p_title)
+                if role == "PRIMARY":
+                    primary_sources.append(
+                        PrimarySourceCitation(
+                            title=p_title or p_url,
                             url=p_url,
-                            title=p_title,
                             domain=extract_domain(p_url),
-                            published_at=None,
-                            grounding_metadata={"role": "primary_source", "ecosystem": cand_eco or classify_ecosystem(p_url)},
+                        )
+                    )
+                elif role == "COMMUNITY_SIGNAL":
+                    discovery_signal = DiscoverySignal(
+                        source_type=stype,
+                        title=p_title or f"Discussion on {stype}",
+                        url=p_url,
+                        domain=extract_domain(p_url),
+                    )
+                else:
+                    supporting_sources.append(
+                        SupportingSourceCitation(
+                            title=p_title or p_url,
+                            url=p_url,
+                            domain=extract_domain(p_url),
+                            source_type=stype,
                         )
                     )
 
-            # 2. Discovery Signal Source (e.g. Hacker News or Reddit discussion)
-            if item.get("discovery_signal_url"):
-                d_url = str(item["discovery_signal_url"]).strip()
-                if is_url_allowed_by_sources(d_url, preferred_sources, allow_broad_web) and not any(c.url == d_url for c in finding_citations):
-                    d_title = str(item.get("discovery_signal_title", d_url)).strip()
-                    finding_citations.append(
-                        SourceCitation(
+            # 2. Evaluate discovery_signal_url (Strict validation: MUST be a real community signal)
+            d_url = str(item.get("discovery_signal_url", "")).strip() if item.get("discovery_signal_url") else ""
+            d_title = str(item.get("discovery_signal_title", d_url)).strip()
+            if d_url and is_url_allowed_by_sources(d_url, preferred_sources, allow_broad_web):
+                role, stype = classify_url_provenance_role(d_url, d_title)
+                if role == "COMMUNITY_SIGNAL":
+                    if discovery_signal is None:
+                        discovery_signal = DiscoverySignal(
+                            source_type=stype,
+                            title=d_title or f"Discussion on {stype}",
                             url=d_url,
-                            title=d_title,
                             domain=extract_domain(d_url),
-                            published_at=None,
-                            grounding_metadata={"role": "discovery_signal", "ecosystem": classify_ecosystem(d_url)},
                         )
-                    )
+                elif role == "PRIMARY":
+                    if not any(p.url == d_url for p in primary_sources):
+                        primary_sources.append(
+                            PrimarySourceCitation(
+                                title=d_title or d_url,
+                                url=d_url,
+                                domain=extract_domain(d_url),
+                            )
+                        )
+                else:
+                    if not any(s.url == d_url for s in supporting_sources):
+                        supporting_sources.append(
+                            SupportingSourceCitation(
+                                title=d_title or d_url,
+                                url=d_url,
+                                domain=extract_domain(d_url),
+                                source_type=stype,
+                            )
+                        )
 
-            # 3. Additional relevant grounding citations from citations_pool
+            # 3. Evaluate additional supporting URLs from candidate payload
+            cand_supporting = item.get("supporting_urls", [])
+            if isinstance(cand_supporting, list):
+                for sup in cand_supporting:
+                    if isinstance(sup, dict):
+                        s_u = str(sup.get("url", "")).strip()
+                        s_t = str(sup.get("title", s_u)).strip()
+                    else:
+                        s_u = str(sup).strip()
+                        s_t = s_u
+                    if s_u and is_url_allowed_by_sources(s_u, preferred_sources, allow_broad_web):
+                        if not any(p.url == s_u for p in primary_sources) and not any(s.url == s_u for s in supporting_sources):
+                            r, st = classify_url_provenance_role(s_u, s_t)
+                            if r == "PRIMARY":
+                                primary_sources.append(PrimarySourceCitation(title=s_t, url=s_u, domain=extract_domain(s_u)))
+                            elif r == "COMMUNITY_SIGNAL" and discovery_signal is None:
+                                discovery_signal = DiscoverySignal(source_type=st, title=s_t, url=s_u, domain=extract_domain(s_u))
+                            else:
+                                supporting_sources.append(SupportingSourceCitation(title=s_t, url=s_u, domain=extract_domain(s_u), source_type=st))
+
+            # 4. Evaluate additional citations from citations_pool
             for pool_cite in citations_pool:
-                if pool_cite.url not in [c.url for c in finding_citations] and len(finding_citations) < 4:
-                    finding_citations.append(pool_cite)
+                c_url = pool_cite.url
+                if any(p.url == c_url for p in primary_sources) or any(s.url == c_url for s in supporting_sources) or (discovery_signal and discovery_signal.url == c_url):
+                    continue
+                role, stype = classify_url_provenance_role(c_url, pool_cite.title)
+                if role == "COMMUNITY_SIGNAL" and discovery_signal is None:
+                    discovery_signal = DiscoverySignal(
+                        source_type=stype,
+                        title=pool_cite.title,
+                        url=c_url,
+                        domain=pool_cite.domain,
+                    )
+                elif role == "PRIMARY":
+                    if len(primary_sources) < 2:
+                        primary_sources.append(
+                            PrimarySourceCitation(
+                                title=pool_cite.title,
+                                url=c_url,
+                                domain=pool_cite.domain,
+                            )
+                        )
+                elif role == "SUPPORTING":
+                    if len(supporting_sources) < 2:
+                        supporting_sources.append(
+                            SupportingSourceCitation(
+                                title=pool_cite.title,
+                                url=c_url,
+                                domain=pool_cite.domain,
+                                source_type=stype,
+                            )
+                        )
 
-            if not finding_citations:
+            # 5. Authority check & Primary Source Resolution (Step 4 & Step 5)
+            # If no primary source was found, but we have an entity match in ENTITY_PRIMARY_SOURCES:
+            if not primary_sources:
+                entity_key = primary_entity.lower().strip()
+                for k, (e_url, e_title) in ENTITY_PRIMARY_SOURCES.items():
+                    if k in entity_key or entity_key in k or k in title.lower():
+                        primary_sources.append(
+                            PrimarySourceCitation(
+                                title=e_title,
+                                url=e_url,
+                                domain=extract_domain(e_url),
+                            )
+                        )
+                        break
+
+            # If still no primary source and no supporting sources: skip invalid candidate
+            if not primary_sources and not supporting_sources:
                 continue
 
-            fp = normalize_topic_fingerprint(title, finding_citations[0].domain)
+            # Build canonical FindingProvenance
+            provenance = FindingProvenance(
+                discovery_signal=discovery_signal,
+                primary_sources=primary_sources,
+                supporting_sources=supporting_sources,
+            )
+
+            # Assemble unified source_citations list with accurate grounding_metadata for backwards compatibility
+            finding_citations: list[SourceCitation] = []
+            for p in primary_sources:
+                finding_citations.append(
+                    SourceCitation(
+                        url=p.url,
+                        title=p.title,
+                        domain=p.domain,
+                        published_at=None,
+                        grounding_metadata={"role": "primary_source", "ecosystem": classify_ecosystem(p.url)},
+                    )
+                )
+            if discovery_signal:
+                finding_citations.append(
+                    SourceCitation(
+                        url=discovery_signal.url,
+                        title=discovery_signal.title,
+                        domain=discovery_signal.domain,
+                        published_at=None,
+                        grounding_metadata={"role": "discovery_signal", "ecosystem": classify_ecosystem(discovery_signal.url)},
+                    )
+                )
+            for s in supporting_sources:
+                finding_citations.append(
+                    SourceCitation(
+                        url=s.url,
+                        title=s.title,
+                        domain=s.domain,
+                        published_at=None,
+                        grounding_metadata={"role": "supporting_source", "ecosystem": classify_ecosystem(s.url)},
+                    )
+                )
+
+            lead_domain = primary_sources[0].domain if primary_sources else (discovery_signal.domain if discovery_signal else supporting_sources[0].domain)
+            fp = normalize_topic_fingerprint(title, lead_domain)
             candidate = ResearchFinding(
                 finding_id=f"fnd_{fp[:12]}_{idx}",
                 run_id=run_id,
@@ -1216,6 +1382,7 @@ class AlexDataScientist:
                 freshness_score=fresh,
                 opportunity_score=opp,
                 source_citations=finding_citations,
+                provenance=provenance,
                 topic_fingerprint=fp,
                 topic_cluster=cluster,
                 primary_entity=primary_entity,

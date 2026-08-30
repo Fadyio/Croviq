@@ -2,7 +2,7 @@ import { ExternalLink, Sparkles, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import React, { useEffect } from "react";
 import type { components } from "../../api/generated";
-
+import { getResolvedProvenance } from "../../lib/provenance";
 type ResearchFinding = components["schemas"]["ResearchFinding"];
 
 interface WorthWatchingFindingsDrawerProps {
@@ -112,33 +112,97 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
                     <span className="text-text-secondary">{finding.why_it_matters}</span>
                   </div>
 
-                  {/* Sources & Citations */}
-                  {finding.source_citations.length > 0 && (
-                    <div className="pt-2 border-t border-border-subtle/60 space-y-1.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                        Verified Sources ({finding.source_citations.length})
-                      </p>
-                      <div className="space-y-1">
-                        {finding.source_citations.map((cite) => (
-                          <a
-                            key={cite.url}
-                            href={cite.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between rounded-lg bg-surface-1 px-2.5 py-1.5 text-xs text-text-secondary hover:bg-surface-3 hover:text-primary transition-colors border border-border-subtle"
-                          >
-                            <span className="truncate max-w-[340px] font-medium">
-                              {cite.title || cite.domain}
-                            </span>
-                            <div className="flex items-center gap-1.5 shrink-0 text-text-muted text-[10px]">
-                              <span>{cite.domain}</span>
-                              <ExternalLink className="h-3 w-3" />
-                            </div>
-                          </a>
-                        ))}
+                  {/* Provenance & Verified Sources */}
+                  {(() => {
+                    const prov = getResolvedProvenance(finding);
+                    const totalCount =
+                      (prov.discovery_signal ? 1 : 0) +
+                      prov.primary_sources.length +
+                      prov.supporting_sources.length;
+                    if (totalCount === 0) return null;
+
+                    return (
+                      <div className="pt-2 border-t border-border-subtle/60 space-y-2.5">
+                        {/* Discovery Signal */}
+                        {prov.discovery_signal && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                              Discovered via {prov.discovery_signal.source_type}
+                            </p>
+                            <a
+                              href={prov.discovery_signal.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-between rounded-lg bg-surface-1 px-2.5 py-1.5 text-xs text-text-secondary hover:bg-surface-3 hover:text-primary transition-colors border border-border-subtle"
+                            >
+                              <span className="truncate max-w-[340px] font-medium">
+                                {prov.discovery_signal.title || prov.discovery_signal.domain}
+                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0 text-text-muted text-[10px]">
+                                <span>{prov.discovery_signal.domain}</span>
+                                <ExternalLink className="h-3 w-3" />
+                              </div>
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Primary Sources */}
+                        {prov.primary_sources.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                              Primary Source {prov.primary_sources.length > 1 ? `(${prov.primary_sources.length})` : ""}
+                            </p>
+                            {prov.primary_sources.map((p) => (
+                              <a
+                                key={p.url}
+                                href={p.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-between rounded-lg bg-surface-1 px-2.5 py-1.5 text-xs text-text-secondary hover:bg-surface-3 hover:text-primary transition-colors border border-border-subtle"
+                              >
+                                <span className="truncate max-w-[340px] font-medium">
+                                  {p.title || p.domain}
+                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0 text-text-muted text-[10px]">
+                                  <span>{p.domain}</span>
+                                  <ExternalLink className="h-3 w-3" />
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Supporting Evidence */}
+                        {prov.supporting_sources.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                              Supporting Evidence {prov.supporting_sources.length > 1 ? `(${prov.supporting_sources.length})` : ""}
+                            </p>
+                            {prov.supporting_sources.map((s) => (
+                              <a
+                                key={s.url}
+                                href={s.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-between rounded-lg bg-surface-1 px-2.5 py-1.5 text-xs text-text-secondary hover:bg-surface-3 hover:text-primary transition-colors border border-border-subtle"
+                              >
+                                <span className="truncate max-w-[340px] font-medium">
+                                  {s.title || s.domain}
+                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0 text-text-muted text-[10px]">
+                                  <span>
+                                    {s.source_type ? `${s.source_type} · ` : ""}
+                                    {s.domain}
+                                  </span>
+                                  <ExternalLink className="h-3 w-3" />
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </article>
               ))}
             </div>

@@ -12,12 +12,15 @@ from croviq_agents.alex import (
 )
 from croviq_domain.channel_intelligence import (
     FindingLifecycle,
+    FindingProvenance,
     ResearchCadence,
     ResearchConfig,
     ResearchFinding,
     ResearchPrompt,
     ResearchRunStatus,
     SourceCitation,
+    classify_url_provenance_role,
+    derive_truthful_provenance_from_citations,
 )
 from croviq_domain.memory import ChannelLesson, TargetAgent
 from croviq_domain.channel_provider import SampleChannelDataProvider
@@ -580,3 +583,208 @@ def test_apply_research_diversity_and_dedup_funnel_stats() -> None:
     assert funnel["low_source_quality_rejected"] == 1
     assert funnel["low_novelty_rejected"] == 3
     assert funnel["final_persisted"] == 2
+
+
+def test_provenance_regression_a_reddit_community_signal() -> None:
+    role, source_type = classify_url_provenance_role(
+        "https://www.reddit.com/r/LocalLLaMA/comments/1vllm_benchmarks",
+        "Speculative Decoding Benchmarks — r/LocalLLaMA",
+    )
+    assert role == "COMMUNITY_SIGNAL"
+    assert source_type == "Reddit"
+
+    citations = [
+        SourceCitation(
+            url="https://github.com/vllm-project/vllm",
+            title="vLLM: Easy, Fast, and Cheap LLM Serving",
+            domain="github.com",
+        ),
+        SourceCitation(
+            url="https://www.reddit.com/r/LocalLLaMA/comments/1vllm_benchmarks",
+            title="Speculative Decoding Benchmarks",
+            domain="reddit.com",
+        ),
+    ]
+    prov = derive_truthful_provenance_from_citations(citations)
+    assert prov.discovery_signal is not None
+    assert prov.discovery_signal.source_type == "Reddit"
+    assert prov.discovery_signal.domain == "reddit.com"
+    assert len(prov.primary_sources) == 1
+    assert prov.primary_sources[0].domain == "github.com"
+
+
+def test_provenance_regression_b_hackernews_community_signal() -> None:
+    role, source_type = classify_url_provenance_role(
+        "https://news.ycombinator.com/item?id=42300010",
+        "Discussion: Production Security for MCP Agent Servers",
+    )
+    assert role == "COMMUNITY_SIGNAL"
+    assert source_type == "Hacker News"
+
+    citations = [
+        SourceCitation(
+            url="https://modelcontextprotocol.io/specification/architecture",
+            title="MCP Architecture Specification",
+            domain="modelcontextprotocol.io",
+        ),
+        SourceCitation(
+            url="https://news.ycombinator.com/item?id=42300010",
+            title="MCP Server Security Discussion",
+            domain="news.ycombinator.com",
+        ),
+    ]
+    prov = derive_truthful_provenance_from_citations(citations)
+    assert prov.discovery_signal is not None
+    assert prov.discovery_signal.source_type == "Hacker News"
+    assert prov.discovery_signal.domain == "news.ycombinator.com"
+    assert len(prov.primary_sources) == 1
+    assert prov.primary_sources[0].domain == "modelcontextprotocol.io"
+
+
+def test_provenance_regression_c_github_primary() -> None:
+    role, source_type = classify_url_provenance_role(
+        "https://github.com/google-github-actions/deploy-cloudrun",
+        "Deploy to Cloud Run GitHub Action",
+    )
+    assert role == "PRIMARY"
+    assert source_type == "GitHub Repository"
+
+    citations = [
+        SourceCitation(
+            url="https://github.com/google-github-actions/deploy-cloudrun",
+            title="Deploy to Cloud Run GitHub Action",
+            domain="github.com",
+        )
+    ]
+    prov = derive_truthful_provenance_from_citations(citations)
+    assert len(prov.primary_sources) == 1
+    assert prov.primary_sources[0].domain == "github.com"
+    assert prov.discovery_signal is None
+
+
+def test_provenance_regression_d_official_docs_primary() -> None:
+    role_spec, type_spec = classify_url_provenance_role(
+        "https://modelcontextprotocol.io/specification/architecture",
+        "Model Context Protocol Specification",
+    )
+    assert role_spec == "PRIMARY"
+    assert type_spec == "Official Specification"
+
+    role_doc, type_doc = classify_url_provenance_role(
+        "https://ai.google.dev/gemini-api/docs/models/gemini",
+        "Gemini Models — Google AI",
+    )
+    assert role_doc == "PRIMARY"
+    assert type_doc == "Official Documentation"
+
+    role_otel, type_otel = classify_url_provenance_role(
+        "https://opentelemetry.io/docs/specs/semconv/gen-ai/",
+        "GenAI Semantic Conventions — OpenTelemetry",
+    )
+    assert role_otel == "PRIMARY"
+    assert type_otel == "Official Specification"
+
+
+def test_provenance_regression_e_random_engineering_blog_not_primary_by_default() -> None:
+    role_particula, type_particula = classify_url_provenance_role(
+        "https://particula.tech/blog/sglang-vs-vllm",
+        "SGLang vs vLLM in 2026: Benchmarks and When to Use Each",
+    )
+    assert role_particula == "SUPPORTING"
+    assert type_particula == "Independent Benchmark"
+
+    role_spheron, type_spheron = classify_url_provenance_role(
+        "https://spheron.network/blog/vllm-vs-sglang-benchmarks",
+        "vLLM vs SGLang Benchmarks: Architecture and Latency",
+    )
+    assert role_spheron == "SUPPORTING"
+    assert type_spheron == "Independent Benchmark"
+
+    role_tds, type_tds = classify_url_provenance_role(
+        "https://towardsdatascience.com/scaling-agentic-tools-with-mcp",
+        "Scaling Complex Agentic Tool Plumbing",
+    )
+    assert role_tds == "SUPPORTING"
+    assert type_tds == "Independent Analysis"
+
+    citations = [
+        SourceCitation(
+            url="https://particula.tech/blog/sglang-vs-vllm",
+            title="SGLang vs vLLM Benchmarks",
+            domain="particula.tech",
+        ),
+        SourceCitation(
+            url="https://spheron.network/blog/vllm-vs-sglang-benchmarks",
+            title="vLLM vs SGLang Benchmarks",
+            domain="spheron.network",
+        ),
+    ]
+    prov = derive_truthful_provenance_from_citations(citations)
+    assert len(prov.primary_sources) == 0
+    assert len(prov.supporting_sources) == 2
+    assert prov.discovery_signal is None
+
+
+def test_provenance_regression_f_search_reddit_without_reddit_url_no_fake_spotted_on_reddit() -> None:
+    # Even if grounding metadata claimed REDDIT ecosystem or discovery signal on a non-reddit domain:
+    citations = [
+        SourceCitation(
+            url="https://particula.tech/blog/sglang-vs-vllm",
+            title="SGLang vs vLLM: RadixAttention Benchmarks",
+            domain="particula.tech",
+            grounding_metadata={"role": "primary_source", "ecosystem": "REDDIT"},
+        ),
+        SourceCitation(
+            url="https://spheron.network/blog/vllm-vs-sglang-benchmarks",
+            title="vLLM vs SGLang Benchmarks",
+            domain="spheron.network",
+            grounding_metadata={"role": "discovery_signal", "ecosystem": "GENERAL_WEB"},
+        ),
+    ]
+    prov = derive_truthful_provenance_from_citations(citations)
+    # Because neither particula.tech nor spheron.network is reddit.com, discovery_signal MUST be None!
+    assert prov.discovery_signal is None
+    assert len(prov.primary_sources) == 0
+    assert len(prov.supporting_sources) == 2
+
+
+def test_provenance_regression_g_legacy_findings_degrade_truthfully() -> None:
+    now = datetime.now(UTC)
+    # Legacy finding created without explicit `provenance`
+    legacy_finding = ResearchFinding(
+        finding_id="fnd_legacy_01",
+        run_id="run_legacy",
+        channel_id="croviq_syn_ai_eng_01",
+        category="Foundation Models",
+        title="SGLang vs vLLM: RadixAttention Benchmarks",
+        summary="Benchmarking inference frameworks",
+        why_it_matters="Channel audience comparison deep-dive",
+        relevance_score=0.92,
+        freshness_score=0.90,
+        opportunity_score=0.91,
+        source_citations=[
+            SourceCitation(
+                url="https://particula.tech/blog/sglang-vs-vllm",
+                title="SGLang vs vLLM",
+                domain="particula.tech",
+                grounding_metadata={"role": "primary_source", "ecosystem": "REDDIT"},
+            ),
+            SourceCitation(
+                url="https://github.com/sgl-project/sglang",
+                title="SGLang GitHub Repository",
+                domain="github.com",
+                grounding_metadata={"role": "primary_source", "ecosystem": "GITHUB"},
+            ),
+        ],
+        topic_fingerprint="fp_legacy_01",
+        discovered_at=now,
+    )
+    assert legacy_finding.provenance is not None
+    # The GitHub repo is correctly classified as primary
+    assert len(legacy_finding.provenance.primary_sources) == 1
+    assert legacy_finding.provenance.primary_sources[0].domain == "github.com"
+    # The particula.tech blog is correctly demoted to supporting
+    assert len(legacy_finding.provenance.supporting_sources) == 1
+    assert legacy_finding.provenance.supporting_sources[0].domain == "particula.tech"
+    # No fake Reddit discovery signal is fabricated
+    assert legacy_finding.provenance.discovery_signal is None
