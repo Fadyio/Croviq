@@ -81,7 +81,6 @@ const formatDeltaPoints = (
     isNeutral: false,
   };
 };
-
 export const OverviewView: React.FC<OverviewViewProps> = ({
   dashboard,
   onNavigateToExperiments: _onNavigateToExperiments,
@@ -100,10 +99,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               average_retention: dashboard.latest_video.retention_percentage,
               retention_delta_points: dashboard.latest_video.retention_delta_points,
               ctr_percentage: dashboard.latest_video.ctr,
-              ctr_delta_points:
-                dashboard.latest_video.ctr != null && dashboard.latest_video.median_ctr != null
-                  ? dashboard.latest_video.ctr - dashboard.latest_video.median_ctr
-                  : null,
+              ctr_delta_points: null,
               subscribers_gained: dashboard.latest_video.subscribers_gained,
               subscribers_lost: dashboard.latest_video.subscribers_lost ?? 0,
               net_subscribers: dashboard.latest_video.net_subscribers,
@@ -111,20 +107,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               subs_per_1k_delta_percentage:
                 dashboard.latest_video.subscriber_conversion_delta_percentage,
               is_latest: true,
-              alex_interpretation:
-                dashboard.latest_video.retention_delta_points != null &&
-                dashboard.latest_video.retention_delta_points <= -10
-                  ? `Retention is the main weakness here. The video is ${Math.abs(
-                      dashboard.latest_video.retention_delta_points,
-                    ).toFixed(
-                      1,
-                    )} points below your channel median despite normal subscriber conversion.`
-                  : null,
-              alex_next_action:
-                dashboard.latest_video.retention_delta_points != null &&
-                dashboard.latest_video.retention_delta_points <= -10
-                  ? "Inspect the first 30 seconds for delayed demonstration or setup."
-                  : null,
+              alex_interpretation: null,
+              alex_next_action: null,
             },
           ]
         : [];
@@ -165,8 +149,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </div>
             <span className="text-[11px] text-text-muted">
               {dashboard.channel_baselines?.sample_size
-                ? `Catalog median baseline (${dashboard.channel_baselines.sample_size} videos)`
-                : "Channel median baseline"}
+                ? `Compared with your channel's historical median (${dashboard.channel_baselines.sample_size} videos)`
+                : "Compared with your channel's historical median"}
             </span>
           </div>
 

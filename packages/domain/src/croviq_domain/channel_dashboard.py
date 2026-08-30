@@ -183,6 +183,87 @@ def _pearson(xs: list[float], ys: list[float]) -> float:
     )
     return numerator / denominator if denominator else 0
 
+def generate_grounded_video_analysis(
+    *,
+    views: int,
+    views_delta_pct: float | None,
+    ret: float,
+    ret_delta_pts: float | None,
+    ctr: float | None,
+    ctr_delta_pts: float | None,
+    subs_per_1k: float | None,
+    subs_1k_delta_pct: float | None,
+    sample_size: int,
+) -> tuple[str, str]:
+    """Generate truthful, evidence-backed Alex commentary and next action for a video."""
+    # Case D: Zero / Undefined comparison baseline
+    if sample_size <= 1 or views_delta_pct is None or ret_delta_pts is None:
+        return (
+            "Catalog baseline is insufficient for comparative performance analysis.",
+            "Publish additional uploads to establish statistically reliable channel medians.",
+        )
+
+    # Case A: Poor retention is the primary weakness (retention down >= 5.0 percentage points)
+    if ret_delta_pts <= -5.0:
+        interp = (
+            f"Retention is the main weakness here. The video is "
+            f"{abs(ret_delta_pts):.1f} points below your channel median."
+        )
+        action = "Inspect the first 30 seconds for delayed demonstration or setup."
+        return interp, action
+
+    # Case B: Strong retention + Weak views/CTR (Content quality strong, distribution bottleneck)
+    if ret_delta_pts >= 0.0 and (
+        (views_delta_pct is not None and views_delta_pct <= -15.0)
+        or (ctr_delta_pts is not None and ctr_delta_pts <= -1.5)
+    ):
+        if ctr_delta_pts is not None and ctr_delta_pts <= -1.5:
+            interp = (
+                f"Viewer engagement is strong with retention {ret_delta_pts:+.1f} pts vs median, "
+                f"but packaging is limiting reach with CTR {ctr_delta_pts:+.1f} pts vs median."
+            )
+            action = "Test alternative thumbnail compositions and high-contrast title variations to match packaging to content quality."
+        else:
+            interp = (
+                f"Content retention is strong ({ret_delta_pts:+.1f} pts vs median), "
+                f"but initial distribution is constrained (views {views_delta_pct:+.1f}% vs median)."
+            )
+            action = "Refine packaging and title hooks on upcoming uploads to improve initial discovery for high-retention formats."
+        return interp, action
+
+    # CTR Bottleneck (when retention is not severely negative)
+    if ctr_delta_pts is not None and ctr_delta_pts <= -2.0:
+        interp = (
+            f"Click-through rate is the main bottleneck. Thumbnail CTR is "
+            f"{abs(ctr_delta_pts):.1f} points below your channel median."
+        )
+        action = "Test high-contrast thumbnail framing and clearer value propositions in title packaging."
+        return interp, action
+
+    # Subscriber conversion bottleneck
+    if subs_1k_delta_pct is not None and subs_1k_delta_pct <= -25.0:
+        interp = (
+            f"Subscriber conversion is lagging at {abs(subs_1k_delta_pct):.1f}% below channel median "
+            f"despite baseline viewership."
+        )
+        action = "Clarify channel value proposition and integrate a context-aligned call-to-subscribe after delivering the core takeaway."
+        return interp, action
+
+    # Strong top-of-funnel momentum
+    if views_delta_pct >= 20.0 and ret_delta_pts >= -3.0:
+        interp = f"Strong top-of-funnel momentum with views {views_delta_pct:+.1f}% vs channel median."
+        action = "Evaluate audience retention curve to optimize long-tail engagement."
+        return interp, action
+
+    # Aligned with channel median
+    if ctr is not None:
+        interp = "Performance across views, retention, and thumbnail CTR aligns closely with your channel median."
+    else:
+        interp = "Performance across views, retention, and subscriber conversion aligns closely with your channel median."
+    action = "Maintain format consistency and pacing across upcoming uploads."
+    return interp, action
+
+
 def compute_latest_video_analysis(
     channel_id: str,
     videos: list[Any],
@@ -230,7 +311,6 @@ def compute_latest_video_analysis(
     latest = videos_by_publish_date[-1]
     latest_v_id = getattr(latest, "video_id", "vid_latest")
     baseline_videos = [v for v in videos_by_publish_date if getattr(v, "video_id", None) != latest_v_id] or [latest]
-
     latest_views = int(getattr(getattr(latest, "analytics", None), "views", 0))
     latest_retention = float(getattr(getattr(latest, "analytics", None), "avg_view_percentage", 0.0))
     latest_ctr = getattr(getattr(latest, "analytics", None), "ctr_percentage", None)
@@ -387,28 +467,17 @@ def compute_recent_video_performance(
         alex_interp: str | None = None
         alex_action: str | None = None
         if is_latest:
-            if ret_delta_pts is not None and ret_delta_pts <= -10.0:
-                alex_interp = (
-                    f"Retention is the main weakness here. The video is "
-                    f"{abs(ret_delta_pts):.1f} points below your channel median despite normal subscriber conversion."
-                )
-                alex_action = "Inspect the first 30 seconds for delayed demonstration or setup."
-            elif ctr_delta_pts is not None and ctr_delta_pts <= -2.0:
-                alex_interp = (
-                    f"Click-through rate is the main bottleneck. Thumbnail CTR is "
-                    f"{abs(ctr_delta_pts):.1f} points below your channel median."
-                )
-                alex_action = "Test alternative thumbnail compositions and high-contrast typography."
-            elif views_delta_pct is not None and views_delta_pct >= 20.0:
-                alex_interp = (
-                    f"Strong top-of-funnel momentum. Views are "
-                    f"{views_delta_pct:+.1f}% vs channel median."
-                )
-                alex_action = "Evaluate audience retention curve to optimize long-tail engagement."
-            else:
-                alex_interp = "Performance across views, retention, and conversion aligns closely with your channel median."
-                alex_action = "Maintain format consistency for upcoming uploads."
-
+            alex_interp, alex_action = generate_grounded_video_analysis(
+                views=views,
+                views_delta_pct=views_delta_pct,
+                ret=ret,
+                ret_delta_pts=ret_delta_pts,
+                ctr=ctr,
+                ctr_delta_pts=ctr_delta_pts,
+                subs_per_1k=subs_per_1k,
+                subs_1k_delta_pct=subs_1k_delta_pct,
+                sample_size=baselines.sample_size,
+            )
         recent_list.append(
             RecentVideoPerformance(
                 video_id=v_id,

@@ -180,6 +180,7 @@ from croviq_domain.channel_dashboard import (
     VideoPerformancePoint,
     compute_latest_video_analysis,
     compute_recent_video_performance,
+    generate_grounded_video_analysis,
 )
 
 __all__ = [
@@ -194,6 +195,7 @@ __all__ = [
     "VideoPerformancePoint",
     "compute_latest_video_analysis",
     "compute_recent_video_performance",
+    "generate_grounded_video_analysis",
     "ChannelExperiment",
     "ChannelInsight",
     "EvidenceKind",

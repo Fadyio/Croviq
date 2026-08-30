@@ -363,3 +363,156 @@ def test_latest_video_analysis_direct_instantiation_with_none_deltas() -> None:
     assert dumped["subscriber_conversion_delta_percentage"] is None
     assert dumped["retention_delta_points"] is None
     assert dumped["views"] == 4500
+def test_bug11_grounded_video_analysis_cases_a_through_f() -> None:
+    from datetime import datetime, UTC
+    from croviq_domain.channel import ChannelVideo, VideoPublicMetadata, VideoPrivateAnalytics, DerivedVideoFeatures, ContentPillar, VideoFormat, TitleStyle
+    from croviq_domain.channel_dashboard import (
+        generate_grounded_video_analysis,
+        compute_recent_video_performance,
+    )
+
+    # CASE A: poor retention + normal CTR
+    interp_a, action_a = generate_grounded_video_analysis(
+        views=23314,
+        views_delta_pct=-21.7,
+        ret=33.4,
+        ret_delta_pts=-25.6,
+        ctr=7.5,
+        ctr_delta_pts=-0.3,
+        subs_per_1k=14.3,
+        subs_1k_delta_pct=-2.4,
+        sample_size=100,
+    )
+    assert "Retention is the main weakness here" in interp_a or "Retention is the primary weakness" in interp_a
+    assert "25.6 points below your channel median" in interp_a
+    assert "Inspect the first 30 seconds" in action_a
+
+    # CASE B: strong retention + weak views
+    interp_b, action_b = generate_grounded_video_analysis(
+        views=18000,
+        views_delta_pct=-39.5,
+        ret=65.2,
+        ret_delta_pts=6.2,
+        ctr=4.2,
+        ctr_delta_pts=-3.6,
+        subs_per_1k=15.0,
+        subs_1k_delta_pct=2.1,
+        sample_size=100,
+    )
+    assert "Viewer engagement is strong" in interp_b or "Content retention is strong" in interp_b
+    assert "+6.2 pts" in interp_b
+    assert "packaging" in interp_b or "distribution" in interp_b
+    assert "thumbnail" in action_b or "packaging" in action_b
+
+    # CASE C: missing CTR
+    interp_c, action_c = generate_grounded_video_analysis(
+        views=30000,
+        views_delta_pct=0.8,
+        ret=59.0,
+        ret_delta_pts=0.0,
+        ctr=None,
+        ctr_delta_pts=None,
+        subs_per_1k=14.7,
+        subs_1k_delta_pct=0.1,
+        sample_size=100,
+    )
+    # Must NOT diagnose or mention CTR in commentary
+    assert "CTR" not in interp_c
+    assert "Click-through" not in interp_c
+    assert "Performance across views, retention, and subscriber conversion aligns closely" in interp_c
+
+    # CASE D: zero/undefined comparison baseline
+    interp_d, action_d = generate_grounded_video_analysis(
+        views=2500,
+        views_delta_pct=None,
+        ret=45.0,
+        ret_delta_pts=None,
+        ctr=None,
+        ctr_delta_pts=None,
+        subs_per_1k=6.0,
+        subs_1k_delta_pct=None,
+        sample_size=1,
+    )
+    assert "Catalog baseline is insufficient" in interp_d
+    assert "Publish additional uploads" in action_d
+
+    # Helper to construct minimal test video
+    def make_test_video(vid_id: str, title: str, pub_date: datetime, views: int, ret: float, ctr: float | None = None) -> ChannelVideo:
+        return ChannelVideo(
+            video_id=vid_id,
+            public=VideoPublicMetadata(
+                video_id=vid_id,
+                title=title,
+                description="",
+                tags=[],
+                duration_seconds=300,
+                published_at=pub_date,
+                view_count=views,
+                like_count=10,
+                comment_count=1,
+                thumbnail_url="",
+                category_id="28",
+            ),
+            analytics=VideoPrivateAnalytics(
+                views=views,
+                watch_time_minutes=views * 2.0,
+                avg_view_duration_seconds=120.0,
+                avg_view_percentage=ret,
+                subscribers_gained=int(views * 0.01),
+                subscribers_lost=0,
+                likes=10,
+                comments=1,
+                shares=0,
+                impressions=None,
+                ctr_percentage=ctr,
+                estimated_revenue_usd=None,
+                retention_curve=[],
+                traffic_sources=[],
+                geography=[],
+                device_types=[],
+            ),
+            derived=DerivedVideoFeatures(
+                content_pillar=ContentPillar.EMERGING_AI,
+                video_format=VideoFormat.TUTORIAL,
+                title_style=TitleStyle.OUTCOME_FOCUSED,
+                topic_cluster="ai",
+                is_time_sensitive_topic=False,
+            ),
+        )
+
+    vid1 = make_test_video("vid_oldest", "Oldest", datetime(2026, 1, 1, tzinfo=UTC), 10000, 50.0, 5.0)
+    vid2 = make_test_video("vid_middle", "Middle", datetime(2026, 2, 1, tzinfo=UTC), 20000, 60.0, 8.0)
+    vid3 = make_test_video("vid_newest", "Newest", datetime(2026, 3, 1, tzinfo=UTC), 5000, 20.0, 4.0)
+
+    # CASE E: latest video ordering
+    recents, baselines = compute_recent_video_performance([vid1, vid2, vid3])
+    assert len(recents) == 3
+    # Ordered descending: newest first
+    assert recents[0].video_id == "vid_newest"
+    assert recents[0].is_latest is True
+    assert recents[1].video_id == "vid_middle"
+    assert recents[1].is_latest is False
+    assert recents[2].video_id == "vid_oldest"
+    assert recents[2].is_latest is False
+
+    # CASE F: two videos with different metrics cannot accidentally share analysis
+    # vid_newest has poor retention (20% vs median 50% = -30 pts) -> diagnoses retention
+    assert recents[0].alex_interpretation is not None
+    assert "Retention is the main weakness" in recents[0].alex_interpretation
+
+    # Directly analyze vid2 (strong retention 60% vs median 50%, high views)
+    interp_vid2, action_vid2 = generate_grounded_video_analysis(
+        views=20000,
+        views_delta_pct=100.0,
+        ret=60.0,
+        ret_delta_pts=10.0,
+        ctr=8.0,
+        ctr_delta_pts=3.0,
+        subs_per_1k=10.0,
+        subs_1k_delta_pct=0.0,
+        sample_size=3,
+    )
+    # vid2 recommendation must NOT be about poor retention
+    assert "Retention is the main weakness" not in interp_vid2
+    assert "top-of-funnel" in interp_vid2
+    assert action_vid2 != recents[0].alex_next_action
