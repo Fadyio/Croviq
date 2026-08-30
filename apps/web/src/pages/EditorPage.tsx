@@ -32,13 +32,18 @@ import {
 import { VideoStage } from "../components/editor/VideoStage";
 import {
   type AgentActivity,
+  type ApiMediaOutputState,
+  apiMediaOutputToState,
+  type CanonicalMediaOutputs,
   type CorrectedTranscript,
   type CoverageMarker,
+  createInitialMediaOutputs,
   deriveKeepSegments,
   type EditDecisionList,
   type EditorDecision,
   type EditorProposal,
   edlToTwickTimeline,
+  type MediaOutputState,
   type TimelineBlock,
   type TimelineTrackId,
   type Transcript,
@@ -88,6 +93,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [studioVoicePreviewUrl, setStudioVoicePreviewUrl] = useState<string | null>(null);
   const [masterUrl, setMasterUrl] = useState<string | null>(null);
   const [finalMixUrl, setFinalMixUrl] = useState<string | null>(null);
+  const [mediaOutputs, setMediaOutputs] = useState<CanonicalMediaOutputs>(createInitialMediaOutputs);
 
   const [previewArtifact, setPreviewArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
@@ -119,7 +125,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [previewMode, setPreviewMode] = useState<PreviewMode>("edited");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("final_mix");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<TimelineBlock | null>(null);
 
@@ -174,10 +180,13 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     ] = await Promise.all([
       productionResponse.json() as Promise<Production>,
       playbackResponse
-        ? readOptionalJson<components["schemas"]["ProductionPlaybackResponse"]>(
-            playbackResponse,
-            "Playback",
-          )
+        ? readOptionalJson<components["schemas"]["ProductionPlaybackResponse"] & {
+            original?: ApiMediaOutputState;
+            edited?: ApiMediaOutputState;
+            voiceover?: ApiMediaOutputState;
+            final_mix?: ApiMediaOutputState;
+            final_mix_url?: string | null;
+          }>(playbackResponse, "Playback")
         : Promise.resolve(null),
       readOptionalJson<Transcript>(transcriptResponse, "Transcript"),
       readOptionalJson<EditorialRunDetail>(runResponse, "Editorial run"),
@@ -189,57 +198,188 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         ? readOptionalJson<components["schemas"]["BRollListResponse"]>(brollResponse, "BRoll")
         : Promise.resolve(null),
       correctedScriptResponse
-        ? readOptionalJson<any>(correctedScriptResponse, "Corrected Script")
+        ? readOptionalJson<components["schemas"]["CorrectedScriptResponse"]>(
+            correctedScriptResponse,
+            "Corrected Script",
+          )
         : Promise.resolve(null),
     ]);
+    let actualEdl: EditDecisionList | null = null;
+    if (edlPayload && typeof edlPayload === "object") {
+      if ("edl" in edlPayload && edlPayload.edl) {
+        actualEdl = edlPayload.edl as EditDecisionList;
+      } else if ("edl_id" in edlPayload) {
+        actualEdl = edlPayload as EditDecisionList;
+      }
+    }
+    const activeEdlId = actualEdl?.edl_id ?? null;
+
+    // Filter renders matching the active EDL lineage
+    const activeRenders = (rendersPayload?.renders || []).filter(
+      (r: components["schemas"]["RenderArtifactResponse"]) =>
+        !activeEdlId || r.edl_id === activeEdlId,
+    );
+
     const preview =
-      rendersPayload?.renders?.find(
+      activeRenders.find(
         (render: components["schemas"]["RenderArtifactResponse"]) =>
           render.artifact_type === "PREVIEW",
       ) ?? null;
     const master =
-      rendersPayload?.renders?.find(
+      activeRenders.find(
         (render: components["schemas"]["RenderArtifactResponse"]) =>
           (render.artifact_type as string) === "MASTER",
       ) ?? null;
     const svPreview =
-      rendersPayload?.renders?.find(
+      activeRenders.find(
         (render: components["schemas"]["RenderArtifactResponse"]) =>
           (render.artifact_type as string) === "STUDIO_VOICE_PREVIEW" ||
           (render.artifact_type as string) === "VOICEOVER_PREVIEW",
       ) ?? null;
     const finalMix =
-      rendersPayload?.renders?.find(
+      activeRenders.find(
         (render: components["schemas"]["RenderArtifactResponse"]) =>
           (render.artifact_type as string) === "FINAL_MIX",
       ) ?? null;
+
+    const apiOriginal = apiMediaOutputToState(playbackPayload?.original);
+    const apiEdited = apiMediaOutputToState(playbackPayload?.edited);
+    const apiVoiceover = apiMediaOutputToState(playbackPayload?.voiceover);
+    const apiFinalMix = apiMediaOutputToState(playbackPayload?.final_mix);
+
+    const originalOutput: MediaOutputState = apiOriginal?.available
+      ? apiOriginal
+      : {
+          available: Boolean(
+            productionPayload.source_media?.status === "uploaded" &&
+              (apiOriginal?.url || playbackPayload?.playback_url),
+          ),
+          artifactId: productionPayload.source_media?.upload_id || null,
+          edlId: null,
+          url: apiOriginal?.url || playbackPayload?.playback_url || null,
+          durationMs:
+            apiOriginal?.durationMs ||
+            transcriptPayload?.duration_ms ||
+            actualEdl?.source_duration_ms ||
+            0,
+          status: apiOriginal?.status || (playbackPayload?.playback_url ? "ready" : "unavailable"),
+        };
+
+    const editedOutput: MediaOutputState = apiEdited?.available && apiEdited.url
+      ? apiEdited
+      : preview && preview.status === "completed" && preview.playback_url
+        ? {
+            available: true,
+            artifactId: preview.artifact_id,
+            edlId: preview.edl_id,
+            url: preview.playback_url || null,
+            durationMs: preview.duration_ms || 0,
+            status: "ready",
+          }
+        : {
+            available: false,
+            artifactId: preview?.artifact_id || apiEdited?.artifactId || null,
+            edlId: preview?.edl_id || apiEdited?.edlId || activeEdlId,
+            url: null,
+            durationMs: 0,
+            status: (preview?.status === "rendering" || preview?.status === "pending" || apiEdited?.status === "generating")
+              ? "generating"
+              : (preview?.status === "failed" || apiEdited?.status === "failed")
+                ? "failed"
+                : "unavailable",
+          };
+
+    const voiceoverOutput: MediaOutputState = apiVoiceover?.available && apiVoiceover.url
+      ? apiVoiceover
+      : svPreview && svPreview.status === "completed" && svPreview.playback_url
+        ? {
+            available: true,
+            artifactId: svPreview.artifact_id,
+            edlId: svPreview.edl_id,
+            url: svPreview.playback_url || null,
+            durationMs: svPreview.duration_ms || 0,
+            status: "ready",
+          }
+        : {
+            available: false,
+            artifactId: svPreview?.artifact_id || apiVoiceover?.artifactId || null,
+            edlId: svPreview?.edl_id || apiVoiceover?.edlId || activeEdlId,
+            url: null,
+            durationMs: 0,
+            status: (svPreview?.status === "rendering" || svPreview?.status === "pending" || apiVoiceover?.status === "generating")
+              ? "generating"
+              : (svPreview?.status === "failed" || apiVoiceover?.status === "failed")
+                ? "failed"
+                : "unavailable",
+          };
+
+    const finalMixOutput: MediaOutputState = apiFinalMix?.available && apiFinalMix.url
+      ? apiFinalMix
+      : finalMix && finalMix.status === "completed" && finalMix.playback_url
+        ? {
+            available: true,
+            artifactId: finalMix.artifact_id,
+            edlId: finalMix.edl_id,
+            url: finalMix.playback_url || null,
+            durationMs: finalMix.duration_ms || 0,
+            status: "ready",
+          }
+        : {
+            available: false,
+            artifactId: finalMix?.artifact_id || apiFinalMix?.artifactId || null,
+            edlId: finalMix?.edl_id || apiFinalMix?.edlId || activeEdlId,
+            url: null,
+            durationMs: 0,
+            status: (finalMix?.status === "rendering" || finalMix?.status === "pending" || apiFinalMix?.status === "generating")
+              ? "generating"
+              : (finalMix?.status === "failed" || apiFinalMix?.status === "failed")
+                ? "failed"
+                : "unavailable",
+          };
+
+    const canonicalOutputs: CanonicalMediaOutputs = {
+      original: originalOutput,
+      edited: editedOutput,
+      voiceover: voiceoverOutput,
+      final_mix: finalMixOutput,
+    };
+    setMediaOutputs(canonicalOutputs);
+
+    // Explicit fallback to highest valid artifact
+    setPreviewMode((prevMode) => {
+      if (prevMode === "final_mix" && canonicalOutputs.final_mix.available) return "final_mix";
+      if (prevMode === "studio_voice" && canonicalOutputs.voiceover.available) return "studio_voice";
+      if (prevMode === "edited" && canonicalOutputs.edited.available) return "edited";
+      if (prevMode === "original" && canonicalOutputs.original.available) return "original";
+
+      if (canonicalOutputs.final_mix.available) return "final_mix";
+      if (canonicalOutputs.voiceover.available) return "studio_voice";
+      if (canonicalOutputs.edited.available) return "edited";
+      return "original";
+    });
+
     setProduction(productionPayload);
-    setPlaybackUrl(playbackPayload?.playback_url ?? null);
-    setRenderedPreviewUrl(preview?.playback_url ?? playbackPayload?.rendered_preview_url ?? null);
-    setStudioVoicePreviewUrl(
-      svPreview?.playback_url ?? playbackPayload?.studio_voice_preview_url ?? null,
-    );
+    setPlaybackUrl(originalOutput.url);
+    setRenderedPreviewUrl(editedOutput.url);
+    setStudioVoicePreviewUrl(voiceoverOutput.url);
     setMasterUrl(master?.playback_url ?? playbackPayload?.master_url ?? null);
-    setFinalMixUrl(finalMix?.playback_url ?? null);
+    setFinalMixUrl(finalMixOutput.url);
 
     setPreviewArtifact(preview);
     setMasterArtifact(master);
     setStudioVoiceArtifact(svPreview);
     setFinalMixArtifact(finalMix);
     if (correctedScriptPayload?.corrected_transcript) {
-      setCorrectedTranscript(correctedScriptPayload.corrected_transcript);
+      setCorrectedTranscript(correctedScriptPayload.corrected_transcript as unknown as CorrectedTranscript);
     }
     if (brollPayload?.artifacts) {
       setBrollArtifacts(brollPayload.artifacts);
     }
 
-    const actualEdl: EditDecisionList | null = (edlPayload as any)?.edl
-      ? (edlPayload as any).edl
-      : edlPayload;
     setTranscript(transcriptPayload);
     setEdl(actualEdl);
 
-    const initialDur = actualEdl?.source_duration_ms || transcriptPayload?.duration_ms || 0;
+    const initialDur = actualEdl?.source_duration_ms || transcriptPayload?.duration_ms || originalOutput.durationMs || 0;
     if (initialDur > 0) {
       setDurationMs(initialDur);
     }
@@ -249,7 +389,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       setActivities(runPayload.activities as AgentActivity[]);
       setEditorialRun(runPayload.run ?? null);
     }
-
     return {
       productionRun: {
         uploaded: productionPayload.source_media?.status === "uploaded",
@@ -357,6 +496,32 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
   useEffect(() => {
     let isMounted = true;
+    // Strict project isolation: reset previous production state immediately
+    setProduction(null);
+    setPlaybackUrl(null);
+    setRenderedPreviewUrl(null);
+    setStudioVoicePreviewUrl(null);
+    setMasterUrl(null);
+    setFinalMixUrl(null);
+    setMediaOutputs(createInitialMediaOutputs());
+    setPreviewArtifact(null);
+    setMasterArtifact(null);
+    setStudioVoiceArtifact(null);
+    setFinalMixArtifact(null);
+    setTranscript(null);
+    setProposal(null);
+    setActivities([]);
+    setBrollArtifacts([]);
+    setEditorialRun(null);
+    setEdl(null);
+    setSelectedDecisionId(null);
+    setSelectedBlock(null);
+    setCurrentTimeMs(0);
+    setIsPlaying(false);
+    setPreviewMode("final_mix");
+    setErrorMessage(null);
+    setIsLoading(true);
+
     const init = async () => {
       try {
         const loaded = await loadPersistedData();
@@ -684,10 +849,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             mode={previewMode}
             onModeChange={setPreviewMode}
             activeCutCount={twickData.activeCutCount}
-            hasStudioVoice={Boolean(
-              studioVoicePreviewUrl && studioVoiceArtifact?.status === "completed",
-            )}
-            hasFinalMix={Boolean(finalMixUrl && finalMixArtifact?.status === "completed")}
+            mediaOutputs={mediaOutputs}
+            hasStudioVoice={mediaOutputs.voiceover.available}
+            hasFinalMix={mediaOutputs.final_mix.available}
+            hasRenderedPreview={mediaOutputs.edited.available}
           />
           {editorialRun?.status !== "failed" &&
             !failedProcessingStage &&
@@ -731,24 +896,21 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           currentMode={previewMode}
           sourceDurationMs={durationMs}
           editedDurationMs={derivedEditedDurationMs}
-          studioVoiceDurationMs={studioVoiceArtifact?.duration_ms}
-          finalMixDurationMs={finalMixArtifact?.duration_ms}
-          hasRenderedPreview={Boolean(
-            renderedPreviewUrl && previewArtifact?.status === "completed",
-          )}
+          studioVoiceDurationMs={mediaOutputs.voiceover.durationMs || studioVoiceArtifact?.duration_ms}
+          finalMixDurationMs={mediaOutputs.final_mix.durationMs || finalMixArtifact?.duration_ms}
+          hasRenderedPreview={mediaOutputs.edited.available}
           hasMaster={Boolean(
             (masterArtifact?.playback_url || masterUrl) && masterArtifact?.status === "completed",
           )}
-          hasStudioVoice={Boolean(
-            studioVoicePreviewUrl && studioVoiceArtifact?.status === "completed",
-          )}
-          hasFinalMix={Boolean(finalMixUrl && finalMixArtifact?.status === "completed")}
+          hasStudioVoice={mediaOutputs.voiceover.available}
+          hasFinalMix={mediaOutputs.final_mix.available}
           hasProposalOrEdl={Boolean(
             (proposal?.decisions && proposal.decisions.length > 0) ||
             (edl?.cuts && edl.cuts.length > 0),
           )}
           isRunFailed={Boolean(editorialRun?.status === "failed" || failedProcessingStage !== null)}
           brollAssets={brollBinItems}
+          mediaOutputs={mediaOutputs}
           onSelectMode={setPreviewMode}
           onSeek={handleSeek}
           className="w-48 shrink-0"
@@ -761,11 +923,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             renderedPreviewUrl={renderedPreviewUrl}
             studioVoicePreviewUrl={studioVoicePreviewUrl}
             finalMixUrl={finalMixUrl}
+            mediaOutputs={mediaOutputs}
             currentTimeMs={currentTimeMs}
             durationMs={durationMs}
             editedDurationMs={derivedEditedDurationMs}
-            studioVoiceDurationMs={studioVoiceArtifact?.duration_ms}
-            finalMixDurationMs={finalMixArtifact?.duration_ms}
+            studioVoiceDurationMs={mediaOutputs.voiceover.durationMs || studioVoiceArtifact?.duration_ms}
+            finalMixDurationMs={mediaOutputs.final_mix.durationMs || finalMixArtifact?.duration_ms}
             isPlaying={isPlaying}
             previewMode={previewMode}
             edl={edl}
@@ -909,6 +1072,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                 selectedDecisionId={selectedDecisionId}
                 onSelectDecision={handleSelectDecision}
                 onSeek={handleSeek}
+                onModeChange={setPreviewMode}
                 onRangeSelect={(selection) => handleTranscriptRange(selection)}
                 onSendRangeToChat={(selection) => handleTranscriptRange(selection, true)}
                 className="h-full"

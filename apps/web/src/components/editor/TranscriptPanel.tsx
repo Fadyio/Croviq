@@ -4,7 +4,10 @@ import {
   type CorrectedTranscript,
   type EditDecisionList,
   type EditorDecision,
+  formatCutLabel,
   formatTimecode,
+  getExecutableCuts,
+  isWordInExecutableCut,
   sourceToEditedTimeMs,
   type Transcript,
   type TranscriptSegment,
@@ -18,6 +21,12 @@ export interface TranscriptRangeSelection {
   endMs: number;
 }
 
+interface RemovedWordNotice {
+  wordText: string;
+  startMs: number;
+  reason?: string;
+}
+
 interface TranscriptPanelProps {
   transcript: Transcript | null;
   correctedTranscript?: CorrectedTranscript | null;
@@ -28,6 +37,7 @@ interface TranscriptPanelProps {
   selectedDecisionId: string | null;
   onSelectDecision: (decision: EditorDecision | null) => void;
   onSeek: (targetMs: number) => void;
+  onModeChange?: (mode: PreviewMode) => void;
   onRangeSelect?: (selection: TranscriptRangeSelection) => void;
   onSendRangeToChat?: (selection: TranscriptRangeSelection) => void;
   className?: string;
@@ -72,6 +82,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   selectedDecisionId,
   onSelectDecision,
   onSeek,
+  onModeChange,
   onRangeSelect,
   onSendRangeToChat,
   className = "",
@@ -81,17 +92,24 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   const manualScrollUntilRef = useRef(0);
   const programmaticScrollRef = useRef(false);
   const [selectedRange, setSelectedRange] = useState<TranscriptRangeSelection | null>(null);
+  const [removedWordNotice, setRemovedWordNotice] = useState<RemovedWordNotice | null>(null);
   const [transcriptViewMode, setTranscriptViewMode] = useState<"original" | "corrected">(
     "original",
   );
 
   const activeWordIndex = useMemo(() => {
-    if (!transcript?.words) return -1;
-    return (
-      transcript.words.find(
-        (word) => currentTimeMs >= word.start_ms && currentTimeMs <= word.end_ms,
-      )?.index ?? -1
+    if (!transcript?.words || transcript.words.length === 0) return -1;
+    const exact = transcript.words.find(
+      (word) => currentTimeMs >= word.start_ms && currentTimeMs <= word.end_ms,
     );
+    if (exact) return exact.index;
+
+    // Nearest prior word within 400ms tolerance
+    const prevWord = [...transcript.words].reverse().find((w) => w.start_ms <= currentTimeMs);
+    if (prevWord && currentTimeMs <= prevWord.end_ms + 400) {
+      return prevWord.index;
+    }
+    return -1;
   }, [currentTimeMs, transcript?.words]);
 
   const transcriptSegments = useMemo<TranscriptSegment[]>(() => {
@@ -110,6 +128,8 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
       },
     ];
   }, [transcript]);
+
+  const executableCuts = useMemo(() => getExecutableCuts(edl), [edl]);
 
   const formatModeTimecode = (sourceMs: number): string =>
     formatTimecode(mode === "original" ? sourceMs : sourceToEditedTimeMs(sourceMs, edl));
@@ -173,6 +193,45 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
           {mode === "original" ? "Source time" : "Edited time"}
         </span>
       </div>
+
+      {removedWordNotice && mode !== "original" && (
+        <div
+          className="flex shrink-0 items-center justify-between gap-2 border-b border-danger/30 bg-danger/10 px-3 py-2 text-[11px] text-danger"
+          data-testid="removed-word-notice"
+        >
+          <div className="flex items-center gap-1.5">
+            <Scissors className="size-3.5 shrink-0 text-danger" />
+            <span>
+              “{removedWordNotice.wordText}” was removed from the edited timeline
+              {removedWordNotice.reason ? ` (${removedWordNotice.reason})` : ""}.
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {onModeChange && (
+              <button
+                type="button"
+                onClick={() => {
+                  onModeChange("original");
+                  onSeek(removedWordNotice.startMs);
+                  setRemovedWordNotice(null);
+                }}
+                className="rounded bg-danger px-2 py-0.5 text-[10px] font-semibold text-white transition-colors hover:bg-danger/80"
+              >
+                Jump in Original
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setRemovedWordNotice(null)}
+              className="text-danger/70 hover:text-danger"
+              aria-label="Dismiss notice"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto px-3 py-3 text-[13px] leading-[1.8] text-text-secondary selection:bg-primary/25"
@@ -353,44 +412,91 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                     {segmentWords.length > 0
                       ? segmentWords.map((word, wordPosition) => {
                           const isActive = word.index === activeWordIndex;
-                          const decisionsAtWord = segmentDecisions.filter(
-                            (decision) =>
-                              word.index >= decision.transcript_start_word &&
-                              word.index <= decision.transcript_end_word,
-                          );
-                          const wordDecision = decisionsAtWord[0];
-                          const isSelectedDecision = decisionsAtWord.some(
-                            (decision) => decision.decision_id === selectedDecisionId,
-                          );
+                          const { isCut, cut } = isWordInExecutableCut(word, edl);
+                          const isEditedMode = mode !== "original";
+                          const isRemovedInEdited = isCut && isEditedMode;
+
+                          // Check if there is an inter-word pause cut immediately preceding this word
+                          const prevWord = wordPosition > 0 ? segmentWords[wordPosition - 1] : null;
+                          const precedingCut = prevWord
+                            ? executableCuts.find(
+                                (c) =>
+                                  c.safe_start_ms >= prevWord.end_ms - 200 &&
+                                  c.safe_end_ms <= word.start_ms + 200 &&
+                                  c.cut_id !== cut?.cut_id,
+                              )
+                            : null;
+
                           const wordSelection: TranscriptRangeSelection = {
                             id: `transcript-word-${word.index}`,
                             label: `Transcript word: ${word.text}`,
                             startMs: word.start_ms,
                             endMs: word.end_ms,
                           };
+
+                          const handleWordClick = () => {
+                            if (isRemovedInEdited) {
+                              setRemovedWordNotice({
+                                wordText: word.text,
+                                startMs: word.start_ms,
+                                reason: cut?.decision_type
+                                  ? formatCutLabel(
+                                      cut.decision_type,
+                                      cut.removed_duration_ms ??
+                                        (cut.safe_end_ms - cut.safe_start_ms),
+                                    )
+                                  : "Removed by edit decision",
+                              });
+                              return;
+                            }
+                            setRemovedWordNotice(null);
+                            selectRange(wordSelection);
+                          };
+
                           return (
                             <React.Fragment key={word.index}>
+                              {precedingCut && (
+                                <span
+                                  className="mx-1 inline-flex select-none items-center rounded border border-danger/30 bg-danger/10 px-1 py-0 text-[9px] font-mono text-danger/80 align-baseline"
+                                  title={formatCutLabel(
+                                    precedingCut.decision_type,
+                                    precedingCut.removed_duration_ms ??
+                                      (precedingCut.safe_end_ms - precedingCut.safe_start_ms),
+                                  )}
+                                >
+                                  {(
+                                    (precedingCut.removed_duration_ms ??
+                                      (precedingCut.safe_end_ms - precedingCut.safe_start_ms)) /
+                                    1000
+                                  ).toFixed(1)}
+                                  s cut
+                                </span>
+                              )}
                               {shouldInsertSpace(word.text, wordPosition) ? " " : null}
                               <button
                                 ref={isActive ? activeWordRef : undefined}
                                 type="button"
-                                onClick={() => {
-                                  selectRange(wordSelection);
-                                  if (wordDecision) onSelectDecision(wordDecision);
-                                }}
+                                onClick={handleWordClick}
                                 className={`rounded-[3px] px-0.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
                                   isActive
-                                    ? "bg-primary font-medium text-white"
-                                    : selectedRange?.id === wordSelection.id
-                                      ? "bg-primary/20 text-text-primary"
-                                      : isSelectedDecision
-                                        ? "bg-surface-3 text-text-primary"
-                                        : "hover:bg-surface-3 hover:text-text-primary"
+                                    ? "bg-primary font-medium text-white shadow-xs"
+                                    : isRemovedInEdited
+                                      ? "line-through decoration-danger/70 text-danger/80 bg-danger/10 hover:bg-danger/15 border border-danger/30"
+                                      : isCut && mode === "original"
+                                        ? "text-text-primary hover:bg-surface-3 border-b border-dotted border-danger/50"
+                                        : selectedRange?.id === wordSelection.id
+                                          ? "bg-primary/20 text-text-primary"
+                                          : "hover:bg-surface-3 hover:text-text-primary"
                                 }`}
                                 aria-label={`${word.text}, ${formatModeTimecode(word.start_ms)}`}
                                 aria-pressed={selectedRange?.id === wordSelection.id}
                                 data-word-index={word.index}
-                                title={`Seek to ${formatModeTimecode(word.start_ms)}`}
+                                data-removed={isRemovedInEdited ? "true" : undefined}
+                                title={
+                                  isRemovedInEdited
+                                    ? `[Cut] "${word.text}" removed from edited version`
+                                    : `Seek to ${formatModeTimecode(word.start_ms)}`
+                                }
                               >
                                 {word.text}
                               </button>

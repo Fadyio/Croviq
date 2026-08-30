@@ -23,6 +23,77 @@ export type TranscriptWord = components["schemas"]["TranscriptWord"];
 export type TranscriptSegment = components["schemas"]["TranscriptSegment"];
 export type ChapterMarker = components["schemas"]["ChapterMarker"];
 
+export type MediaOutputStatus = "ready" | "generating" | "failed" | "unavailable";
+
+export interface MediaOutputState {
+  available: boolean;
+  artifactId: string | null;
+  edlId: string | null;
+  url: string | null;
+  durationMs: number;
+  status: MediaOutputStatus;
+}
+export interface ApiMediaOutputState {
+  available?: boolean;
+  artifact_id?: string | null;
+  edl_id?: string | null;
+  url?: string | null;
+  duration_ms?: number;
+  status?: MediaOutputStatus;
+}
+
+export function apiMediaOutputToState(apiOutput?: ApiMediaOutputState | null): MediaOutputState | null {
+  if (!apiOutput) return null;
+  return {
+    available: Boolean(apiOutput.available),
+    artifactId: apiOutput.artifact_id || null,
+    edlId: apiOutput.edl_id || null,
+    url: apiOutput.url || null,
+    durationMs: apiOutput.duration_ms || 0,
+    status: apiOutput.status || (apiOutput.available ? "ready" : "unavailable"),
+  };
+}
+
+export interface CanonicalMediaOutputs {
+  original: MediaOutputState;
+  edited: MediaOutputState;
+  voiceover: MediaOutputState;
+  final_mix: MediaOutputState;
+}
+export const createInitialMediaOutputs = (): CanonicalMediaOutputs => ({
+  original: {
+    available: false,
+    artifactId: null,
+    edlId: null,
+    url: null,
+    durationMs: 0,
+    status: "unavailable",
+  },
+  edited: {
+    available: false,
+    artifactId: null,
+    edlId: null,
+    url: null,
+    durationMs: 0,
+    status: "unavailable",
+  },
+  voiceover: {
+    available: false,
+    artifactId: null,
+    edlId: null,
+    url: null,
+    durationMs: 0,
+    status: "unavailable",
+  },
+  final_mix: {
+    available: false,
+    artifactId: null,
+    edlId: null,
+    url: null,
+    durationMs: 0,
+    status: "unavailable",
+  },
+});
 export type TimelineTrackId =
   | "video"
   | "audio"
@@ -363,6 +434,55 @@ export function findExecutableSkipInterval(
     }
   }
   return null;
+}
+
+/**
+ * Check if a source timestamp (in ms) falls strictly inside an active executable cut.
+ */
+export function isSourceTimeInCut(sourceMs: number, edl?: EditDecisionList | null): boolean {
+  if (!edl?.cuts) return false;
+  const executableCuts = getExecutableCuts(edl);
+  return executableCuts.some(
+    (cut) => sourceMs >= cut.safe_start_ms && sourceMs < cut.safe_end_ms,
+  );
+}
+
+/**
+ * Retrieve the active cut (if any) covering a given source timestamp in ms.
+ */
+export function getCutAtSourceTime(
+  sourceMs: number,
+  edl?: EditDecisionList | null,
+): CutInstruction | null {
+  if (!edl?.cuts) return null;
+  const executableCuts = getExecutableCuts(edl);
+  return (
+    executableCuts.find(
+      (cut) => sourceMs >= cut.safe_start_ms && sourceMs <= cut.safe_end_ms,
+    ) || null
+  );
+}
+
+/**
+ * Deterministically determine whether a transcript word was removed by an active EDL cut.
+ * A word is considered removed if its midpoint or time bounds fall inside an active cut.
+ */
+export function isWordInExecutableCut(
+  word: { start_ms: number; end_ms: number; index?: number },
+  edl?: EditDecisionList | null,
+): { isCut: boolean; cut: CutInstruction | null } {
+  if (!edl?.cuts) return { isCut: false, cut: null };
+  const executableCuts = getExecutableCuts(edl);
+  const midMs = Math.round((word.start_ms + word.end_ms) / 2);
+  for (const cut of executableCuts) {
+    if (
+      (midMs >= cut.safe_start_ms && midMs <= cut.safe_end_ms) ||
+      (word.start_ms >= cut.safe_start_ms && word.end_ms <= cut.safe_end_ms)
+    ) {
+      return { isCut: true, cut };
+    }
+  }
+  return { isCut: false, cut: null };
 }
 
 /**
