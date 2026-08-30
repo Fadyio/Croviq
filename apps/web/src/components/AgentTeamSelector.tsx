@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
 import { ChevronDown, MessageSquare, Settings } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 import alexAvatar from "../assets/agents/alex.webp";
-import leoAvatar from "../assets/agents/leo.webp";
 import irisAvatar from "../assets/agents/Iris.png";
+import leoAvatar from "../assets/agents/leo.webp";
 
 export type AgentId = "alex" | "leo" | "iris";
 

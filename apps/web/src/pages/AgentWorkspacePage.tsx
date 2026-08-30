@@ -1,4 +1,3 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   LineChart,
@@ -10,10 +9,11 @@ import {
   User,
   Wrench,
 } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
-import { AGENT_IDENTITIES, AgentTeamSelector, type AgentId } from "../components/AgentTeamSelector";
+import { AGENT_IDENTITIES, type AgentId, AgentTeamSelector } from "../components/AgentTeamSelector";
 import { CroviqLogo } from "../components/CroviqLogo";
+import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import type { ToolExecution } from "../components/ToolDisclosure";
 

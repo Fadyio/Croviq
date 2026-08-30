@@ -1,14 +1,14 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
-  deriveKeepSegments,
   deriveAudioRegions,
-  getExecutableCuts,
-  findExecutableSkipInterval,
-  edlToTwickTimeline,
-  formatTimecode,
-  formatDuration,
-  formatCutLabel,
+  deriveKeepSegments,
   type EditDecisionList,
+  edlToTwickTimeline,
+  findExecutableSkipInterval,
+  formatCutLabel,
+  formatDuration,
+  formatTimecode,
+  getExecutableCuts,
 } from "./edl-adapter";
 
 test.describe("EDL Adapter & Playback Logic", () => {
@@ -135,13 +135,15 @@ test.describe("EDL Adapter & Playback Logic", () => {
 
   test("edlToTwickTimeline builds canonical tracks and populates blocks truthfully", () => {
     const twickData = edlToTwickTimeline(fairphoneEDL);
-    expect(twickData.tracks.length).toBe(7);
+    expect(twickData.tracks.length).toBe(8);
     expect(twickData.tracks[0].getName()).toBe("Video");
     expect(twickData.tracks[1].getName()).toBe("Audio");
     expect(twickData.tracks[2].getName()).toBe("Edits");
     expect(twickData.tracks[3].getName()).toBe("B-roll");
-
-    expect(twickData.activeCutCount).toBe(0);
+    expect(twickData.tracks[4].getName()).toBe("Voiceover");
+    expect(twickData.tracks[5].getName()).toBe("Music");
+    expect(twickData.tracks[6].getName()).toBe("Chapters");
+    expect(twickData.tracks[7].getName()).toBe("Captions");
     expect(twickData.coverageMarkerCount).toBe(1);
 
     // Coverage block matches Fairphone fixture

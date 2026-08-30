@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const loadBalancerIp = process.env.LOAD_BALANCER_IP || "8.233.204.233";
+const launchArgs = process.env.LOAD_BALANCER_IP
+  ? [`--host-resolver-rules=MAP app.croviq.app ${process.env.LOAD_BALANCER_IP}`]
+  : [];
 
 export default defineConfig({
   fullyParallel: false,
@@ -19,7 +21,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         launchOptions: {
-          args: [`--host-resolver-rules=MAP app.croviq.app ${loadBalancerIp}`],
+          args: launchArgs,
         },
       },
     },

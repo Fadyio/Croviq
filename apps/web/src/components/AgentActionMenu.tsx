@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
 import { MessageSquare, Settings } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 import { AGENT_IDENTITIES, type AgentId } from "./AgentTeamSelector";
 
 interface AgentActionMenuProps {

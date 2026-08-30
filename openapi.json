@@ -1251,6 +1251,52 @@
         }
       }
     },
+    "/api/productions/{production_id}/corrected-script": {
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get Source-Grounded Corrected Script",
+        "description": "Retrieve the source-grounded corrected script with verification metrics, change types, and visual evidence.",
+        "operationId": "get_production_corrected_script_api_productions__production_id__corrected_script_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorrectedScriptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/productions/{production_id}/source-analysis-input": {
       "get": {
         "tags": ["Productions & Uploads"],
@@ -1382,6 +1428,149 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EditorialRunDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/chat": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Chat with Leo in the production editor",
+        "operationId": "chat_with_leo_api_productions__production_id__chat_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductionChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductionChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/chat/history": {
+      "get": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Get Leo production chat history",
+        "operationId": "get_leo_chat_history_api_productions__production_id__chat_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductionChatHistoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Clear Leo production chat history",
+        "operationId": "delete_leo_chat_history_api_productions__production_id__chat_history_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductionChatHistoryResponse"
                 }
               }
             }
@@ -1564,6 +1753,210 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RenderArtifactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/renders/voiceover-preview": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Render Voiceover Preview Video",
+        "description": "Render a preview MP4 combining EDL cuts with active voiceover replacements.",
+        "operationId": "render_voiceover_preview_video_api_productions__production_id__renders_voiceover_preview_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderArtifactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/renders/final-mix": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Render Final Mix Video",
+        "description": "Render Final Mix combining EDL cuts, B-roll overlays, voiceover corrections, and background music.",
+        "operationId": "render_final_mix_video_api_productions__production_id__renders_final_mix_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderArtifactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/music/generate": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Generate Google Lyria Background Music",
+        "description": "Generate subtle instrumental background music with Google Lyria and attach to EDL.",
+        "operationId": "generate_production_music_api_productions__production_id__music_generate_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateBackgroundMusicRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EDLDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/music": {
+      "patch": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Update Background Music Mix Settings",
+        "description": "Modify volume, ducking, or mute state of background music.",
+        "operationId": "update_production_music_api_productions__production_id__music_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBackgroundMusicRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EDLDetailResponse"
                 }
               }
             }
@@ -3091,10 +3484,12 @@
           "PREVIEW",
           "MASTER",
           "SHORT",
+          "VOICEOVER_PREVIEW",
           "STUDIO_VOICE_PREVIEW",
           "STUDIO_VOICE_MASTER",
           "BROLL_PREVIEW",
-          "BROLL_MASTER"
+          "BROLL_MASTER",
+          "FINAL_MIX"
         ],
         "title": "ArtifactType",
         "description": "Supported render artifact types."
@@ -3759,6 +4154,92 @@
         "title": "BRollQualityMode",
         "description": "Explicit quality modes for Gemini Omni video generation."
       },
+      "BackgroundMusicMix": {
+        "properties": {
+          "style": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Style"
+          },
+          "model_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Model Id",
+            "default": "lyria-3-pro-preview"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "volume_db": {
+            "type": "number",
+            "maximum": 0.0,
+            "title": "Volume Db",
+            "default": -24.0
+          },
+          "ducking_db": {
+            "type": "number",
+            "maximum": 0.0,
+            "title": "Ducking Db",
+            "default": -14.0
+          },
+          "target_lufs": {
+            "type": "number",
+            "maximum": -8.0,
+            "minimum": -45.0,
+            "title": "Target Lufs",
+            "default": -32.0
+          },
+          "music_gcs_object": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Music Gcs Object"
+          },
+          "preview_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Artifact Id"
+          },
+          "is_muted": {
+            "type": "boolean",
+            "title": "Is Muted",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["style", "music_gcs_object"],
+        "title": "BackgroundMusicMix",
+        "description": "Canonical background music selection and speech-ducking parameters."
+      },
       "BrandKit": {
         "properties": {
           "tone": {
@@ -4300,6 +4781,13 @@
       },
       "ChapterMarker": {
         "properties": {
+          "chapter_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Chapter Id",
+            "description": "Stable chapter identifier for typed editor operations"
+          },
           "title": {
             "type": "string",
             "maxLength": 120,
@@ -4338,8 +4826,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": ["title", "source_start_ms", "source_end_ms", "summary"],
-        "title": "ChapterMarker",
-        "description": "Semantic chapter candidate generated from Leo's multimodal video understanding."
+        "title": "ChapterMarker"
       },
       "ClaimSupportStatus": {
         "type": "string",
@@ -4460,6 +4947,221 @@
         "additionalProperties": false,
         "type": "object",
         "title": "CodeExecutionRequest"
+      },
+      "CorrectedScriptResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id",
+            "description": "Unique production identifier"
+          },
+          "corrected_transcript": {
+            "$ref": "#/components/schemas/CorrectedTranscript",
+            "description": "Canonical corrected transcript"
+          },
+          "corrections_count": {
+            "type": "integer",
+            "title": "Corrections Count",
+            "description": "Total count of corrected segments"
+          },
+          "transcription_corrections_count": {
+            "type": "integer",
+            "title": "Transcription Corrections Count",
+            "description": "Count of transcription error fixes"
+          },
+          "grammar_corrections_count": {
+            "type": "integer",
+            "title": "Grammar Corrections Count",
+            "description": "Count of grammar improvements"
+          },
+          "meaning_preserved": {
+            "type": "boolean",
+            "title": "Meaning Preserved",
+            "description": "Whether all corrections preserve factual meaning"
+          },
+          "supported_corrections_count": {
+            "type": "integer",
+            "title": "Supported Corrections Count",
+            "description": "Count of corrections supported by entailment check"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "production_id",
+          "corrected_transcript",
+          "corrections_count",
+          "transcription_corrections_count",
+          "grammar_corrections_count",
+          "meaning_preserved",
+          "supported_corrections_count"
+        ],
+        "title": "CorrectedScriptResponse",
+        "description": "Source-grounded corrected script representation with verification status and diff metrics."
+      },
+      "CorrectedTranscript": {
+        "properties": {
+          "transcript_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Transcript Id",
+            "description": "Unique identifier for this corrected transcript entity"
+          },
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id",
+            "description": "Associated production identifier"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/CorrectedTranscriptSegment"
+            },
+            "type": "array",
+            "title": "Segments",
+            "description": "Ordered list of corrected script segments"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the corrected transcript was generated (UTC)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["transcript_id", "production_id", "created_at"],
+        "title": "CorrectedTranscript",
+        "description": "Canonical source-grounded corrected script representation for an entire production."
+      },
+      "CorrectedTranscriptSegment": {
+        "properties": {
+          "segment_id": {
+            "type": "string",
+            "title": "Segment Id",
+            "description": "Unique identifier for this corrected segment",
+            "default": ""
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms",
+            "description": "Start offset on source video timeline in milliseconds"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source End Ms",
+            "description": "End offset on source video timeline in milliseconds"
+          },
+          "original_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Original Text",
+            "description": "Original recognized speech transcription text"
+          },
+          "corrected_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Corrected Text",
+            "description": "Source-grounded corrected spoken performance text"
+          },
+          "change_type": {
+            "$ref": "#/components/schemas/ScriptCorrectionChangeType",
+            "description": "Classification of the applied correction",
+            "default": "KEEP"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Detailed justification for the correction",
+            "default": ""
+          },
+          "visual_evidence": {
+            "type": "string",
+            "title": "Visual Evidence",
+            "description": "Screen, IDE, or visual context confirming the correction",
+            "default": ""
+          },
+          "meaning_changed": {
+            "type": "boolean",
+            "title": "Meaning Changed",
+            "description": "Whether the factual meaning is changed (MUST be false for valid corrections)",
+            "default": false
+          },
+          "target_duration_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Target Duration Ms",
+            "description": "Immutable video time budget in milliseconds for replacement speech"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence score of the correction proposal",
+            "default": 1.0
+          },
+          "entailment_verdict": {
+            "$ref": "#/components/schemas/EntailmentVerdict",
+            "description": "Result of the second-pass closed-world entailment check",
+            "default": "SUPPORTED"
+          },
+          "is_voiceover_active": {
+            "type": "boolean",
+            "title": "Is Voiceover Active",
+            "description": "Whether a synthesized voiceover replacement is active for this segment",
+            "default": false
+          },
+          "voice_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Mode",
+            "description": "Voice mode used for synthesis (e.g. REPLICATED_MY_VOICE, PREBUILT_STUDIO_VOICE)"
+          },
+          "generated_audio_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated Audio Duration Ms",
+            "description": "Actual measured TTS audio duration in ms"
+          },
+          "audio_artifact_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Artifact Reference",
+            "description": "Storage key or artifact ID of the synthesized voice segment"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_start_ms",
+          "source_end_ms",
+          "original_text",
+          "corrected_text",
+          "target_duration_ms"
+        ],
+        "title": "CorrectedTranscriptSegment",
+        "description": "Typed source-grounded corrected script segment with strict duration budget and entailment."
       },
       "CoverageMarker": {
         "properties": {
@@ -5146,6 +5848,25 @@
             "title": "Coverage Markers",
             "description": "Visual coverage markers for B-roll and screen recordings"
           },
+          "voiceover_segments": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceoverSegment"
+            },
+            "type": "array",
+            "title": "Voiceover Segments",
+            "description": "Persisted generated narration segments mixed into the preview"
+          },
+          "background_music": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackgroundMusicMix"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Active persisted background music mix, if any"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -5153,7 +5874,6 @@
             "description": "Timestamp when the EDL was generated (UTC)"
           }
         },
-        "additionalProperties": false,
         "type": "object",
         "required": ["edl_id", "production_id", "source_duration_ms", "created_at"],
         "title": "EditDecisionList",
@@ -5367,6 +6087,17 @@
         "title": "EditorProposal",
         "description": "Complete batch proposal emitted by Leo (Video Editor)."
       },
+      "EditorVoiceMode": {
+        "type": "string",
+        "enum": [
+          "ORIGINAL_VOICE",
+          "ORIGINAL_AUDIO",
+          "REPLICATED_MY_VOICE",
+          "PREBUILT_STUDIO_VOICE"
+        ],
+        "title": "EditorVoiceMode",
+        "description": "Truthful audio provenance modes surfaced by Leo's editor tools."
+      },
       "EditorialRun": {
         "properties": {
           "run_id": {
@@ -5474,6 +6205,12 @@
         "title": "EditorialRunStatus",
         "description": "Operational state of an editorial analysis run."
       },
+      "EntailmentVerdict": {
+        "type": "string",
+        "enum": ["SUPPORTED", "UNSUPPORTED", "UNCERTAIN"],
+        "title": "EntailmentVerdict",
+        "description": "Closed-world entailment check verdict for a proposed script correction."
+      },
       "EvidenceKind": {
         "type": "string",
         "enum": ["FACT", "INFERENCE", "RESEARCH", "RECOMMENDATION"],
@@ -5488,6 +6225,46 @@
         "type": "string",
         "enum": ["NEW", "UPDATED", "SEEN", "EXPIRED"],
         "title": "FindingLifecycle"
+      },
+      "GenerateBackgroundMusicRequest": {
+        "properties": {
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt",
+            "description": "Custom prompt for Google Lyria (defaults to minimal modern technology documentary underscore)"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id",
+            "description": "Google Lyria model ID ('lyria-3-pro-preview' or 'lyria-3-clip-preview')",
+            "default": "lyria-3-pro-preview"
+          },
+          "volume_db": {
+            "type": "number",
+            "maximum": 0.0,
+            "title": "Volume Db",
+            "description": "Music bed volume in dB relative to dialogue",
+            "default": -24.0
+          },
+          "ducking_db": {
+            "type": "number",
+            "maximum": 0.0,
+            "title": "Ducking Db",
+            "description": "Additional speech ducking attenuation in dB",
+            "default": -14.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GenerateBackgroundMusicRequest",
+        "description": "Request payload to generate Google Lyria background music."
       },
       "GenerateReleaseReviewRequest": {
         "properties": {
@@ -6411,6 +7188,189 @@
         ],
         "title": "Production",
         "description": "Canonical Production model representing a content production lifecycle."
+      },
+      "ProductionChatHistoryResponse": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "title": "Production Id"
+          },
+          "messages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["production_id"],
+        "title": "ProductionChatHistoryResponse"
+      },
+      "ProductionChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "selected_range_ms": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Range Ms"
+          },
+          "selected_element": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionChatSelectedElement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_playhead_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Playhead Ms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["message"],
+        "title": "ProductionChatRequest"
+      },
+      "ProductionChatResponse": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "role": {
+            "type": "string",
+            "const": "assistant",
+            "title": "Role",
+            "default": "assistant"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "tool_executions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Tool Executions"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "edl": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditDecisionList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timeline_updated": {
+            "type": "boolean",
+            "title": "Timeline Updated",
+            "default": false
+          },
+          "voiceover_updated": {
+            "type": "boolean",
+            "title": "Voiceover Updated",
+            "default": false
+          },
+          "preview_updated": {
+            "type": "boolean",
+            "title": "Preview Updated",
+            "default": false
+          },
+          "seek_range": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seek Range"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["message_id", "content", "created_at"],
+        "title": "ProductionChatResponse"
+      },
+      "ProductionChatSelectedElement": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Type"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Ms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["type", "id", "start_ms", "end_ms"],
+        "title": "ProductionChatSelectedElement"
       },
       "ProductionListResponse": {
         "properties": {
@@ -7739,6 +8699,12 @@
         "required": ["runs_evaluated", "runs_executed", "findings_created", "status"],
         "title": "SchedulerTickResponse"
       },
+      "ScriptCorrectionChangeType": {
+        "type": "string",
+        "enum": ["GRAMMAR", "TRANSCRIPTION_ERROR", "FILLER", "FALSE_START", "REPETITION", "KEEP"],
+        "title": "ScriptCorrectionChangeType",
+        "description": "Types of source-grounded script corrections."
+      },
       "SectionAction": {
         "type": "string",
         "enum": ["KEEP", "TIGHTEN", "REMOVE", "COVERAGE"],
@@ -8564,6 +9530,64 @@
         "title": "TranscriptWord",
         "description": "Canonical representation of a single spoken word with millisecond time alignment."
       },
+      "UpdateBackgroundMusicRequest": {
+        "properties": {
+          "volume_db": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Db",
+            "description": "Updated music volume in dB"
+          },
+          "ducking_db": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ducking Db",
+            "description": "Updated ducking attenuation in dB"
+          },
+          "is_muted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Muted",
+            "description": "Whether background music is muted"
+          },
+          "style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Style",
+            "description": "Updated music style label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UpdateBackgroundMusicRequest",
+        "description": "Request payload to modify active background music mix parameters."
+      },
       "UpdatePackagingOverridesRequest": {
         "properties": {
           "selected_title": {
@@ -9202,6 +10226,89 @@
         "required": ["updated_at"],
         "title": "VoiceSettingsConfig",
         "description": "Creator-configured narration and Studio Voice settings."
+      },
+      "VoiceoverSegment": {
+        "properties": {
+          "segment_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Segment Id"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source End Ms"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
+          },
+          "voice_mode": {
+            "$ref": "#/components/schemas/EditorVoiceMode",
+            "default": "PREBUILT_STUDIO_VOICE"
+          },
+          "voice_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Id"
+          },
+          "generated_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated Duration Ms"
+          },
+          "preview_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Artifact Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["segment_id", "source_start_ms", "source_end_ms", "text"],
+        "title": "VoiceoverSegment",
+        "description": "Persisted narration replacement placed on the source timeline."
       },
       "Workspace": {
         "properties": {

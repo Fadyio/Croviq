@@ -1,20 +1,21 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ZoomIn,
-  ZoomOut,
-  Maximize,
-  Scissors,
+  Bookmark,
+  FileText,
   Layers,
+  Maximize,
+  Mic,
+  Music,
+  Scissors,
   Video,
   Volume2,
-  Bookmark,
-  Sparkles,
-  FileText,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   formatTimecode,
-  type TwickTimelineRepresentation,
   type TimelineBlock,
+  type TwickTimelineRepresentation,
 } from "../../lib/edl-adapter";
 
 interface EditorTimelineProps {
@@ -24,6 +25,7 @@ interface EditorTimelineProps {
   selectedBlockId: string | null;
   onSelectBlock: (block: TimelineBlock | null) => void;
   onSeek: (targetMs: number) => void;
+  onSelectRange?: (startMs: number, endMs: number) => void;
   isPlaying?: boolean;
   className?: string;
 }
@@ -35,13 +37,17 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   selectedBlockId,
   onSelectBlock,
   onSeek,
+  onSelectRange,
   className = "",
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const _containerRef = useRef<HTMLDivElement>(null);
   const trackAreaRef = useRef<HTMLDivElement>(null);
+  const scrubStartMsRef = useRef<number | null>(null);
+  const latestScrubMsRef = useRef<number | null>(null);
 
   const [zoomScale, setZoomScale] = useState<number | null>(null);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
+  const [selectedTimeRange, setSelectedTimeRange] = useState<[number, number] | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const totalDurationSec = Math.max(1, durationMs / 1000);
 
@@ -115,6 +121,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
     const clickX = e.clientX - rect.left + scrollLeft;
     const targetMs = pixelsToMs(clickX);
     onSeek(targetMs);
+    scrubStartMsRef.current = targetMs;
+    latestScrubMsRef.current = targetMs;
   };
 
   useEffect(() => {
@@ -125,12 +133,20 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
       const moveX = e.clientX - rect.left + scrollLeft;
       const targetMs = pixelsToMs(moveX);
       onSeek(targetMs);
+      latestScrubMsRef.current = targetMs;
     };
 
     const handleMouseUp = () => {
-      if (isScrubbing) {
-        setIsScrubbing(false);
-      }
+      if (!isScrubbing) return;
+      setIsScrubbing(false);
+      const startMs = scrubStartMsRef.current;
+      const endMs = latestScrubMsRef.current;
+      scrubStartMsRef.current = null;
+      latestScrubMsRef.current = null;
+      if (startMs === null || endMs === null || Math.abs(endMs - startMs) < 250) return;
+      const range: [number, number] = [Math.min(startMs, endMs), Math.max(startMs, endMs)];
+      setSelectedTimeRange(range);
+      onSelectRange?.(range[0], range[1]);
     };
 
     if (isScrubbing) {
@@ -141,7 +157,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isScrubbing, onSeek, pixelsToMs]);
+  }, [isScrubbing, onSeek, onSelectRange, pixelsToMs]);
 
   // Generate ruler tick marks based on zoom level
   const effectiveZoomScale =
@@ -154,20 +170,22 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
 
   const playheadPx = msToPixels(currentTimeMs);
 
-  // Group blocks by canonical track
+  // Group blocks by canonical tracks
   const dialogueCutBlocks = twickData.blocks.filter(
     (b) => b.trackId === "edits" || b.trackId === "dialogue-edits",
   );
   const coverageBlocks = twickData.blocks.filter(
     (b) => b.trackId === "broll" || b.trackId === "coverage",
   );
+  const voiceoverBlocks = twickData.blocks.filter(
+    (b) => b.trackId === "voiceover" || b.trackId === "narration",
+  );
+  const musicBlocks = twickData.blocks.filter((b) => b.trackId === "music");
   const chapterBlocks = twickData.blocks.filter((b) => b.trackId === "chapters");
-  const narrationBlocks = twickData.blocks.filter((b) => b.trackId === "narration");
   const captionBlocks = twickData.blocks.filter((b) => b.trackId === "captions");
 
   return (
     <div
-      ref={containerRef}
       className={`h-[180px] shrink-0 flex flex-col bg-surface-1 rounded-xl border border-border-subtle overflow-hidden select-none shadow-md ${className}`}
       data-testid="editor-timeline"
     >
@@ -182,12 +200,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             <span className="font-medium text-text-secondary">{twickData.activeCutCount} cuts</span>
             <span>&middot;</span>
             <span>{twickData.coverageMarkerCount} coverage</span>
-            {chapterBlocks.length > 0 && (
-              <>
-                <span>&middot;</span>
-                <span>{chapterBlocks.length} chapters</span>
-              </>
-            )}
+            <span>&middot;</span>
+            <span>{chapterBlocks.length} chapters</span>
           </div>
         </div>
 
@@ -252,7 +266,23 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             </div>
           )}
 
-          {/* Track 5 Header: Chapters */}
+          {/* Track 5 Header: Voiceover */}
+          {voiceoverBlocks.length > 0 && (
+            <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-blue-400">
+              <Mic className="w-3 h-3 text-blue-400 shrink-0" />
+              <span className="truncate">Voiceover</span>
+            </div>
+          )}
+
+          {/* Track 6 Header: Music */}
+          {musicBlocks.length > 0 && (
+            <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-purple-400">
+              <Music className="w-3 h-3 text-purple-400 shrink-0" />
+              <span className="truncate">Music</span>
+            </div>
+          )}
+
+          {/* Track 7 Header: Chapters */}
           {chapterBlocks.length > 0 && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-amber-400/80">
               <Bookmark className="w-3 h-3 text-amber-400 shrink-0" />
@@ -260,15 +290,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             </div>
           )}
 
-          {/* Track 6 Header: Narration */}
-          {narrationBlocks.length > 0 && (
-            <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-blue-400">
-              <Sparkles className="w-3 h-3 text-blue-400 shrink-0" />
-              <span className="truncate">Narration</span>
-            </div>
-          )}
-
-          {/* Track 7 Header: Captions */}
+          {/* Track 8 Header: Captions */}
           {captionBlocks.length > 0 && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-secondary">
               <FileText className="w-3 h-3 text-text-muted shrink-0" />
@@ -276,7 +298,6 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             </div>
           )}
         </div>
-
         {/* Right Scrollable Timeline Canvas */}
         <div
           ref={trackAreaRef}
@@ -317,11 +338,29 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                   const segLeft = msToPixels(startMs);
                   const segWidth = Math.max(2, msToPixels(endMs) - segLeft);
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={`keep-${idx}`}
-                      className="absolute top-0 bottom-0 bg-primary/40 border-r border-background/60"
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectBlock({
+                          id: `keep-${idx}`,
+                          trackId: "video",
+                          label: "Video section",
+                          startMs,
+                          endMs,
+                          durationMs: endMs - startMs,
+                          type: "keep",
+                          details: { summary: "Continuous source footage retained in the edit." },
+                        });
+                      }}
+                      className={`absolute top-0 bottom-0 bg-primary/40 border-r border-background/60 hover:bg-primary/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+                        selectedBlockId === `keep-${idx}` ? "ring-1 ring-primary" : ""
+                      }`}
                       style={{ left: `${segLeft}px`, width: `${segWidth}px` }}
-                      title={`Keep segment ${formatTimecode(startMs)} → ${formatTimecode(endMs)}`}
+                      title={`Video section ${formatTimecode(startMs)} → ${formatTimecode(endMs)}`}
+                      aria-label={`Select video section from ${formatTimecode(startMs)} to ${formatTimecode(endMs)}`}
                     />
                   );
                 })}
@@ -335,27 +374,50 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 twickData.audioRegions.map((region, idx) => {
                   const leftPx = msToPixels(region.startMs);
                   const widthPx = Math.max(2, msToPixels(region.endMs) - leftPx);
-                  if (region.type === "speech") {
-                    return (
-                      <div
-                        key={`aud-${idx}`}
-                        className="absolute top-1 bottom-1 bg-emerald-500/50 border-t border-b border-emerald-400/80 rounded-xs"
-                        style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                        title={`Speech segment ${formatTimecode(region.startMs)} → ${formatTimecode(region.endMs)}`}
-                      />
-                    );
-                  }
-                  if (region.type === "removed") {
-                    return (
-                      <div
-                        key={`aud-${idx}`}
-                        className="absolute top-1 bottom-1 bg-danger/40 border border-danger/60 rounded-xs"
-                        style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                        title={`Cut removed region ${formatTimecode(region.startMs)} → ${formatTimecode(region.endMs)}`}
-                      />
-                    );
-                  }
-                  return null;
+                  const label =
+                    region.label ||
+                    (region.type === "speech"
+                      ? "Spoken audio"
+                      : region.type === "removed"
+                        ? "Removed audio"
+                        : "Pause");
+                  return (
+                    <button
+                      type="button"
+                      key={`aud-${idx}`}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectBlock({
+                          id: `audio-${idx}`,
+                          trackId: "audio",
+                          label,
+                          startMs: region.startMs,
+                          endMs: region.endMs,
+                          durationMs: region.endMs - region.startMs,
+                          type: region.type === "removed" ? "cut-safe" : "source",
+                          details: {
+                            summary:
+                              region.type === "speech"
+                                ? "Speech activity detected in the source audio."
+                                : region.type === "removed"
+                                  ? "This audio range is removed by the edit."
+                                  : "A pause was detected in the source audio.",
+                          },
+                        });
+                      }}
+                      className={`absolute top-1 bottom-1 rounded-xs border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+                        region.type === "speech"
+                          ? "border-emerald-400/80 bg-emerald-500/50 hover:bg-emerald-500/70"
+                          : region.type === "removed"
+                            ? "border-danger/60 bg-danger/40 hover:bg-danger/60"
+                            : "border-border-strong bg-surface-3/80 hover:bg-surface-3"
+                      } ${selectedBlockId === `audio-${idx}` ? "ring-1 ring-primary" : ""}`}
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                      title={`${label} ${formatTimecode(region.startMs)} → ${formatTimecode(region.endMs)}`}
+                      aria-label={`Select ${label.toLowerCase()} from ${formatTimecode(region.startMs)} to ${formatTimecode(region.endMs)}`}
+                    />
+                  );
                 })
               ) : (
                 <div className="absolute inset-x-1 h-1.5 rounded-full bg-emerald-500/30 border border-emerald-500/40" />
@@ -374,13 +436,15 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                   const isSelected = selectedBlockId === cut.id;
 
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={cut.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
                         onSelectBlock(cut);
                       }}
-                      className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center justify-center px-1.5 text-[9px] font-mono font-medium truncate ${
+                      className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center justify-center px-1.5 text-[9px] font-mono font-medium truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                         cut.type === "cut-safe"
                           ? "bg-danger/20 border border-danger/60 text-danger hover:bg-danger/35 shadow-xs"
                           : cut.type === "cut-needs-coverage"
@@ -391,7 +455,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                       title={`${cut.label}: ${formatTimecode(cut.startMs)} → ${formatTimecode(cut.endMs)}`}
                     >
                       <span className="truncate font-sans font-semibold">{cut.label}</span>
-                    </div>
+                    </button>
                   );
                 })
               )}
@@ -407,13 +471,15 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                     currentTimeMs >= cov.startMs && currentTimeMs <= cov.endMs;
 
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={cov.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
                         onSelectBlock(cov);
                       }}
-                      className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium ${
+                      className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                         cov.type === "coverage-broll"
                           ? "bg-info/25 border border-info/70 text-info hover:bg-info/35"
                           : "bg-surface-3 border border-border-strong text-text-secondary hover:bg-surface-3/80"
@@ -425,13 +491,72 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                     >
                       <Layers className="w-2.5 h-2.5 shrink-0" />
                       <span className="truncate font-semibold">{cov.label}</span>
-                    </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {/* 6. Track 5 Content: VOICEOVER (Individually visible voiceover replacement regions) */}
+            {voiceoverBlocks.length > 0 && (
+              <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-blue-500/5">
+                {voiceoverBlocks.map((vo) => {
+                  const leftPx = msToPixels(vo.startMs);
+                  const widthPx = Math.max(20, msToPixels(vo.endMs) - leftPx);
+                  const isSelected = selectedBlockId === vo.id;
+                  return (
+                    <button
+                      type="button"
+                      key={vo.id}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectBlock(vo);
+                      }}
+                      className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-2 text-[9px] font-medium bg-blue-500/20 border border-blue-500/60 text-blue-200 truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                        isSelected ? "ring-2 ring-primary shadow-md" : ""
+                      }`}
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                      title={`Voiceover: ${vo.label} (${formatTimecode(vo.startMs)} → ${formatTimecode(vo.endMs)})`}
+                    >
+                      <Mic className="w-2.5 h-2.5 shrink-0 text-blue-400" />
+                      <span className="truncate font-semibold">{vo.label}</span>
+                    </button>
                   );
                 })}
               </div>
             )}
 
-            {/* 6. Track 5 Content: CHAPTERS (Semantic Chapter Markers) */}
+            {/* 7. Track 6 Content: MUSIC (Lyria background music bed with controls) */}
+            {musicBlocks.length > 0 && (
+              <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-purple-500/5">
+                {musicBlocks.map((mb) => {
+                  const leftPx = msToPixels(mb.startMs);
+                  const widthPx = Math.max(40, msToPixels(mb.endMs) - leftPx);
+                  const isSelected = selectedBlockId === mb.id;
+                  return (
+                    <button
+                      type="button"
+                      key={mb.id}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectBlock(mb);
+                      }}
+                      className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-2 text-[9px] font-medium bg-purple-500/20 border border-purple-500/50 text-purple-200 truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                        isSelected ? "ring-2 ring-primary shadow-md" : ""
+                      }`}
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                      title={`Music: ${mb.label}`}
+                    >
+                      <Music className="w-2.5 h-2.5 shrink-0 text-purple-400" />
+                      <span className="truncate font-semibold">{mb.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 8. Track 7 Content: CHAPTERS (Semantic Chapter Markers) */}
             {chapterBlocks.length > 0 && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-amber-500/5">
                 {chapterBlocks.map((chap) => {
@@ -439,72 +564,68 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                   const widthPx = Math.max(20, msToPixels(chap.endMs) - leftPx);
 
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={chap.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSeek(chap.startMs);
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
                         onSelectBlock(chap);
                       }}
-                      className="absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 truncate"
+                      className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                        selectedBlockId === chap.id ? "ring-2 ring-primary" : ""
+                      }`}
                       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
                       title={`Chapter: ${chap.label} (${formatTimecode(chap.startMs)} → ${formatTimecode(chap.endMs)})`}
                     >
                       <Bookmark className="w-2.5 h-2.5 shrink-0 text-amber-400" />
                       <span className="truncate font-semibold">{chap.label}</span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
             )}
 
-            {/* 7. Track 6 Content: NARRATION */}
-            {narrationBlocks.length > 0 && (
-              <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-blue-500/5">
-                {narrationBlocks.map((narr) => {
-                  const leftPx = msToPixels(narr.startMs);
-                  const widthPx = Math.max(20, msToPixels(narr.endMs) - leftPx);
-                  return (
-                    <div
-                      key={narr.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectBlock(narr);
-                      }}
-                      className="absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-2 text-[9px] font-medium bg-blue-500/20 border border-blue-500/60 text-blue-200 truncate"
-                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                      title={`${narr.label} (${formatTimecode(narr.startMs)} → ${formatTimecode(narr.endMs)})`}
-                    >
-                      <Sparkles className="w-2.5 h-2.5 shrink-0 text-blue-400" />
-                      <span className="truncate font-semibold">{narr.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* 8. Track 7 Content: CAPTIONS */}
+            {/* 9. Track 8 Content: CAPTIONS */}
             {captionBlocks.length > 0 && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-2/10">
                 {captionBlocks.map((cap) => {
                   const leftPx = msToPixels(cap.startMs);
                   const widthPx = Math.max(16, msToPixels(cap.endMs) - leftPx);
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={cap.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
                         onSelectBlock(cap);
                       }}
-                      className="absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium bg-surface-3/80 border border-border-strong text-text-muted truncate"
+                      className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium bg-surface-3/80 border border-border-strong text-text-muted truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                        selectedBlockId === cap.id ? "ring-2 ring-primary" : ""
+                      }`}
                       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
                       title={`${cap.label} (${formatTimecode(cap.startMs)} → ${formatTimecode(cap.endMs)})`}
                     >
                       <span className="truncate">{cap.label}</span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
+            )}
+
+            {selectedTimeRange && (
+              <div
+                className="pointer-events-none absolute bottom-0 top-5 z-10 border-x border-primary/60 bg-primary/10"
+                style={{
+                  left: `${msToPixels(selectedTimeRange[0])}px`,
+                  width: `${Math.max(
+                    2,
+                    msToPixels(selectedTimeRange[1]) - msToPixels(selectedTimeRange[0]),
+                  )}px`,
+                }}
+                aria-hidden="true"
+              />
             )}
 
             {/* Playhead Indicator Line across all tracks */}

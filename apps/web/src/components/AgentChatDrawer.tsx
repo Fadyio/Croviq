@@ -1,4 +1,3 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   LineChart,
@@ -10,6 +9,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { AGENT_IDENTITIES, type AgentId } from "./AgentTeamSelector";
 import { MarkdownRenderer } from "./MarkdownRenderer";

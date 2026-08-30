@@ -1,8 +1,8 @@
-import React, { useMemo } from "react";
 import { Clock, Loader2, Sparkles } from "lucide-react";
-import { formatTimecode } from "../../lib/edl-adapter";
-import type { AgentActivity, EditorDecision } from "../../lib/edl-adapter";
+import React, { useMemo } from "react";
 import leoAvatar from "../../assets/agents/leo.webp";
+import type { AgentActivity, EditorDecision } from "../../lib/edl-adapter";
+import { formatTimecode } from "../../lib/edl-adapter";
 
 interface AgentActivityFeedProps {
   activities?: AgentActivity[];

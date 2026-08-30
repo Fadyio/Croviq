@@ -1,15 +1,16 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Check, ChevronDown, LogOut, Plus, RefreshCw, TrendingUp, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../api/generated";
 import { useAuth } from "../auth/AuthContext";
-import { CroviqLogo } from "../components/CroviqLogo";
-import { AgentTeamSelector, type AgentId } from "../components/AgentTeamSelector";
-import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
 import { AgentChatDrawer } from "../components/AgentChatDrawer";
+import { type AgentId, AgentTeamSelector } from "../components/AgentTeamSelector";
+import { CroviqLogo } from "../components/CroviqLogo";
 import { AlexRail } from "../components/dashboard/AlexRail";
 import { OverviewView } from "../components/dashboard/OverviewView";
 import { WorthWatchingFindingsDrawer } from "../components/dashboard/WorthWatchingFindingsDrawer";
+import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
+
 type ChannelDashboard = components["schemas"]["ChannelDashboard"];
 type ResearchFinding = components["schemas"]["ResearchFinding"];
 type ResearchConfig = components["schemas"]["ResearchConfig"];

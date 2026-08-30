@@ -1,6 +1,7 @@
 """Canonical Editorial domain models for Leo (Video Editor)."""
 from datetime import datetime, timezone
 from enum import StrEnum
+import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from croviq_domain.validators import validate_timezone_aware
@@ -25,6 +26,13 @@ class EditorDecisionType(StrEnum):
     NARRATION_REWRITE = "NARRATION_REWRITE"
     CAPTION_EMPHASIS = "CAPTION_EMPHASIS"
 
+class EditorVoiceMode(StrEnum):
+    """Truthful audio provenance modes surfaced by Leo's editor tools."""
+
+    ORIGINAL_VOICE = "ORIGINAL_VOICE"
+    ORIGINAL_AUDIO = "ORIGINAL_AUDIO"
+    REPLICATED_MY_VOICE = "REPLICATED_MY_VOICE"
+    PREBUILT_STUDIO_VOICE = "PREBUILT_STUDIO_VOICE"
 class SectionAction(StrEnum):
     """Editorial action applied to a full-timeline production section."""
 
@@ -113,6 +121,12 @@ class VideoSectionDecision(BaseModel):
         return self
 
 class ChapterMarker(BaseModel):
+    chapter_id: str = Field(
+        default_factory=lambda: f"chap_{uuid.uuid4().hex[:12]}",
+        min_length=1,
+        max_length=64,
+        description="Stable chapter identifier for typed editor operations",
+    )
     """Semantic chapter candidate generated from Leo's multimodal video understanding."""
 
     model_config = ConfigDict(

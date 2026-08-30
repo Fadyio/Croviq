@@ -5,7 +5,7 @@ from enum import StrEnum
 import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from croviq_domain.editorial import EditorDecisionType
+from croviq_domain.editorial import EditorDecisionType, EditorVoiceMode
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
 from croviq_domain.validators import validate_timezone_aware
 
@@ -75,6 +75,44 @@ class CoverageMarker(BaseModel):
             )
         return self
 
+
+class VoiceoverSegment(BaseModel):
+    """Persisted narration replacement placed on the source timeline."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    segment_id: str = Field(..., min_length=1, max_length=64)
+    source_start_ms: int = Field(..., ge=0)
+    source_end_ms: int = Field(..., ge=0)
+    text: str = Field(..., min_length=1, max_length=10_000)
+    original_text: str | None = Field(default=None, max_length=10_000)
+    voice_mode: EditorVoiceMode = Field(default=EditorVoiceMode.PREBUILT_STUDIO_VOICE)
+    voice_id: str | None = Field(default=None, max_length=64)
+    generated_duration_ms: int | None = Field(default=None, ge=0)
+    preview_artifact_id: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "VoiceoverSegment":
+        if self.source_end_ms <= self.source_start_ms:
+            raise ValueError("Voiceover source_end_ms must be greater than source_start_ms")
+        return self
+
+
+class BackgroundMusicMix(BaseModel):
+    """Canonical background music selection and speech-ducking parameters."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    style: str = Field(..., min_length=1, max_length=120)
+    model_id: str = Field(default="lyria-3-pro-preview", max_length=64)
+    prompt: str | None = Field(default=None, max_length=1000)
+    duration_ms: int | None = Field(default=None, ge=0)
+    volume_db: float = Field(default=-24.0, le=0)
+    ducking_db: float = Field(default=-14.0, le=0)
+    target_lufs: float = Field(default=-32.0, ge=-45.0, le=-8.0)
+    music_gcs_object: str = Field(..., min_length=1)
+    preview_artifact_id: str | None = Field(default=None, max_length=64)
+    is_muted: bool = Field(default=False)
 
 class CutInstruction(BaseModel):
     """Deterministic, audio-safe cut instruction ready for FFmpeg render execution."""
@@ -199,7 +237,7 @@ class EditDecisionList(BaseModel):
     """Canonical, vendor-neutral Edit Decision List (EDL) schema."""
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="ignore",
         str_strip_whitespace=True,
         validate_assignment=True,
     )
@@ -238,6 +276,14 @@ class EditDecisionList(BaseModel):
     coverage_markers: list[CoverageMarker] = Field(
         default_factory=list,
         description="Visual coverage markers for B-roll and screen recordings",
+    )
+    voiceover_segments: list[VoiceoverSegment] = Field(
+        default_factory=list,
+        description="Persisted generated narration segments mixed into the preview",
+    )
+    background_music: BackgroundMusicMix | None = Field(
+        default=None,
+        description="Active persisted background music mix, if any",
     )
     created_at: datetime = Field(
         ...,

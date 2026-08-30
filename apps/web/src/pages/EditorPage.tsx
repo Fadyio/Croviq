@@ -1,38 +1,48 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft,
   AlertCircle,
-  LogOut,
-  Loader2,
+  ArrowLeft,
   CheckCircle2,
-  ShieldCheck,
-  MessageSquare,
   FileText,
-  Sliders,
+  Loader2,
+  LogOut,
+  MessageSquare,
+  ScrollText,
+  ShieldCheck,
 } from "lucide-react";
-import { CroviqLogo } from "../components/CroviqLogo";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { components } from "../api/generated";
 import { useAuth } from "../auth/AuthContext";
-import { PreviewToggle, type PreviewMode } from "../components/editor/PreviewToggle";
-import { VideoStage } from "../components/editor/VideoStage";
-import { EditorTimeline } from "../components/editor/EditorTimeline";
-import { TranscriptPanel } from "../components/editor/TranscriptPanel";
+import { CroviqLogo } from "../components/CroviqLogo";
+import { AgentLogPanel } from "../components/editor/AgentLogPanel";
 import { AgentPresence } from "../components/editor/AgentPresence";
-import { AgentActivityFeed } from "../components/editor/AgentActivityFeed";
-import { DecisionInspector } from "../components/editor/DecisionInspector";
-import { MediaBin, type BRollAssetItem } from "../components/editor/MediaBin";
 import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
+import { DecisionInspector } from "../components/editor/DecisionInspector";
+import { EditorTimeline } from "../components/editor/EditorTimeline";
 import {
-  edlToTwickTimeline,
+  type LeoChatContext,
+  LeoChatPanel,
+  type LeoChatResponse,
+} from "../components/editor/LeoChatPanel";
+import { type BRollAssetItem, MediaBin } from "../components/editor/MediaBin";
+import { type PreviewMode, PreviewToggle } from "../components/editor/PreviewToggle";
+import {
+  TranscriptPanel,
+  type TranscriptRangeSelection,
+} from "../components/editor/TranscriptPanel";
+import { VideoStage } from "../components/editor/VideoStage";
+import {
+  type AgentActivity,
+  type CorrectedTranscript,
+  type CoverageMarker,
   deriveKeepSegments,
   type EditDecisionList,
-  type EditorProposal,
   type EditorDecision,
-  type AgentActivity,
-  type Transcript,
+  type EditorProposal,
+  edlToTwickTimeline,
   type TimelineBlock,
-  type CoverageMarker,
+  type TimelineTrackId,
+  type Transcript,
 } from "../lib/edl-adapter";
-import type { components } from "../api/generated";
 import {
   nextMissingProcessingStage,
   type PersistedProductionRun,
@@ -77,6 +87,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [renderedPreviewUrl, setRenderedPreviewUrl] = useState<string | null>(null);
   const [studioVoicePreviewUrl, setStudioVoicePreviewUrl] = useState<string | null>(null);
   const [masterUrl, setMasterUrl] = useState<string | null>(null);
+  const [finalMixUrl, setFinalMixUrl] = useState<string | null>(null);
 
   const [previewArtifact, setPreviewArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
@@ -87,7 +98,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [studioVoiceArtifact, setStudioVoiceArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
   >(null);
+  const [finalMixArtifact, setFinalMixArtifact] = useState<
+    components["schemas"]["RenderArtifactResponse"] | null
+  >(null);
   const [renderSubStatus, setRenderSubStatus] = useState<string | null>(null);
+  const [correctedTranscript, setCorrectedTranscript] = useState<CorrectedTranscript | null>(null);
 
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [proposal, setProposal] = useState<EditorProposal | null>(null);
@@ -108,10 +123,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<TimelineBlock | null>(null);
 
-  // Production Room inspector tab: "agents" | "transcript" | "decision"
-  const [rightPanelTab, setRightPanelTab] = useState<"agents" | "transcript" | "decision">(
-    "agents",
+  const [rightPanelTab, setRightPanelTab] = useState<"agent-log" | "chat" | "transcript">(
+    "agent-log",
   );
+  const [chatContext, setChatContext] = useState<LeoChatContext | null>(null);
 
   // Agent settings drawer state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -125,7 +140,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     if (!firebaseUser) throw new Error("Authentication required");
     const token = await firebaseUser.getIdToken();
     const headers = { Authorization: `Bearer ${token}` };
-
     const [
       productionResponse,
       playbackResponse,
@@ -134,6 +148,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       edlResponse,
       rendersResponse,
       brollResponse,
+      correctedScriptResponse,
     ] = await Promise.all([
       fetch(`/api/productions/${productionId}`, { headers }),
       fetch(`/api/productions/${productionId}/playback`, { headers }).catch(() => null),
@@ -142,12 +157,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       fetch(`/api/productions/${productionId}/edl`, { headers }),
       fetch(`/api/productions/${productionId}/renders`, { headers }).catch(() => null),
       fetch(`/api/productions/${productionId}/broll`, { headers }).catch(() => null),
+      fetch(`/api/productions/${productionId}/corrected-script`, { headers }).catch(() => null),
     ]);
-
     if (!productionResponse.ok) {
       throw new Error(`Production '${productionId}' could not be loaded`);
     }
-
     const [
       productionPayload,
       playbackPayload,
@@ -156,6 +170,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       edlPayload,
       rendersPayload,
       brollPayload,
+      correctedScriptPayload,
     ] = await Promise.all([
       productionResponse.json() as Promise<Production>,
       playbackResponse
@@ -173,8 +188,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       brollResponse
         ? readOptionalJson<components["schemas"]["BRollListResponse"]>(brollResponse, "BRoll")
         : Promise.resolve(null),
+      correctedScriptResponse
+        ? readOptionalJson<any>(correctedScriptResponse, "Corrected Script")
+        : Promise.resolve(null),
     ]);
-
     const preview =
       rendersPayload?.renders?.find(
         (render: components["schemas"]["RenderArtifactResponse"]) =>
@@ -183,12 +200,18 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     const master =
       rendersPayload?.renders?.find(
         (render: components["schemas"]["RenderArtifactResponse"]) =>
-          render.artifact_type === "MASTER",
+          (render.artifact_type as string) === "MASTER",
       ) ?? null;
     const svPreview =
       rendersPayload?.renders?.find(
         (render: components["schemas"]["RenderArtifactResponse"]) =>
-          render.artifact_type === "STUDIO_VOICE_PREVIEW",
+          (render.artifact_type as string) === "STUDIO_VOICE_PREVIEW" ||
+          (render.artifact_type as string) === "VOICEOVER_PREVIEW",
+      ) ?? null;
+    const finalMix =
+      rendersPayload?.renders?.find(
+        (render: components["schemas"]["RenderArtifactResponse"]) =>
+          (render.artifact_type as string) === "FINAL_MIX",
       ) ?? null;
     setProduction(productionPayload);
     setPlaybackUrl(playbackPayload?.playback_url ?? null);
@@ -197,11 +220,15 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       svPreview?.playback_url ?? playbackPayload?.studio_voice_preview_url ?? null,
     );
     setMasterUrl(master?.playback_url ?? playbackPayload?.master_url ?? null);
+    setFinalMixUrl(finalMix?.playback_url ?? null);
 
     setPreviewArtifact(preview);
     setMasterArtifact(master);
     setStudioVoiceArtifact(svPreview);
-
+    setFinalMixArtifact(finalMix);
+    if (correctedScriptPayload?.corrected_transcript) {
+      setCorrectedTranscript(correctedScriptPayload.corrected_transcript);
+    }
     if (brollPayload?.artifacts) {
       setBrollArtifacts(brollPayload.artifacts);
     }
@@ -362,25 +389,94 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setIsPlaying((prev) => !prev);
   }, []);
 
-  const handleSelectBlock = useCallback((block: TimelineBlock | null) => {
-    setSelectedBlock(block);
-    if (block) {
-      setSelectedDecisionId(block.decisionId || (block as any).decision_id || null);
-      setRightPanelTab("decision");
-    }
-  }, []);
+  const handleSelectBlock = useCallback(
+    (block: TimelineBlock | null) => {
+      setSelectedBlock(block);
+      if (!block) return;
+
+      const labelPrefix: Record<TimelineTrackId, string> = {
+        video: "Video",
+        audio: "Audio",
+        edits: "Edit",
+        broll: "Visual",
+        voiceover: "Voiceover",
+        music: "Music",
+        narration: "Voiceover",
+        captions: "Caption",
+        chapters: "Chapter",
+        "source-video": "Video",
+        "dialogue-edits": "Edit",
+        coverage: "Visual",
+      };
+      setSelectedDecisionId(block.decisionId || null);
+      handleSeek(block.startMs);
+      setChatContext({
+        kind: "element",
+        label: `${labelPrefix[block.trackId]}: ${block.label}`,
+        startMs: block.startMs,
+        endMs: block.endMs,
+        elementType: block.trackId,
+        elementId: block.id,
+      });
+      setRightPanelTab("chat");
+    },
+    [handleSeek],
+  );
 
   const handleSelectDecision = useCallback(
     (decision: EditorDecision | null) => {
-      if (!decision) {
-        setSelectedDecisionId(null);
-        return;
+      setSelectedDecisionId(decision?.decision_id || null);
+      if (decision) {
+        handleSeek(decision.source_start_ms);
+        setRightPanelTab("agent-log");
       }
-      setSelectedDecisionId(decision.decision_id);
-      handleSeek(decision.source_start_ms);
-      setRightPanelTab("decision");
     },
     [handleSeek],
+  );
+
+  const handleTimelineRange = useCallback(
+    (startMs: number, endMs: number) => {
+      handleSeek(startMs);
+      setChatContext({
+        kind: "range",
+        label: "Timeline selection",
+        startMs,
+        endMs,
+      });
+      setRightPanelTab("chat");
+    },
+    [handleSeek],
+  );
+
+  const handleTranscriptRange = useCallback(
+    (selection: TranscriptRangeSelection, openChat = false) => {
+      handleSeek(selection.startMs);
+      setChatContext({
+        kind: "element",
+        label: selection.label,
+        startMs: selection.startMs,
+        endMs: selection.endMs,
+        elementType: "transcript",
+        elementId: selection.id,
+      });
+      if (openChat) setRightPanelTab("chat");
+    },
+    [handleSeek],
+  );
+
+  const getAuthToken = useCallback(async (): Promise<string> => {
+    if (!firebaseUser) throw new Error("Authentication required");
+    return firebaseUser.getIdToken();
+  }, [firebaseUser]);
+
+  const handleChatWorkspaceUpdated = useCallback(
+    async (response: LeoChatResponse) => {
+      if (response.edl) setEdl(response.edl);
+      if (response.timeline_updated || response.voiceover_updated || response.preview_updated) {
+        await loadPersistedData();
+      }
+    },
+    [loadPersistedData],
   );
   const handleOpenSettings = useCallback((agent: "leo") => {
     setSettingsAgentId(agent);
@@ -562,19 +658,24 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           </span>
         </div>
 
-        {/* Center: Compact Current Status (No checklist pipeline bar) */}
         <div
           className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-2/70 border border-border-subtle text-xs"
           data-testid="compact-status-banner"
         >
           {activeProcessingStage ? (
-            <Loader2 className="size-3.5 text-primary animate-spin shrink-0" />
+            <>
+              <Loader2 className="size-3.5 animate-spin text-primary shrink-0" />
+              <span className="text-text-primary font-medium">{compactStatus}</span>
+              {renderSubStatus && (
+                <span className="text-text-muted text-[11px]">&middot; {renderSubStatus}</span>
+              )}
+            </>
           ) : (
-            <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+            <>
+              <CheckCircle2 className="size-3.5 text-success shrink-0" />
+              <span className="text-text-primary font-medium">Edit ready</span>
+            </>
           )}
-          <span className="font-medium text-text-secondary text-[11px] truncate max-w-xs">
-            {compactStatus}
-          </span>
         </div>
 
         {/* Right: Preview Mode Switcher + User Actions */}
@@ -583,7 +684,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             mode={previewMode}
             onModeChange={setPreviewMode}
             activeCutCount={twickData.activeCutCount}
-            hasStudioVoice={Boolean(studioVoicePreviewUrl)}
+            hasStudioVoice={Boolean(
+              studioVoicePreviewUrl && studioVoiceArtifact?.status === "completed",
+            )}
+            hasFinalMix={Boolean(finalMixUrl && finalMixArtifact?.status === "completed")}
           />
           {editorialRun?.status !== "failed" &&
             !failedProcessingStage &&
@@ -622,13 +726,13 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
       {/* Main Professional Editor NLE Workstation (3 Columns) */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Left Column: Media Bin (220-260px) */}
+        {/* Left Column: compact project artifacts */}
         <MediaBin
           currentMode={previewMode}
           sourceDurationMs={durationMs}
           editedDurationMs={derivedEditedDurationMs}
           studioVoiceDurationMs={studioVoiceArtifact?.duration_ms}
-          masterDurationMs={masterArtifact?.duration_ms}
+          finalMixDurationMs={finalMixArtifact?.duration_ms}
           hasRenderedPreview={Boolean(
             renderedPreviewUrl && previewArtifact?.status === "completed",
           )}
@@ -638,6 +742,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           hasStudioVoice={Boolean(
             studioVoicePreviewUrl && studioVoiceArtifact?.status === "completed",
           )}
+          hasFinalMix={Boolean(finalMixUrl && finalMixArtifact?.status === "completed")}
           hasProposalOrEdl={Boolean(
             (proposal?.decisions && proposal.decisions.length > 0) ||
             (edl?.cuts && edl.cuts.length > 0),
@@ -646,7 +751,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           brollAssets={brollBinItems}
           onSelectMode={setPreviewMode}
           onSeek={handleSeek}
-          className="w-[230px] shrink-0"
+          className="w-48 shrink-0"
         />
 
         {/* Center Column: Video Canvas */}
@@ -655,10 +760,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             playbackUrl={playbackUrl}
             renderedPreviewUrl={renderedPreviewUrl}
             studioVoicePreviewUrl={studioVoicePreviewUrl}
+            finalMixUrl={finalMixUrl}
             currentTimeMs={currentTimeMs}
             durationMs={durationMs}
             editedDurationMs={derivedEditedDurationMs}
             studioVoiceDurationMs={studioVoiceArtifact?.duration_ms}
+            finalMixDurationMs={finalMixArtifact?.duration_ms}
             isPlaying={isPlaying}
             previewMode={previewMode}
             edl={edl}
@@ -669,12 +776,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             className="flex-1 min-h-0"
           />
         </div>
-        {/* Right Column: Production Room (340-400px, Inspector Tabs: AGENTS / TRANSCRIPT / DECISION) */}
         <aside
           className="w-[360px] shrink-0 h-full min-h-0 flex flex-col bg-surface-1 border-l border-border-subtle overflow-hidden"
           data-testid="production-room"
         >
-          {/* Agent Presence Header (Click avatar to open settings) */}
           <div className="p-3 border-b border-border-subtle bg-surface-2/30">
             <AgentPresence
               activeAgent={activeAgent}
@@ -702,90 +807,112 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             )}
           </div>
 
-          {/* Inspector Tab Switcher */}
-          <div className="flex border-b border-border-subtle bg-surface-2/20 px-3">
+          <div
+            className="grid grid-cols-3 border-b border-border-subtle bg-surface-2/20 px-2"
+            role="tablist"
+            aria-label="Editor information"
+          >
             <button
               type="button"
-              onClick={() => setRightPanelTab("agents")}
-              className={`flex items-center gap-1.5 py-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
-                rightPanelTab === "agents"
+              role="tab"
+              aria-selected={rightPanelTab === "agent-log"}
+              onClick={() => setRightPanelTab("agent-log")}
+              className={`flex min-w-0 items-center justify-center gap-1 border-b-2 px-1 py-2.5 text-[9px] font-semibold tracking-wide transition-colors ${
+                rightPanelTab === "agent-log"
                   ? "border-primary text-text-primary"
                   : "border-transparent text-text-muted hover:text-text-secondary"
               }`}
-              data-testid="tab-agents-feed"
+              data-testid="tab-agent-log"
             >
-              <MessageSquare className="size-3.5" />
-              Agents
+              <ScrollText className="size-3 shrink-0" aria-hidden="true" />
+              <span>AGENT LOG</span>
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={rightPanelTab === "chat"}
+              onClick={() => setRightPanelTab("chat")}
+              className={`flex min-w-0 items-center justify-center gap-1 border-b-2 px-1 py-2.5 text-[9px] font-semibold tracking-wide transition-colors ${
+                rightPanelTab === "chat"
+                  ? "border-primary text-text-primary"
+                  : "border-transparent text-text-muted hover:text-text-secondary"
+              }`}
+              data-testid="tab-chat-leo"
+            >
+              <MessageSquare className="size-3 shrink-0" aria-hidden="true" />
+              <span>CHAT WITH LEO</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={rightPanelTab === "transcript"}
               onClick={() => setRightPanelTab("transcript")}
-              className={`flex items-center gap-1.5 py-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
+              className={`flex min-w-0 items-center justify-center gap-1 border-b-2 px-1 py-2.5 text-[9px] font-semibold tracking-wide transition-colors ${
                 rightPanelTab === "transcript"
                   ? "border-primary text-text-primary"
                   : "border-transparent text-text-muted hover:text-text-secondary"
               }`}
               data-testid="tab-transcript"
             >
-              <FileText className="size-3.5" />
-              Transcript
+              <FileText className="size-3 shrink-0" aria-hidden="true" />
+              <span>TRANSCRIPT</span>
             </button>
-            {(selectedDecision || selectedBlock) && (
-              <button
-                type="button"
-                onClick={() => setRightPanelTab("decision")}
-                className={`flex items-center gap-1.5 py-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
-                  rightPanelTab === "decision"
-                    ? "border-primary text-text-primary"
-                    : "border-transparent text-text-muted hover:text-text-secondary"
-                }`}
-                data-testid="tab-decision-inspector"
-              >
-                <Sliders className="size-3.5" />
-                Decision
-              </button>
-            )}
           </div>
 
-          {/* Active Tab Surface */}
-          <div className="flex-1 min-h-0 overflow-hidden">
-            {rightPanelTab === "agents" ? (
-              <AgentActivityFeed
-                activities={activities}
-                decisions={proposal?.decisions ?? []}
-                statusMessage={activeProcessingStage ? compactStatus : null}
-                onSeek={handleSeek}
-                onSelectActivity={(activity) => {
-                  const matching = proposal?.decisions?.find(
-                    (decision: EditorDecision) =>
-                      decision.decision_id === activity.related_decision_id,
-                  );
-                  if (matching) handleSelectDecision(matching);
-                }}
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            {rightPanelTab === "agent-log" ? (
+              <div className="flex min-h-0 flex-1 flex-col">
+                {(selectedDecision || selectedBlock) && (
+                  <div className="max-h-[56%] shrink-0 overflow-y-auto border-b border-border-subtle p-2">
+                    <DecisionInspector
+                      decision={selectedDecision}
+                      selectedBlock={selectedBlock}
+                      onClose={() => {
+                        setSelectedDecisionId(null);
+                        setSelectedBlock(null);
+                      }}
+                      onSeek={handleSeek}
+                    />
+                  </div>
+                )}
+                <AgentLogPanel
+                  activities={activities}
+                  decisions={proposal?.decisions ?? []}
+                  statusMessage={activeProcessingStage ? compactStatus : null}
+                  onSeek={handleSeek}
+                  onSelectActivity={(activity) => {
+                    const matching = proposal?.decisions?.find(
+                      (decision: EditorDecision) =>
+                        decision.decision_id === activity.related_decision_id,
+                    );
+                    if (matching) handleSelectDecision(matching);
+                  }}
+                />
+              </div>
+            ) : rightPanelTab === "chat" ? (
+              <LeoChatPanel
+                productionId={productionId}
+                currentPlayheadMs={currentTimeMs}
+                context={chatContext}
+                getAuthToken={getAuthToken}
+                onClearContext={() => setChatContext(null)}
+                onWorkspaceUpdated={handleChatWorkspaceUpdated}
               />
-            ) : rightPanelTab === "transcript" ? (
+            ) : (
               <TranscriptPanel
                 transcript={transcript}
+                correctedTranscript={correctedTranscript}
+                edl={edl}
+                mode={previewMode}
                 currentTimeMs={currentTimeMs}
                 decisions={proposal?.decisions || []}
                 selectedDecisionId={selectedDecisionId}
                 onSelectDecision={handleSelectDecision}
                 onSeek={handleSeek}
+                onRangeSelect={(selection) => handleTranscriptRange(selection)}
+                onSendRangeToChat={(selection) => handleTranscriptRange(selection, true)}
                 className="h-full"
               />
-            ) : (
-              <div className="p-3 h-full overflow-y-auto">
-                <DecisionInspector
-                  decision={selectedDecision}
-                  selectedBlock={selectedBlock}
-                  onClose={() => {
-                    setSelectedDecisionId(null);
-                    setSelectedBlock(null);
-                    setRightPanelTab("agents");
-                  }}
-                  onSeek={handleSeek}
-                />
-              </div>
             )}
           </div>
         </aside>
@@ -800,6 +927,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           selectedBlockId={selectedBlock?.id || null}
           onSelectBlock={handleSelectBlock}
           onSeek={handleSeek}
+          onSelectRange={handleTimelineRange}
           isPlaying={isPlaying}
           className="h-full"
         />

@@ -1,17 +1,17 @@
-import React, { useEffect, useRef } from "react";
-import * as echarts from "echarts/core";
-import { LineChart, ScatterChart, BarChart } from "echarts/charts";
+import type { EChartsOption } from "echarts";
+import { BarChart, LineChart, ScatterChart } from "echarts/charts";
 import {
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  MarkLineComponent,
-  MarkAreaComponent,
   DatasetComponent,
   GraphicComponent,
+  GridComponent,
+  LegendComponent,
+  MarkAreaComponent,
+  MarkLineComponent,
+  TooltipComponent,
 } from "echarts/components";
+import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import type { EChartsOption } from "echarts";
+import React, { useEffect, useRef } from "react";
 
 // Register tree-shakeable components once
 echarts.use([

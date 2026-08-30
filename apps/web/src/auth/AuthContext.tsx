@@ -1,12 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
+  type User as FirebaseUser,
   onIdTokenChanged,
   signInWithEmailAndPassword,
   signOut,
-  type User as FirebaseUser,
 } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { components } from "../api/generated";
+import { auth } from "../lib/firebase";
 
 export type User = components["schemas"]["User"];
 export type ClientAuthEvent =

@@ -1,10 +1,10 @@
-import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
+import { type FirebaseApp, getApp, getApps, initializeApp } from "firebase/app";
 import {
+  type Auth,
   browserLocalPersistence,
   getAuth,
   indexedDBLocalPersistence,
   initializeAuth,
-  type Auth,
 } from "firebase/auth";
 
 /**

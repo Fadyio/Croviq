@@ -9,7 +9,10 @@
 import { Track } from "@twick/timeline";
 import type { components } from "../api/generated";
 
-export type EditDecisionList = components["schemas"]["EditDecisionList"];
+export type EditDecisionList = components["schemas"]["EditDecisionList"] & {
+  voiceover_segments?: VoiceoverSegment[];
+  background_music?: BackgroundMusicMix | null;
+};
 export type CutInstruction = components["schemas"]["CutInstruction"];
 export type CoverageMarker = components["schemas"]["CoverageMarker"];
 export type EditorProposal = components["schemas"]["EditorProposal"];
@@ -25,13 +28,69 @@ export type TimelineTrackId =
   | "audio"
   | "edits"
   | "broll"
-  | "narration"
-  | "captions"
+  | "voiceover"
+  | "music"
   | "chapters"
+  | "captions"
+  | "narration"
   | "source-video"
   | "dialogue-edits"
   | "coverage";
 
+export type ScriptCorrectionChangeType =
+  "GRAMMAR" | "TRANSCRIPTION_ERROR" | "FILLER" | "FALSE_START" | "REPETITION" | "KEEP";
+
+export type EntailmentVerdict = "SUPPORTED" | "UNSUPPORTED" | "UNCERTAIN";
+
+export interface CorrectedTranscriptSegment {
+  segment_id: string;
+  source_start_ms: number;
+  source_end_ms: number;
+  original_text: string;
+  corrected_text: string;
+  change_type: ScriptCorrectionChangeType;
+  reason: string;
+  visual_evidence: string;
+  meaning_changed: boolean;
+  target_duration_ms: number;
+  confidence: number;
+  entailment_verdict: EntailmentVerdict;
+  is_voiceover_active?: boolean;
+  voice_mode?: string;
+  generated_audio_duration_ms?: number | null;
+}
+
+export interface CorrectedTranscript {
+  transcript_id: string;
+  production_id: string;
+  segments: CorrectedTranscriptSegment[];
+  created_at: string;
+}
+
+export interface BackgroundMusicMix {
+  style: string;
+  model_id?: string;
+  prompt?: string | null;
+  duration_ms?: number | null;
+  volume_db: number;
+  ducking_db: number;
+  target_lufs: number;
+  music_gcs_object: string;
+  preview_artifact_id?: string | null;
+  is_muted?: boolean;
+}
+
+export interface VoiceoverSegment {
+  segment_id: string;
+  source_start_ms: number;
+  source_end_ms: number;
+  text: string;
+  original_text?: string | null;
+  voice_mode: string;
+  voice_id?: string | null;
+  generated_duration_ms?: number | null;
+  preview_artifact_id?: string | null;
+}
 export interface TimelineBlock {
   id: string;
   trackId: TimelineTrackId;
@@ -46,6 +105,8 @@ export interface TimelineBlock {
     | "cut-rejected"
     | "coverage-broll"
     | "coverage-screen"
+    | "voiceover"
+    | "music"
     | "narration"
     | "caption"
     | "chapter"
@@ -55,14 +116,18 @@ export interface TimelineBlock {
   markerId?: string;
   details?: {
     originalText?: string;
+    correctedText?: string;
     conciseReason?: string;
     confidence?: number;
     safetyStatus?: string;
     coverageType?: string;
     summary?: string;
+    voiceMode?: string;
+    volumeDb?: number;
+    duckingDb?: number;
+    isMuted?: boolean;
   };
 }
-
 export interface AudioTrackRegion {
   type: "speech" | "silence" | "removed";
   startMs: number;
@@ -369,6 +434,8 @@ export function edlToTwickTimeline(
 
   // 3. B-ROLL / COVERAGE track
   const coverageMarkers = edl.coverage_markers || [];
+  const coverageDecisionIds = new Set(coverageMarkers.map((marker) => marker.decision_id));
+  let coverageBlockCount = 0;
   for (const marker of coverageMarkers) {
     const leoDec = leoDecisionMap[marker.decision_id];
 
@@ -390,9 +457,84 @@ export function edlToTwickTimeline(
         coverageType: marker.coverage_type,
       },
     });
+    coverageBlockCount += 1;
   }
 
-  // 4. CHAPTERS track
+  // Persisted proposal candidates can precede EDL marker assembly. Keep them visible
+  // on the canonical B-roll track without duplicating assembled coverage markers.
+  for (const candidate of proposal?.decisions || []) {
+    if (
+      (candidate.decision_type !== "BROLL_COVER_CANDIDATE" &&
+        candidate.decision_type !== "BROLL_COVER") ||
+      coverageDecisionIds.has(candidate.decision_id)
+    ) {
+      continue;
+    }
+
+    const duration = Math.max(0, candidate.source_end_ms - candidate.source_start_ms);
+    blocks.push({
+      id: `cov-decision-${candidate.decision_id}`,
+      trackId: "broll",
+      label: "B-roll candidate",
+      startMs: candidate.source_start_ms,
+      endMs: candidate.source_end_ms,
+      durationMs: duration,
+      type: "coverage-broll",
+      decisionId: candidate.decision_id,
+      details: {
+        originalText: candidate.original_text,
+        conciseReason: candidate.concise_reason,
+        confidence: candidate.confidence,
+        coverageType: "BROLL_CANDIDATE",
+      },
+    });
+    coverageBlockCount += 1;
+  }
+
+  // 4. VOICEOVER track (persisted replacement voiceover segments)
+  const voiceovers = edl.voiceover_segments || [];
+  for (const vo of voiceovers) {
+    const duration = vo.source_end_ms - vo.source_start_ms;
+    blocks.push({
+      id: `vo-${vo.segment_id}`,
+      trackId: "voiceover",
+      label: vo.voice_mode === "REPLICATED_MY_VOICE" ? "My Voice Voiceover" : "Studio Voiceover",
+      startMs: vo.source_start_ms,
+      endMs: vo.source_end_ms,
+      durationMs: duration,
+      type: "voiceover",
+      details: {
+        originalText: vo.original_text || undefined,
+        correctedText: vo.text,
+        conciseReason: `Narration replacement (${vo.voice_mode})`,
+        voiceMode: vo.voice_mode,
+      },
+    });
+  }
+
+  // 5. MUSIC track (Google Lyria background music bed)
+  if (edl.background_music) {
+    const bg = edl.background_music;
+    blocks.push({
+      id: "bg-music-bed",
+      trackId: "music",
+      label: bg.is_muted
+        ? "Background Music (Muted)"
+        : `${bg.style || "Subtle Technology Underscore"} (${bg.volume_db}dB)`,
+      startMs: 0,
+      endMs: sourceDurationMs,
+      durationMs: sourceDurationMs,
+      type: "music",
+      details: {
+        conciseReason: `Google Lyria 3 Pro (${bg.volume_db}dB, ducking ${bg.ducking_db}dB)`,
+        volumeDb: bg.volume_db,
+        duckingDb: bg.ducking_db,
+        isMuted: bg.is_muted,
+      },
+    });
+  }
+
+  // 6. CHAPTERS track
   const rawChapters = proposal?.chapters || [];
   for (let i = 0; i < rawChapters.length; i++) {
     const chap = rawChapters[i];
@@ -412,7 +554,7 @@ export function edlToTwickTimeline(
     });
   }
 
-  // 6. CAPTIONS track (from canonical transcript segments)
+  // 7. CAPTIONS track (from canonical transcript segments)
   if (transcript?.segments) {
     for (const seg of transcript.segments) {
       blocks.push({
@@ -430,17 +572,18 @@ export function edlToTwickTimeline(
     }
   }
 
-  // Construct Twick Track instances
+  // Construct Twick Track instances in canonical order:
+  // VIDEO, AUDIO, EDITS, B-ROLL, VOICEOVER, MUSIC, CHAPTERS, CAPTIONS
   const tracks = [
     new Track("Video", "ELEMENT", "track-video"),
     new Track("Audio", "ELEMENT", "track-audio"),
     new Track("Edits", "ELEMENT", "track-edits"),
     new Track("B-roll", "ELEMENT", "track-broll"),
-    new Track("Narration", "ELEMENT", "track-narration"),
-    new Track("Captions", "ELEMENT", "track-captions"),
+    new Track("Voiceover", "ELEMENT", "track-voiceover"),
+    new Track("Music", "ELEMENT", "track-music"),
     new Track("Chapters", "ELEMENT", "track-chapters"),
+    new Track("Captions", "ELEMENT", "track-captions"),
   ];
-
   const keepSegments = deriveKeepSegments(edl);
   const audioRegions = deriveAudioRegions(edl, transcript);
 
@@ -449,7 +592,7 @@ export function edlToTwickTimeline(
     blocks,
     totalDurationMs: sourceDurationMs,
     activeCutCount: getExecutableCuts(edl).length,
-    coverageMarkerCount: coverageMarkers.length,
+    coverageMarkerCount: coverageBlockCount,
     keepSegments,
     audioRegions,
     chapters: rawChapters,

@@ -1,7 +1,8 @@
-import React from "react";
 import { Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import React from "react";
 import type { components } from "../../api/generated";
 import { ChannelTrendChart } from "./ChannelTrendChart";
+
 type ChannelDashboard = components["schemas"]["ChannelDashboard"];
 type DashboardKpi = components["schemas"]["DashboardKpi"];
 

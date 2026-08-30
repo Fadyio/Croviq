@@ -1,13 +1,14 @@
+import { Film, Scissors } from "lucide-react";
 import React from "react";
-import { Scissors, Film } from "lucide-react";
 
-export type PreviewMode = "original" | "edited" | "studio_voice";
+export type PreviewMode = "original" | "edited" | "studio_voice" | "final_mix";
 
 interface PreviewToggleProps {
   mode: PreviewMode;
   onModeChange: (mode: PreviewMode) => void;
   activeCutCount: number;
   hasStudioVoice?: boolean;
+  hasFinalMix?: boolean;
   className?: string;
 }
 
@@ -16,6 +17,7 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
   onModeChange,
   activeCutCount,
   hasStudioVoice = false,
+  hasFinalMix = false,
   className = "",
 }) => {
   return (
@@ -81,6 +83,25 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
             className={`w-3.5 h-3.5 ${mode === "studio_voice" ? "text-white" : "text-primary"}`}
           />
           <span>Studio Voice</span>
+        </button>
+      )}
+      {hasFinalMix && (
+        <button
+          type="button"
+          onClick={() => onModeChange("final_mix")}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+            mode === "final_mix"
+              ? "bg-purple-600 text-white shadow-xs font-semibold"
+              : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
+          }`}
+          aria-pressed={mode === "final_mix"}
+          title="Play Final Mix with voice corrections, B-roll, and background music"
+          data-testid="preview-toggle-final-mix"
+        >
+          <Film
+            className={`w-3.5 h-3.5 ${mode === "final_mix" ? "text-white" : "text-purple-400"}`}
+          />
+          <span>Final Mix</span>
         </button>
       )}
     </div>

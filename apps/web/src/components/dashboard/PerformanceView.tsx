@@ -1,9 +1,9 @@
 import React from "react";
 import type { components } from "../../api/generated";
 import { ChannelTrendChart } from "./ChannelTrendChart";
+import { TrafficSourceChart } from "./TrafficSourceChart";
 import { VideoPerformanceRankedChart } from "./VideoPerformanceRankedChart";
 import { VideoPerformanceTable } from "./VideoPerformanceTable";
-import { TrafficSourceChart } from "./TrafficSourceChart";
 
 type ChannelDashboard = components["schemas"]["ChannelDashboard"];
 type VideoPoint = components["schemas"]["VideoPerformancePoint"];

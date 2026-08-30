@@ -1,5 +1,5 @@
-import React from "react";
 import { Beaker, CheckCircle2, Clock, Sparkles } from "lucide-react";
+import React from "react";
 import type { components } from "../../api/generated";
 
 type ChannelDashboard = components["schemas"]["ChannelDashboard"];

@@ -72,6 +72,10 @@ from croviq_domain.render_review import (
 )
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import (
+    CorrectedTranscript,
+    CorrectedTranscriptSegment,
+    EntailmentVerdict,
+    ScriptCorrectionChangeType,
     SilenceInterval,
     Transcript,
     TranscriptSegment,
@@ -275,6 +279,10 @@ __all__ = [
     "build_publish_idempotency_key",
     "build_thumbnail_artifact_gcs_path",
     "derive_synthetic_media_status",
+    "CorrectedTranscript",
+    "CorrectedTranscriptSegment",
+    "EntailmentVerdict",
+    "ScriptCorrectionChangeType",
 ]
 
 __version__ = "0.1.0"

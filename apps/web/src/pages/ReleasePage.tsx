@@ -1,4 +1,3 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -18,15 +17,16 @@ import {
   VolumeX,
   X,
 } from "lucide-react";
-import { CroviqLogo } from "../components/CroviqLogo";
-import { useAuth } from "../auth/AuthContext";
-import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import type { components } from "../api/generated";
 import irisAvatar from "../assets/agents/Iris.png";
+import { useAuth } from "../auth/AuthContext";
+import { CroviqLogo } from "../components/CroviqLogo";
+import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
 import {
   PublishConfirmationModal,
   YouTubeIcon,
 } from "../components/release/PublishConfirmationModal";
-import type { components } from "../api/generated";
 
 type PackagingDetailResponse = components["schemas"]["PackagingDetailResponse"];
 type ReleaseReviewDetailResponse = components["schemas"]["ReleaseReviewDetailResponse"];

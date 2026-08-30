@@ -14,10 +14,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 import json
 import logging
-from typing import Any
+import os
+from typing import Any, Sequence
 import uuid
 
 from croviq_agents.alex import AlexDataScientist
+from croviq_agents.editor import LeoVideoEditor
+from croviq_agents.tools import build_editor_chat_tool_registry
 from croviq_api.config import get_settings
 from croviq_api.channels.research_repository import ResearchRepository
 from croviq_api.channels.youtube_provider import YouTubeChannelDataProvider
@@ -156,6 +159,100 @@ def append_conversation_message(
         structured_artifact=structured_artifact,
         user_id=user_id,
     )
+
+async def get_production_chat_history(
+    production_id: str,
+    user_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Load Leo production chat from Firestore, with bounded local storage outside cloud."""
+    settings = get_settings()
+    if not settings.is_production and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+        return get_conversation_history(f"production:{production_id}", "leo", user_id)
+    from google.cloud.firestore import AsyncClient
+
+    client = AsyncClient(project=settings.gcp_project_id or None)
+    query = (
+        client.collection("productions")
+        .document(production_id)
+        .collection("leo_chat")
+        .order_by("created_at")
+        .limit(MAX_MESSAGES_PER_CONVERSATION)
+    )
+    docs = [doc async for doc in query.stream()]
+    messages: list[dict[str, Any]] = []
+    for doc in docs:
+        data = doc.to_dict()
+        created_at = data.get("created_at")
+        if isinstance(created_at, datetime):
+            data["created_at"] = created_at.isoformat()
+        data["message_id"] = doc.id
+        messages.append(data)
+    return messages
+
+
+async def clear_production_chat_history(production_id: str, user_id: str | None = None) -> None:
+    """Delete every persisted Leo chat message for one production."""
+    settings = get_settings()
+    if not settings.is_production and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+        clear_conversation_history(f"production:{production_id}", "leo", user_id)
+        return
+    from google.cloud.firestore import AsyncClient
+
+    client = AsyncClient(project=settings.gcp_project_id or None)
+    collection = (
+        client.collection("productions")
+        .document(production_id)
+        .collection("leo_chat")
+    )
+    async for doc in collection.stream():
+        await doc.reference.delete()
+
+
+async def _append_production_chat_message(
+    production_id: str,
+    role: str,
+    content: str,
+    *,
+    tool_executions: list[dict[str, Any]] | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    settings = get_settings()
+    message_id = f"msg_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(UTC)
+    payload = {
+        "message_id": message_id,
+        "role": role,
+        "content": content[:MAX_CHARS_PER_MESSAGE],
+        "tool_executions": tool_executions or [],
+        "created_at": now.isoformat(),
+    }
+    if not settings.is_production and not os.getenv("FIRESTORE_EMULATOR_HOST"):
+        local_message = append_conversation_message(
+            f"production:{production_id}",
+            "leo",
+            role,
+            content,
+            tool_executions=tool_executions,
+            user_id=user_id,
+        )
+        local_message.pop("structured_artifact", None)
+        return local_message
+    from google.cloud.firestore import AsyncClient
+
+    client = AsyncClient(project=settings.gcp_project_id or None)
+    reference = (
+        client.collection("productions")
+        .document(production_id)
+        .collection("leo_chat")
+        .document(message_id)
+    )
+    firestore_payload = dict(payload)
+    firestore_payload["created_at"] = now
+    firestore_payload["user_id"] = user_id
+    await reference.set(firestore_payload)
+    return payload
+
+
 class AgentChatService:
     """Executes authentic agent conversations with domain tools, code execution, and persistent memory."""
 
@@ -269,20 +366,105 @@ class AgentChatService:
             structured_artifact=structured_artifact,
         )
 
-    async def handle_leo_message(self, message: str, user_id: str | None = None) -> dict[str, Any]:
-        """Leo (Video Editor) conversational chat activates in Editor phase."""
-        reply = (
-            "Leo is active in the Editor workspace where he performs dialogue passes, filler cleanup, "
-            "and natural cut safety. Direct conversational chat with Leo will activate in the Editor development phase."
+    async def handle_leo_message(
+        self,
+        message: str,
+        user_id: str | None = None,
+        *,
+        production: Any | None = None,
+        media_metadata: Any | None = None,
+        transcript: Any | None = None,
+        proposal: Any | None = None,
+        edl: Any | None = None,
+        artifacts: Sequence[Any] | None = None,
+        current_playhead_ms: int | None = None,
+        selected_range: Sequence[int] | None = None,
+        selected_element: dict[str, Any] | None = None,
+        channel_profile: Any | None = None,
+        lessons: list[Any] | None = None,
+        editor: LeoVideoEditor | None = None,
+        editorial_repo: Any | None = None,
+        edl_repo: Any | None = None,
+        proposal_id: str | None = None,
+        callbacks: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Delegate production chat to Leo and durably persist every canonical state change."""
+        if production is None or transcript is None or proposal is None or edl is None:
+            reply = "Open a production in the Editor workspace to chat with Leo about its timeline."
+            append_conversation_message(self.workspace_id, "leo", "user", message, user_id=user_id)
+            return append_conversation_message(
+                self.workspace_id,
+                "leo",
+                "assistant",
+                reply,
+                user_id=user_id,
+            )
+
+        production_id = production.production_id
+        history = await get_production_chat_history(production_id, user_id)
+        prompt_config = await self.agent_config_repo.get_agent_prompt(
+            self.workspace_id, AgentId.LEO
         )
-        append_conversation_message(self.workspace_id, "leo", "user", message, user_id=user_id)
-        return append_conversation_message(
-            self.workspace_id,
-            "leo",
-            "assistant",
-            reply,
+        custom_prompt = prompt_config.prompt_text if prompt_config.is_custom else None
+        registry = build_editor_chat_tool_registry(
+            production_id=production_id,
+            transcript=transcript,
+            proposal=proposal,
+            edl=edl,
+            artifacts=artifacts,
+            media_metadata=media_metadata,
+            callbacks=callbacks,
+        )
+        if editor is None:
+            raise RuntimeError("Leo production chat requires the configured GenAI client")
+        leo = editor
+        leo._tool_registry = registry
+        chat_result = await leo.chat(
+            message=message,
+            conversation_history=history,
+            production=production,
+            media_metadata=media_metadata,
+            transcript=transcript,
+            proposal=proposal,
+            edl=edl,
+            artifacts=artifacts,
+            current_playhead_ms=current_playhead_ms,
+            selected_range=selected_range,
+            selected_element=selected_element,
+            channel_profile=channel_profile,
+            lessons=lessons,
+            custom_prompt=custom_prompt,
+        )
+
+        updated_proposal = chat_result["proposal"]
+        updated_edl = chat_result["edl"]
+        if chat_result["timeline_updated"]:
+            if editorial_repo is None or edl_repo is None or proposal_id is None:
+                raise RuntimeError("Leo edit changed canonical state without persistence repositories")
+            await editorial_repo.save_editor_proposal(updated_proposal, proposal_id=proposal_id)
+            await edl_repo.save_edl(updated_edl)
+
+        await _append_production_chat_message(
+            production_id,
+            "user",
+            message,
             user_id=user_id,
         )
+        assistant = await _append_production_chat_message(
+            production_id,
+            "assistant",
+            chat_result["reply"],
+            tool_executions=chat_result["tool_executions"],
+            user_id=user_id,
+        )
+        assistant.update({
+            "edl": updated_edl,
+            "timeline_updated": chat_result["timeline_updated"],
+            "voiceover_updated": chat_result["voiceover_updated"],
+            "preview_updated": chat_result["preview_updated"],
+            "seek_range": chat_result.get("seek_range"),
+        })
+        return assistant
 
     async def handle_iris_message(self, message: str, user_id: str | None = None) -> dict[str, Any]:
         """Iris (Quality Control) conversational chat activates in Release QA phase."""

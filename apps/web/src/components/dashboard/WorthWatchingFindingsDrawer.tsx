@@ -1,6 +1,6 @@
-import React from "react";
-import { AnimatePresence, motion } from "motion/react";
 import { ExternalLink, Sparkles, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import React from "react";
 import type { components } from "../../api/generated";
 
 type ResearchFinding = components["schemas"]["ResearchFinding"];

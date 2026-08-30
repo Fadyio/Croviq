@@ -1,21 +1,21 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Play,
-  Pause,
-  Volume2,
-  VolumeX,
   Maximize2,
   Minimize2,
+  Pause,
+  Play,
   RotateCcw,
   Sparkles,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  type CoverageMarker,
+  type EditDecisionList,
+  editedToSourceTimeMs,
   findExecutableSkipInterval,
   formatTimecode,
   sourceToEditedTimeMs,
-  editedToSourceTimeMs,
-  type EditDecisionList,
-  type CoverageMarker,
 } from "../../lib/edl-adapter";
 import type { PreviewMode } from "./PreviewToggle";
 
@@ -23,10 +23,12 @@ interface VideoStageProps {
   playbackUrl: string | null;
   renderedPreviewUrl?: string | null;
   studioVoicePreviewUrl?: string | null;
+  finalMixUrl?: string | null;
   currentTimeMs: number;
   durationMs: number;
   editedDurationMs?: number;
   studioVoiceDurationMs?: number | null;
+  finalMixDurationMs?: number | null;
   isPlaying: boolean;
   previewMode: PreviewMode;
   edl: EditDecisionList | null;
@@ -41,10 +43,12 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   playbackUrl,
   renderedPreviewUrl,
   studioVoicePreviewUrl,
+  finalMixUrl,
   currentTimeMs,
   durationMs,
   editedDurationMs,
   studioVoiceDurationMs,
+  finalMixDurationMs,
   isPlaying,
   previewMode,
   edl,
@@ -76,25 +80,31 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
   }, [isPlaying]);
 
+  const isUsingFinalMix = previewMode === "final_mix" && Boolean(finalMixUrl);
   const isUsingStudioVoiceArtifact =
     previewMode === "studio_voice" && Boolean(studioVoicePreviewUrl);
   const isUsingRenderedArtifact = previewMode === "edited" && Boolean(renderedPreviewUrl);
 
-  const activeVideoUrl = isUsingStudioVoiceArtifact
-    ? studioVoicePreviewUrl
-    : isUsingRenderedArtifact
-      ? renderedPreviewUrl
-      : playbackUrl;
+  const activeVideoUrl = isUsingFinalMix
+    ? finalMixUrl
+    : isUsingStudioVoiceArtifact
+      ? studioVoicePreviewUrl
+      : isUsingRenderedArtifact
+        ? renderedPreviewUrl
+        : playbackUrl;
 
   const activeDurationMs =
-    previewMode === "studio_voice"
-      ? studioVoiceDurationMs || editedDurationMs || durationMs
-      : previewMode === "edited"
-        ? editedDurationMs || durationMs
-        : durationMs;
+    previewMode === "final_mix"
+      ? finalMixDurationMs || studioVoiceDurationMs || editedDurationMs || durationMs
+      : previewMode === "studio_voice"
+        ? studioVoiceDurationMs || editedDurationMs || durationMs
+        : previewMode === "edited"
+          ? editedDurationMs || durationMs
+          : durationMs;
 
   const activeCurrentTimeMs =
-    (previewMode === "edited" || previewMode === "studio_voice") && edl
+    (previewMode === "edited" || previewMode === "studio_voice" || previewMode === "final_mix") &&
+    edl
       ? sourceToEditedTimeMs(currentTimeMs, edl)
       : currentTimeMs;
 

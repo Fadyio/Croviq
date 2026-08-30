@@ -1,5 +1,5 @@
-import React, { useState } from "react";
 import { Settings } from "lucide-react";
+import React, { useState } from "react";
 import leoAvatar from "../../assets/agents/leo.webp";
 
 type AgentId = "leo" | "system";

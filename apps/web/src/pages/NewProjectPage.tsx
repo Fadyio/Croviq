@@ -1,4 +1,3 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -10,10 +9,12 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { CroviqLogo } from "../components/CroviqLogo";
-import { useAuth } from "../auth/AuthContext";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../api/generated";
+import { useAuth } from "../auth/AuthContext";
+import { CroviqLogo } from "../components/CroviqLogo";
 import { RecentProjectsList } from "../components/projects/RecentProjectsList";
+
 type CreateUploadResponse = components["schemas"]["CreateUploadResponse"];
 type Production = components["schemas"]["Production"];
 

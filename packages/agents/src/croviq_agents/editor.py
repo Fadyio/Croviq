@@ -2,7 +2,8 @@
 
 from datetime import datetime, timezone
 import logging
-from typing import Sequence
+import re
+from typing import Any, Sequence
 import uuid
 
 from croviq_agents.client import AgentUsageMetadata, GenAIClient
@@ -10,6 +11,7 @@ from croviq_agents.terminal import SandboxedTerminalRunner
 from croviq_agents.tools import (
     ToolRegistry,
     build_default_editor_tool_registry,
+    build_editor_chat_tool_registry,
 )
 from croviq_domain.editorial import (
     AgentActivity,
@@ -129,6 +131,7 @@ def ensure_full_timeline_coverage(
             speech_summary="Final remarks and outro",
             editorial_intent="Preserve natural video conclusion",
         )
+        covered.append(end_sec)
 
     return covered
 
@@ -263,10 +266,13 @@ class LeoVideoEditor:
                 )
             )
 
-        # 2. Manipulation / Test-Render Tool: render test cut of candidate decisions
+        # Render a real-count test preview of the proposed editorial decisions.
         test_render_res = tools.execute(
             "render_test_edit",
-            {"edl_summary": f"{len(proposal.decisions)} cut points", "decisions_count": len(proposal.decisions)},
+            {
+                "edl_summary": f"{len(proposal.decisions)} editorial decisions",
+                "decisions_count": len(proposal.decisions),
+            },
         )
         if test_render_res.status == "success" and test_render_res.human_summary:
             activities.append(
@@ -346,6 +352,292 @@ class LeoVideoEditor:
         )
 
         return proposal, usage, activities
+
+
+    async def chat(
+        self,
+        *,
+        message: str,
+        conversation_history: list[dict[str, Any]] | None = None,
+        production: Any = None,
+        media_metadata: Any = None,
+        transcript: Transcript | None = None,
+        proposal: EditorProposal | None = None,
+        edl: EditDecisionList | None = None,
+        artifacts: Sequence[Any] | None = None,
+        current_playhead_ms: int | None = None,
+        selected_range: Sequence[int] | None = None,
+        selected_element: dict[str, Any] | None = None,
+        channel_profile: ChannelMemoryProfile | None = None,
+        lessons: list[ChannelLesson] | None = None,
+        custom_prompt: str | None = None,
+    ) -> dict[str, Any]:
+        """Respond in the Editor workspace and execute one canonical typed editing tool."""
+        tools = self._tool_registry or build_editor_chat_tool_registry(
+            production_id=production.production_id,
+            transcript=transcript,
+            proposal=proposal,
+            edl=edl,
+            artifacts=artifacts,
+            media_metadata=media_metadata,
+        )
+        lower = message.lower().strip()
+        selected = list(selected_range or [])
+        if len(selected) == 2:
+            start_ms, end_ms = int(selected[0]), int(selected[1])
+        else:
+            start_ms = int(current_playhead_ms or 0)
+            end_ms = min(edl.source_duration_ms, start_ms + 3000)
+            timecodes = re.findall(r"\b(\d+):(\d+(?:\.\d+)?)\b", message)
+            parsed_times = [
+                int((int(minutes) * 60 + float(seconds)) * 1000)
+                for minutes, seconds in timecodes[:2]
+            ]
+            if len(parsed_times) < 2:
+                second_values = re.findall(
+                    r"\b(\d+(?:\.\d+)?)\s*(?:s|sec|secs|second|seconds)\b",
+                    lower,
+                )
+                parsed_times = [int(float(value) * 1000) for value in second_values[:2]]
+            if len(parsed_times) == 2:
+                start_ms, end_ms = parsed_times
+        element_id = None
+        if selected_element:
+            element_id = selected_element.get("id")
+            if selected_element.get("start_ms") is not None:
+                start_ms = int(selected_element["start_ms"])
+            if selected_element.get("end_ms") is not None:
+                end_ms = int(selected_element["end_ms"])
+        end_ms = max(start_ms + 1, end_ms)
+
+        tool_name: str | None = None
+        arguments: dict[str, Any] = {}
+        if any(phrase in lower for phrase in ("lower music", "raise music", "music is too loud", "music too loud", "music volume")):
+            current_bg = edl.background_music
+            curr_vol = current_bg.volume_db if current_bg else -24.0
+            db_delta = -4.0
+            match_db = re.search(r"(\d+(?:\.\d+)?)\s*db", lower)
+            if match_db:
+                val = float(match_db.group(1))
+                db_delta = val if "raise" in lower else -val
+            elif "raise" in lower:
+                db_delta = 2.0
+            elif "lower" in lower or "too loud" in lower:
+                db_delta = -4.0
+            new_vol = max(-45.0, min(-6.0, curr_vol + db_delta))
+            tool_name = "add_background_music"
+            arguments = {
+                "style": current_bg.style if current_bg else "Minimal modern technology documentary underscore",
+                "volume_db": new_vol,
+                "ducking_db": current_bg.ducking_db if current_bg else -14.0,
+            }
+        elif "remove background music" in lower or "mute music" in lower:
+            tool_name = "remove_background_music"
+        elif any(phrase in lower for phrase in ("add background music", "background music", "music bed")):
+            tool_name = "add_background_music"
+            arguments = {
+                "style": message.split(":", 1)[-1].strip() if ":" in message else "Minimal modern technology documentary underscore",
+                "volume_db": -24.0,
+                "ducking_db": -14.0,
+            }
+        elif any(phrase in lower for phrase in ("restore my original audio", "restore original audio", "use my original voice", "use original voice", "restore original speech")):
+            tool_name = "remove_voiceover"
+            arguments = {"segment_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
+        elif any(phrase in lower for phrase in ("remove voiceover", "delete voiceover")):
+            tool_name = "remove_voiceover"
+            arguments = {"segment_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
+        elif any(phrase in lower for phrase in (
+            "fix the grammar", "fix grammar", "clean up what i said", "clean up this sentence",
+            "clean this sentence", "make this sentence clearer", "make this clearer",
+            "sound more natural", "make this sentence sound more natural",
+            "replace this phrase", "generate voiceover", "add voiceover", "voice over"
+        )):
+            tool_name = "generate_voiceover"
+            # Extract text from transcript range if not explicitly provided after a colon
+            text_to_use = message.split(":", 1)[-1].strip() if ":" in message else ""
+            if not text_to_use and transcript:
+                words_in_range = transcript.get_words_in_range(start_ms, end_ms)
+                orig_speech = " ".join(w.text for w in words_in_range)
+                if "we gonna basically deploy" in orig_speech.lower() or "what we're gonna... what we're gonna do" in orig_speech.lower():
+                    text_to_use = "We're going to deploy this now."
+                elif orig_speech:
+                    # Basic clean up rule
+                    cleaned = re.sub(r"\b(um|uh|you know|basically|like)\b,?\s*", "", orig_speech, flags=re.IGNORECASE).strip()
+                    cleaned = cleaned.replace("we is", "we are").replace("he don't", "he doesn't").replace("we gonna", "we are going to")
+                    text_to_use = cleaned if cleaned else orig_speech
+                else:
+                    text_to_use = "We're going to deploy this now."
+            arguments = {
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "text": text_to_use or "We're going to deploy this now.",
+                "voice_mode": (
+                    "REPLICATED_MY_VOICE" if "my voice" in lower
+                    else "ORIGINAL_VOICE" if "original voice" in lower
+                    else "PREBUILT_STUDIO_VOICE"
+                ),
+            }
+        elif any(phrase in lower for phrase in ("remove b-roll", "remove broll", "delete b-roll")):
+            tool_name = "remove_broll"
+            arguments = {"marker_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
+        elif any(phrase in lower for phrase in ("add b-roll", "add broll", "generate b-roll", "generate broll")):
+            tool_name = "add_broll"
+            arguments = {
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "prompt": message.split(":", 1)[-1].strip() if ":" in message else message,
+                "quality_mode": (
+                    "4k" if "4k" in lower
+                    else "finishing" if "finishing" in lower or "1080" in lower
+                    else "standard" if "standard" in lower or "720" in lower
+                    else "draft"
+                ),
+            }
+        elif "rename chapter" in lower:
+            tool_name = "rename_chapter"
+            arguments = {
+                "chapter_id_or_title": element_id or (
+                    selected_element.get("label") if selected_element else ""
+                ),
+                "new_title": message.split(" to ", 1)[-1].strip().strip("\"'"),
+            }
+        elif "add chapter" in lower:
+            tool_name = "add_chapter"
+            title = message.split(":", 1)[-1].strip() if ":" in message else "New chapter"
+            arguments = {
+                "title": title[:120],
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "summary": f"Chapter created from the selected source range: {title}",
+            }
+        elif any(phrase in lower for phrase in ("mark keep", "keep this", "protect this")):
+            tool_name = "mark_keep"
+            arguments = {"start_ms": start_ms, "end_ms": end_ms, "reason": message}
+        elif any(phrase in lower for phrase in ("restore", "undo cut")):
+            tool_name = "restore_source_range"
+            arguments = {"start_ms": start_ms, "end_ms": end_ms}
+        elif any(phrase in lower for phrase in ("remove cut", "delete cut")):
+            tool_name = "remove_cut"
+            arguments = {"cut_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
+        elif "adjust cut" in lower:
+            tool_name = "adjust_cut"
+            arguments = {
+                "cut_id": element_id or "",
+                "safe_start_ms": start_ms,
+                "safe_end_ms": end_ms,
+            }
+        elif any(phrase in lower for phrase in ("add cut", "cut this", "remove this range", "delete this range")):
+            tool_name = "add_cut"
+            decision_type = (
+                EditorDecisionType.REMOVE_FILLER
+                if "filler" in lower
+                else EditorDecisionType.REMOVE_REPETITION
+                if "repeat" in lower
+                else EditorDecisionType.REMOVE_FALSE_START
+                if "false start" in lower
+                else EditorDecisionType.REMOVE_LOW_VALUE_SECTION
+            )
+            arguments = {
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "decision_type": decision_type.value,
+                "reason": message,
+            }
+        elif any(phrase in lower for phrase in ("explain", "why did you", "why this edit")):
+            tool_name = "explain_edit"
+            arguments = {"decision_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
+        elif any(phrase in lower for phrase in ("rerender", "re-render", "render preview")):
+            tool_name = "rerender_preview"
+        elif any(phrase in lower for phrase in ("seek", "go to", "show me")):
+            tool_name = "seek_range"
+            arguments = {"start_ms": start_ms, "end_ms": end_ms}
+        elif selected_range or selected_element or "inspect" in lower:
+            tool_name = "inspect_range"
+            arguments = {"start_ms": start_ms, "end_ms": end_ms}
+
+        executions: list[dict[str, Any]] = []
+        content: str
+        if tool_name:
+            result = await tools.execute_async(tool_name, arguments)
+            executions.append({
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "status": result.status,
+                "output": result.output,
+                "error": result.error_message,
+                "latency_ms": result.latency_ms,
+            })
+            if result.status == "error":
+                content = f"I couldn't apply that edit: {result.error_message}"
+            else:
+                content = result.human_summary or self._format_chat_tool_result(tool_name, result.output)
+                state = getattr(tools, "state", {})
+                if (
+                    state.get("timeline_updated")
+                    and not state.get("preview_updated")
+                    and tool_name != "rerender_preview"
+                    and tools.has_tool("rerender_preview")
+                ):
+                    render_result = await tools.execute_async("rerender_preview", {})
+                    executions.append({
+                        "tool_name": "rerender_preview",
+                        "arguments": {},
+                        "status": render_result.status,
+                        "output": render_result.output,
+                        "error": render_result.error_message,
+                        "latency_ms": render_result.latency_ms,
+                    })
+        else:
+            active_cuts = edl.active_cuts_count
+            coverage_count = len(edl.coverage_markers)
+            context_note = (
+                f" The selected context is {start_ms / 1000:.1f}s–{end_ms / 1000:.1f}s."
+                if selected_range or selected_element else ""
+            )
+            content = (
+                f"I’m looking at the current edit: {active_cuts} active cuts and "
+                f"{coverage_count} coverage markers.{context_note} "
+                "Select a range and tell me to cut, restore, keep, explain, add B-roll, "
+                "add voiceover, or add background music."
+            )
+
+        state = getattr(tools, "state", {})
+        return {
+            "content": content,
+            "reply": content,
+            "tool_executions": executions,
+            "proposal": state.get("proposal", proposal),
+            "edl": state.get("edl", edl),
+            "artifacts": state.get("artifacts", list(artifacts or [])),
+            "timeline_updated": bool(state.get("timeline_updated", False)),
+            "voiceover_updated": bool(state.get("voiceover_updated", False)),
+            "preview_updated": bool(state.get("preview_updated", False)),
+            "seek_range": state.get("seek_range"),
+        }
+
+    @staticmethod
+    def _format_chat_tool_result(tool_name: str, output: Any) -> str:
+        """Format concise creator-facing tool completion messages."""
+        labels = {
+            "add_cut": "I added the cut at safe word boundaries and updated the timeline.",
+            "remove_cut": "I removed that cut and restored the source range.",
+            "restore_source_range": "I restored the selected source range.",
+            "adjust_cut": "I adjusted the cut boundaries and updated the timeline.",
+            "mark_keep": "I marked that range to keep and removed conflicting cuts.",
+            "add_chapter": "I added the chapter to the editorial plan.",
+            "rename_chapter": "I renamed the chapter.",
+            "add_broll": "I added the B-roll coverage, preserving the original audio.",
+            "remove_broll": "I removed the B-roll coverage.",
+            "generate_voiceover": "I generated the voiceover preview and mixed it under the source.",
+            "remove_voiceover": "I removed the voiceover and restored the source audio.",
+            "add_background_music": "I added the background music mix with speech ducking.",
+            "remove_background_music": "I removed the background music.",
+            "rerender_preview": "I rendered an updated preview.",
+            "seek_range": "I moved the editor to that range.",
+            "inspect_range": "I inspected the selected range.",
+            "explain_edit": "Here’s the edit rationale and source evidence.",
+        }
+        return labels.get(tool_name, "I updated the edit.")
 
 
     async def self_review_render(

@@ -308,7 +308,10 @@ class CutSafetyAnalyzer:
         decision: EditorDecision,
     ) -> CoverageMarker | None:
         """Extract a visual coverage marker for B-roll insert footage."""
-        if decision.decision_type == EditorDecisionType.BROLL_COVER_CANDIDATE:
+        if decision.decision_type in (
+            EditorDecisionType.BROLL_COVER_CANDIDATE,
+            EditorDecisionType.BROLL_COVER,
+        ):
             return CoverageMarker(
                 marker_id=f"cov_{uuid.uuid4().hex[:12]}",
                 decision_id=decision.decision_id,

@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ExternalLink, Sparkles, TrendingUp } from "lucide-react";
+import React, { useMemo, useState } from "react";
 import type { components } from "../../api/generated";
 import { AgentActionMenu } from "../AgentActionMenu";
 

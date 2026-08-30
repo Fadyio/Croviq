@@ -170,3 +170,17 @@ async def test_fake_genai_client_handles_failures() -> None:
         )
 
 
+@pytest.mark.asyncio
+async def test_fake_genai_client_lyria_music_generation():
+    client = FakeGenAIClient()
+    wav_bytes, fmt, dur_ms = await client.generate_background_music(
+        prompt="Minimal modern technology documentary underscore",
+        duration_s=10,
+        model_id="lyria-3-pro-preview",
+        production_id="prod_music_test",
+    )
+    assert fmt == "audio/wav"
+    assert dur_ms == 10000
+    assert len(wav_bytes) > 0
+    assert wav_bytes.startswith(b"RIFF")
+

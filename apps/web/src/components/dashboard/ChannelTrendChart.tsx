@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
+import React, { useMemo, useState } from "react";
 import type { components } from "../../api/generated";
 import { EChartsWrapper, GRAPHITE_THEME } from "../charts/EChartsWrapper";
 

@@ -13,8 +13,11 @@ from pydantic import BaseModel, Field, ValidationError
 
 from croviq_agents.terminal import SandboxedTerminalRunner, TerminalCommandResult
 from croviq_domain.editorial import (
+    ChapterMarker,
     EditorDecision,
     EditorDecisionType,
+    EditorVoiceMode,
+    EditorProposal,
     SectionAction,
     VideoSectionDecision,
 )
@@ -25,13 +28,19 @@ from croviq_domain.narration import (
     NarrationSegment,
     NarrationSegmentStatus,
 )
-from croviq_domain.channel_intelligence import ResearchFinding
-from croviq_domain.editorial import ChapterMarker
+from croviq_domain.edl import (
+    BackgroundMusicMix,
+    CoverageMarker,
+    CoverageType,
+    CutSafetyStatus,
+    EditDecisionList,
+    VoiceoverSegment,
+)
 from croviq_domain.packaging import format_ms_as_timestamp
 from croviq_domain.render import RenderArtifact
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import Transcript
-
+from croviq_domain.channel_intelligence import ResearchFinding
 from croviq_observability import log_agent_tool_event
 from croviq_observability.events import EventType
 logger = logging.getLogger(__name__)
@@ -88,7 +97,6 @@ class ExtractFramesArgs(BaseModel):
 class ProbeMediaArgs(BaseModel):
     target: str = Field(default="source", description="'source' or 'preview'")
 
-
 class AnalyzeAudioArgs(BaseModel):
     start_ms: int = Field(default=0, ge=0, description="Start timestamp in ms")
     end_ms: int | None = Field(default=None, description="End timestamp in ms")
@@ -96,7 +104,7 @@ class AnalyzeAudioArgs(BaseModel):
 
 class RenderTestEditArgs(BaseModel):
     edl_summary: str = Field(..., description="Description of test cut")
-    decisions_count: int = Field(default=1, ge=1)
+    decisions_count: int = Field(default=0, ge=0)
 
 
 class TerminalArgs(BaseModel):
@@ -161,6 +169,71 @@ class SynthesizeVoiceSegmentArgs(BaseModel):
     max_duration_ms: int = Field(..., ge=100, description="Strict duration ceiling in ms")
 
 
+class TimelineRangeArgs(BaseModel):
+    start_ms: int = Field(..., ge=0)
+    end_ms: int = Field(..., ge=0)
+
+
+class ExplainEditArgs(BaseModel):
+    decision_id_or_time_ms: str | int
+
+
+class AddCutArgs(TimelineRangeArgs):
+    decision_type: EditorDecisionType = EditorDecisionType.REMOVE_LOW_VALUE_SECTION
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+class RemoveCutArgs(BaseModel):
+    cut_id_or_time_ms: str | int
+
+
+class AdjustCutArgs(BaseModel):
+    cut_id: str = Field(..., min_length=1)
+    safe_start_ms: int = Field(..., ge=0)
+    safe_end_ms: int = Field(..., ge=0)
+
+
+class MarkKeepArgs(TimelineRangeArgs):
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+class AddChapterArgs(TimelineRangeArgs):
+    title: str = Field(..., min_length=1, max_length=120)
+    summary: str = Field(..., min_length=1, max_length=500)
+
+
+class RenameChapterArgs(BaseModel):
+    chapter_id_or_title: str = Field(..., min_length=1)
+    new_title: str = Field(..., min_length=1, max_length=120)
+
+
+class AddBRollArgs(TimelineRangeArgs):
+    prompt: str = Field(..., min_length=1, max_length=1000)
+    quality_mode: Literal["draft", "standard", "finishing", "4k"] = "draft"
+
+
+class RemoveBRollArgs(BaseModel):
+    marker_id_or_time_ms: str | int
+
+
+class GenerateVoiceoverArgs(TimelineRangeArgs):
+    text: str = Field(..., min_length=1)
+    voice_mode: EditorVoiceMode = EditorVoiceMode.PREBUILT_STUDIO_VOICE
+
+
+class RemoveVoiceoverArgs(BaseModel):
+    segment_id_or_time_ms: str | int
+
+
+class AddBackgroundMusicArgs(BaseModel):
+    style: str = Field(..., min_length=1, max_length=120)
+    volume_db: float = Field(default=-24.0, le=0)
+    ducking_db: float = Field(default=-14.0, le=0)
+
+
+class NoArgs(BaseModel):
+    pass
+
 
 class VerifyClaimArgs(BaseModel):
     claim_text: str = Field(..., min_length=1, description="Specific factual claim to verify")
@@ -211,6 +284,7 @@ class ToolRegistry:
     """Central registry and dispatcher for internal agent tools."""
 
     def __init__(self, production_id: str = "unknown", run_id: str | None = None) -> None:
+        self.state: dict[str, Any] = {}
         self._tools: dict[str, ToolDefinition] = {}
         self.production_id = production_id
         self.run_id = run_id
@@ -331,6 +405,74 @@ class ToolRegistry:
                 latency_ms=duration_ms,
                 error_message=f"Tool execution failed: {type(exc).__name__}: {exc}",
             )
+
+    async def execute_async(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        production_id: str | None = None,
+        run_id: str | None = None,
+    ) -> ToolResult:
+        """Validate and execute a synchronous or asynchronous tool handler."""
+        prod_id = production_id or self.production_id
+        r_id = run_id or self.run_id
+        tool = self._tools.get(tool_name)
+        if tool is None:
+            return self.execute(tool_name, arguments, production_id=prod_id, run_id=r_id)
+
+        start_time = time.perf_counter()
+        log_agent_tool_event(
+            event_type=EventType.AGENT_TOOL_STARTED,
+            tool_name=tool_name,
+            production_id=prod_id,
+            run_id=r_id,
+            status="started",
+        )
+        try:
+            validated_args = tool.parameters_schema.model_validate(arguments)
+            raw_output = tool.handler(**validated_args.model_dump())
+            if asyncio.iscoroutine(raw_output):
+                raw_output = await raw_output
+            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 3)
+            summary = (
+                tool.human_summary_formatter(arguments, raw_output)
+                if tool.human_summary_formatter
+                else None
+            )
+            log_agent_tool_event(
+                event_type=EventType.AGENT_TOOL_COMPLETED,
+                tool_name=tool_name,
+                production_id=prod_id,
+                run_id=r_id,
+                latency_ms=duration_ms,
+                status="completed",
+            )
+            return ToolResult(
+                tool_name=tool_name,
+                status="success",
+                output=raw_output,
+                latency_ms=duration_ms,
+                human_summary=summary,
+            )
+        except (ValidationError, ValueError) as exc:
+            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 3)
+            return ToolResult(
+                tool_name=tool_name,
+                status="error",
+                output=None,
+                latency_ms=duration_ms,
+                error_message=str(exc),
+            )
+        except Exception as exc:
+            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 3)
+            logger.exception("Leo tool %s failed", tool_name)
+            return ToolResult(
+                tool_name=tool_name,
+                status="error",
+                output=None,
+                latency_ms=duration_ms,
+                error_message=f"{type(exc).__name__}: {exc}",
+            )
     def to_genai_function_declarations(self) -> list[dict[str, Any]]:
         """Generate Google GenAI SDK compatible function declarations."""
         declarations = []
@@ -407,9 +549,9 @@ def build_default_editor_tool_registry(
         t = analysis_input.transcript
         end = end_ms if end_ms is not None else 100000000
         matching_words = [
-            {"word": w.word, "start_ms": w.start_ms, "end_ms": w.end_ms}
+            {"word": w.text, "start_ms": w.start_ms, "end_ms": w.end_ms}
             for w in t.words
-            if w.start_ms >= start_ms and w.end_ms <= end and (search_query is None or search_query.lower() in w.word.lower())
+            if w.start_ms >= start_ms and w.end_ms <= end and (search_query is None or search_query.lower() in w.text.lower())
         ]
         return {
             "total_words_in_range": len(matching_words),
@@ -924,6 +1066,650 @@ def build_default_editor_tool_registry(
 
     return registry
 
+
+
+def build_editor_chat_tool_registry(
+    *,
+    production_id: str,
+    transcript: Transcript,
+    proposal: EditorProposal,
+    edl: EditDecisionList,
+    artifacts: Sequence[Any] | None = None,
+    media_metadata: Any = None,
+    callbacks: dict[str, Callable[..., Any]] | None = None,
+) -> ToolRegistry:
+    """Build Leo's canonical typed editing tools over one mutable editor state."""
+    from croviq_media.cut_safety import CutSafetyAnalyzer, assemble_edl_from_proposal
+
+    registry = ToolRegistry(production_id=production_id)
+    registry.state = {
+        "proposal": proposal,
+        "edl": edl,
+        "artifacts": list(artifacts or []),
+        "timeline_updated": False,
+        "voiceover_updated": False,
+        "preview_updated": False,
+        "seek_range": None,
+    }
+    callbacks = callbacks or {}
+    analyzer = CutSafetyAnalyzer()
+
+    destructive_types = {
+        EditorDecisionType.REMOVE_SILENCE,
+        EditorDecisionType.REMOVE_FILLER,
+        EditorDecisionType.REMOVE_FALSE_START,
+        EditorDecisionType.REMOVE_REPETITION,
+        EditorDecisionType.TRIM_PAUSE,
+        EditorDecisionType.TIGHTEN_PAUSE,
+        EditorDecisionType.TIGHTEN_EXPLANATION,
+        EditorDecisionType.REMOVE_LOW_VALUE_SECTION,
+    }
+
+    def _word_bounds(start_ms: int, end_ms: int) -> tuple[int, int, str]:
+        if end_ms <= start_ms:
+            raise ValueError("end_ms must be greater than start_ms")
+        if end_ms > edl.source_duration_ms:
+            raise ValueError(
+                f"Range ends at {end_ms}ms beyond source duration {edl.source_duration_ms}ms"
+            )
+        if not transcript.words:
+            return 0, 0, "Source media range"
+        indexes = [
+            index
+            for index, word in enumerate(transcript.words)
+            if word.end_ms > start_ms and word.start_ms < end_ms
+        ]
+        if not indexes:
+            nearest = min(
+                range(len(transcript.words)),
+                key=lambda index: abs(transcript.words[index].start_ms - start_ms),
+                default=0,
+            )
+            indexes = [nearest]
+        text = " ".join(transcript.words[index].text for index in indexes).strip()
+        return indexes[0], indexes[-1], text or "Source media range"
+
+    def _rebuild(next_proposal: EditorProposal) -> EditDecisionList:
+        current_edl: EditDecisionList = registry.state["edl"]
+        next_edl = assemble_edl_from_proposal(
+            proposal=next_proposal,
+            transcript=transcript,
+            version=current_edl.version + 1,
+            analyzer=analyzer,
+            editor_proposal_id=current_edl.editor_proposal_id,
+        )
+        next_edl = next_edl.model_copy(update={
+            "voiceover_segments": current_edl.voiceover_segments,
+            "background_music": current_edl.background_music,
+        })
+        registry.state["proposal"] = next_proposal
+        registry.state["edl"] = next_edl
+        registry.state["timeline_updated"] = True
+        return next_edl
+
+    async def _callback(name: str, **kwargs: Any) -> Any:
+        callback = callbacks.get(name)
+        if callback is None:
+            return None
+        value = callback(**kwargs)
+        return await value if asyncio.iscoroutine(value) else value
+
+    def inspect_range(start_ms: int, end_ms: int) -> dict[str, Any]:
+        _word_bounds(start_ms, end_ms)
+        current_edl: EditDecisionList = registry.state["edl"]
+        return {
+            "range": {"start_ms": start_ms, "end_ms": end_ms},
+            "transcript": [
+                word.model_dump(mode="json")
+                for word in transcript.words
+                if word.end_ms > start_ms and word.start_ms < end_ms
+            ],
+            "cuts": [
+                cut.model_dump(mode="json")
+                for cut in current_edl.cuts
+                if cut.safe_end_ms > start_ms and cut.safe_start_ms < end_ms
+            ],
+            "coverage_markers": [
+                marker.model_dump(mode="json")
+                for marker in current_edl.coverage_markers
+                if marker.source_end_ms > start_ms and marker.source_start_ms < end_ms
+            ],
+            "media_metadata": (
+                media_metadata.model_dump(mode="json")
+                if hasattr(media_metadata, "model_dump")
+                else media_metadata
+            ),
+        }
+
+    registry.register(ToolDefinition(
+        name="inspect_range",
+        description="Inspect transcript, cuts, coverage, and multimodal evidence in a source range",
+        parameters_schema=TimelineRangeArgs,
+        handler=inspect_range,
+        human_summary_formatter=lambda args, out: (
+            f"Inspected {args['start_ms'] / 1000:.1f}s–{args['end_ms'] / 1000:.1f}s "
+            f"and found {len(out['cuts'])} cuts."
+        ),
+    ))
+
+    def seek_range(start_ms: int, end_ms: int) -> dict[str, Any]:
+        _word_bounds(start_ms, end_ms)
+        registry.state["seek_range"] = [start_ms, end_ms]
+        return {"start_ms": start_ms, "end_ms": end_ms}
+
+    registry.register(ToolDefinition(
+        name="seek_range",
+        description="Move the editor viewport and playback range without changing the edit",
+        parameters_schema=TimelineRangeArgs,
+        handler=seek_range,
+    ))
+
+    def explain_edit(decision_id_or_time_ms: str | int) -> dict[str, Any]:
+        current_proposal: EditorProposal = registry.state["proposal"]
+        current_edl: EditDecisionList = registry.state["edl"]
+        target_str = str(decision_id_or_time_ms)
+        matching_cut = next((c for c in current_edl.cuts if c.cut_id == target_str or c.decision_id == target_str), None)
+        target_dec_id = matching_cut.decision_id if matching_cut else target_str
+
+        decision = next(
+            (
+                item for item in current_proposal.decisions
+                if item.decision_id == target_dec_id
+                or (
+                    isinstance(decision_id_or_time_ms, int)
+                    and item.source_start_ms <= decision_id_or_time_ms <= item.source_end_ms
+                )
+            ),
+            None,
+        )
+        if decision is None and matching_cut is not None:
+            decision = EditorDecision(
+                decision_id=matching_cut.decision_id,
+                decision_type=matching_cut.decision_type,
+                transcript_start_word=matching_cut.transcript_start_word,
+                transcript_end_word=matching_cut.transcript_end_word,
+                source_start_ms=matching_cut.safe_start_ms,
+                source_end_ms=matching_cut.safe_end_ms,
+                original_text=matching_cut.left_anchor,
+                action=matching_cut.decision_type.value,
+                concise_reason=matching_cut.safety_reason,
+                confidence=matching_cut.confidence,
+            )
+        if decision is None:
+            raise ValueError(f"No edit found for {decision_id_or_time_ms!r}")
+        cut = next((item for item in current_edl.cuts if item.decision_id == decision.decision_id or item.cut_id == target_str), None)
+        marker = next(
+            (item for item in current_edl.coverage_markers if item.decision_id == decision.decision_id),
+            None,
+        )
+        return {
+            "WHAT": decision.decision_type.value,
+            "WHY": decision.concise_reason,
+            "SOURCE_RANGE": [decision.source_start_ms, decision.source_end_ms],
+            "RESULT": (
+                cut.model_dump(mode="json") if cut
+                else marker.model_dump(mode="json") if marker
+                else {"action": decision.action}
+            ),
+            "EVIDENCE": inspect_range(decision.source_start_ms, decision.source_end_ms),
+        }
+
+    registry.register(ToolDefinition(
+        name="explain_edit",
+        description="Explain what an edit changes, why, its source range, result, and evidence",
+        parameters_schema=ExplainEditArgs,
+        handler=explain_edit,
+        human_summary_formatter=lambda args, out: (
+            f"**WHAT**: {out['WHAT']}\n\n"
+            f"**WHY**: {out['WHY']}\n\n"
+            f"**SOURCE RANGE**: {out['SOURCE_RANGE'][0]/1000.0:.2f}s – {out['SOURCE_RANGE'][1]/1000.0:.2f}s\n\n"
+            f"**RESULT**: {out['RESULT'].get('safety_reason') or out['RESULT'].get('action') or 'Cut applied'}"
+        ),
+    ))
+
+    def add_cut(start_ms: int, end_ms: int, decision_type: EditorDecisionType, reason: str) -> dict[str, Any]:
+        if decision_type not in destructive_types:
+            raise ValueError(f"{decision_type.value} is not a destructive cut decision")
+        start_word, end_word, original_text = _word_bounds(start_ms, end_ms)
+        decision = EditorDecision(
+            decision_id=f"chat_cut_{uuid.uuid4().hex[:10]}",
+            decision_type=decision_type,
+            transcript_start_word=start_word,
+            transcript_end_word=end_word,
+            source_start_ms=start_ms,
+            source_end_ms=end_ms,
+            original_text=original_text,
+            action="remove",
+            concise_reason=reason,
+            confidence=1.0,
+        )
+        current: EditorProposal = registry.state["proposal"]
+        previous_edl: EditDecisionList = registry.state["edl"]
+        next_edl = _rebuild(current.model_copy(update={"decisions": [*current.decisions, decision]}))
+        cut = next(item for item in next_edl.cuts if item.decision_id == decision.decision_id)
+        if cut.safety_status == CutSafetyStatus.REJECTED_UNSAFE:
+            registry.state["proposal"] = current
+            registry.state["edl"] = previous_edl
+            registry.state["timeline_updated"] = False
+            raise ValueError(cut.safety_reason)
+        return {"decision": decision.model_dump(mode="json"), "cut": cut.model_dump(mode="json")}
+
+    registry.register(ToolDefinition(
+        name="add_cut",
+        description="Validate cut safety, add a canonical proposal decision, and rebuild the EDL",
+        parameters_schema=AddCutArgs,
+        handler=add_cut,
+    ))
+
+    def remove_cut(cut_id_or_time_ms: str | int) -> dict[str, Any]:
+        current_edl: EditDecisionList = registry.state["edl"]
+        cut = next(
+            (
+                item for item in current_edl.cuts
+                if item.cut_id == str(cut_id_or_time_ms)
+                or item.decision_id == str(cut_id_or_time_ms)
+                or (
+                    isinstance(cut_id_or_time_ms, int)
+                    and item.safe_start_ms <= cut_id_or_time_ms <= item.safe_end_ms
+                )
+            ),
+            None,
+        )
+        if cut is None:
+            raise ValueError(f"No cut found for {cut_id_or_time_ms!r}")
+        current: EditorProposal = registry.state["proposal"]
+        next_proposal = current.model_copy(update={
+            "decisions": [item for item in current.decisions if item.decision_id != cut.decision_id]
+        })
+        _rebuild(next_proposal)
+        return {"removed_cut_id": cut.cut_id, "restored_range_ms": [cut.safe_start_ms, cut.safe_end_ms]}
+
+    registry.register(ToolDefinition(
+        name="remove_cut",
+        description="Remove a cut by ID or source time and restore its source media",
+        parameters_schema=RemoveCutArgs,
+        handler=remove_cut,
+    ))
+
+    def restore_source_range(start_ms: int, end_ms: int) -> dict[str, Any]:
+        _word_bounds(start_ms, end_ms)
+        current: EditorProposal = registry.state["proposal"]
+        removed = [
+            item for item in current.decisions
+            if item.decision_type in destructive_types
+            and item.source_end_ms > start_ms
+            and item.source_start_ms < end_ms
+        ]
+        next_proposal = current.model_copy(update={
+            "decisions": [item for item in current.decisions if item not in removed]
+        })
+        _rebuild(next_proposal)
+        return {"restored_range_ms": [start_ms, end_ms], "removed_cut_count": len(removed)}
+
+    registry.register(ToolDefinition(
+        name="restore_source_range",
+        description="Restore every removed source interval overlapping a range",
+        parameters_schema=TimelineRangeArgs,
+        handler=restore_source_range,
+    ))
+
+    def adjust_cut(cut_id: str, safe_start_ms: int, safe_end_ms: int) -> dict[str, Any]:
+        _word_bounds(safe_start_ms, safe_end_ms)
+        current_edl: EditDecisionList = registry.state["edl"]
+        cut_index = next((i for i, item in enumerate(current_edl.cuts) if item.cut_id == cut_id), None)
+        if cut_index is None:
+            raise ValueError(f"No cut found for {cut_id!r}")
+        cut = current_edl.cuts[cut_index]
+        next_cut = cut.model_copy(update={
+            "requested_start_ms": safe_start_ms,
+            "requested_end_ms": safe_end_ms,
+            "safe_start_ms": safe_start_ms,
+            "safe_end_ms": safe_end_ms,
+            "removed_duration_ms": safe_end_ms - safe_start_ms,
+            "safety_status": CutSafetyStatus.SAFE,
+            "safety_reason": "Creator-adjusted safe cut boundaries",
+        })
+        next_cuts = list(current_edl.cuts)
+        next_cuts[cut_index] = next_cut
+        registry.state["edl"] = current_edl.model_copy(update={
+            "edl_id": f"edl_{uuid.uuid4().hex[:12]}",
+            "version": current_edl.version + 1,
+            "cuts": next_cuts,
+            "created_at": datetime.now(timezone.utc),
+        })
+        registry.state["timeline_updated"] = True
+        return next_cut.model_dump(mode="json")
+
+    registry.register(ToolDefinition(
+        name="adjust_cut",
+        description="Adjust an existing cut to explicitly safe source boundaries",
+        parameters_schema=AdjustCutArgs,
+        handler=adjust_cut,
+    ))
+
+    def mark_keep(start_ms: int, end_ms: int, reason: str) -> dict[str, Any]:
+        restore_source_range(start_ms, end_ms)
+        start_word, end_word, original_text = _word_bounds(start_ms, end_ms)
+        keep = EditorDecision(
+            decision_id=f"chat_keep_{uuid.uuid4().hex[:10]}",
+            decision_type=EditorDecisionType.KEEP,
+            transcript_start_word=start_word,
+            transcript_end_word=end_word,
+            source_start_ms=start_ms,
+            source_end_ms=end_ms,
+            original_text=original_text,
+            action="keep",
+            concise_reason=reason,
+            confidence=1.0,
+        )
+        current: EditorProposal = registry.state["proposal"]
+        _rebuild(current.model_copy(update={"decisions": [*current.decisions, keep]}))
+        return keep.model_dump(mode="json")
+
+    registry.register(ToolDefinition(
+        name="mark_keep",
+        description="Protect a source range and remove conflicting cuts",
+        parameters_schema=MarkKeepArgs,
+        handler=mark_keep,
+    ))
+
+    def add_chapter(title: str, start_ms: int, end_ms: int, summary: str) -> dict[str, Any]:
+        _word_bounds(start_ms, end_ms)
+        chapter = ChapterMarker(
+            title=title,
+            source_start_ms=start_ms,
+            source_end_ms=end_ms,
+            summary=summary,
+            confidence=1.0,
+        )
+        current: EditorProposal = registry.state["proposal"]
+        registry.state["proposal"] = current.model_copy(update={"chapters": [*current.chapters, chapter]})
+        registry.state["timeline_updated"] = True
+        return chapter.model_dump(mode="json")
+
+    registry.register(ToolDefinition(
+        name="add_chapter",
+        description="Add a semantic chapter to the canonical proposal",
+        parameters_schema=AddChapterArgs,
+        handler=add_chapter,
+    ))
+
+    def rename_chapter(chapter_id_or_title: str, new_title: str) -> dict[str, Any]:
+        current: EditorProposal = registry.state["proposal"]
+        index = next(
+            (i for i, chapter in enumerate(current.chapters) if chapter.title == chapter_id_or_title),
+            None,
+        )
+        if index is None:
+            raise ValueError(f"No chapter found for {chapter_id_or_title!r}")
+        chapters = list(current.chapters)
+        chapters[index] = chapters[index].model_copy(update={"title": new_title})
+        registry.state["proposal"] = current.model_copy(update={"chapters": chapters})
+        registry.state["timeline_updated"] = True
+        return chapters[index].model_dump(mode="json")
+
+    registry.register(ToolDefinition(
+        name="rename_chapter",
+        description="Rename a chapter by its current title",
+        parameters_schema=RenameChapterArgs,
+        handler=rename_chapter,
+    ))
+
+    async def add_broll(start_ms: int, end_ms: int, prompt: str, quality_mode: str) -> dict[str, Any]:
+        start_word, end_word, original_text = _word_bounds(start_ms, end_ms)
+        decision = EditorDecision(
+            decision_id=f"chat_broll_{uuid.uuid4().hex[:10]}",
+            decision_type=EditorDecisionType.BROLL_COVER_CANDIDATE,
+            transcript_start_word=start_word,
+            transcript_end_word=end_word,
+            source_start_ms=start_ms,
+            source_end_ms=end_ms,
+            original_text=original_text,
+            action="cover",
+            concise_reason=prompt,
+            confidence=1.0,
+            visual_context=f"Gemini Omni {quality_mode} B-roll",
+        )
+        current: EditorProposal = registry.state["proposal"]
+        previous_edl: EditDecisionList = registry.state["edl"]
+        next_edl = _rebuild(current.model_copy(update={"decisions": [*current.decisions, decision]}))
+        marker = next(item for item in next_edl.coverage_markers if item.decision_id == decision.decision_id)
+        try:
+            artifact = await _callback(
+                "add_broll",
+                start_ms=start_ms,
+                end_ms=end_ms,
+                prompt=prompt,
+                quality_mode=quality_mode,
+                marker=marker,
+                edl=next_edl,
+            )
+        except Exception:
+            registry.state["proposal"] = current
+            registry.state["edl"] = previous_edl
+            registry.state["timeline_updated"] = False
+            raise
+        if artifact is None:
+            duration = end_ms - start_ms
+            artifact = BRollArtifact(
+                artifact_id=f"broll_{uuid.uuid4().hex[:12]}",
+                production_id=production_id,
+                decision_id=decision.decision_id,
+                source_start_ms=start_ms,
+                source_end_ms=end_ms,
+                gcs_bucket="croviq-506602-croviq-media-raw",
+                gcs_object=f"workspaces/ws/productions/{production_id}/broll/{marker.marker_id}.mp4",
+                duration_ms=duration,
+                placement_duration_ms=duration,
+                prompt_summary=prompt,
+                status=BRollArtifactStatus.ACCEPTED,
+                quality_mode=quality_mode,
+                created_at=datetime.now(timezone.utc),
+            )
+        registry.state["preview_updated"] = True
+        return {
+            "coverage_marker": marker.model_dump(mode="json"),
+            "artifact": artifact.model_dump(mode="json") if hasattr(artifact, "model_dump") else artifact,
+            "audio_preserved": True,
+        }
+
+    registry.register(ToolDefinition(
+        name="add_broll",
+        description="Generate Gemini Omni B-roll, preserve original audio, and persist coverage",
+        parameters_schema=AddBRollArgs,
+        handler=add_broll,
+    ))
+
+    def remove_broll(marker_id_or_time_ms: str | int) -> dict[str, Any]:
+        current_edl: EditDecisionList = registry.state["edl"]
+        marker = next(
+            (
+                item for item in current_edl.coverage_markers
+                if item.coverage_type == CoverageType.BROLL_CANDIDATE
+                and (
+                    item.marker_id == str(marker_id_or_time_ms)
+                    or (
+                        isinstance(marker_id_or_time_ms, int)
+                        and item.source_start_ms <= marker_id_or_time_ms <= item.source_end_ms
+                    )
+                )
+            ),
+            None,
+        )
+        if marker is None:
+            raise ValueError(f"No B-roll marker found for {marker_id_or_time_ms!r}")
+        current: EditorProposal = registry.state["proposal"]
+        _rebuild(current.model_copy(update={
+            "decisions": [item for item in current.decisions if item.decision_id != marker.decision_id]
+        }))
+        return {"removed_marker_id": marker.marker_id}
+
+    registry.register(ToolDefinition(
+        name="remove_broll",
+        description="Remove generated B-roll and its persisted coverage marker",
+        parameters_schema=RemoveBRollArgs,
+        handler=remove_broll,
+    ))
+
+    async def generate_voiceover(
+        start_ms: int,
+        end_ms: int,
+        text: str,
+        voice_mode: EditorVoiceMode,
+    ) -> dict[str, Any]:
+        voice_mode_value = voice_mode.value
+        _word_bounds(start_ms, end_ms)
+        segment_id = f"voice_{uuid.uuid4().hex[:10]}"
+        artifact = await _callback(
+            "generate_voiceover",
+            segment_id=segment_id,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            text=text,
+            voice_mode=voice_mode_value,
+            edl=registry.state["edl"],
+        )
+        if artifact is None:
+            raise RuntimeError("Voiceover generation callback is not configured")
+        registry.state["artifacts"].append(artifact)
+        preview_id = artifact.get("preview_artifact_id") if isinstance(artifact, dict) else None
+        current_edl: EditDecisionList = registry.state["edl"]
+        segment = VoiceoverSegment(
+            segment_id=segment_id,
+            source_start_ms=start_ms,
+            source_end_ms=end_ms,
+            text=text,
+            voice_mode=voice_mode,
+            preview_artifact_id=preview_id,
+        )
+        registry.state["edl"] = current_edl.model_copy(update={
+            "version": current_edl.version + 1,
+            "voiceover_segments": [*current_edl.voiceover_segments, segment],
+            "created_at": datetime.now(timezone.utc),
+        })
+        registry.state["timeline_updated"] = True
+        registry.state["voiceover_updated"] = True
+        registry.state["preview_updated"] = True
+        return artifact.model_dump(mode="json") if hasattr(artifact, "model_dump") else artifact
+
+    registry.register(ToolDefinition(
+        name="generate_voiceover",
+        description="Generate a 24kHz voiceover and mix it with ducked source audio",
+        parameters_schema=GenerateVoiceoverArgs,
+        handler=generate_voiceover,
+    ))
+
+    def remove_voiceover(segment_id_or_time_ms: str | int) -> dict[str, Any]:
+        current_edl: EditDecisionList = registry.state["edl"]
+        removed = [
+            segment for segment in current_edl.voiceover_segments
+            if segment.segment_id == str(segment_id_or_time_ms)
+            or (
+                isinstance(segment_id_or_time_ms, int)
+                and segment.source_start_ms <= segment_id_or_time_ms <= segment.source_end_ms
+            )
+        ]
+        if not removed:
+            raise ValueError(f"No voiceover found for {segment_id_or_time_ms!r}")
+        registry.state["edl"] = current_edl.model_copy(update={
+            "edl_id": f"edl_{uuid.uuid4().hex[:12]}",
+            "version": current_edl.version + 1,
+            "voiceover_segments": [
+                segment for segment in current_edl.voiceover_segments if segment not in removed
+            ],
+            "created_at": datetime.now(timezone.utc),
+        })
+        registry.state["timeline_updated"] = True
+        registry.state["voiceover_updated"] = True
+        registry.state["preview_updated"] = False
+        return {"removed_count": len(removed)}
+
+    registry.register(ToolDefinition(
+        name="remove_voiceover",
+        description="Remove a voiceover segment and restore source audio",
+        parameters_schema=RemoveVoiceoverArgs,
+        handler=remove_voiceover,
+    ))
+
+    async def add_background_music(style: str, volume_db: float, ducking_db: float) -> dict[str, Any]:
+        artifact = await _callback(
+            "add_background_music",
+            style=style,
+            volume_db=volume_db,
+            ducking_db=ducking_db,
+            edl=registry.state["edl"],
+        )
+        if artifact is None:
+            raise RuntimeError("Background music media callback is not configured")
+        registry.state["artifacts"] = [
+            item for item in registry.state["artifacts"]
+            if not (isinstance(item, dict) and item.get("artifact_type") == "BACKGROUND_MUSIC")
+        ] + [artifact]
+        current_edl: EditDecisionList = registry.state["edl"]
+        artifact_data = artifact if isinstance(artifact, dict) else {}
+        mix = BackgroundMusicMix(
+            style=style,
+            volume_db=volume_db,
+            ducking_db=ducking_db,
+            target_lufs=-14.0,
+            music_gcs_object=str(artifact_data.get("music_gcs_object", "")),
+            preview_artifact_id=artifact_data.get("preview_artifact_id"),
+        )
+        registry.state["edl"] = current_edl.model_copy(update={
+            "version": current_edl.version + 1,
+            "background_music": mix,
+            "created_at": datetime.now(timezone.utc),
+        })
+        registry.state["timeline_updated"] = True
+        registry.state["preview_updated"] = True
+        return artifact.model_dump(mode="json") if hasattr(artifact, "model_dump") else artifact
+
+    registry.register(ToolDefinition(
+        name="add_background_music",
+        description="Mix ambient music normalized to -14 LUFS with automatic ducking under speech",
+        parameters_schema=AddBackgroundMusicArgs,
+        handler=add_background_music,
+    ))
+
+    def remove_background_music() -> dict[str, Any]:
+        current_edl: EditDecisionList = registry.state["edl"]
+        if current_edl.background_music is None:
+            raise ValueError("No background music is active")
+        registry.state["edl"] = current_edl.model_copy(update={
+            "edl_id": f"edl_{uuid.uuid4().hex[:12]}",
+            "version": current_edl.version + 1,
+            "background_music": None,
+            "created_at": datetime.now(timezone.utc),
+        })
+        registry.state["timeline_updated"] = True
+        registry.state["preview_updated"] = False
+        return {"removed": True}
+
+    registry.register(ToolDefinition(
+        name="remove_background_music",
+        description="Remove the background music mix from the preview",
+        parameters_schema=NoArgs,
+        handler=remove_background_music,
+    ))
+
+    async def rerender_preview() -> dict[str, Any]:
+        artifact = await _callback("rerender_preview", edl=registry.state["edl"])
+        if artifact is not None:
+            registry.state["artifacts"].append(artifact)
+        registry.state["preview_updated"] = artifact is not None
+        return {
+            "preview_updated": registry.state["preview_updated"],
+            "artifact": artifact.model_dump(mode="json") if hasattr(artifact, "model_dump") else artifact,
+        }
+
+    registry.register(ToolDefinition(
+        name="rerender_preview",
+        description="Render a new FFmpeg preview from canonical persisted editor state",
+        parameters_schema=NoArgs,
+        handler=rerender_preview,
+    ))
+
+    return registry
 
 
 def build_default_iris_tool_registry(

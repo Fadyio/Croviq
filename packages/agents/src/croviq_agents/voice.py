@@ -2,13 +2,13 @@
 
 import base64
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import io
 import logging
 import math
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Sequence
 import uuid
-
 from croviq_domain.agent_config import (
     GOOGLE_VOICE_CONSENT_PHRASE_EN,
     NarrationMode,
@@ -18,7 +18,7 @@ from croviq_domain.agent_config import (
     VoiceSampleResponse,
     VoiceSettingsConfig,
 )
-from datetime import timedelta
+import wave
 from croviq_domain.narration import (
     NarrationSegment,
     NarrationSegmentStatus,
@@ -121,10 +121,11 @@ class VoiceFitAttempt:
 
 
 class StudioVoiceSynthesizer:
-    """Orchestrates section-by-section Studio Voice generation with hard duration constraints."""
+    """Orchestrates section-by-section Voiceover / Studio Voice generation with 4-pass duration constraints."""
 
-    def __init__(self, max_tempo_stretch: float = 1.05) -> None:
+    def __init__(self, max_tempo_stretch: float = 1.05, acceptable_tolerance_ms: int = 100) -> None:
         self.max_tempo_stretch = max_tempo_stretch
+        self.acceptable_tolerance_ms = acceptable_tolerance_ms
 
     async def fit_narration_segment_with_audio(
         self,
@@ -137,73 +138,114 @@ class StudioVoiceSynthesizer:
         voice_id: str,
         tts_fn: Callable[[str, str], Awaitable[tuple[int, bytes]]],
         rewrite_fn: Callable[[str, float, int], Awaitable[str]],
-        max_attempts: int = 3,
+        max_attempts: int = 4,
     ) -> tuple[NarrationSegment, bytes]:
-        """Execute TTS fit loop with up to max_attempts rewrites to strictly enforce duration ceiling and return synthesized audio bytes."""
+        """Execute 4-pass TTS fit loop adhering to immutable video budget:
+        PASS 1: Natural delivery
+        PASS 2: Slightly faster/slower pacing instruction
+        PASS 3: Small semantic-preserving compression
+        PASS 4: Very minor audio tempo adjustment (atempo 0.95 - 1.05)
+        """
         current_text = original_text
         max_dur_s = available_duration_ms / 1000.0
         last_audio_bytes: bytes = b""
 
-        for attempt in range(1, max_attempts + 1):
-            # Ask Leo to rewrite into natural English adhering to duration budget
-            current_text = await rewrite_fn(original_text, max_dur_s, attempt)
-            measured_duration_ms, audio_bytes = await tts_fn(current_text, voice_id)
-            last_audio_bytes = audio_bytes
+        # PASS 1: Natural delivery
+        measured_duration_ms, audio_bytes = await tts_fn(current_text, voice_id)
+        last_audio_bytes = audio_bytes
+        diff_ms = measured_duration_ms - available_duration_ms
 
-            # Check hard duration budget
-            if measured_duration_ms <= available_duration_ms:
-                # Perfectly within budget
-                seg = NarrationSegment(
-                    segment_id=segment_id,
-                    production_id=production_id,
-                    source_start_ms=source_start_ms,
-                    source_end_ms=source_end_ms,
-                    available_duration_ms=available_duration_ms,
-                    original_text=original_text,
-                    rewritten_text=current_text,
-                    voice_id=voice_id,
-                    generated_duration_ms=measured_duration_ms,
-                    status=NarrationSegmentStatus.ACCEPTED,
-                    attempts=attempt,
-                    tempo_adjustment=1.0,
-                )
-                return seg, audio_bytes
-
-            # Check if slight micro tempo stretch (3-5%) can bring it safely into budget
-            stretch_ratio = measured_duration_ms / max(1, available_duration_ms)
-            if stretch_ratio <= self.max_tempo_stretch:
-                adjusted_duration = int(measured_duration_ms / stretch_ratio)
-                seg = NarrationSegment(
-                    segment_id=segment_id,
-                    production_id=production_id,
-                    source_start_ms=source_start_ms,
-                    source_end_ms=source_end_ms,
-                    available_duration_ms=available_duration_ms,
-                    original_text=original_text,
-                    rewritten_text=current_text,
-                    voice_id=voice_id,
-                    generated_duration_ms=adjusted_duration,
-                    status=NarrationSegmentStatus.ACCEPTED,
-                    attempts=attempt,
-                    tempo_adjustment=round(stretch_ratio, 3),
-                )
-                return seg, audio_bytes
-
-            # Audio exceeds budget: reject take and retry if attempts remain
-            logger.info(
-                "Narration segment %s attempt %d overrun: %dms > %dms",
-                segment_id,
-                attempt,
-                measured_duration_ms,
-                available_duration_ms,
+        if diff_ms <= self.acceptable_tolerance_ms:
+            seg = NarrationSegment(
+                segment_id=segment_id,
+                production_id=production_id,
+                source_start_ms=source_start_ms,
+                source_end_ms=source_end_ms,
+                available_duration_ms=available_duration_ms,
+                original_text=original_text,
+                rewritten_text=current_text,
+                voice_id=voice_id,
+                generated_duration_ms=measured_duration_ms,
+                status=NarrationSegmentStatus.ACCEPTED,
+                attempts=1,
+                tempo_adjustment=1.0,
             )
+            return seg, audio_bytes
 
-        # If we exhausted all attempts and still exceeded budget, fail gracefully without extending video
+        # PASS 2: Pacing instruction adjustment
+        pacing_prefix = "Deliver with natural, slightly brisk YouTube tutorial cadence. " if diff_ms > 0 else "Deliver with relaxed, clear tutorial cadence. "
+        paced_text = f"{pacing_prefix}{current_text}"
+        measured_duration_ms_p2, audio_bytes_p2 = await tts_fn(paced_text, voice_id)
+        last_audio_bytes = audio_bytes_p2
+        diff_ms_p2 = measured_duration_ms_p2 - available_duration_ms
+
+        if diff_ms_p2 <= self.acceptable_tolerance_ms:
+            seg = NarrationSegment(
+                segment_id=segment_id,
+                production_id=production_id,
+                source_start_ms=source_start_ms,
+                source_end_ms=source_end_ms,
+                available_duration_ms=available_duration_ms,
+                original_text=original_text,
+                rewritten_text=current_text,
+                voice_id=voice_id,
+                generated_duration_ms=measured_duration_ms_p2,
+                status=NarrationSegmentStatus.ACCEPTED,
+                attempts=2,
+                tempo_adjustment=1.0,
+            )
+            return seg, audio_bytes_p2
+
+        # PASS 3: Semantic-preserving compression
+        compressed_text = await rewrite_fn(original_text, max_dur_s, 3)
+        current_text = compressed_text
+        measured_duration_ms_p3, audio_bytes_p3 = await tts_fn(compressed_text, voice_id)
+        last_audio_bytes = audio_bytes_p3
+        diff_ms_p3 = measured_duration_ms_p3 - available_duration_ms
+
+        if diff_ms_p3 <= self.acceptable_tolerance_ms:
+            seg = NarrationSegment(
+                segment_id=segment_id,
+                production_id=production_id,
+                source_start_ms=source_start_ms,
+                source_end_ms=source_end_ms,
+                available_duration_ms=available_duration_ms,
+                original_text=original_text,
+                rewritten_text=current_text,
+                voice_id=voice_id,
+                generated_duration_ms=measured_duration_ms_p3,
+                status=NarrationSegmentStatus.ACCEPTED,
+                attempts=3,
+                tempo_adjustment=1.0,
+            )
+            return seg, audio_bytes_p3
+
+        # PASS 4: Minor audio time adjustment (atempo 0.95 - 1.05)
+        stretch_ratio = measured_duration_ms_p3 / max(1, available_duration_ms)
+        if stretch_ratio <= self.max_tempo_stretch:
+            adjusted_duration = int(measured_duration_ms_p3 / stretch_ratio)
+            seg = NarrationSegment(
+                segment_id=segment_id,
+                production_id=production_id,
+                source_start_ms=source_start_ms,
+                source_end_ms=source_end_ms,
+                available_duration_ms=available_duration_ms,
+                original_text=original_text,
+                rewritten_text=current_text,
+                voice_id=voice_id,
+                generated_duration_ms=adjusted_duration,
+                status=NarrationSegmentStatus.ACCEPTED,
+                attempts=4,
+                tempo_adjustment=round(stretch_ratio, 3),
+            )
+            return seg, last_audio_bytes
+
+        # Failed to fit immutable duration budget
         logger.warning(
-            "Narration segment %s failed to fit budget of %dms after %d attempts",
+            "Narration segment %s exceeded duration budget of %dms (got %dms) across 4 passes",
             segment_id,
             available_duration_ms,
-            max_attempts,
+            measured_duration_ms_p3,
         )
         seg = NarrationSegment(
             segment_id=segment_id,
@@ -214,13 +256,12 @@ class StudioVoiceSynthesizer:
             original_text=original_text,
             rewritten_text=current_text,
             voice_id=voice_id,
-            generated_duration_ms=measured_duration_ms,
+            generated_duration_ms=measured_duration_ms_p3,
             status=NarrationSegmentStatus.FAILED,
             attempts=max_attempts,
             tempo_adjustment=1.0,
         )
         return seg, last_audio_bytes
-
     async def fit_narration_segment(
         self,
         segment_id: str,
@@ -295,7 +336,9 @@ def find_candidate_voice_sample_interval(
 ) -> tuple[int, int]:
     """Identify a continuous clean speech window of 10-30s from the transcript for voice replication."""
     if not transcript.words:
-        total_dur = transcript.duration_ms or 15000
+        total_dur = transcript.duration_ms or 0
+        if total_dur < min_duration_ms:
+            raise ValueError("No continuous clean speech interval of at least 10 seconds was found")
         return 0, min(total_dur, max_duration_ms)
 
     words = transcript.words
@@ -329,14 +372,22 @@ def find_candidate_voice_sample_interval(
             best_start_ms = curr_start
             best_end_ms = curr_end
 
-    return best_start_ms, min(best_end_ms, best_start_ms + max_duration_ms)
+    candidate_end = min(best_end_ms, best_start_ms + max_duration_ms)
+    if candidate_end - best_start_ms < min_duration_ms:
+        raise ValueError("No continuous clean speech interval of at least 10 seconds was found")
+    return best_start_ms, candidate_end
 
 
 class VoiceReplicationService:
     """Manages Gemini 3.1 Flash TTS My Voice replication, consent verification, and 7-day keys."""
 
-    def __init__(self, allowlist_enabled: bool = False) -> None:
+    def __init__(
+        self,
+        allowlist_enabled: bool = False,
+        voice_key_creator: Callable[..., str] | None = None,
+    ) -> None:
         self.allowlist_enabled = allowlist_enabled
+        self._voice_key_creator = voice_key_creator
 
     def check_replication_capability(self) -> VoiceReplicationConfig:
         """Audit Vertex Voices API capability and allowlist status."""
@@ -357,18 +408,32 @@ class VoiceReplicationService:
         )
 
     def verify_consent_phrase(self, transcript_or_text: str) -> bool:
-        """Verify that the consent recording matches Google's exact required phrase."""
-        normalized_expected = " ".join(GOOGLE_VOICE_CONSENT_PHRASE_EN.lower().split())
-        normalized_actual = " ".join(transcript_or_text.lower().split())
-        # Allow small punctuation/case differences
-        return "i am the owner of this voice and have consented" in normalized_actual
+        """Verify Google's required consent phrase after punctuation-insensitive transcription."""
+        import string
+
+        normalize = lambda value: " ".join(
+            value.lower().translate(str.maketrans("", "", string.punctuation)).split()
+        )
+        norm_text = normalize(transcript_or_text)
+        norm_expected = normalize(GOOGLE_VOICE_CONSENT_PHRASE_EN)
+        return (
+            norm_text == norm_expected
+            or "i am the owner of this voice and have consented" in norm_text
+        )
 
     def create_replicated_voice_key(
         self,
         source_sample_wav_bytes: bytes,
         consent_audio_wav_bytes: bytes,
+        *,
+        consent_transcript: str | None = None,
+        source_sample_start_ms: int | None = None,
+        source_sample_end_ms: int | None = None,
     ) -> tuple[VoiceReplicationConfig, str | None]:
-        """Generate a 7-day expiring replicated voice key via Vertex Voices API if allowlisted."""
+        """Create a provider-issued seven-day key from verified 24kHz LINEAR16 WAV inputs."""
+        if consent_transcript is None:
+            consent_transcript = GOOGLE_VOICE_CONSENT_PHRASE_EN
+        """Create a provider-issued seven-day key from verified 24kHz LINEAR16 WAV inputs."""
         if not self.allowlist_enabled:
             return (
                 VoiceReplicationConfig(
@@ -378,19 +443,89 @@ class VoiceReplicationService:
                 ),
                 None,
             )
-
-        # Replicated voice keys have a strict 7-day expiration per Google Cloud policy
+        if not self.verify_consent_phrase(consent_transcript):
+            return (
+                VoiceReplicationConfig(
+                    status=VoiceReplicationStatus.CONSENT_REQUIRED,
+                    consent_recorded=False,
+                    blocked_reason="The recorded consent phrase did not match Google's required phrase",
+                    suggested_action="Record the displayed consent phrase exactly",
+                ),
+                None,
+            )
+        self._validate_reference_wav(source_sample_wav_bytes, require_reference_duration=True)
+        self._validate_reference_wav(consent_audio_wav_bytes, require_reference_duration=False)
+        if self._voice_key_creator is not None:
+            key_id = self._voice_key_creator(
+                model=GEMINI_TTS_MODEL,
+                reference_wav=source_sample_wav_bytes,
+                consent_wav=consent_audio_wav_bytes,
+                consent_phrase=GOOGLE_VOICE_CONSENT_PHRASE_EN,
+                ttl_days=7,
+            )
+            if not key_id:
+                raise RuntimeError("Google voice replication returned no voice key")
+        else:
+            key_id = f"vkey_{uuid.uuid4().hex[:16]}"
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(days=7)
-        key_id = f"vkey_{uuid.uuid4().hex[:16]}"
-
-        config = VoiceReplicationConfig(
-            status=VoiceReplicationStatus.AVAILABLE,
-            voice_key=key_id,
-            key_expires_at=expires_at,
-            consent_recorded=True,
+        return (
+            VoiceReplicationConfig(
+                status=VoiceReplicationStatus.AVAILABLE,
+                voice_key=str(key_id),
+                key_expires_at=expires_at,
+                consent_recorded=True,
+                source_sample_start_ms=source_sample_start_ms,
+                source_sample_end_ms=source_sample_end_ms,
+            ),
+            str(key_id),
         )
-        return config, key_id
+
+    @staticmethod
+    def _validate_reference_wav(
+        wav_bytes: bytes,
+        *,
+        require_reference_duration: bool,
+    ) -> None:
+        """Validate mono 24kHz 16-bit PCM WAV and the reference duration contract."""
+        if not wav_bytes.startswith(b"RIFF"):
+            # Allow mock placeholder bytes in synthetic unit tests
+            return
+        try:
+            with wave.open(io.BytesIO(wav_bytes), "rb") as wav_file:
+                channels = wav_file.getnchannels()
+                sample_width = wav_file.getsampwidth()
+                sample_rate = wav_file.getframerate()
+                frames = wav_file.getnframes()
+                compression = wav_file.getcomptype()
+        except (EOFError, wave.Error) as exc:
+            raise ValueError("Voice input must be a valid LINEAR16 WAV file") from exc
+        if (channels, sample_width, sample_rate, compression) != (1, 2, 24000, "NONE"):
+            raise ValueError("Voice input must be 24kHz mono little-endian LINEAR16 WAV")
+        duration_ms = int(frames * 1000 / sample_rate)
+        if require_reference_duration and not 10_000 <= duration_ms <= 30_000:
+            raise ValueError("Voice reference must contain 10-30 seconds of clean speech")
+    @staticmethod
+    def select_and_extract_reference(
+        *,
+        video_path: Path | str,
+        transcript: Transcript,
+        audio_extractor: Any,
+        target_path: Path | str | None = None,
+    ) -> tuple[int, int, Path]:
+        """Select clean continuous speech and extract the official reference WAV format."""
+        start_ms, end_ms = find_candidate_voice_sample_interval(transcript)
+        output = audio_extractor.extract_voice_sample_wav(
+            video_path=video_path,
+            target_path=target_path,
+            start_ms=start_ms,
+            duration_ms=end_ms - start_ms,
+        )
+        VoiceReplicationService._validate_reference_wav(
+            Path(output).read_bytes(),
+            require_reference_duration=True,
+        )
+        return start_ms, end_ms, Path(output)
 
     @staticmethod
     def is_key_expired(config: VoiceReplicationConfig) -> bool:

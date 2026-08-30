@@ -83,6 +83,26 @@ CANONICAL_MODEL_REGISTRY: list[ModelCapabilityEntry] = [
         audio_isolation_verified=True,
         notes="Gemini Omni 1.1 Flash is operated through Vertex AI Interactions API (POST /v1beta1/projects/{project}/locations/global/interactions) for text-to-video, reference-to-video, and visual coverage B-roll.",
     ),
+    ModelCapabilityEntry(
+        model_id="lyria-3-pro-preview",
+        feature="Background Music Generation (Long-form)",
+        code_path="croviq_agents.client.GoogleGenAIClient.generate_background_music",
+        implemented=ModelImplementationStatus.IMPLEMENTED,
+        live_upstream_proven=UpstreamVerificationStatus.YES,
+        last_verified_at="2026-08-30",
+        duration_control_verified=True,
+        notes="Google Lyria 3 Pro preview generates up to 184 seconds of minimal, subtle, modern instrumental background music with exact duration control.",
+    ),
+    ModelCapabilityEntry(
+        model_id="lyria-3-clip-preview",
+        feature="Background Music Generation (Short Clip)",
+        code_path="croviq_agents.client.GoogleGenAIClient.generate_background_music",
+        implemented=ModelImplementationStatus.IMPLEMENTED,
+        live_upstream_proven=UpstreamVerificationStatus.YES,
+        last_verified_at="2026-08-30",
+        duration_control_verified=True,
+        notes="Google Lyria 3 Clip preview generates 30-second music assets for short video formats.",
+    ),
 ]
 
 

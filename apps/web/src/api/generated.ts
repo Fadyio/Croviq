@@ -210,6 +210,14 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/corrected-script": {
+    get: {
+      responses: {
+        200: components["schemas"]["CorrectedScriptResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
   "/api/productions/{production_id}/source-analysis-input": {
     get: {
       responses: {
@@ -230,6 +238,28 @@ export interface paths {
     get: {
       responses: {
         200: components["schemas"]["EditorialRunDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/chat": {
+    post: {
+      responses: {
+        200: components["schemas"]["ProductionChatResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/chat/history": {
+    get: {
+      responses: {
+        200: components["schemas"]["ProductionChatHistoryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+    delete: {
+      responses: {
+        200: components["schemas"]["ProductionChatHistoryResponse"];
         422: components["schemas"]["HTTPValidationError"];
       };
     };
@@ -260,6 +290,38 @@ export interface paths {
     post: {
       responses: {
         200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/renders/voiceover-preview": {
+    post: {
+      responses: {
+        200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/renders/final-mix": {
+    post: {
+      responses: {
+        200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/music/generate": {
+    post: {
+      responses: {
+        200: components["schemas"]["EDLDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
+  "/api/productions/{production_id}/music": {
+    patch: {
+      responses: {
+        200: components["schemas"]["EDLDetailResponse"];
         422: components["schemas"]["HTTPValidationError"];
       };
     };
@@ -549,10 +611,12 @@ export interface components {
       | "PREVIEW"
       | "MASTER"
       | "SHORT"
+      | "VOICEOVER_PREVIEW"
       | "STUDIO_VOICE_PREVIEW"
       | "STUDIO_VOICE_MASTER"
       | "BROLL_PREVIEW"
-      | "BROLL_MASTER";
+      | "BROLL_MASTER"
+      | "FINAL_MIX";
     AssembleEDLResponse: {
       /** Unique identifier for the assembled Edit Decision List */
       edl_id: string;
@@ -685,6 +749,18 @@ export interface components {
       artifacts?: components["schemas"]["BRollArtifact"][];
     };
     BRollQualityMode: "draft" | "standard" | "finishing" | "4k";
+    BackgroundMusicMix: {
+      style: string;
+      model_id?: string;
+      prompt?: string | null;
+      duration_ms?: number | null;
+      volume_db?: number;
+      ducking_db?: number;
+      target_lufs?: number;
+      music_gcs_object: string;
+      preview_artifact_id?: string | null;
+      is_muted?: boolean;
+    };
     BrandKit: {
       /** Tone adjectives or stylistic descriptors (e.g. ['concise', 'informative']) */
       tone?: string[];
@@ -787,6 +863,8 @@ export interface components {
       updated_at?: string;
     };
     ChapterMarker: {
+      /** Stable chapter identifier for typed editor operations */
+      chapter_id?: string;
       /** Concise descriptive chapter title */
       title: string;
       /** Start time in milliseconds on the source video timeline */
@@ -821,6 +899,66 @@ export interface components {
     };
     CodeExecutionRequest: {
       analysis_goal?: string;
+    };
+    CorrectedScriptResponse: {
+      /** Unique production identifier */
+      production_id: string;
+      /** Canonical corrected transcript */
+      corrected_transcript: components["schemas"]["CorrectedTranscript"];
+      /** Total count of corrected segments */
+      corrections_count: number;
+      /** Count of transcription error fixes */
+      transcription_corrections_count: number;
+      /** Count of grammar improvements */
+      grammar_corrections_count: number;
+      /** Whether all corrections preserve factual meaning */
+      meaning_preserved: boolean;
+      /** Count of corrections supported by entailment check */
+      supported_corrections_count: number;
+    };
+    CorrectedTranscript: {
+      /** Unique identifier for this corrected transcript entity */
+      transcript_id: string;
+      /** Associated production identifier */
+      production_id: string;
+      /** Ordered list of corrected script segments */
+      segments?: components["schemas"]["CorrectedTranscriptSegment"][];
+      /** Timestamp when the corrected transcript was generated (UTC) */
+      created_at: string;
+    };
+    CorrectedTranscriptSegment: {
+      /** Unique identifier for this corrected segment */
+      segment_id?: string;
+      /** Start offset on source video timeline in milliseconds */
+      source_start_ms: number;
+      /** End offset on source video timeline in milliseconds */
+      source_end_ms: number;
+      /** Original recognized speech transcription text */
+      original_text: string;
+      /** Source-grounded corrected spoken performance text */
+      corrected_text: string;
+      /** Classification of the applied correction */
+      change_type?: components["schemas"]["ScriptCorrectionChangeType"];
+      /** Detailed justification for the correction */
+      reason?: string;
+      /** Screen, IDE, or visual context confirming the correction */
+      visual_evidence?: string;
+      /** Whether the factual meaning is changed (MUST be false for valid corrections) */
+      meaning_changed?: boolean;
+      /** Immutable video time budget in milliseconds for replacement speech */
+      target_duration_ms: number;
+      /** Confidence score of the correction proposal */
+      confidence?: number;
+      /** Result of the second-pass closed-world entailment check */
+      entailment_verdict?: components["schemas"]["EntailmentVerdict"];
+      /** Whether a synthesized voiceover replacement is active for this segment */
+      is_voiceover_active?: boolean;
+      /** Voice mode used for synthesis (e.g. REPLICATED_MY_VOICE, PREBUILT_STUDIO_VOICE) */
+      voice_mode?: string | null;
+      /** Actual measured TTS audio duration in ms */
+      generated_audio_duration_ms?: number | null;
+      /** Storage key or artifact ID of the synthesized voice segment */
+      audio_artifact_reference?: string | null;
     };
     CoverageMarker: {
       /** Unique identifier for the coverage marker */
@@ -981,6 +1119,10 @@ export interface components {
       cuts?: components["schemas"]["CutInstruction"][];
       /** Visual coverage markers for B-roll and screen recordings */
       coverage_markers?: components["schemas"]["CoverageMarker"][];
+      /** Persisted generated narration segments mixed into the preview */
+      voiceover_segments?: components["schemas"]["VoiceoverSegment"][];
+      /** Active persisted background music mix, if any */
+      background_music?: components["schemas"]["BackgroundMusicMix"] | null;
       /** Timestamp when the EDL was generated (UTC) */
       created_at: string;
     };
@@ -1047,6 +1189,8 @@ export interface components {
       /** Overall confidence in the proposal */
       overall_confidence: number;
     };
+    EditorVoiceMode:
+      "ORIGINAL_VOICE" | "ORIGINAL_AUDIO" | "REPLICATED_MY_VOICE" | "PREBUILT_STUDIO_VOICE";
     EditorialRun: {
       /** Unique identifier for the editorial run */
       run_id: string;
@@ -1072,9 +1216,20 @@ export interface components {
       activities?: components["schemas"]["AgentActivity"][];
     };
     EditorialRunStatus: "pending" | "analyzing" | "reviewing" | "completed" | "failed";
+    EntailmentVerdict: "SUPPORTED" | "UNSUPPORTED" | "UNCERTAIN";
     EvidenceKind: "FACT" | "INFERENCE" | "RESEARCH" | "RECOMMENDATION";
     ExperimentStatus: "PROPOSED" | "ACTIVE" | "COMPLETED" | "INCONCLUSIVE";
     FindingLifecycle: "NEW" | "UPDATED" | "SEEN" | "EXPIRED";
+    GenerateBackgroundMusicRequest: {
+      /** Custom prompt for Google Lyria (defaults to minimal modern technology documentary underscore) */
+      prompt?: string | null;
+      /** Google Lyria model ID ('lyria-3-pro-preview' or 'lyria-3-clip-preview') */
+      model_id?: string;
+      /** Music bed volume in dB relative to dialogue */
+      volume_db?: number;
+      /** Additional speech ducking attenuation in dB */
+      ducking_db?: number;
+    };
     GenerateReleaseReviewRequest: {
       /** Whether to bypass cached review and execute a fresh Iris QA pass */
       force_regenerate?: boolean;
@@ -1281,6 +1436,35 @@ export interface components {
       created_at: string;
       /** Timestamp when the production was last updated (UTC) */
       updated_at: string;
+    };
+    ProductionChatHistoryResponse: {
+      production_id: string;
+      messages?: Record<string, unknown>[];
+    };
+    ProductionChatRequest: {
+      message: string;
+      selected_range_ms?: unknown[] | null;
+      selected_element?: components["schemas"]["ProductionChatSelectedElement"] | null;
+      current_playhead_ms?: number | null;
+    };
+    ProductionChatResponse: {
+      message_id: string;
+      role?: "assistant";
+      content: string;
+      tool_executions?: Record<string, unknown>[];
+      created_at: string;
+      edl?: components["schemas"]["EditDecisionList"] | null;
+      timeline_updated?: boolean;
+      voiceover_updated?: boolean;
+      preview_updated?: boolean;
+      seek_range?: number[] | null;
+    };
+    ProductionChatSelectedElement: {
+      type: string;
+      id: string;
+      label?: string;
+      start_ms: number;
+      end_ms: number;
     };
     ProductionListResponse: {
       /** List of recent Production records */
@@ -1596,6 +1780,8 @@ export interface components {
       findings_created: number;
       status: string;
     };
+    ScriptCorrectionChangeType:
+      "GRAMMAR" | "TRANSCRIPTION_ERROR" | "FILLER" | "FALSE_START" | "REPETITION" | "KEEP";
     SectionAction: "KEEP" | "TIGHTEN" | "REMOVE" | "COVERAGE";
     SilenceInterval: {
       /** Silence interval start offset in milliseconds */
@@ -1800,6 +1986,16 @@ export interface components {
       /** Optional speaker identifier or diarization tag */
       speaker_id?: string | null;
     };
+    UpdateBackgroundMusicRequest: {
+      /** Updated music volume in dB */
+      volume_db?: number | null;
+      /** Updated ducking attenuation in dB */
+      ducking_db?: number | null;
+      /** Whether background music is muted */
+      is_muted?: boolean | null;
+      /** Updated music style label */
+      style?: string | null;
+    };
     UpdatePackagingOverridesRequest: {
       /** Creator selected title */
       selected_title?: string | null;
@@ -1940,6 +2136,17 @@ export interface components {
       updated_at: string;
       /** My Voice replication settings and consent status */
       my_voice?: components["schemas"]["VoiceReplicationConfig"] | null;
+    };
+    VoiceoverSegment: {
+      segment_id: string;
+      source_start_ms: number;
+      source_end_ms: number;
+      text: string;
+      original_text?: string | null;
+      voice_mode?: components["schemas"]["EditorVoiceMode"];
+      voice_id?: string | null;
+      generated_duration_ms?: number | null;
+      preview_artifact_id?: string | null;
     };
     Workspace: {
       /** Unique workspace identifier */

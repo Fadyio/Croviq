@@ -1,4 +1,3 @@
-import React, { useState, useEffect, useMemo } from "react";
 import {
   Check,
   Clock,
@@ -10,6 +9,7 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
 
 export const YouTubeIcon: React.FC<{ className?: string }> = ({ className = "size-4" }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
@@ -25,6 +25,7 @@ export interface VerifiedThumbnailFrame {
   formatted_time?: string;
   visual_description?: string;
 }
+
 import type { components } from "../../api/generated";
 
 type PublishPreparationResponse = components["schemas"]["PublishPreparationResponse"];

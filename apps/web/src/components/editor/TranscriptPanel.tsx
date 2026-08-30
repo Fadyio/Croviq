@@ -1,49 +1,89 @@
-import React, { useEffect, useMemo, useRef } from "react";
-import { FileText, Layers, ShieldCheck } from "lucide-react";
+import { ArrowRight, Layers, MessageSquare, Scissors, ShieldCheck } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  formatTimecode,
+  type CorrectedTranscript,
+  type EditDecisionList,
   type EditorDecision,
+  formatTimecode,
+  sourceToEditedTimeMs,
   type Transcript,
   type TranscriptSegment,
 } from "../../lib/edl-adapter";
+import type { PreviewMode } from "./PreviewToggle";
+
+export interface TranscriptRangeSelection {
+  id: string;
+  label: string;
+  startMs: number;
+  endMs: number;
+}
 
 interface TranscriptPanelProps {
   transcript: Transcript | null;
+  correctedTranscript?: CorrectedTranscript | null;
+  edl?: EditDecisionList | null;
+  mode: PreviewMode;
   currentTimeMs: number;
   decisions?: EditorDecision[];
   selectedDecisionId: string | null;
   onSelectDecision: (decision: EditorDecision | null) => void;
   onSeek: (targetMs: number) => void;
+  onRangeSelect?: (selection: TranscriptRangeSelection) => void;
+  onSendRangeToChat?: (selection: TranscriptRangeSelection) => void;
   className?: string;
 }
 
+const isPauseDecision = (decision: EditorDecision): boolean =>
+  decision.decision_type === "TRIM_PAUSE" ||
+  decision.decision_type === "REMOVE_SILENCE" ||
+  decision.decision_type === "TIGHTEN_PAUSE";
+
+const isRemovedSpeech = (decision: EditorDecision): boolean =>
+  decision.decision_type === "REMOVE_FALSE_START" ||
+  decision.decision_type === "REMOVE_REPETITION" ||
+  decision.decision_type === "REMOVE_FILLER" ||
+  decision.decision_type === "REMOVE_LOW_VALUE_SECTION" ||
+  decision.decision_type === "TIGHTEN_EXPLANATION";
+
+const decisionTitle = (decision: EditorDecision): string => {
+  if (decision.decision_type === "REMOVE_FALSE_START") return "False start removed";
+  if (decision.decision_type === "REMOVE_REPETITION") return "Repetition removed";
+  if (decision.decision_type === "REMOVE_FILLER") return "Filler removed";
+  if (decision.decision_type === "REMOVE_LOW_VALUE_SECTION") return "Low-value section removed";
+  if (decision.decision_type === "TIGHTEN_EXPLANATION") return "Explanation tightened";
+  if (decision.decision_type === "BROLL_COVER_CANDIDATE") return "B-roll coverage";
+  if (decision.decision_type === "BROLL_COVER") return "B-roll coverage";
+  if (decision.decision_type === "SOURCE_COVER") return "Source coverage";
+  if (decision.decision_type === "KEEP_FOR_CLARITY") return "Preserved for clarity";
+  if (isPauseDecision(decision)) return "Pause removed";
+  return "Editorial note";
+};
+
+const shouldInsertSpace = (text: string, wordPosition: number): boolean =>
+  wordPosition > 0 && !/^[,.;:!?)}\]'"’]/u.test(text);
+
 export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   transcript,
+  correctedTranscript,
+  edl,
+  mode,
   currentTimeMs,
   decisions = [],
   selectedDecisionId,
   onSelectDecision,
   onSeek,
+  onRangeSelect,
+  onSendRangeToChat,
   className = "",
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeWordRef = useRef<HTMLButtonElement>(null);
   const manualScrollUntilRef = useRef(0);
   const programmaticScrollRef = useRef(false);
-
-  const wordDecisionMap = useMemo(() => {
-    const map = new Map<number, EditorDecision>();
-    for (const decision of decisions) {
-      for (
-        let wordIndex = decision.transcript_start_word;
-        wordIndex <= decision.transcript_end_word;
-        wordIndex += 1
-      ) {
-        map.set(wordIndex, decision);
-      }
-    }
-    return map;
-  }, [decisions]);
+  const [selectedRange, setSelectedRange] = useState<TranscriptRangeSelection | null>(null);
+  const [transcriptViewMode, setTranscriptViewMode] = useState<"original" | "corrected">(
+    "original",
+  );
 
   const activeWordIndex = useMemo(() => {
     if (!transcript?.words) return -1;
@@ -71,9 +111,14 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
     ];
   }, [transcript]);
 
-  useEffect(() => {
-    manualScrollUntilRef.current = 0;
-  }, []);
+  const formatModeTimecode = (sourceMs: number): string =>
+    formatTimecode(mode === "original" ? sourceMs : sourceToEditedTimeMs(sourceMs, edl));
+
+  const selectRange = (selection: TranscriptRangeSelection) => {
+    setSelectedRange(selection);
+    onSeek(selection.startMs);
+    onRangeSelect?.(selection);
+  };
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -96,19 +141,41 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
 
   return (
     <section
-      className={`flex flex-1 min-h-0 flex-col border-t border-border-subtle pt-2.5 overflow-hidden ${className}`}
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden ${className}`}
       data-testid="transcript-panel"
     >
-      <div className="mb-2 flex items-center justify-between shrink-0">
-        <h2 className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
-          <FileText className="size-3.5 text-text-muted" />
-          Transcript
-        </h2>
+      <div className="flex shrink-0 items-center justify-between border-b border-border-subtle px-3 py-2">
+        <div className="flex items-center gap-1 rounded-md border border-border-subtle bg-surface-2 p-0.5 text-[10px]">
+          <button
+            type="button"
+            onClick={() => setTranscriptViewMode("original")}
+            className={`rounded px-2 py-0.5 font-semibold transition-colors ${
+              transcriptViewMode === "original"
+                ? "bg-surface-1 text-text-primary shadow-xs"
+                : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            Original Transcript
+          </button>
+          <button
+            type="button"
+            onClick={() => setTranscriptViewMode("corrected")}
+            className={`rounded px-2 py-0.5 font-semibold transition-colors ${
+              transcriptViewMode === "corrected"
+                ? "bg-surface-1 text-text-primary shadow-xs"
+                : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            Corrected Script
+          </button>
+        </div>
+        <span className="rounded border border-border-subtle bg-surface-2 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-text-muted">
+          {mode === "original" ? "Source time" : "Edited time"}
+        </span>
       </div>
-
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto pr-2 text-[13px] leading-[1.8] text-text-secondary selection:bg-primary/25"
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-3 text-[13px] leading-[1.8] text-text-secondary selection:bg-primary/25"
         onScroll={() => {
           if (!programmaticScrollRef.current) {
             manualScrollUntilRef.current = Date.now() + 3000;
@@ -119,97 +186,306 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
           <p className="py-4 text-[11px] text-text-muted">Preparing transcript…</p>
         ) : transcriptSegments.length === 0 ? (
           <p className="py-4 text-[11px] text-text-muted">No spoken transcript available.</p>
+        ) : transcriptViewMode === "corrected" ? (
+          <div className="space-y-4 pb-3">
+            {(correctedTranscript?.segments || []).length === 0 ? (
+              <p className="py-4 text-[11px] text-text-muted">
+                No corrected script segments available yet. Leo will provide source-grounded
+                corrections upon analysis.
+              </p>
+            ) : (
+              (correctedTranscript?.segments || []).map((seg) => {
+                const isModified = seg.change_type !== "KEEP";
+                const segSelection: TranscriptRangeSelection = {
+                  id: `corr-seg-${seg.segment_id}`,
+                  label: `Corrected: ${seg.corrected_text}`,
+                  startMs: seg.source_start_ms,
+                  endMs: seg.source_end_ms,
+                };
+                const isSelected =
+                  selectedRange &&
+                  selectedRange.startMs >= seg.source_start_ms &&
+                  selectedRange.endMs <= seg.source_end_ms;
+
+                return (
+                  <article
+                    key={seg.segment_id}
+                    className={`rounded-md border p-3 transition-colors ${
+                      isSelected
+                        ? "border-primary/40 bg-primary/5"
+                        : isModified
+                          ? "border-emerald-500/30 bg-emerald-500/5"
+                          : "border-border-subtle/50 bg-surface-1/50"
+                    }`}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        className="font-mono text-[10px] tabular-nums text-text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                        onClick={() => selectRange(segSelection)}
+                        title={`Seek to ${formatModeTimecode(seg.source_start_ms)}`}
+                      >
+                        {formatModeTimecode(seg.source_start_ms)} →{" "}
+                        {formatModeTimecode(seg.source_end_ms)}
+                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`rounded border px-1.5 py-0.5 text-[9px] font-semibold ${
+                            isModified
+                              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                              : "border-border-subtle bg-surface-3 text-text-muted"
+                          }`}
+                        >
+                          {seg.change_type}
+                        </span>
+                        <span className="rounded border border-info/40 bg-info/10 px-1.5 py-0.5 text-[9px] font-semibold text-info">
+                          {seg.entailment_verdict}
+                        </span>
+                        {onSendRangeToChat && (
+                          <button
+                            type="button"
+                            onClick={() => onSendRangeToChat(segSelection)}
+                            className="flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary transition-colors hover:bg-primary/20"
+                            title="Send range to Leo Chat"
+                          >
+                            <MessageSquare className="size-2.5" />
+                            Ask Leo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {isModified ? (
+                      <div className="space-y-1.5">
+                        <div className="text-[12px] leading-relaxed text-text-muted">
+                          <span className="mr-1.5 font-mono text-[10px] uppercase font-bold text-danger/80">
+                            Original:
+                          </span>
+                          <span className="line-through decoration-danger/70">
+                            {seg.original_text}
+                          </span>
+                        </div>
+                        <div className="text-[13px] font-medium leading-relaxed text-text-primary">
+                          <span className="mr-1.5 font-mono text-[10px] uppercase font-bold text-emerald-400">
+                            Corrected:
+                          </span>
+                          <span className="text-emerald-300 font-semibold">
+                            {seg.corrected_text}
+                          </span>
+                        </div>
+                        {seg.reason && (
+                          <div className="pt-1 text-[11px] text-text-secondary">
+                            <span className="font-semibold text-text-muted">Reason:</span>{" "}
+                            {seg.reason}
+                          </div>
+                        )}
+                        {seg.visual_evidence && (
+                          <div className="text-[10px] italic text-text-muted">
+                            <span className="font-semibold not-italic">Visual context:</span>{" "}
+                            {seg.visual_evidence}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[13px] leading-relaxed text-text-primary/90">
+                        {seg.corrected_text}
+                      </p>
+                    )}
+                  </article>
+                );
+              })
+            )}
+          </div>
         ) : (
-          <div className="space-y-3.5 pb-2">
+          <div className="space-y-5 pb-3">
             {transcriptSegments.map((segment) => {
               const segmentWords = (transcript.words ?? []).filter(
                 (word) =>
                   word.index >= segment.word_start_index && word.index <= segment.word_end_index,
               );
+              const segmentDecisions = decisions.filter(
+                (decision) =>
+                  decision.transcript_end_word >= segment.word_start_index &&
+                  decision.transcript_start_word <= segment.word_end_index,
+              );
+              const segmentSelection: TranscriptRangeSelection = {
+                id: `transcript-segment-${segment.segment_id}`,
+                label: `Transcript: ${segment.text}`,
+                startMs: segment.start_ms,
+                endMs: segment.end_ms,
+              };
+              const isRangeInSegment =
+                selectedRange &&
+                selectedRange.startMs >= segment.start_ms &&
+                selectedRange.endMs <= segment.end_ms;
+
               return (
-                <p key={segment.segment_id} className="text-text-secondary">
-                  <button
-                    type="button"
-                    className="mr-2.5 inline-block select-none font-mono text-[10px] tabular-nums text-text-muted/80 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                    onClick={() => onSeek(segment.start_ms)}
-                    title="Seek to paragraph"
-                  >
-                    {formatTimecode(segment.start_ms)}
-                  </button>
-                  {segmentWords.map((word) => {
-                    const decision = wordDecisionMap.get(word.index);
-                    const isActive = word.index === activeWordIndex;
-                    const isSelected = decision?.decision_id === selectedDecisionId;
-                    const isDecisionStart = decision?.transcript_start_word === word.index;
-                    const isCoverage = decision?.decision_type === "BROLL_COVER_CANDIDATE";
-                    const isProtected = decision?.decision_type === "KEEP_FOR_CLARITY";
-                    const isSilenceCut =
-                      decision?.decision_type === "TRIM_PAUSE" ||
-                      decision?.decision_type === "REMOVE_SILENCE" ||
-                      decision?.decision_type === "TIGHTEN_PAUSE";
-                    const isWordRemoved =
-                      (decision?.decision_type.startsWith("REMOVE_") &&
-                        decision?.decision_type !== "REMOVE_SILENCE") ||
-                      decision?.decision_type.startsWith("TIGHTEN_");
-                    return (
-                      <React.Fragment key={word.index}>
-                        {isDecisionStart && isCoverage && (
-                          <Layers
-                            className="mr-0.5 inline size-3 align-[-0.12em] text-info/75"
-                            aria-label="Visual coverage"
-                          />
-                        )}
-                        {isDecisionStart && isProtected && (
-                          <ShieldCheck
-                            className="mr-0.5 inline size-3 align-[-0.12em] text-success/75"
-                            aria-label="Preserved for clarity"
-                          />
-                        )}
-                        {isSilenceCut && isDecisionStart && (
-                          <span
+                <article
+                  key={segment.segment_id}
+                  className={`rounded-md border px-2.5 py-2.5 transition-colors ${
+                    isRangeInSegment
+                      ? "border-primary/30 bg-primary/5"
+                      : "border-transparent bg-transparent"
+                  }`}
+                >
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      className="font-mono text-[10px] tabular-nums text-text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                      onClick={() => selectRange(segmentSelection)}
+                      title={`Select sentence at ${formatModeTimecode(segment.start_ms)}`}
+                    >
+                      {formatModeTimecode(segment.start_ms)}
+                    </button>
+                    {isRangeInSegment && selectedRange && onSendRangeToChat && (
+                      <button
+                        type="button"
+                        onClick={() => onSendRangeToChat(selectedRange)}
+                        className="flex items-center gap-1 rounded bg-primary/10 px-1.5 py-1 text-[9px] font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                      >
+                        <MessageSquare className="size-2.5" aria-hidden="true" />
+                        Send range to Leo Chat
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="select-text text-[13px] leading-7 text-text-primary/90">
+                    {segmentWords.length > 0
+                      ? segmentWords.map((word, wordPosition) => {
+                          const isActive = word.index === activeWordIndex;
+                          const decisionsAtWord = segmentDecisions.filter(
+                            (decision) =>
+                              word.index >= decision.transcript_start_word &&
+                              word.index <= decision.transcript_end_word,
+                          );
+                          const wordDecision = decisionsAtWord[0];
+                          const isSelectedDecision = decisionsAtWord.some(
+                            (decision) => decision.decision_id === selectedDecisionId,
+                          );
+                          const wordSelection: TranscriptRangeSelection = {
+                            id: `transcript-word-${word.index}`,
+                            label: `Transcript word: ${word.text}`,
+                            startMs: word.start_ms,
+                            endMs: word.end_ms,
+                          };
+                          return (
+                            <React.Fragment key={word.index}>
+                              {shouldInsertSpace(word.text, wordPosition) ? " " : null}
+                              <button
+                                ref={isActive ? activeWordRef : undefined}
+                                type="button"
+                                onClick={() => {
+                                  selectRange(wordSelection);
+                                  if (wordDecision) onSelectDecision(wordDecision);
+                                }}
+                                className={`rounded-[3px] px-0.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+                                  isActive
+                                    ? "bg-primary font-medium text-white"
+                                    : selectedRange?.id === wordSelection.id
+                                      ? "bg-primary/20 text-text-primary"
+                                      : isSelectedDecision
+                                        ? "bg-surface-3 text-text-primary"
+                                        : "hover:bg-surface-3 hover:text-text-primary"
+                                }`}
+                                aria-label={`${word.text}, ${formatModeTimecode(word.start_ms)}`}
+                                aria-pressed={selectedRange?.id === wordSelection.id}
+                                data-word-index={word.index}
+                                title={`Seek to ${formatModeTimecode(word.start_ms)}`}
+                              >
+                                {word.text}
+                              </button>
+                            </React.Fragment>
+                          );
+                        })
+                      : segment.text}
+                  </p>
+
+                  {segmentDecisions.length > 0 && (
+                    <div
+                      className="mt-2.5 space-y-1.5 border-l border-border-subtle pl-2"
+                      aria-label="Edit annotations"
+                    >
+                      {segmentDecisions.map((decision) => {
+                        const durationSeconds = Math.max(
+                          0,
+                          (decision.source_end_ms - decision.source_start_ms) / 1000,
+                        ).toFixed(2);
+                        const previousWord = (transcript.words ?? [])
+                          .filter((word) => word.index < decision.transcript_start_word)
+                          .at(-1)?.text;
+                        const isCoverage =
+                          decision.decision_type === "BROLL_COVER_CANDIDATE" ||
+                          decision.decision_type === "BROLL_COVER" ||
+                          decision.decision_type === "SOURCE_COVER";
+                        const isProtected = decision.decision_type === "KEEP_FOR_CLARITY";
+                        const AnnotationIcon = isCoverage
+                          ? Layers
+                          : isProtected
+                            ? ShieldCheck
+                            : Scissors;
+
+                        return (
+                          <button
+                            key={decision.decision_id}
+                            type="button"
                             onClick={() => {
-                              onSeek(decision.source_start_ms);
+                              const decisionRange: TranscriptRangeSelection = {
+                                id: `transcript-decision-${decision.decision_id}`,
+                                label: `${decisionTitle(decision)}: ${decision.concise_reason}`,
+                                startMs: decision.source_start_ms,
+                                endMs: decision.source_end_ms,
+                              };
+                              selectRange(decisionRange);
                               onSelectDecision(decision);
                             }}
-                            className="mx-1 inline-flex items-center gap-0.5 cursor-pointer text-[9px] text-danger/85 bg-danger/10 px-1 py-0.5 rounded border border-danger/20 font-mono select-none hover:bg-danger/20 transition-colors"
-                            title={decision.concise_reason}
+                            className={`flex w-full items-start gap-1.5 rounded px-1.5 py-1 text-left text-[10px] leading-relaxed transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+                              selectedDecisionId === decision.decision_id
+                                ? "bg-surface-2 text-text-primary"
+                                : "text-text-muted"
+                            }`}
                           >
-                            ✂ -
-                            {((decision.source_end_ms - decision.source_start_ms) / 1000).toFixed(
-                              1,
-                            )}
-                            s
-                          </span>
-                        )}
-                        <button
-                          ref={isActive ? activeWordRef : undefined}
-                          type="button"
-                          onClick={() => {
-                            onSeek(word.start_ms);
-                            if (decision) onSelectDecision(decision);
-                          }}
-                          className={`rounded-[3px] px-0.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
-                            isActive
-                              ? "bg-primary font-medium text-white shadow-sm"
-                              : isSelected
-                                ? "bg-primary/20 text-text-primary"
-                                : isWordRemoved
-                                  ? "text-danger/70 line-through decoration-danger/60 decoration-1"
-                                  : isCoverage
-                                    ? "text-text-primary underline decoration-info/60 decoration-1 underline-offset-4 hover:bg-info/10"
-                                    : isProtected
-                                      ? "text-text-primary underline decoration-success/60 decoration-dotted decoration-1 underline-offset-4 hover:bg-success/10"
-                                      : "text-text-primary/90 hover:bg-surface-3 hover:text-text-primary"
-                          }`}
-                          data-word-index={word.index}
-                          title={`${formatTimecode(word.start_ms)}${decision ? ` · ${decision.concise_reason}` : ""}`}
-                        >
-                          {word.text}
-                        </button>{" "}
-                      </React.Fragment>
-                    );
-                  })}
-                </p>
+                            <AnnotationIcon
+                              className={`mt-0.5 size-3 shrink-0 ${
+                                isCoverage
+                                  ? "text-info"
+                                  : isProtected
+                                    ? "text-success"
+                                    : "text-danger"
+                              }`}
+                              aria-hidden="true"
+                            />
+                            <span>
+                              {isPauseDecision(decision) ? (
+                                <>
+                                  [ {durationSeconds}s pause removed
+                                  {previousWord ? ` after “${previousWord}”` : ""} ] ·{" "}
+                                  {decision.concise_reason}
+                                </>
+                              ) : isRemovedSpeech(decision) ? (
+                                <>
+                                  <span className="line-through decoration-danger/70">
+                                    {decision.original_text}
+                                  </span>
+                                  <ArrowRight className="mx-1 inline size-2.5" aria-hidden="true" />
+                                  {decisionTitle(decision)} · {durationSeconds}s ·{" "}
+                                  {decision.concise_reason}
+                                </>
+                              ) : isCoverage ? (
+                                <>
+                                  [ {decisionTitle(decision)}: {decision.concise_reason} ]
+                                </>
+                              ) : (
+                                <>
+                                  [ {decisionTitle(decision)}: {decision.concise_reason} ]
+                                </>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </article>
               );
             })}
           </div>

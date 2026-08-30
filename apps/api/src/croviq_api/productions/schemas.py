@@ -18,7 +18,13 @@ from croviq_domain.packaging import (
     PackagingProposal,
     ThumbnailConcept,
 )
-from croviq_domain.transcript import Transcript
+from croviq_domain.transcript import (
+    CorrectedTranscript,
+    CorrectedTranscriptSegment,
+    EntailmentVerdict,
+    ScriptCorrectionChangeType,
+    Transcript,
+)
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
 from croviq_domain.narration import BRollArtifact, StudioVoiceResult
 from croviq_domain.release_review import (
@@ -630,3 +636,45 @@ class PublishJobDetailResponse(BaseModel):
     has_upload_access: bool = Field(default=False, description="True if youtube.upload OAuth scope is granted")
     status_message: str = Field(default="", description="Creator-facing status or restriction message")
     is_sample_channel: bool = Field(default=False, description="True if synthetic sample channel is active")
+
+
+class CorrectedScriptResponse(BaseModel):
+    """Source-grounded corrected script representation with verification status and diff metrics."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    production_id: str = Field(..., description="Unique production identifier")
+    corrected_transcript: CorrectedTranscript = Field(..., description="Canonical corrected transcript")
+    corrections_count: int = Field(..., description="Total count of corrected segments")
+    transcription_corrections_count: int = Field(..., description="Count of transcription error fixes")
+    grammar_corrections_count: int = Field(..., description="Count of grammar improvements")
+    meaning_preserved: bool = Field(..., description="Whether all corrections preserve factual meaning")
+    supported_corrections_count: int = Field(..., description="Count of corrections supported by entailment check")
+
+
+class GenerateBackgroundMusicRequest(BaseModel):
+    """Request payload to generate Google Lyria background music."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    prompt: str | None = Field(
+        default=None,
+        description="Custom prompt for Google Lyria (defaults to minimal modern technology documentary underscore)",
+    )
+    model_id: str = Field(
+        default="lyria-3-pro-preview",
+        description="Google Lyria model ID ('lyria-3-pro-preview' or 'lyria-3-clip-preview')",
+    )
+    volume_db: float = Field(default=-24.0, le=0, description="Music bed volume in dB relative to dialogue")
+    ducking_db: float = Field(default=-14.0, le=0, description="Additional speech ducking attenuation in dB")
+
+
+class UpdateBackgroundMusicRequest(BaseModel):
+    """Request payload to modify active background music mix parameters."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    volume_db: float | None = Field(default=None, le=0, description="Updated music volume in dB")
+    ducking_db: float | None = Field(default=None, le=0, description="Updated ducking attenuation in dB")
+    is_muted: bool | None = Field(default=None, description="Whether background music is muted")
+    style: str | None = Field(default=None, description="Updated music style label")

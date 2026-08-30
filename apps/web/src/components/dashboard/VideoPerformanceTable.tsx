@@ -1,5 +1,5 @@
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import React, { useMemo, useState } from "react";
-import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import type { components } from "../../api/generated";
 
 type VideoPoint = components["schemas"]["VideoPerformancePoint"];

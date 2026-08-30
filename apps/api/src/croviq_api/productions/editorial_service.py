@@ -1,10 +1,13 @@
 """Editorial application service orchestrating Leo's deterministic preview pipeline."""
 
+import asyncio
 from datetime import datetime, timezone
+import hashlib
 import logging
 from pathlib import Path
 import tempfile
 import uuid
+import wave
 
 from fastapi import HTTPException, status
 
@@ -33,6 +36,12 @@ from croviq_domain.editorial import (
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile, ChannelProfileBuilder
 from croviq_domain.production import Production, SourceMediaStatus
+from croviq_domain.narration import (
+    BRollArtifact,
+    BRollArtifactStatus,
+    BRollQualityMode,
+    QUALITY_MODE_TO_RESOLUTION,
+)
 from croviq_domain.render import (
     ArtifactStatus,
     ArtifactType,
@@ -219,6 +228,353 @@ class EditorialService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Editorial analysis failed: {exc}",
             ) from exc
+
+    async def handle_chat_message(
+        self,
+        *,
+        production_id: str,
+        current_user: User,
+        chat_service: object,
+        message: str,
+        current_playhead_ms: int | None = None,
+        selected_range: list[int] | None = None,
+        selected_element: dict[str, object] | None = None,
+        request_id: str = "unknown",
+        broll_repo: object | None = None,
+        voice_settings: object | None = None,
+    ) -> dict[str, object]:
+        """Load persisted editor state, execute Leo's typed tool, and render changed previews."""
+        production = await self._get_owned_uploaded_production(production_id, current_user)
+        transcript = await self._transcript_repo.get_transcript_by_production_id(production_id)
+        if transcript is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Production must be transcribed before chatting with Leo",
+            )
+        run = await self._editorial_repo.get_latest_editorial_run(production_id)
+        if run is None or not run.editor_proposal_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Run editorial analysis before chatting with Leo",
+            )
+        proposal = await self._editorial_repo.get_editor_proposal(
+            production_id, run.editor_proposal_id
+        )
+        if proposal is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The active editorial run is missing its proposal",
+            )
+        edl = await self._edl_service._edl_repo.get_latest_edl(production_id)
+        if edl is None:
+            edl = await self._edl_service.assemble_edl(
+                production_id, current_user, request_id=request_id
+            )
+        metadata = self._build_analysis_input(production, transcript).media_metadata
+        profile, lessons = await self._load_memory_context(production.channel_id)
+        artifacts = await self._render_repo.list_render_artifacts(production_id)
+
+        async def rerender_preview(*, edl: EditDecisionList) -> RenderArtifact:
+            return await self._render_media(
+                production,
+                edl,
+                ArtifactType.PREVIEW,
+                request_id=request_id,
+            )
+
+        async def _save_rendered_preview(
+            *,
+            local_output: Path,
+            edl: EditDecisionList,
+            render_result: object,
+            artifact_type: ArtifactType,
+        ) -> RenderArtifact:
+            object_name = build_render_artifact_gcs_object_path(
+                workspace_id=production.workspace_id,
+                production_id=production.production_id,
+                edl_id=edl.edl_id,
+                artifact_type=artifact_type,
+            )
+            await self._media_storage.upload_object_from_path(
+                bucket=production.source_media.gcs_bucket,
+                object_name=object_name,
+                source_path=local_output,
+                content_type="video/mp4",
+            )
+            now = datetime.now(timezone.utc)
+            artifact = RenderArtifact(
+                artifact_id=f"art_{uuid.uuid4().hex[:12]}",
+                production_id=production.production_id,
+                edl_id=edl.edl_id,
+                artifact_type=artifact_type,
+                status=ArtifactStatus.completed,
+                gcs_bucket=production.source_media.gcs_bucket,
+                gcs_object=object_name,
+                content_type="video/mp4",
+                size_bytes=render_result.size_bytes,
+                duration_ms=render_result.duration_ms,
+                width=render_result.width,
+                height=render_result.height,
+                frame_rate=render_result.frame_rate,
+                video_codec=render_result.video_codec,
+                audio_codec=render_result.audio_codec,
+                created_at=now,
+                completed_at=now,
+            )
+            await self._render_repo.save_render_artifact(artifact)
+            return artifact
+
+        async def add_broll(
+            *,
+            start_ms: int,
+            end_ms: int,
+            prompt: str,
+            quality_mode: str,
+            marker: object,
+            edl: EditDecisionList,
+        ) -> BRollArtifact:
+            if broll_repo is None:
+                raise RuntimeError("B-roll repository is unavailable")
+            quality = BRollQualityMode(quality_mode)
+            resolution = QUALITY_MODE_TO_RESOLUTION[quality]
+            requested_duration = max(3000, min(10_000, end_ms - start_ms))
+            video_bytes, interaction_id, generated_duration, actual_resolution = (
+                await self._genai_client.generate_broll_clip(
+                    prompt=prompt,
+                    production_id=production.production_id,
+                    duration_ms=requested_duration,
+                    task="text_to_video",
+                    resolution=resolution,
+                    aspect_ratio="16:9",
+                )
+            )
+            if not video_bytes:
+                raise RuntimeError("Gemini Omni returned no B-roll media")
+            artifact_id = f"broll_{uuid.uuid4().hex[:12]}"
+            object_name = (
+                f"workspaces/{production.workspace_id}/productions/"
+                f"{production.production_id}/broll/{artifact_id}.mp4"
+            )
+            with tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                source_path = root / "source.mp4"
+                broll_path = root / "broll.mp4"
+                preview_path = root / "preview.mp4"
+                broll_path.write_bytes(video_bytes)
+                await self._media_storage.download_object_to_path(
+                    bucket=production.source_media.gcs_bucket,
+                    object_name=production.source_media.gcs_object,
+                    target_path=source_path,
+                )
+                await self._media_storage.upload_object_from_path(
+                    bucket=production.source_media.gcs_bucket,
+                    object_name=object_name,
+                    source_path=broll_path,
+                    content_type="video/mp4",
+                )
+                result = await asyncio.to_thread(
+                    self._render_service.render_broll_placement,
+                    source_path=source_path,
+                    edl=edl,
+                    broll_path=broll_path,
+                    coverage_start_ms=start_ms,
+                    coverage_end_ms=end_ms,
+                    output_path=preview_path,
+                )
+                await _save_rendered_preview(
+                    local_output=preview_path,
+                    edl=edl,
+                    render_result=result,
+                    artifact_type=ArtifactType.PREVIEW,
+                )
+            artifact = BRollArtifact(
+                artifact_id=artifact_id,
+                production_id=production.production_id,
+                decision_id=marker.decision_id,
+                source_start_ms=start_ms,
+                source_end_ms=end_ms,
+                gcs_bucket=production.source_media.gcs_bucket,
+                gcs_object=object_name,
+                duration_ms=generated_duration,
+                status=BRollArtifactStatus.ACCEPTED,
+                prompt_summary=prompt,
+                quality_mode=quality,
+                requested_resolution=resolution,
+                resolution=actual_resolution,
+                requested_duration_ms=requested_duration,
+                generated_duration_ms=generated_duration,
+                placement_duration_ms=end_ms - start_ms,
+                audio_used_in_master=False,
+                sha256=hashlib.sha256(video_bytes).hexdigest(),
+                interaction_id=interaction_id,
+                is_draft=quality == BRollQualityMode.DRAFT,
+                created_at=datetime.now(timezone.utc),
+            )
+            await broll_repo.save(artifact)
+            return artifact
+
+        async def generate_voiceover(
+            *,
+            segment_id: str,
+            start_ms: int,
+            end_ms: int,
+            text: str,
+            voice_mode: str,
+            edl: EditDecisionList,
+        ) -> dict[str, object]:
+            if voice_mode == "ORIGINAL_VOICE":
+                artifact = await rerender_preview(edl=edl)
+                return {
+                    "segment_id": segment_id,
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "voice_mode": voice_mode,
+                    "preview_artifact_id": artifact.artifact_id,
+                }
+            selected_voice = getattr(voice_settings, "selected_voice", "Puck")
+            if voice_mode == "REPLICATED_MY_VOICE":
+                replication = getattr(voice_settings, "my_voice", None)
+                if (
+                    replication is None
+                    or not replication.voice_key
+                    or replication.key_expires_at is None
+                    or replication.key_expires_at <= datetime.now(timezone.utc)
+                ):
+                    raise RuntimeError("Replicated My Voice key is unavailable or expired")
+                selected_voice = replication.voice_key
+            measured_duration, pcm_bytes = await self._genai_client.synthesize_studio_voice(
+                text=text,
+                voice_id=selected_voice,
+                production_id=production.production_id,
+            )
+            if measured_duration > end_ms - start_ms:
+                raise ValueError("Generated voiceover exceeds the selected range")
+            with tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                source_path = root / "source.mp4"
+                narration_path = root / "voiceover.wav"
+                preview_path = root / "voiceover_preview.mp4"
+                await self._media_storage.download_object_to_path(
+                    bucket=production.source_media.gcs_bucket,
+                    object_name=production.source_media.gcs_object,
+                    target_path=source_path,
+                )
+                total_samples = int(24_000 * edl.source_duration_ms / 1000)
+                track = bytearray(total_samples * 2)
+                start_byte = int(24_000 * start_ms / 1000) * 2
+                copy_length = min(len(pcm_bytes), len(track) - start_byte)
+                track[start_byte:start_byte + copy_length] = pcm_bytes[:copy_length]
+                with wave.open(str(narration_path), "wb") as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(24_000)
+                    wav_file.writeframes(track)
+                result = await asyncio.to_thread(
+                    self._render_service.render_studio_voice_preview,
+                    source_path=source_path,
+                    edl=edl,
+                    narration_audio_path=narration_path,
+                    speech_intervals_ms=[(start_ms, end_ms)],
+                    output_path=preview_path,
+                )
+                artifact = await _save_rendered_preview(
+                    local_output=preview_path,
+                    edl=edl,
+                    render_result=result,
+                    artifact_type=ArtifactType.STUDIO_VOICE_PREVIEW,
+                )
+            return {
+                "segment_id": segment_id,
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "voice_mode": voice_mode,
+                "voice_id": selected_voice,
+                "preview_artifact_id": artifact.artifact_id,
+            }
+
+        async def add_background_music(
+            *,
+            style: str,
+            volume_db: float,
+            ducking_db: float,
+            edl: EditDecisionList,
+        ) -> dict[str, object]:
+            safe_style = "".join(char for char in style.lower() if char.isalnum() or char in "-_")
+            music_object = f"workspaces/{production.workspace_id}/music/{safe_style}.mp3"
+            music_metadata = await self._media_storage.get_object_metadata(
+                production.source_media.gcs_bucket,
+                music_object,
+            )
+            if not music_metadata.exists:
+                raise RuntimeError(f"No licensed background music asset is configured for style '{style}'")
+            with tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                source_path = root / "source.mp4"
+                music_path = root / "music.mp3"
+                preview_path = root / "music_preview.mp4"
+                await self._media_storage.download_object_to_path(
+                    bucket=production.source_media.gcs_bucket,
+                    object_name=production.source_media.gcs_object,
+                    target_path=source_path,
+                )
+                await self._media_storage.download_object_to_path(
+                    bucket=production.source_media.gcs_bucket,
+                    object_name=music_object,
+                    target_path=music_path,
+                )
+                result = await asyncio.to_thread(
+                    self._render_service.render_background_music_preview,
+                    source_path=source_path,
+                    edl=edl,
+                    music_audio_path=music_path,
+                    speech_intervals_ms=[
+                        (segment.start_ms, segment.end_ms) for segment in transcript.segments
+                    ],
+                    output_path=preview_path,
+                    volume_db=volume_db,
+                    ducking_db=ducking_db,
+                )
+                artifact = await _save_rendered_preview(
+                    local_output=preview_path,
+                    edl=edl,
+                    render_result=result,
+                    artifact_type=ArtifactType.PREVIEW,
+                )
+            return {
+                "artifact_type": "BACKGROUND_MUSIC",
+                "style": style,
+                "volume_db": volume_db,
+                "ducking_db": ducking_db,
+                "target_lufs": -14.0,
+                "preview_artifact_id": artifact.artifact_id,
+                "music_gcs_object": music_object,
+            }
+
+        return await chat_service.handle_leo_message(
+            message,
+            user_id=current_user.user_id,
+            production=production,
+            media_metadata=metadata,
+            transcript=transcript,
+            proposal=proposal,
+            edl=edl,
+            artifacts=artifacts,
+            current_playhead_ms=current_playhead_ms,
+            selected_range=selected_range,
+            selected_element=selected_element,
+            channel_profile=profile,
+            lessons=lessons,
+            editor=LeoVideoEditor(client=self._genai_client),
+            editorial_repo=self._editorial_repo,
+            edl_repo=self._edl_service._edl_repo,
+            proposal_id=run.editor_proposal_id,
+            callbacks={
+                "rerender_preview": rerender_preview,
+                "add_broll": add_broll,
+                "generate_voiceover": generate_voiceover,
+                "add_background_music": add_background_music,
+            },
+        )
 
     async def _get_owned_uploaded_production(
         self, production_id: str, current_user: User

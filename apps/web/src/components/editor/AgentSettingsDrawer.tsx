@@ -1,4 +1,3 @@
-import React, { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
   ExternalLink,
@@ -12,9 +11,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
 import type { components } from "../../api/generated";
 import { useAuth } from "../../auth/AuthContext";
 import { AGENT_IDENTITIES, type AgentId } from "../AgentTeamSelector";
+
 type AgentPromptConfig = components["schemas"]["AgentPromptConfig"];
 type VoiceSettingsConfig = components["schemas"]["VoiceSettingsConfig"];
 type AgentMemorySummary = components["schemas"]["AgentMemorySummaryResponse"] & {

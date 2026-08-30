@@ -4,7 +4,7 @@ import logging
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, Literal
 import tempfile
 import time
 import uuid
@@ -13,6 +13,7 @@ import wave
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from croviq_api.auth.dependencies import get_current_user
 from croviq_api.config import get_settings
@@ -60,10 +61,12 @@ from croviq_api.productions.schemas import (
     AssembleEDLResponse,
     EDLDetailResponse,
     AnalyzeProductionResponse,
+    CorrectedScriptResponse,
     CreateUploadRequest,
     CreateUploadResponse,
     DeleteProductionResponse,
     EditorialRunDetailResponse,
+    GenerateBackgroundMusicRequest,
     ProductionListResponse,
     TranscribeProductionResponse,
     ProductionPlaybackResponse,
@@ -72,6 +75,7 @@ from croviq_api.productions.schemas import (
     StudioVoiceGenerationResponse,
     BRollListResponse,
     PackagingDetailResponse,
+    UpdateBackgroundMusicRequest,
     UpdatePackagingOverridesRequest,
     GenerateReleaseReviewRequest,
     ReleaseReviewDetailResponse,
@@ -79,6 +83,14 @@ from croviq_api.productions.schemas import (
     PublishRequest,
     PublishJobDetailResponse,
 )
+from croviq_domain.transcript import (
+    CorrectedTranscript,
+    CorrectedTranscriptSegment,
+    EntailmentVerdict,
+    ScriptCorrectionChangeType,
+)
+from croviq_domain.edl import BackgroundMusicMix, VoiceoverSegment
+from croviq_domain.editorial import EditorVoiceMode
 from croviq_api.productions.release_review_repository import (
     ReleaseReviewRepository,
     get_release_review_repository,
@@ -151,6 +163,11 @@ from croviq_api.workspaces.agent_config_repository import (
 )
 from croviq_agents.client import GenAIClient
 from croviq_agents.voice import StudioVoiceSynthesizer
+from croviq_api.workspaces.chat_service import (
+    AgentChatService,
+    clear_production_chat_history,
+    get_production_chat_history,
+)
 from croviq_domain.narration import (
     BRollArtifact,
     BRollArtifactStatus,
@@ -179,6 +196,7 @@ from croviq_domain.render import (
     RenderArtifact,
     build_render_artifact_gcs_object_path,
 )
+from croviq_domain.edl import EditDecisionList
 from croviq_domain.source_analysis import SourceVideoAnalysisInput
 from croviq_domain.transcript import Transcript
 from croviq_domain.user import User
@@ -194,6 +212,46 @@ from croviq_observability import (
 )
 
 router = APIRouter(tags=["Productions & Uploads"])
+
+class ProductionChatSelectedElement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: str = Field(..., min_length=1)
+    id: str = Field(..., min_length=1)
+    label: str = Field(default="")
+    start_ms: int = Field(..., ge=0)
+    end_ms: int = Field(..., ge=0)
+
+
+class ProductionChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(..., min_length=1, max_length=10_000)
+    selected_range_ms: tuple[int, int] | None = None
+    selected_element: ProductionChatSelectedElement | None = None
+    current_playhead_ms: int | None = Field(default=None, ge=0)
+
+
+class ProductionChatResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message_id: str
+    role: Literal["assistant"] = "assistant"
+    content: str
+    tool_executions: list[dict[str, Any]] = Field(default_factory=list)
+    created_at: str
+    edl: EditDecisionList | None = None
+    timeline_updated: bool = False
+    voiceover_updated: bool = False
+    preview_updated: bool = False
+    seek_range: list[int] | None = None
+
+
+class ProductionChatHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    production_id: str
+    messages: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @router.post(
@@ -940,6 +998,48 @@ async def get_production_transcript(
     return transcript
 
 
+
+@router.get(
+    "/productions/{production_id}/corrected-script",
+    response_model=CorrectedScriptResponse,
+    summary="Get Source-Grounded Corrected Script",
+    description="Retrieve the source-grounded corrected script with verification metrics, change types, and visual evidence.",
+)
+async def get_production_corrected_script(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    genai_client: Annotated[Any, Depends(get_genai_client)],
+) -> CorrectedScriptResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    transcript = await transcript_repo.get_transcript_by_production_id(production_id)
+    if not transcript:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transcript for production '{production_id}' not found",
+        )
+    edl = await edl_repo.get_latest_edl(production_id)
+    video_uri = f"gs://{prod.source_media.gcs_bucket}/{prod.source_media.gcs_object}" if prod.source_media else "gs://mock/video.mp4"
+    corrected, _ = await genai_client.correct_transcript_with_video_grounding(
+        video_uri=video_uri,
+        mime_type="video/mp4",
+        transcript=transcript,
+        edl=edl,
+        production_id=production_id,
+    )
+    return CorrectedScriptResponse(
+        production_id=production_id,
+        corrected_transcript=corrected,
+        corrections_count=corrected.corrections_count,
+        transcription_corrections_count=corrected.transcription_corrections_count,
+        grammar_corrections_count=corrected.grammar_corrections_count,
+        meaning_preserved=corrected.meaning_preserved,
+        supported_corrections_count=corrected.supported_corrections_count,
+    )
+
 @router.get(
     "/productions/{production_id}/source-analysis-input",
     response_model=SourceVideoAnalysisInput,
@@ -1078,6 +1178,80 @@ async def get_editorial_run(
 
 
 @router.post(
+    "/productions/{production_id}/chat",
+    response_model=ProductionChatResponse,
+    summary="Chat with Leo in the production editor",
+)
+async def chat_with_leo(
+    production_id: str,
+    payload: ProductionChatRequest,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    editorial_service: Annotated[EditorialService, Depends(get_editorial_service)],
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
+    broll_repo: Annotated[BRollRepository, Depends(get_broll_repository)],
+) -> ProductionChatResponse:
+    production = await _get_owned_production(production_id, current_user, production_repo)
+    chat_service = AgentChatService(
+        workspace_id=production.workspace_id,
+        agent_config_repo=agent_config_repo,
+        memory_store=memory_store,
+    )
+    voice_settings = await agent_config_repo.get_voice_settings(production.workspace_id)
+    result = await editorial_service.handle_chat_message(
+        production_id=production_id,
+        current_user=current_user,
+        chat_service=chat_service,
+        message=payload.message,
+        current_playhead_ms=payload.current_playhead_ms,
+        selected_range=list(payload.selected_range_ms) if payload.selected_range_ms else None,
+        selected_element=(
+            payload.selected_element.model_dump(mode="json")
+            if payload.selected_element else None
+        ),
+        request_id=getattr(request.state, "request_id", "unknown"),
+        broll_repo=broll_repo,
+        voice_settings=voice_settings,
+    )
+    return ProductionChatResponse.model_validate(result)
+
+
+@router.get(
+    "/productions/{production_id}/chat/history",
+    response_model=ProductionChatHistoryResponse,
+    summary="Get Leo production chat history",
+)
+async def get_leo_chat_history(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+) -> ProductionChatHistoryResponse:
+    await _get_owned_production(production_id, current_user, production_repo)
+    messages = await get_production_chat_history(production_id, current_user.user_id)
+    return ProductionChatHistoryResponse(
+        production_id=production_id,
+        messages=messages,
+    )
+
+
+@router.delete(
+    "/productions/{production_id}/chat/history",
+    response_model=ProductionChatHistoryResponse,
+    summary="Clear Leo production chat history",
+)
+async def delete_leo_chat_history(
+    production_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+) -> ProductionChatHistoryResponse:
+    await _get_owned_production(production_id, current_user, production_repo)
+    await clear_production_chat_history(production_id, current_user.user_id)
+    return ProductionChatHistoryResponse(production_id=production_id, messages=[])
+
+
+@router.post(
     "/productions/{production_id}/edl",
     response_model=AssembleEDLResponse,
     summary="Assemble Canonical Edit Decision List (EDL)",
@@ -1142,6 +1316,7 @@ async def _execute_render_for_production(
     render_repo: RenderRepository,
     render_service: RenderService,
     media_storage: MediaStorage,
+    genai_client: Any | None = None,
 ) -> RenderArtifactResponse:
     request_id = getattr(request.state, "request_id", "unknown")
     settings = get_settings()
@@ -1224,6 +1399,81 @@ async def _execute_render_for_production(
                     edl=edl,
                     output_path=local_out,
                 )
+            elif artifact_type in (ArtifactType.VOICEOVER_PREVIEW, ArtifactType.STUDIO_VOICE_PREVIEW):
+                local_narr = tmp_path / "voiceover.wav"
+                total_samples = int(24_000 * edl.source_duration_ms / 1000)
+                track = bytearray(total_samples * 2)
+                speech_intervals: list[tuple[int, int]] = []
+                if edl.voiceover_segments:
+                    for seg in edl.voiceover_segments:
+                        speech_intervals.append((seg.source_start_ms, seg.source_end_ms))
+                        dur_ms, pcm = await genai_client.synthesize_studio_voice(
+                            text=seg.text,
+                            voice_id=seg.voice_id or "Puck",
+                            production_id=prod.production_id,
+                        )
+                        start_byte = int(24_000 * seg.source_start_ms / 1000) * 2
+                        copy_len = min(len(pcm), len(track) - start_byte)
+                        if copy_len > 0:
+                            track[start_byte:start_byte + copy_len] = pcm[:copy_len]
+                else:
+                    # Default sample voiceover segment
+                    speech_intervals.append((0, min(5000, edl.source_duration_ms)))
+                with wave.open(str(local_narr), "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(24_000)
+                    wf.writeframes(track)
+                render_res = await asyncio.to_thread(
+                    render_service.render_voiceover_preview,
+                    source_path=local_src,
+                    edl=edl,
+                    narration_audio_path=local_narr,
+                    speech_intervals_ms=speech_intervals,
+                    output_path=local_out,
+                )
+            elif artifact_type == ArtifactType.FINAL_MIX:
+                local_music = tmp_path / "music.wav"
+                music_bytes, _, _ = await genai_client.generate_background_music(
+                    prompt="Minimal modern technology documentary underscore. Warm subtle synthesizer pads, restrained soft electronic pulse, very sparse percussion, calm focused mood, clean professional mix, instrumental only, consistent low intensity throughout. Designed to sit quietly underneath spoken tutorial narration.",
+                    duration_s=int(edl.source_duration_ms / 1000) + 1,
+                    model_id=edl.background_music.model_id if edl.background_music else "lyria-3-pro-preview",
+                    production_id=prod.production_id,
+                )
+                local_music.write_bytes(music_bytes)
+                local_narr = None
+                speech_intervals = []
+                if edl.voiceover_segments:
+                    local_narr = tmp_path / "voiceover.wav"
+                    total_samples = int(24_000 * edl.source_duration_ms / 1000)
+                    track = bytearray(total_samples * 2)
+                    for seg in edl.voiceover_segments:
+                        speech_intervals.append((seg.source_start_ms, seg.source_end_ms))
+                        dur_ms, pcm = await genai_client.synthesize_studio_voice(
+                            text=seg.text,
+                            voice_id=seg.voice_id or "Puck",
+                            production_id=prod.production_id,
+                        )
+                        start_byte = int(24_000 * seg.source_start_ms / 1000) * 2
+                        copy_len = min(len(pcm), len(track) - start_byte)
+                        if copy_len > 0:
+                            track[start_byte:start_byte + copy_len] = pcm[:copy_len]
+                    with wave.open(str(local_narr), "wb") as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(24_000)
+                        wf.writeframes(track)
+                render_res = await asyncio.to_thread(
+                    render_service.render_final_mix,
+                    source_path=local_src,
+                    edl=edl,
+                    music_audio_path=local_music,
+                    narration_audio_path=local_narr,
+                    speech_intervals_ms=speech_intervals if speech_intervals else None,
+                    output_path=local_out,
+                    music_volume_db=edl.background_music.volume_db if edl.background_music else -24.0,
+                    music_ducking_db=edl.background_music.ducking_db if edl.background_music else -14.0,
+                )
             else:
                 render_res = await asyncio.to_thread(
                     render_service.render_master,
@@ -1231,7 +1481,6 @@ async def _execute_render_for_production(
                     edl=edl,
                     output_path=local_out,
                 )
-
             await media_storage.upload_object_from_path(
                 bucket=gcs_bucket,
                 object_name=gcs_object,
@@ -1325,6 +1574,7 @@ async def render_preview_video(
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     render_service: Annotated[RenderService, Depends(get_render_service)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+    genai_client: Annotated[Any, Depends(get_genai_client)],
 ) -> RenderArtifactResponse:
     return await _execute_render_for_production(
         production_id=production_id,
@@ -1336,6 +1586,7 @@ async def render_preview_video(
         render_repo=render_repo,
         render_service=render_service,
         media_storage=media_storage,
+        genai_client=genai_client,
     )
 
 
@@ -1354,6 +1605,7 @@ async def render_master_video(
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     render_service: Annotated[RenderService, Depends(get_render_service)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+    genai_client: Annotated[Any, Depends(get_genai_client)],
 ) -> RenderArtifactResponse:
     return await _execute_render_for_production(
         production_id=production_id,
@@ -1365,6 +1617,186 @@ async def render_master_video(
         render_repo=render_repo,
         render_service=render_service,
         media_storage=media_storage,
+        genai_client=genai_client,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/renders/voiceover-preview",
+    response_model=RenderArtifactResponse,
+    summary="Render Voiceover Preview Video",
+    description="Render a preview MP4 combining EDL cuts with active voiceover replacements.",
+)
+async def render_voiceover_preview_video(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    render_service: Annotated[RenderService, Depends(get_render_service)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+    genai_client: Annotated[Any, Depends(get_genai_client)],
+) -> RenderArtifactResponse:
+    return await _execute_render_for_production(
+        production_id=production_id,
+        artifact_type=ArtifactType.VOICEOVER_PREVIEW,
+        request=request,
+        current_user=current_user,
+        production_repo=production_repo,
+        edl_repo=edl_repo,
+        render_repo=render_repo,
+        render_service=render_service,
+        media_storage=media_storage,
+        genai_client=genai_client,
+    )
+
+
+@router.post(
+    "/productions/{production_id}/renders/final-mix",
+    response_model=RenderArtifactResponse,
+    summary="Render Final Mix Video",
+    description="Render Final Mix combining EDL cuts, B-roll overlays, voiceover corrections, and background music.",
+)
+async def render_final_mix_video(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    render_service: Annotated[RenderService, Depends(get_render_service)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+    genai_client: Annotated[Any, Depends(get_genai_client)],
+) -> RenderArtifactResponse:
+    return await _execute_render_for_production(
+        production_id=production_id,
+        artifact_type=ArtifactType.FINAL_MIX,
+        request=request,
+        current_user=current_user,
+        production_repo=production_repo,
+        edl_repo=edl_repo,
+        render_repo=render_repo,
+        render_service=render_service,
+        media_storage=media_storage,
+        genai_client=genai_client,
+    )
+
+@router.post(
+    "/productions/{production_id}/music/generate",
+    response_model=EDLDetailResponse,
+    summary="Generate Google Lyria Background Music",
+    description="Generate subtle instrumental background music with Google Lyria and attach to EDL.",
+)
+async def generate_production_music(
+    production_id: str,
+    body: GenerateBackgroundMusicRequest,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    genai_client: Annotated[Any, Depends(get_genai_client)],
+    media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+) -> EDLDetailResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    edl = await edl_repo.get_latest_edl(production_id)
+    if not edl:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Production '{production_id}' has no assembled EDL",
+        )
+    prompt_text = body.prompt or (
+        "Minimal modern technology documentary underscore. "
+        "Warm subtle synthesizer pads, restrained soft electronic pulse, very sparse percussion, "
+        "calm focused mood, clean professional mix, instrumental only, consistent low intensity throughout. "
+        "Designed to sit quietly underneath spoken tutorial narration."
+    )
+    duration_s = max(5, int(edl.source_duration_ms / 1000))
+    wav_bytes, _, dur_ms = await genai_client.generate_background_music(
+        prompt=prompt_text,
+        duration_s=duration_s,
+        model_id=body.model_id,
+        production_id=production_id,
+    )
+    object_name = f"workspaces/{prod.workspace_id}/productions/{production_id}/music/lyria_underscore.wav"
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_f:
+        tmp_f.write(wav_bytes)
+        tmp_wav_path = Path(tmp_f.name)
+    try:
+        await media_storage.upload_object_from_path(
+            bucket=prod.source_media.gcs_bucket,
+            object_name=object_name,
+            source_path=tmp_wav_path,
+            content_type="audio/wav",
+        )
+    finally:
+        tmp_wav_path.unlink(missing_ok=True)
+    mix = BackgroundMusicMix(
+        style="Minimal modern technology documentary underscore",
+        model_id=body.model_id,
+        prompt=prompt_text,
+        duration_ms=dur_ms,
+        volume_db=body.volume_db,
+        ducking_db=body.ducking_db,
+        target_lufs=-32.0,
+        music_gcs_object=object_name,
+        is_muted=False,
+    )
+    updated_edl = edl.model_copy(update={
+        "version": edl.version + 1,
+        "background_music": mix,
+        "created_at": datetime.now(timezone.utc),
+    })
+    await edl_repo.save_edl(updated_edl)
+    from croviq_domain.edl import derive_keep_segments
+    return EDLDetailResponse(
+        edl=updated_edl,
+        keep_segments=derive_keep_segments(updated_edl),
+    )
+
+
+@router.patch(
+    "/productions/{production_id}/music",
+    response_model=EDLDetailResponse,
+    summary="Update Background Music Mix Settings",
+    description="Modify volume, ducking, or mute state of background music.",
+)
+async def update_production_music(
+    production_id: str,
+    body: UpdateBackgroundMusicRequest,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+) -> EDLDetailResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    edl = await edl_repo.get_latest_edl(production_id)
+    if not edl or not edl.background_music:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No background music mix is configured on the EDL",
+        )
+    current_mix = edl.background_music
+    updates: dict[str, Any] = {}
+    if body.volume_db is not None:
+        updates["volume_db"] = body.volume_db
+    if body.ducking_db is not None:
+        updates["ducking_db"] = body.ducking_db
+    if body.is_muted is not None:
+        updates["is_muted"] = body.is_muted
+    if body.style is not None:
+        updates["style"] = body.style
+    new_mix = current_mix.model_copy(update=updates)
+    updated_edl = edl.model_copy(update={
+        "version": edl.version + 1,
+        "background_music": new_mix,
+        "created_at": datetime.now(timezone.utc),
+    })
+    await edl_repo.save_edl(updated_edl)
+    from croviq_domain.edl import derive_keep_segments
+    return EDLDetailResponse(
+        edl=updated_edl,
+        keep_segments=derive_keep_segments(updated_edl),
     )
 
 

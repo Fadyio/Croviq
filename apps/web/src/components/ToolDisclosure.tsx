@@ -1,5 +1,5 @@
-import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
+import React, { useState } from "react";
 
 export interface ToolExecution {
   tool_name: string;

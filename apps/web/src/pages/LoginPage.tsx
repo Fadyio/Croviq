@@ -1,8 +1,8 @@
-import React, { useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AlertCircle, Loader2, LogOut } from "lucide-react";
-import { CroviqLogo } from "../components/CroviqLogo";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import React, { useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { CroviqLogo } from "../components/CroviqLogo";
 
 export const LoginPage: React.FC = () => {
   const { clearError, error, isLoading, loginWithPassword, logout, firebaseUser } = useAuth();

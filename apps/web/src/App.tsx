@@ -1,14 +1,14 @@
-import React, { useEffect, useLayoutEffect, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import type { AgentId } from "./components/AgentTeamSelector";
 import { AuthGuard } from "./components/AuthGuard";
-import { LoginPage } from "./pages/LoginPage";
-import { AppPage } from "./pages/AppPage";
-import { NewProjectPage } from "./pages/NewProjectPage";
-import { EditorPage } from "./pages/EditorPage";
-import { ReleasePage } from "./pages/ReleasePage";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { AgentWorkspacePage } from "./pages/AgentWorkspacePage";
-import type { AgentId } from "./components/AgentTeamSelector";
+import { AppPage } from "./pages/AppPage";
+import { EditorPage } from "./pages/EditorPage";
+import { LoginPage } from "./pages/LoginPage";
+import { NewProjectPage } from "./pages/NewProjectPage";
+import { ReleasePage } from "./pages/ReleasePage";
 
 const parseProductionReleaseRoute = (pathname: string): string | null => {
   const match = pathname.match(/^\/productions\/([^/]+)\/release\/?$/);
