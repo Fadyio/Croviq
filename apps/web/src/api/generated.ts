@@ -1333,6 +1333,20 @@ export interface components {
       /** Total media file size in bytes */
       size_bytes: number;
     };
+    MediaOutputState: {
+      /** Whether this media output exists and is playable */
+      available?: boolean;
+      /** Artifact ID if available */
+      artifact_id?: string | null;
+      /** Parent EDL ID this artifact was rendered from */
+      edl_id?: string | null;
+      /** Signed playback URL */
+      url?: string | null;
+      /** Duration of this media output in milliseconds */
+      duration_ms?: number;
+      /** Status: 'ready', 'generating', 'failed', or 'unavailable' */
+      status?: string;
+    };
     MemoryCardResponse: {
       /** Full resource name */
       name: string;
@@ -1522,6 +1536,16 @@ export interface components {
       master_url?: string | null;
       /** Studio Voice video playback URL */
       studio_voice_preview_url?: string | null;
+      /** Final Mix video playback URL */
+      final_mix_url?: string | null;
+      /** Original source media state */
+      original?: components["schemas"]["MediaOutputState"];
+      /** Edited preview render state */
+      edited?: components["schemas"]["MediaOutputState"];
+      /** Voiceover/Studio Voice preview render state */
+      voiceover?: components["schemas"]["MediaOutputState"];
+      /** Final mix render state */
+      final_mix?: components["schemas"]["MediaOutputState"];
     };
     ProductionStatus: "pending" | "uploading" | "uploaded" | "deleting" | "failed";
     PublishJobDetailResponse: {

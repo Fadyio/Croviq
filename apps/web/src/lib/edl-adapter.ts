@@ -42,7 +42,9 @@ export interface ApiMediaOutputState {
   status?: MediaOutputStatus;
 }
 
-export function apiMediaOutputToState(apiOutput?: ApiMediaOutputState | null): MediaOutputState | null {
+export function apiMediaOutputToState(
+  apiOutput?: ApiMediaOutputState | null,
+): MediaOutputState | null {
   if (!apiOutput) return null;
   return {
     available: Boolean(apiOutput.available),
@@ -442,9 +444,7 @@ export function findExecutableSkipInterval(
 export function isSourceTimeInCut(sourceMs: number, edl?: EditDecisionList | null): boolean {
   if (!edl?.cuts) return false;
   const executableCuts = getExecutableCuts(edl);
-  return executableCuts.some(
-    (cut) => sourceMs >= cut.safe_start_ms && sourceMs < cut.safe_end_ms,
-  );
+  return executableCuts.some((cut) => sourceMs >= cut.safe_start_ms && sourceMs < cut.safe_end_ms);
 }
 
 /**
@@ -457,9 +457,8 @@ export function getCutAtSourceTime(
   if (!edl?.cuts) return null;
   const executableCuts = getExecutableCuts(edl);
   return (
-    executableCuts.find(
-      (cut) => sourceMs >= cut.safe_start_ms && sourceMs <= cut.safe_end_ms,
-    ) || null
+    executableCuts.find((cut) => sourceMs >= cut.safe_start_ms && sourceMs <= cut.safe_end_ms) ||
+    null
   );
 }
 

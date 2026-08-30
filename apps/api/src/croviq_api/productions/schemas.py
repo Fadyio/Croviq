@@ -295,27 +295,6 @@ class EDLDetailResponse(BaseModel):
     )
 
 
-class ProductionPlaybackResponse(BaseModel):
-    """Response containing a short-lived signed GET URL for browser source video playback."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    production_id: str = Field(
-        ...,
-        description="Canonical unique production identifier",
-    )
-    playback_url: str = Field(
-        ...,
-        description="Short-lived keyless signed GET URL for browser video playback",
-    )
-    expires_at: datetime = Field(
-        ...,
-        description="UTC expiration timestamp of the signed playback URL",
-    )
-
-
 class RenderArtifactResponse(BaseModel):
     """Product-level response for a rendered media artifact."""
 
@@ -443,8 +422,21 @@ class RenderListResponse(BaseModel):
     )
 
 
+class MediaOutputState(BaseModel):
+    """Canonical state representation for a media output mode."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    available: bool = Field(default=False, description="Whether this media output exists and is playable")
+    artifact_id: str | None = Field(default=None, description="Artifact ID if available")
+    edl_id: str | None = Field(default=None, description="Parent EDL ID this artifact was rendered from")
+    url: str | None = Field(default=None, description="Signed playback URL")
+    duration_ms: int = Field(default=0, description="Duration of this media output in milliseconds")
+    status: str = Field(default="unavailable", description="Status: 'ready', 'generating', 'failed', or 'unavailable'")
+
+
 class ProductionPlaybackResponse(BaseModel):
-    """Playback URLs for all available media outputs of a production."""
+    """Playback URLs and canonical media states for all available media outputs of a production."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -454,7 +446,12 @@ class ProductionPlaybackResponse(BaseModel):
     rendered_preview_url: str | None = Field(default=None, description="Edited preview video playback URL")
     master_url: str | None = Field(default=None, description="Master video playback URL")
     studio_voice_preview_url: str | None = Field(default=None, description="Studio Voice video playback URL")
+    final_mix_url: str | None = Field(default=None, description="Final Mix video playback URL")
 
+    original: MediaOutputState = Field(default_factory=MediaOutputState, description="Original source media state")
+    edited: MediaOutputState = Field(default_factory=MediaOutputState, description="Edited preview render state")
+    voiceover: MediaOutputState = Field(default_factory=MediaOutputState, description="Voiceover/Studio Voice preview render state")
+    final_mix: MediaOutputState = Field(default_factory=MediaOutputState, description="Final mix render state")
 class StudioVoiceGenerationResponse(BaseModel):
     """Response returned upon generating Studio Voice narration for a production."""
 

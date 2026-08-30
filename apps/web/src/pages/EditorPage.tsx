@@ -93,7 +93,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [studioVoicePreviewUrl, setStudioVoicePreviewUrl] = useState<string | null>(null);
   const [masterUrl, setMasterUrl] = useState<string | null>(null);
   const [finalMixUrl, setFinalMixUrl] = useState<string | null>(null);
-  const [mediaOutputs, setMediaOutputs] = useState<CanonicalMediaOutputs>(createInitialMediaOutputs);
+  const [mediaOutputs, setMediaOutputs] =
+    useState<CanonicalMediaOutputs>(createInitialMediaOutputs);
 
   const [previewArtifact, setPreviewArtifact] = useState<
     components["schemas"]["RenderArtifactResponse"] | null
@@ -180,13 +181,15 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     ] = await Promise.all([
       productionResponse.json() as Promise<Production>,
       playbackResponse
-        ? readOptionalJson<components["schemas"]["ProductionPlaybackResponse"] & {
-            original?: ApiMediaOutputState;
-            edited?: ApiMediaOutputState;
-            voiceover?: ApiMediaOutputState;
-            final_mix?: ApiMediaOutputState;
-            final_mix_url?: string | null;
-          }>(playbackResponse, "Playback")
+        ? readOptionalJson<
+            components["schemas"]["ProductionPlaybackResponse"] & {
+              original?: ApiMediaOutputState;
+              edited?: ApiMediaOutputState;
+              voiceover?: ApiMediaOutputState;
+              final_mix?: ApiMediaOutputState;
+              final_mix_url?: string | null;
+            }
+          >(playbackResponse, "Playback")
         : Promise.resolve(null),
       readOptionalJson<Transcript>(transcriptResponse, "Transcript"),
       readOptionalJson<EditorialRunDetail>(runResponse, "Editorial run"),
@@ -252,7 +255,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       : {
           available: Boolean(
             productionPayload.source_media?.status === "uploaded" &&
-              (apiOriginal?.url || playbackPayload?.playback_url),
+            (apiOriginal?.url || playbackPayload?.playback_url),
           ),
           artifactId: productionPayload.source_media?.upload_id || null,
           edlId: null,
@@ -265,77 +268,89 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           status: apiOriginal?.status || (playbackPayload?.playback_url ? "ready" : "unavailable"),
         };
 
-    const editedOutput: MediaOutputState = apiEdited?.available && apiEdited.url
-      ? apiEdited
-      : preview && preview.status === "completed" && preview.playback_url
-        ? {
-            available: true,
-            artifactId: preview.artifact_id,
-            edlId: preview.edl_id,
-            url: preview.playback_url || null,
-            durationMs: preview.duration_ms || 0,
-            status: "ready",
-          }
-        : {
-            available: false,
-            artifactId: preview?.artifact_id || apiEdited?.artifactId || null,
-            edlId: preview?.edl_id || apiEdited?.edlId || activeEdlId,
-            url: null,
-            durationMs: 0,
-            status: (preview?.status === "rendering" || preview?.status === "pending" || apiEdited?.status === "generating")
-              ? "generating"
-              : (preview?.status === "failed" || apiEdited?.status === "failed")
-                ? "failed"
-                : "unavailable",
-          };
+    const editedOutput: MediaOutputState =
+      apiEdited?.available && apiEdited.url
+        ? apiEdited
+        : preview && preview.status === "completed" && preview.playback_url
+          ? {
+              available: true,
+              artifactId: preview.artifact_id,
+              edlId: preview.edl_id,
+              url: preview.playback_url || null,
+              durationMs: preview.duration_ms || 0,
+              status: "ready",
+            }
+          : {
+              available: false,
+              artifactId: preview?.artifact_id || apiEdited?.artifactId || null,
+              edlId: preview?.edl_id || apiEdited?.edlId || activeEdlId,
+              url: null,
+              durationMs: 0,
+              status:
+                preview?.status === "rendering" ||
+                preview?.status === "pending" ||
+                apiEdited?.status === "generating"
+                  ? "generating"
+                  : preview?.status === "failed" || apiEdited?.status === "failed"
+                    ? "failed"
+                    : "unavailable",
+            };
 
-    const voiceoverOutput: MediaOutputState = apiVoiceover?.available && apiVoiceover.url
-      ? apiVoiceover
-      : svPreview && svPreview.status === "completed" && svPreview.playback_url
-        ? {
-            available: true,
-            artifactId: svPreview.artifact_id,
-            edlId: svPreview.edl_id,
-            url: svPreview.playback_url || null,
-            durationMs: svPreview.duration_ms || 0,
-            status: "ready",
-          }
-        : {
-            available: false,
-            artifactId: svPreview?.artifact_id || apiVoiceover?.artifactId || null,
-            edlId: svPreview?.edl_id || apiVoiceover?.edlId || activeEdlId,
-            url: null,
-            durationMs: 0,
-            status: (svPreview?.status === "rendering" || svPreview?.status === "pending" || apiVoiceover?.status === "generating")
-              ? "generating"
-              : (svPreview?.status === "failed" || apiVoiceover?.status === "failed")
-                ? "failed"
-                : "unavailable",
-          };
+    const voiceoverOutput: MediaOutputState =
+      apiVoiceover?.available && apiVoiceover.url
+        ? apiVoiceover
+        : svPreview && svPreview.status === "completed" && svPreview.playback_url
+          ? {
+              available: true,
+              artifactId: svPreview.artifact_id,
+              edlId: svPreview.edl_id,
+              url: svPreview.playback_url || null,
+              durationMs: svPreview.duration_ms || 0,
+              status: "ready",
+            }
+          : {
+              available: false,
+              artifactId: svPreview?.artifact_id || apiVoiceover?.artifactId || null,
+              edlId: svPreview?.edl_id || apiVoiceover?.edlId || activeEdlId,
+              url: null,
+              durationMs: 0,
+              status:
+                svPreview?.status === "rendering" ||
+                svPreview?.status === "pending" ||
+                apiVoiceover?.status === "generating"
+                  ? "generating"
+                  : svPreview?.status === "failed" || apiVoiceover?.status === "failed"
+                    ? "failed"
+                    : "unavailable",
+            };
 
-    const finalMixOutput: MediaOutputState = apiFinalMix?.available && apiFinalMix.url
-      ? apiFinalMix
-      : finalMix && finalMix.status === "completed" && finalMix.playback_url
-        ? {
-            available: true,
-            artifactId: finalMix.artifact_id,
-            edlId: finalMix.edl_id,
-            url: finalMix.playback_url || null,
-            durationMs: finalMix.duration_ms || 0,
-            status: "ready",
-          }
-        : {
-            available: false,
-            artifactId: finalMix?.artifact_id || apiFinalMix?.artifactId || null,
-            edlId: finalMix?.edl_id || apiFinalMix?.edlId || activeEdlId,
-            url: null,
-            durationMs: 0,
-            status: (finalMix?.status === "rendering" || finalMix?.status === "pending" || apiFinalMix?.status === "generating")
-              ? "generating"
-              : (finalMix?.status === "failed" || apiFinalMix?.status === "failed")
-                ? "failed"
-                : "unavailable",
-          };
+    const finalMixOutput: MediaOutputState =
+      apiFinalMix?.available && apiFinalMix.url
+        ? apiFinalMix
+        : finalMix && finalMix.status === "completed" && finalMix.playback_url
+          ? {
+              available: true,
+              artifactId: finalMix.artifact_id,
+              edlId: finalMix.edl_id,
+              url: finalMix.playback_url || null,
+              durationMs: finalMix.duration_ms || 0,
+              status: "ready",
+            }
+          : {
+              available: false,
+              artifactId: finalMix?.artifact_id || apiFinalMix?.artifactId || null,
+              edlId: finalMix?.edl_id || apiFinalMix?.edlId || activeEdlId,
+              url: null,
+              durationMs: 0,
+              status:
+                finalMix?.status === "rendering" ||
+                finalMix?.status === "pending" ||
+                apiFinalMix?.status === "generating"
+                  ? "generating"
+                  : finalMix?.status === "failed" || apiFinalMix?.status === "failed"
+                    ? "failed"
+                    : "unavailable",
+            };
 
     const canonicalOutputs: CanonicalMediaOutputs = {
       original: originalOutput,
@@ -348,7 +363,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     // Explicit fallback to highest valid artifact
     setPreviewMode((prevMode) => {
       if (prevMode === "final_mix" && canonicalOutputs.final_mix.available) return "final_mix";
-      if (prevMode === "studio_voice" && canonicalOutputs.voiceover.available) return "studio_voice";
+      if (prevMode === "studio_voice" && canonicalOutputs.voiceover.available)
+        return "studio_voice";
       if (prevMode === "edited" && canonicalOutputs.edited.available) return "edited";
       if (prevMode === "original" && canonicalOutputs.original.available) return "original";
 
@@ -370,7 +386,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setStudioVoiceArtifact(svPreview);
     setFinalMixArtifact(finalMix);
     if (correctedScriptPayload?.corrected_transcript) {
-      setCorrectedTranscript(correctedScriptPayload.corrected_transcript as unknown as CorrectedTranscript);
+      setCorrectedTranscript(
+        correctedScriptPayload.corrected_transcript as unknown as CorrectedTranscript,
+      );
     }
     if (brollPayload?.artifacts) {
       setBrollArtifacts(brollPayload.artifacts);
@@ -379,7 +397,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setTranscript(transcriptPayload);
     setEdl(actualEdl);
 
-    const initialDur = actualEdl?.source_duration_ms || transcriptPayload?.duration_ms || originalOutput.durationMs || 0;
+    const initialDur =
+      actualEdl?.source_duration_ms ||
+      transcriptPayload?.duration_ms ||
+      originalOutput.durationMs ||
+      0;
     if (initialDur > 0) {
       setDurationMs(initialDur);
     }
@@ -896,7 +918,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           currentMode={previewMode}
           sourceDurationMs={durationMs}
           editedDurationMs={derivedEditedDurationMs}
-          studioVoiceDurationMs={mediaOutputs.voiceover.durationMs || studioVoiceArtifact?.duration_ms}
+          studioVoiceDurationMs={
+            mediaOutputs.voiceover.durationMs || studioVoiceArtifact?.duration_ms
+          }
           finalMixDurationMs={mediaOutputs.final_mix.durationMs || finalMixArtifact?.duration_ms}
           hasRenderedPreview={mediaOutputs.edited.available}
           hasMaster={Boolean(
@@ -927,7 +951,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             currentTimeMs={currentTimeMs}
             durationMs={durationMs}
             editedDurationMs={derivedEditedDurationMs}
-            studioVoiceDurationMs={mediaOutputs.voiceover.durationMs || studioVoiceArtifact?.duration_ms}
+            studioVoiceDurationMs={
+              mediaOutputs.voiceover.durationMs || studioVoiceArtifact?.duration_ms
+            }
             finalMixDurationMs={mediaOutputs.final_mix.durationMs || finalMixArtifact?.duration_ms}
             isPlaying={isPlaying}
             previewMode={previewMode}

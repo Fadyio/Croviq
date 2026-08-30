@@ -69,6 +69,7 @@ from croviq_api.productions.schemas import (
     GenerateBackgroundMusicRequest,
     ProductionListResponse,
     TranscribeProductionResponse,
+    MediaOutputState,
     ProductionPlaybackResponse,
     RenderArtifactResponse,
     RenderListResponse,
@@ -1824,8 +1825,8 @@ async def list_production_renders(
     settings = get_settings()
     prod = await _get_owned_production(production_id, current_user, production_repo)
     artifacts = await render_repo.list_render_artifacts(production_id)
-    responses: list[RenderArtifactResponse] = []
-    for art in artifacts:
+
+    async def _sign_artifact(art) -> RenderArtifactResponse:
         playback_url = None
         playback_expires_at = None
         if art.status == ArtifactStatus.completed:
@@ -1839,70 +1840,125 @@ async def list_production_renders(
                 playback_expires_at = target.expires_at
             except Exception:
                 pass
-        responses.append(
-            RenderArtifactResponse.from_domain(
-                artifact=art,
-                playback_url=playback_url,
-                playback_expires_at=playback_expires_at,
-            )
+        return RenderArtifactResponse.from_domain(
+            artifact=art,
+            playback_url=playback_url,
+            playback_expires_at=playback_expires_at,
         )
+
+    responses = await asyncio.gather(*[_sign_artifact(art) for art in artifacts]) if artifacts else []
     return RenderListResponse(
         production_id=prod.production_id,
-        renders=responses,
+        renders=list(responses),
     )
-
 
 @router.get(
     "/productions/{production_id}/playback",
     response_model=ProductionPlaybackResponse,
     summary="Get Production Media Playback URLs",
-    description="Retrieve distinct signed URLs for Original, Edited Preview, Master, and Studio Voice media.",
+    description="Retrieve distinct signed URLs and canonical media states for Original, Edited Preview, Master, and Studio Voice media.",
 )
 async def get_production_playback_urls(
     production_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+    transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> ProductionPlaybackResponse:
     settings = get_settings()
     prod = await _get_owned_production(production_id, current_user, production_repo)
+    latest_edl = await edl_repo.get_latest_edl(prod.production_id)
+    transcript = await transcript_repo.get_transcript_by_production_id(prod.production_id)
 
-    source_url = None
-    if prod.source_media and prod.source_media.status == SourceMediaStatus.UPLOADED:
+    active_edl_id = latest_edl.edl_id if latest_edl else None
+    renders = await render_repo.list_render_artifacts(prod.production_id)
+    active_renders = [r for r in renders if (active_edl_id is None or r.edl_id == active_edl_id)]
+
+    # Find target artifacts for active lineage
+    preview_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.PREVIEW.value), None)
+    master_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.MASTER.value), None)
+    sv_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) in (ArtifactType.STUDIO_VOICE_PREVIEW.value, ArtifactType.VOICEOVER_PREVIEW.value)), None)
+    fm_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.FINAL_MIX.value), None)
+
+    async def _sign_target(bucket: str, obj: str) -> str | None:
         try:
             target = await media_storage.generate_signed_read_target(
-                bucket=prod.source_media.gcs_bucket,
-                object_name=prod.source_media.gcs_object,
+                bucket=bucket,
+                object_name=obj,
                 expiry_seconds=settings.signed_url_expiry_seconds,
             )
-            source_url = target.read_url
-        except Exception:
-            pass
+            return target.read_url
+        except Exception as exc:
+            logger.warning("Failed to generate signed target for %s/%s: %s", bucket, obj, exc)
+            return None
 
-    renders = await render_repo.list_render_artifacts(prod.production_id)
-    preview_url = None
-    master_url = None
-    sv_url = None
+    # Parallel signing of active artifacts
+    tasks = []
+    source_eligible = prod.source_media and (prod.source_media.status.value if hasattr(prod.source_media.status, "value") else str(prod.source_media.status)).lower() == "uploaded"
+    tasks.append(_sign_target(prod.source_media.gcs_bucket, prod.source_media.gcs_object) if source_eligible else asyncio.sleep(0, result=None))
 
-    for r in renders:
-        status_val = r.status.value if hasattr(r.status, "value") else str(r.status)
-        if status_val.lower() == "completed":
-            try:
-                target = await media_storage.generate_signed_read_target(
-                    bucket=r.gcs_bucket,
-                    object_name=r.gcs_object,
-                    expiry_seconds=settings.signed_url_expiry_seconds,
-                )
-                type_val = r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)
-                if type_val == ArtifactType.PREVIEW.value and preview_url is None:
-                    preview_url = target.read_url
-                elif type_val == ArtifactType.MASTER.value and master_url is None:
-                    master_url = target.read_url
-                elif type_val == ArtifactType.STUDIO_VOICE_PREVIEW.value and sv_url is None:
-                    sv_url = target.read_url
-            except Exception as exc:
-                logger.warning("Failed to generate signed read target for artifact %s: %s", r.artifact_id, exc)
+    preview_eligible = preview_art and (preview_art.status.value if hasattr(preview_art.status, "value") else str(preview_art.status)).lower() == "completed"
+    tasks.append(_sign_target(preview_art.gcs_bucket, preview_art.gcs_object) if preview_eligible else asyncio.sleep(0, result=None))
+
+    master_eligible = master_art and (master_art.status.value if hasattr(master_art.status, "value") else str(master_art.status)).lower() == "completed"
+    tasks.append(_sign_target(master_art.gcs_bucket, master_art.gcs_object) if master_eligible else asyncio.sleep(0, result=None))
+
+    sv_eligible = sv_art and (sv_art.status.value if hasattr(sv_art.status, "value") else str(sv_art.status)).lower() == "completed"
+    tasks.append(_sign_target(sv_art.gcs_bucket, sv_art.gcs_object) if sv_eligible else asyncio.sleep(0, result=None))
+
+    fm_eligible = fm_art and (fm_art.status.value if hasattr(fm_art.status, "value") else str(fm_art.status)).lower() == "completed"
+    tasks.append(_sign_target(fm_art.gcs_bucket, fm_art.gcs_object) if fm_eligible else asyncio.sleep(0, result=None))
+
+    signed_results = await asyncio.gather(*tasks)
+    source_url = signed_results[0]
+    preview_url = signed_results[1]
+    master_url = signed_results[2]
+    sv_url = signed_results[3]
+    final_mix_url = signed_results[4]
+
+    source_dur = transcript.duration_ms if transcript else (latest_edl.source_duration_ms if latest_edl else 0)
+    original_state = MediaOutputState(
+        available=bool(source_url),
+        artifact_id=prod.source_media.upload_id if prod.source_media else None,
+        url=source_url,
+        duration_ms=source_dur,
+        status="ready" if source_url else "unavailable",
+    )
+
+    def _build_state(art, url: str | None) -> MediaOutputState:
+        if not art:
+            return MediaOutputState(available=False, edl_id=active_edl_id, status="unavailable")
+        s_val = (art.status.value if hasattr(art.status, "value") else str(art.status)).lower()
+        if s_val == "completed" and url:
+            return MediaOutputState(
+                available=True,
+                artifact_id=art.artifact_id,
+                edl_id=art.edl_id,
+                url=url,
+                duration_ms=art.duration_ms or 0,
+                status="ready",
+            )
+        if s_val in ("rendering", "pending"):
+            return MediaOutputState(
+                available=False,
+                artifact_id=art.artifact_id,
+                edl_id=art.edl_id,
+                status="generating",
+            )
+        if s_val == "failed":
+            return MediaOutputState(
+                available=False,
+                artifact_id=art.artifact_id,
+                edl_id=art.edl_id,
+                status="failed",
+            )
+        return MediaOutputState(available=False, artifact_id=art.artifact_id, edl_id=art.edl_id, status="unavailable")
+
+    edited_state = _build_state(preview_art, preview_url)
+    voiceover_state = _build_state(sv_art, sv_url)
+    final_mix_state = _build_state(fm_art, final_mix_url)
 
     return ProductionPlaybackResponse(
         production_id=prod.production_id,
@@ -1910,8 +1966,12 @@ async def get_production_playback_urls(
         rendered_preview_url=preview_url,
         master_url=master_url,
         studio_voice_preview_url=sv_url,
+        final_mix_url=final_mix_url,
+        original=original_state,
+        edited=edited_state,
+        voiceover=voiceover_state,
+        final_mix=final_mix_state,
     )
-
 
 @router.post(
     "/productions/{production_id}/studio-voice",

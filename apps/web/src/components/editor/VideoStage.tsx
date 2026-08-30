@@ -1,19 +1,21 @@
 import {
+  AlertCircle,
+  Film,
+  Loader2,
   Maximize2,
   Minimize2,
   Pause,
   Play,
   RotateCcw,
-  Sparkles,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  type CanonicalMediaOutputs,
   type CoverageMarker,
   type EditDecisionList,
   editedToSourceTimeMs,
-  findExecutableSkipInterval,
   formatTimecode,
   sourceToEditedTimeMs,
 } from "../../lib/edl-adapter";
@@ -24,6 +26,7 @@ interface VideoStageProps {
   renderedPreviewUrl?: string | null;
   studioVoicePreviewUrl?: string | null;
   finalMixUrl?: string | null;
+  mediaOutputs?: CanonicalMediaOutputs;
   currentTimeMs: number;
   durationMs: number;
   editedDurationMs?: number;
@@ -38,12 +41,12 @@ interface VideoStageProps {
   onDurationChange?: (durationMs: number) => void;
   className?: string;
 }
-
 export const VideoStage: React.FC<VideoStageProps> = ({
   playbackUrl,
   renderedPreviewUrl,
   studioVoicePreviewUrl,
   finalMixUrl,
+  mediaOutputs,
   currentTimeMs,
   durationMs,
   editedDurationMs,
@@ -62,7 +65,6 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   const stageContainerRef = useRef<HTMLDivElement>(null);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [lastSkippedNotice, setLastSkippedNotice] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const isSeekingInternallyRef = useRef<boolean>(false);
 
@@ -80,33 +82,59 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     }
   }, [isPlaying]);
 
-  const isUsingFinalMix = previewMode === "final_mix" && Boolean(finalMixUrl);
-  const isUsingStudioVoiceArtifact =
-    previewMode === "studio_voice" && Boolean(studioVoicePreviewUrl);
-  const isUsingRenderedArtifact = previewMode === "edited" && Boolean(renderedPreviewUrl);
+  const isEdlDerivedMode =
+    previewMode === "edited" || previewMode === "studio_voice" || previewMode === "final_mix";
 
-  const activeVideoUrl = isUsingFinalMix
-    ? finalMixUrl
-    : isUsingStudioVoiceArtifact
-      ? studioVoicePreviewUrl
-      : isUsingRenderedArtifact
-        ? renderedPreviewUrl
-        : playbackUrl;
+  const currentOutput = mediaOutputs
+    ? previewMode === "original"
+      ? mediaOutputs.original
+      : previewMode === "edited"
+        ? mediaOutputs.edited
+        : previewMode === "studio_voice"
+          ? mediaOutputs.voiceover
+          : mediaOutputs.final_mix
+    : null;
+
+  const activeVideoUrl = currentOutput
+    ? currentOutput.available
+      ? currentOutput.url
+      : null
+    : previewMode === "final_mix"
+      ? finalMixUrl || null
+      : previewMode === "studio_voice"
+        ? studioVoicePreviewUrl || null
+        : previewMode === "edited"
+          ? renderedPreviewUrl || null
+          : playbackUrl || null;
+
+  const outputStatus = currentOutput
+    ? currentOutput.status
+    : activeVideoUrl
+      ? "ready"
+      : "unavailable";
+
+  const modeLabel =
+    previewMode === "original"
+      ? "Original"
+      : previewMode === "edited"
+        ? "Edited Preview"
+        : previewMode === "studio_voice"
+          ? "Voiceover Preview"
+          : "Final Mix";
 
   const activeDurationMs =
-    previewMode === "final_mix"
-      ? finalMixDurationMs || studioVoiceDurationMs || editedDurationMs || durationMs
-      : previewMode === "studio_voice"
-        ? studioVoiceDurationMs || editedDurationMs || durationMs
-        : previewMode === "edited"
-          ? editedDurationMs || durationMs
-          : durationMs;
+    currentOutput?.available && currentOutput.durationMs > 0
+      ? currentOutput.durationMs
+      : previewMode === "final_mix"
+        ? finalMixDurationMs || studioVoiceDurationMs || editedDurationMs || durationMs
+        : previewMode === "studio_voice"
+          ? studioVoiceDurationMs || editedDurationMs || durationMs
+          : previewMode === "edited"
+            ? editedDurationMs || durationMs
+            : durationMs;
 
   const activeCurrentTimeMs =
-    (previewMode === "edited" || previewMode === "studio_voice" || previewMode === "final_mix") &&
-    edl
-      ? sourceToEditedTimeMs(currentTimeMs, edl)
-      : currentTimeMs;
+    isEdlDerivedMode && edl ? sourceToEditedTimeMs(currentTimeMs, edl) : currentTimeMs;
 
   // Sync external seek to video element
   useEffect(() => {
@@ -114,15 +142,14 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     if (!video || isSeekingInternallyRef.current) return;
 
     const targetSec =
-      previewMode === "edited" && isUsingRenderedArtifact && edl
+      isEdlDerivedMode && edl
         ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
         : currentTimeMs / 1000;
 
     if (Math.abs(video.currentTime - targetSec) > 0.1) {
       video.currentTime = targetSec;
     }
-  }, [currentTimeMs, edl, isUsingRenderedArtifact, previewMode]);
-
+  }, [currentTimeMs, edl, isEdlDerivedMode]);
   // Preserve playback position across source switches
   const prevActiveUrlRef = useRef<string | null>(null);
   useEffect(() => {
@@ -130,7 +157,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     if (!video || !activeVideoUrl) return;
     if (prevActiveUrlRef.current && prevActiveUrlRef.current !== activeVideoUrl) {
       const targetSec =
-        previewMode === "edited" && isUsingRenderedArtifact && edl
+        isEdlDerivedMode && edl
           ? sourceToEditedTimeMs(currentTimeMs, edl) / 1000
           : currentTimeMs / 1000;
       video.currentTime = targetSec;
@@ -139,7 +166,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       }
     }
     prevActiveUrlRef.current = activeVideoUrl;
-  }, [activeVideoUrl, currentTimeMs, edl, isPlaying, isUsingRenderedArtifact, previewMode]);
+  }, [activeVideoUrl, currentTimeMs, edl, isPlaying, isEdlDerivedMode]);
 
   // Handle time update from video element & execute cut skipping
   const handleTimeUpdate = useCallback(() => {
@@ -148,38 +175,14 @@ export const VideoStage: React.FC<VideoStageProps> = ({
 
     const currentMs = Math.round(video.currentTime * 1000);
 
-    if (previewMode === "edited" && isUsingRenderedArtifact && edl) {
+    if (isEdlDerivedMode && edl) {
       const sourceMs = editedToSourceTimeMs(currentMs, edl);
       onSeek(sourceMs);
       return;
     }
 
-    // Client EDL simulation fallback
-    if (previewMode === "edited" && !isUsingRenderedArtifact && edl) {
-      const skipInterval = findExecutableSkipInterval(currentMs, edl);
-      if (skipInterval) {
-        const jumpToSec = skipInterval.safe_end_ms / 1000;
-        isSeekingInternallyRef.current = true;
-        video.currentTime = jumpToSec;
-        onSeek(skipInterval.safe_end_ms);
-
-        const skippedSecs = (
-          (skipInterval.safe_end_ms - skipInterval.safe_start_ms) /
-          1000
-        ).toFixed(1);
-        setLastSkippedNotice(`Skipped ${skippedSecs}s cut`);
-        setTimeout(() => setLastSkippedNotice(null), 2500);
-
-        setTimeout(() => {
-          isSeekingInternallyRef.current = false;
-        }, 50);
-        return;
-      }
-    }
-
     onSeek(currentMs);
-  }, [edl, onSeek, previewMode, isUsingRenderedArtifact]);
-
+  }, [edl, onSeek, isEdlDerivedMode]);
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -263,7 +266,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const targetModeMs = Math.round(clickRatio * activeDurationMs);
 
-    if (previewMode === "edited" && edl) {
+    if (isEdlDerivedMode && edl) {
       const sourceMs = editedToSourceTimeMs(targetModeMs, edl);
       onSeek(sourceMs);
     } else {
@@ -284,7 +287,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       return;
     }
     e.preventDefault();
-    if (previewMode === "edited" && edl) {
+    if (isEdlDerivedMode && edl) {
       const sourceMs = editedToSourceTimeMs(target, edl);
       onSeek(sourceMs);
     } else {
@@ -314,8 +317,57 @@ export const VideoStage: React.FC<VideoStageProps> = ({
             data-testid="video-element"
           />
         ) : (
-          <div className="flex flex-col items-center justify-center text-center p-6 text-text-muted gap-2">
-            <p className="text-xs font-medium">Video media is ready for playback.</p>
+          <div
+            className="flex flex-col items-center justify-center text-center p-6 text-text-muted gap-3 max-w-sm"
+            data-testid="media-unavailable-card"
+          >
+            {outputStatus === "generating" ? (
+              <>
+                <Loader2 className="size-8 text-primary animate-spin" />
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-text-primary">
+                    {modeLabel} is generating…
+                  </p>
+                  <p className="text-[11px] text-text-secondary">
+                    Rendering artifact for active timeline.
+                  </p>
+                </div>
+              </>
+            ) : outputStatus === "failed" ? (
+              <>
+                <AlertCircle className="size-8 text-danger" />
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-danger">{modeLabel} failed</p>
+                  <p className="text-[11px] text-text-secondary">
+                    Could not render the requested output artifact.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <Film className="size-8 text-text-muted/60" />
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-text-primary">{modeLabel} unavailable</p>
+                  <p className="text-[11px] text-text-secondary">
+                    No rendered artifact exists for this mode on the active timeline.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Video Error Message Overlay if signed URL fails */}
+        {videoError && (
+          <div
+            className="absolute inset-0 m-auto max-w-sm h-fit bg-surface-1/95 border border-danger/40 rounded-xl p-4 flex flex-col items-center text-center gap-2 shadow-2xl backdrop-blur-sm z-20"
+            data-testid="video-error-overlay"
+          >
+            <AlertCircle className="size-6 text-danger" />
+            <p className="text-xs font-semibold text-danger">{videoError}</p>
+            <p className="text-[11px] text-text-secondary">
+              The signed media URL could not be played or has expired.
+            </p>
           </div>
         )}
 
@@ -333,16 +385,8 @@ export const VideoStage: React.FC<VideoStageProps> = ({
           </div>
         )}
 
-        {/* Edited Preview Cut Skipped Toast */}
-        {lastSkippedNotice && (
-          <div className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-white text-xs font-semibold shadow-lg animate-bounce">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{lastSkippedNotice}</span>
-          </div>
-        )}
-
         {/* Big Center Play/Pause Indicator on hover/pause */}
-        {!isPlaying && playbackUrl && !videoError && (
+        {!isPlaying && activeVideoUrl && !videoError && (
           <button
             type="button"
             onClick={onPlayPause}
@@ -402,10 +446,15 @@ export const VideoStage: React.FC<VideoStageProps> = ({
             </button>
 
             {/* Mode-appropriate Timecode Readout */}
-            <div className="font-mono text-[11px] text-text-primary font-medium tracking-tight flex items-center gap-1">
-              <span>{formatTimecode(activeCurrentTimeMs)}</span>
+            <div
+              className="font-mono text-[11px] text-text-primary font-medium tracking-tight flex items-center gap-1"
+              data-testid="timecode-display"
+            >
+              <span data-testid="timecode-current">{formatTimecode(activeCurrentTimeMs)}</span>
               <span className="text-text-muted">/</span>
-              <span className="text-text-muted">{formatTimecode(activeDurationMs)}</span>
+              <span className="text-text-muted" data-testid="timecode-duration">
+                {formatTimecode(activeDurationMs)}
+              </span>
             </div>
           </div>
 

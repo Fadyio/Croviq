@@ -104,7 +104,9 @@ async function run() {
   await page.waitForURL("**/app*", { timeout: 15000 });
 
   console.log(`2. Opening ${TARGET_PROD_ID}...`);
-  await page.goto(`${BASE_URL}/productions/${TARGET_PROD_ID}/editor`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE_URL}/productions/${TARGET_PROD_ID}/editor`, {
+    waitUntil: "domcontentloaded",
+  });
   await page.waitForSelector("[data-testid='editor-workspace']", { timeout: 60000 });
   await page.waitForSelector("[data-testid='video-stage']", { timeout: 60000 });
   await page.waitForTimeout(2000);
@@ -116,7 +118,10 @@ async function run() {
 
   // STEP 4: Source Mode Acceptance (10 positions across video: 5%, 15%, 25%, 35%, 45%, 55%, 65%, 75%, 85%, 95%)
   console.log("\n=== STEP 4: AUDIT ORIGINAL MODE SEEK (10 POSITIONS) ===");
-  await page.getByRole("button", { name: /^Original/i }).first().click();
+  await page
+    .getByRole("button", { name: /^Original/i })
+    .first()
+    .click();
   await page.waitForTimeout(1000);
 
   const sampleIndices = [5, 16, 28, 39, 50, 61, 72, 84, 95, 106];
@@ -215,7 +220,10 @@ async function run() {
 
   // STEP 8 & 9: Player / Timeline synchronization
   console.log("\n=== STEP 8 & 9: TIMELINE / PLAYER -> TRANSCRIPT SYNCHRONIZATION ===");
-  await page.getByRole("button", { name: /^Original/i }).first().click();
+  await page
+    .getByRole("button", { name: /^Original/i })
+    .first()
+    .click();
   await page.waitForTimeout(500);
 
   await page.evaluate(() => {
@@ -241,7 +249,10 @@ async function run() {
 
   // 1600x900: Original
   await page.setViewportSize({ width: 1600, height: 900 });
-  await page.getByRole("button", { name: /^Original/i }).first().click();
+  await page
+    .getByRole("button", { name: /^Original/i })
+    .first()
+    .click();
   await page.waitForTimeout(1000);
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, "bug13-after-original-1600x900.png") });
 
@@ -252,7 +263,9 @@ async function run() {
 
   // 1600x900: Cut Boundary / Removed Word
   await word15Btn.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: path.join(SCREENSHOT_DIR, "bug13-after-cut-boundary-1600x900.png") });
+  await page.screenshot({
+    path: path.join(SCREENSHOT_DIR, "bug13-after-cut-boundary-1600x900.png"),
+  });
 
   // 1440x900
   await page.setViewportSize({ width: 1440, height: 900 });

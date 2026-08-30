@@ -1,7 +1,8 @@
 import { Film, type LucideIcon, Mic2, Music, Video } from "lucide-react";
 import React from "react";
-import { formatDuration } from "../../lib/edl-adapter";
-import type { PreviewMode } from "./PreviewToggle";
+import { type CanonicalMediaOutputs, formatDuration } from "../../lib/edl-adapter";
+export type PreviewMode = "original" | "edited" | "studio_voice" | "final_mix";
+
 export interface BRollAssetItem {
   artifactId: string;
   sourceStartMs: number;
@@ -26,11 +27,11 @@ interface MediaBinProps {
   hasProposalOrEdl?: boolean;
   isRunFailed?: boolean;
   brollAssets?: BRollAssetItem[];
+  mediaOutputs?: CanonicalMediaOutputs;
   onSeek?: (timeMs: number) => void;
   onSelectMode: (mode: PreviewMode) => void;
   className?: string;
 }
-
 interface ProjectArtifact {
   id: "original" | "edited" | "studio_voice" | "final_mix";
   name: string;
@@ -84,55 +85,81 @@ export const MediaBin: React.FC<MediaBinProps> = ({
   hasRenderedPreview,
   hasStudioVoice,
   hasFinalMix = false,
+  mediaOutputs,
   onSelectMode,
   className = "",
 }) => {
+  const isEditedAvailable = mediaOutputs ? mediaOutputs.edited.available : hasRenderedPreview;
+  const isVoiceoverAvailable = mediaOutputs ? mediaOutputs.voiceover.available : hasStudioVoice;
+  const isFinalMixAvailable = mediaOutputs ? mediaOutputs.final_mix.available : hasFinalMix;
+
+  const sourceDur =
+    mediaOutputs?.original.durationMs && mediaOutputs.original.durationMs > 0
+      ? mediaOutputs.original.durationMs
+      : sourceDurationMs;
+
+  const editedDur =
+    mediaOutputs?.edited.durationMs && mediaOutputs.edited.durationMs > 0
+      ? mediaOutputs.edited.durationMs
+      : editedDurationMs;
+
+  const voDur =
+    mediaOutputs?.voiceover.durationMs && mediaOutputs.voiceover.durationMs > 0
+      ? mediaOutputs.voiceover.durationMs
+      : studioVoiceDurationMs || editedDurationMs;
+
+  const fmDur =
+    mediaOutputs?.final_mix.durationMs && mediaOutputs.final_mix.durationMs > 0
+      ? mediaOutputs.final_mix.durationMs
+      : finalMixDurationMs || studioVoiceDurationMs || editedDurationMs;
+
   const source: ProjectArtifact = {
     id: "original",
     name: "Source Video",
     mode: "original",
-    durationMs: sourceDurationMs,
+    durationMs: sourceDur,
     description: "Original recording",
     icon: Video,
   };
   const outputs: ProjectArtifact[] = [
-    ...(hasRenderedPreview
+    ...(isEditedAvailable
       ? [
           {
             id: "edited" as const,
             name: "Edited Preview",
             mode: "edited" as PreviewMode,
-            durationMs: editedDurationMs,
+            durationMs: editedDur,
             description: "Cuts and visual B-roll",
             icon: Film,
           },
         ]
       : []),
-    ...(hasStudioVoice
+    ...(isVoiceoverAvailable
       ? [
           {
             id: "studio_voice" as const,
             name: "Voiceover Preview",
             mode: "studio_voice" as PreviewMode,
-            durationMs: studioVoiceDurationMs || editedDurationMs,
+            durationMs: voDur,
             description: "Voice corrections included",
             icon: Mic2,
           },
         ]
       : []),
-    ...(hasFinalMix
+    ...(isFinalMixAvailable
       ? [
           {
             id: "final_mix" as const,
             name: "Final Mix",
             mode: "final_mix" as PreviewMode,
-            durationMs: finalMixDurationMs || studioVoiceDurationMs || editedDurationMs,
+            durationMs: fmDur,
             description: "Voice corrections + B-roll + background music",
             icon: Music,
           },
         ]
       : []),
   ];
+
   return (
     <aside
       className={`flex h-full flex-col overflow-hidden border-r border-border-subtle bg-surface-1 select-none ${className}`}

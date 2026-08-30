@@ -88,7 +88,9 @@ async function run() {
   await page.waitForURL("**/app*", { timeout: 15000 });
 
   console.log(`2. Opening ${TARGET_PROD_ID}...`);
-  await page.goto(`${BASE_URL}/productions/${TARGET_PROD_ID}/editor`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE_URL}/productions/${TARGET_PROD_ID}/editor`, {
+    waitUntil: "domcontentloaded",
+  });
   await page.waitForSelector("[data-testid='editor-workspace']", { timeout: 60000 });
   await page.waitForSelector("[data-testid='video-stage']", { timeout: 60000 });
   await page.waitForTimeout(2000);
@@ -99,15 +101,17 @@ async function run() {
   await page.waitForTimeout(1000);
 
   const domSummary = await page.evaluate(() => {
-    const wordBtns = Array.from(document.querySelectorAll("[data-word-index]")).map(el => ({
+    const wordBtns = Array.from(document.querySelectorAll("[data-word-index]")).map((el) => ({
       index: el.getAttribute("data-word-index"),
       text: el.textContent?.trim(),
       aria: el.getAttribute("aria-label"),
     }));
     return {
       wordBtnCount: wordBtns.length,
-      sampleIndices: wordBtns.slice(0, 20).map(w => w.index),
-      panelText: document.querySelector("[data-testid='transcript-panel']")?.textContent?.slice(0, 200),
+      sampleIndices: wordBtns.slice(0, 20).map((w) => w.index),
+      panelText: document
+        .querySelector("[data-testid='transcript-panel']")
+        ?.textContent?.slice(0, 200),
     };
   });
 
@@ -116,7 +120,10 @@ async function run() {
   // Let's capture the BEFORE screenshots directly:
   // 1. Original + Transcript
   console.log("4. Original + Transcript screenshot...");
-  await page.getByRole("button", { name: /^Original/i }).first().click();
+  await page
+    .getByRole("button", { name: /^Original/i })
+    .first()
+    .click();
   await page.waitForTimeout(1000);
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, "bug13-before-original-1600x900.png") });
 
@@ -128,12 +135,14 @@ async function run() {
 
   // 3. Timeline + Transcript visible together
   console.log("6. Timeline + Transcript screenshot...");
-  await page.screenshot({ path: path.join(SCREENSHOT_DIR, "bug13-before-timeline-transcript-1600x900.png") });
+  await page.screenshot({
+    path: path.join(SCREENSHOT_DIR, "bug13-before-timeline-transcript-1600x900.png"),
+  });
 
   // 4. Cut boundary (around words 5 and 6)
   console.log("7. Cut boundary screenshot...");
   const word5 = page.locator("[data-word-index='5']");
-  if (await word5.count() > 0) {
+  if ((await word5.count()) > 0) {
     await word5.scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, "bug13-before-cut-boundary.png") });
   }
@@ -152,7 +161,10 @@ async function run() {
 
   // Step 4: Click 10 transcript positions and measure seek in Original mode
   console.log("10. Testing 10 transcript seek positions in Original mode...");
-  await page.getByRole("button", { name: /^Original/i }).first().click();
+  await page
+    .getByRole("button", { name: /^Original/i })
+    .first()
+    .click();
   await page.waitForTimeout(1000);
 
   const sampleIndices = [5, 16, 28, 39, 50, 61, 72, 84, 95, 106]; // approx 5%, 15%, 25%, 35%, 45%, 55%, 65%, 75%, 85%, 95%
@@ -160,7 +172,7 @@ async function run() {
 
   for (const idx of sampleIndices) {
     const btn = page.locator(`[data-word-index='${idx}']`);
-    if (await btn.count() === 0) {
+    if ((await btn.count()) === 0) {
       console.log(`Word index ${idx} not found in DOM!`);
       continue;
     }

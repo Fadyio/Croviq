@@ -443,7 +443,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                                   ? formatCutLabel(
                                       cut.decision_type,
                                       cut.removed_duration_ms ??
-                                        (cut.safe_end_ms - cut.safe_start_ms),
+                                        cut.safe_end_ms - cut.safe_start_ms,
                                     )
                                   : "Removed by edit decision",
                               });
@@ -461,13 +461,12 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                                   title={formatCutLabel(
                                     precedingCut.decision_type,
                                     precedingCut.removed_duration_ms ??
-                                      (precedingCut.safe_end_ms - precedingCut.safe_start_ms),
+                                      precedingCut.safe_end_ms - precedingCut.safe_start_ms,
                                   )}
                                 >
                                   {(
                                     (precedingCut.removed_duration_ms ??
-                                      (precedingCut.safe_end_ms - precedingCut.safe_start_ms)) /
-                                    1000
+                                      precedingCut.safe_end_ms - precedingCut.safe_start_ms) / 1000
                                   ).toFixed(1)}
                                   s cut
                                 </span>

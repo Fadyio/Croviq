@@ -2024,7 +2024,7 @@
       "get": {
         "tags": ["Productions & Uploads"],
         "summary": "Get Production Media Playback URLs",
-        "description": "Retrieve distinct signed URLs for Original, Edited Preview, Master, and Studio Voice media.",
+        "description": "Retrieve distinct signed URLs and canonical media states for Original, Edited Preview, Master, and Studio Voice media.",
         "operationId": "get_production_playback_urls_api_productions__production_id__playback_get",
         "security": [
           {
@@ -6829,6 +6829,68 @@
         "title": "MediaMetadata",
         "description": "Canonical metadata extracted from source video/audio via FFprobe."
       },
+      "MediaOutputState": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "description": "Whether this media output exists and is playable",
+            "default": false
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id",
+            "description": "Artifact ID if available"
+          },
+          "edl_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edl Id",
+            "description": "Parent EDL ID this artifact was rendered from"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "Signed playback URL"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms",
+            "description": "Duration of this media output in milliseconds",
+            "default": 0
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Status: 'ready', 'generating', 'failed', or 'unavailable'",
+            "default": "unavailable"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MediaOutputState",
+        "description": "Canonical state representation for a media output mode."
+      },
       "MemoryCardResponse": {
         "properties": {
           "name": {
@@ -7704,13 +7766,41 @@
             ],
             "title": "Studio Voice Preview Url",
             "description": "Studio Voice video playback URL"
+          },
+          "final_mix_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Mix Url",
+            "description": "Final Mix video playback URL"
+          },
+          "original": {
+            "$ref": "#/components/schemas/MediaOutputState",
+            "description": "Original source media state"
+          },
+          "edited": {
+            "$ref": "#/components/schemas/MediaOutputState",
+            "description": "Edited preview render state"
+          },
+          "voiceover": {
+            "$ref": "#/components/schemas/MediaOutputState",
+            "description": "Voiceover/Studio Voice preview render state"
+          },
+          "final_mix": {
+            "$ref": "#/components/schemas/MediaOutputState",
+            "description": "Final mix render state"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": ["production_id"],
         "title": "ProductionPlaybackResponse",
-        "description": "Playback URLs for all available media outputs of a production."
+        "description": "Playback URLs and canonical media states for all available media outputs of a production."
       },
       "ProductionStatus": {
         "type": "string",
