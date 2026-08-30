@@ -89,7 +89,7 @@ from croviq_domain.transcript import (
     EntailmentVerdict,
     ScriptCorrectionChangeType,
 )
-from croviq_domain.edl import BackgroundMusicMix, VoiceoverSegment
+from croviq_domain.edl import BackgroundMusicMix, VoiceoverSegment, map_source_time_to_edited
 from croviq_domain.editorial import EditorVoiceMode
 from croviq_api.productions.release_review_repository import (
     ReleaseReviewRepository,
@@ -1401,24 +1401,27 @@ async def _execute_render_for_production(
                 )
             elif artifact_type in (ArtifactType.VOICEOVER_PREVIEW, ArtifactType.STUDIO_VOICE_PREVIEW):
                 local_narr = tmp_path / "voiceover.wav"
-                total_samples = int(24_000 * edl.source_duration_ms / 1000)
+                target_dur_ms = edl.estimated_target_duration_ms
+                total_samples = int(24_000 * target_dur_ms / 1000)
                 track = bytearray(total_samples * 2)
                 speech_intervals: list[tuple[int, int]] = []
                 if edl.voiceover_segments:
                     for seg in edl.voiceover_segments:
-                        speech_intervals.append((seg.source_start_ms, seg.source_end_ms))
+                        ed_start = map_source_time_to_edited(seg.source_start_ms, edl)
+                        ed_end = map_source_time_to_edited(seg.source_end_ms, edl)
+                        speech_intervals.append((ed_start, ed_end))
                         dur_ms, pcm = await genai_client.synthesize_studio_voice(
                             text=seg.text,
                             voice_id=seg.voice_id or "Puck",
                             production_id=prod.production_id,
                         )
-                        start_byte = int(24_000 * seg.source_start_ms / 1000) * 2
+                        start_byte = int(24_000 * ed_start / 1000) * 2
                         copy_len = min(len(pcm), len(track) - start_byte)
-                        if copy_len > 0:
+                        if copy_len > 0 and start_byte < len(track):
                             track[start_byte:start_byte + copy_len] = pcm[:copy_len]
                 else:
                     # Default sample voiceover segment
-                    speech_intervals.append((0, min(5000, edl.source_duration_ms)))
+                    speech_intervals.append((0, min(5000, target_dur_ms)))
                 with wave.open(str(local_narr), "wb") as wf:
                     wf.setnchannels(1)
                     wf.setsampwidth(2)
@@ -1434,9 +1437,10 @@ async def _execute_render_for_production(
                 )
             elif artifact_type == ArtifactType.FINAL_MIX:
                 local_music = tmp_path / "music.wav"
+                target_dur_ms = edl.estimated_target_duration_ms
                 music_bytes, _, _ = await genai_client.generate_background_music(
                     prompt="Minimal modern technology documentary underscore. Warm subtle synthesizer pads, restrained soft electronic pulse, very sparse percussion, calm focused mood, clean professional mix, instrumental only, consistent low intensity throughout. Designed to sit quietly underneath spoken tutorial narration.",
-                    duration_s=int(edl.source_duration_ms / 1000) + 1,
+                    duration_s=int(target_dur_ms / 1000) + 1,
                     model_id=edl.background_music.model_id if edl.background_music else "lyria-3-pro-preview",
                     production_id=prod.production_id,
                 )
@@ -1445,18 +1449,20 @@ async def _execute_render_for_production(
                 speech_intervals = []
                 if edl.voiceover_segments:
                     local_narr = tmp_path / "voiceover.wav"
-                    total_samples = int(24_000 * edl.source_duration_ms / 1000)
+                    total_samples = int(24_000 * target_dur_ms / 1000)
                     track = bytearray(total_samples * 2)
                     for seg in edl.voiceover_segments:
-                        speech_intervals.append((seg.source_start_ms, seg.source_end_ms))
+                        ed_start = map_source_time_to_edited(seg.source_start_ms, edl)
+                        ed_end = map_source_time_to_edited(seg.source_end_ms, edl)
+                        speech_intervals.append((ed_start, ed_end))
                         dur_ms, pcm = await genai_client.synthesize_studio_voice(
                             text=seg.text,
                             voice_id=seg.voice_id or "Puck",
                             production_id=prod.production_id,
                         )
-                        start_byte = int(24_000 * seg.source_start_ms / 1000) * 2
+                        start_byte = int(24_000 * ed_start / 1000) * 2
                         copy_len = min(len(pcm), len(track) - start_byte)
-                        if copy_len > 0:
+                        if copy_len > 0 and start_byte < len(track):
                             track[start_byte:start_byte + copy_len] = pcm[:copy_len]
                     with wave.open(str(local_narr), "wb") as wf:
                         wf.setnchannels(1)
@@ -2000,19 +2006,22 @@ async def generate_studio_voice(
 
                 # Create composite narration audio track at 24000 Hz, 16-bit mono (matching Gemini TTS output)
                 sample_rate = 24000
-                total_dur_ms = edl.source_duration_ms or (transcript.duration_ms if transcript else 10000)
+                total_dur_ms = edl.estimated_target_duration_ms or (transcript.duration_ms if transcript else 10000)
                 num_samples = int(sample_rate * total_dur_ms / 1000)
                 audio_buffer = bytearray(num_samples * 2)
 
+                speech_intervals: list[tuple[int, int]] = []
                 for seg, pcm_bytes in results:
                     if seg.status == NarrationSegmentStatus.ACCEPTED and pcm_bytes:
-                        start_sample = int(sample_rate * seg.source_start_ms / 1000)
+                        ed_start = map_source_time_to_edited(seg.source_start_ms, edl)
+                        ed_end = map_source_time_to_edited(seg.source_end_ms, edl)
+                        speech_intervals.append((ed_start, ed_end))
+                        start_sample = int(sample_rate * ed_start / 1000)
                         start_byte = start_sample * 2
                         end_byte = min(len(audio_buffer), start_byte + len(pcm_bytes))
                         copy_len = end_byte - start_byte
-                        if copy_len > 0:
+                        if copy_len > 0 and start_byte < len(audio_buffer):
                             audio_buffer[start_byte : start_byte + copy_len] = pcm_bytes[:copy_len]
-
                 with wave.open(str(local_narr), "wb") as wf:
                     wf.setnchannels(1)
                     wf.setsampwidth(2)
@@ -2033,7 +2042,7 @@ async def generate_studio_voice(
                     source_path=local_src,
                     edl=edl,
                     narration_audio_path=local_narr,
-                    speech_intervals_ms=[(s.source_start_ms, s.source_end_ms) for s in segments],
+                    speech_intervals_ms=speech_intervals,
                     output_path=local_out,
                 )
 

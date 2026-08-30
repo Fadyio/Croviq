@@ -36,7 +36,8 @@ from croviq_api.workspaces.repository import (
     InMemoryWorkspaceRepository,
     set_workspace_repository,
 )
-from croviq_domain.edl import EditDecisionList
+from croviq_domain.edl import CutInstruction, CutSafetyStatus, EditDecisionList, VoiceoverSegment
+from croviq_domain.editorial import EditorDecisionType
 from croviq_domain.production import (
     Production,
     ProductionStatus,
@@ -231,3 +232,83 @@ async def test_generate_and_update_music_routes(app_and_deps, test_user: User):
     assert patch_resp.status_code == 200
     patched_edl = patch_resp.json()
     assert patched_edl["edl"]["background_music"]["volume_db"] == -28.0
+
+
+@pytest.mark.asyncio
+async def test_render_final_mix_and_voiceover_preview_uses_active_edl_cuts_and_timeline_mapping(
+    app_and_deps, test_user: User
+):
+    client, prod_repo, trans_repo, edl_repo, render_repo, _, _ = app_and_deps
+    now = datetime.now(timezone.utc)
+    prod = Production(
+        production_id="prod_render_cut_01",
+        workspace_id="ws_test",
+        channel_id="croviq_syn_ai_eng_01",
+        owner_user_id=test_user.user_id,
+        status=ProductionStatus.UPLOADED,
+        source_media=SourceMedia(
+            upload_id="up_01",
+            original_filename="tutorial.mp4",
+            content_type="video/mp4",
+            size_bytes=1000000,
+            gcs_bucket="test-bucket",
+            gcs_object="workspaces/ws_test/productions/prod_render_cut_01/source.mp4",
+            status=SourceMediaStatus.UPLOADED,
+            created_at=now,
+            uploaded_at=now,
+        ),
+        created_at=now,
+        updated_at=now,
+    )
+    await prod_repo.create_production(prod)
+
+    # Create EDL with a 4-second cut: 10000ms source -> 6000ms target
+    cut = CutInstruction(
+        cut_id="cut_01",
+        decision_id="dec_01",
+        decision_type=EditorDecisionType.TRIM_PAUSE,
+        transcript_start_word=1,
+        transcript_end_word=2,
+        requested_start_ms=2000,
+        requested_end_ms=6000,
+        safe_start_ms=2000,
+        safe_end_ms=6000,
+        removed_duration_ms=4000,
+        left_anchor="left",
+        right_anchor="right",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="clean cut",
+        confidence=0.99,
+    )
+    vo = VoiceoverSegment(
+        segment_id="vo_01",
+        source_start_ms=7000,
+        source_end_ms=9000,
+        text="Corrected voiceover replacement",
+        original_text="Original voiceover",
+    )
+    edl = EditDecisionList(
+        edl_id="edl_cuts_01",
+        production_id="prod_render_cut_01",
+        source_duration_ms=10000,
+        cuts=[cut],
+        voiceover_segments=[vo],
+        version=1,
+        created_at=now,
+    )
+    await edl_repo.save_edl(edl)
+
+    # 1. Render Voiceover Preview - must have duration = 6000ms (preserving EDL cuts)
+    vo_resp = client.post("/api/productions/prod_render_cut_01/renders/voiceover-preview")
+    assert vo_resp.status_code == 200
+    vo_data = vo_resp.json()
+    assert vo_data["artifact_type"] == "VOICEOVER_PREVIEW"
+    assert vo_data["duration_ms"] == 6000
+
+    # 2. Render Final Mix - must have duration = 6000ms (preserving EDL cuts)
+    fm_resp = client.post("/api/productions/prod_render_cut_01/renders/final-mix")
+    assert fm_resp.status_code == 200
+    fm_data = fm_resp.json()
+    assert fm_data["artifact_type"] == "FINAL_MIX"
+    assert fm_data["duration_ms"] == 6000

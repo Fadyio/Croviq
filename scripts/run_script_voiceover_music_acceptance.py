@@ -1,6 +1,7 @@
 """Comprehensive Acceptance Milestone Runner for Script Correction, Voiceover & Lyria Music Pipeline."""
 
 import asyncio
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -24,7 +25,7 @@ from croviq_api.productions.edl_repository import FirestoreEDLRepository
 from croviq_api.productions.render_repository import FirestoreRenderRepository
 from croviq_agents.client import GoogleGenAIClient, FakeGenAIClient
 from croviq_agents.voice import VoiceReplicationService, StudioVoiceSynthesizer
-from croviq_domain.edl import EditDecisionList, BackgroundMusicMix, VoiceoverSegment
+from croviq_domain.edl import EditDecisionList, BackgroundMusicMix, VoiceoverSegment, map_source_time_to_edited
 from croviq_domain.editorial import EditorVoiceMode
 from croviq_domain.render import ArtifactType, ArtifactStatus, RenderArtifact
 from croviq_domain.transcript import (
@@ -60,10 +61,11 @@ async def run_milestone():
 
     prod_repo = FirestoreProductionRepository(project_id=PROJECT_ID)
     tr_repo = FirestoreTranscriptRepository(project_id=PROJECT_ID)
+    edl_repo = FirestoreEDLRepository(project_id=PROJECT_ID)
+    render_repo = FirestoreRenderRepository(project_id=PROJECT_ID)
     storage = GoogleMediaStorage(project_id=PROJECT_ID)
     genai_client = GoogleGenAIClient(project_id=PROJECT_ID)
     render_service = FFmpegRenderService()
-
     # 1. Fetch real production & transcript
     prod = await prod_repo.get_production(PRODUCTION_ID)
     transcript = await tr_repo.get_transcript_by_production_id(PRODUCTION_ID)
@@ -173,7 +175,15 @@ async def run_milestone():
         print("Synthesizing Voiceovers with gemini-3.1-flash-tts-preview...")
         synthesizer = StudioVoiceSynthesizer(max_tempo_stretch=1.05, acceptable_tolerance_ms=100)
 
-        total_samples = int(24_000 * transcript.duration_ms / 1000)
+        # Load active EDL with 20 cuts
+        active_edl = await edl_repo.get_latest_edl(PRODUCTION_ID)
+        if not active_edl:
+            raise RuntimeError("Active EDL not found in Firestore")
+
+        target_dur_ms = active_edl.estimated_target_duration_ms
+        print(f"Active EDL {active_edl.edl_id}: cuts={len(active_edl.active_cuts)}, target_duration={target_dur_ms}ms ({target_dur_ms/1000:.2f}s)")
+
+        total_samples = int(24_000 * target_dur_ms / 1000)
         track_pcm = bytearray(total_samples * 2)
         speech_intervals: list[tuple[int, int]] = []
         voiceover_edl_segments: list[VoiceoverSegment] = []
@@ -186,11 +196,13 @@ async def run_milestone():
                 production_id=PRODUCTION_ID,
             )
             dur_err = abs(dur_ms - avail_dur)
+            ed_start = map_source_time_to_edited(seg.source_start_ms, active_edl)
+            ed_end = map_source_time_to_edited(seg.source_end_ms, active_edl)
             print(f"Segment: {seg.segment_id}")
             print(f"  SOURCE TEXT: {seg.original_text}")
             print(f"  CORRECTED TEXT: {seg.corrected_text}")
-            print(f"  SOURCE START: {seg.source_start_ms}ms")
-            print(f"  SOURCE END: {seg.source_end_ms}ms")
+            print(f"  SOURCE START: {seg.source_start_ms}ms -> EDITED START: {ed_start}ms")
+            print(f"  SOURCE END: {seg.source_end_ms}ms -> EDITED END: {ed_end}ms")
             print(f"  AVAILABLE DURATION: {avail_dur}ms")
             print(f"  TTS DURATION: {dur_ms}ms")
             print(f"  DURATION ERROR: {dur_err}ms")
@@ -198,10 +210,10 @@ async def run_milestone():
             print(f"  VIDEO SUPPORT: True")
             print(f"  VOICE MODE: PREBUILT_STUDIO_VOICE (Engineering validation; My Voice BLOCKED Pre-GA)")
 
-            speech_intervals.append((seg.source_start_ms, seg.source_end_ms))
-            start_byte = int(24_000 * seg.source_start_ms / 1000) * 2
+            speech_intervals.append((ed_start, ed_end))
+            start_byte = int(24_000 * ed_start / 1000) * 2
             copy_len = min(len(pcm), len(track_pcm) - start_byte)
-            if copy_len > 0:
+            if copy_len > 0 and start_byte < len(track_pcm):
                 track_pcm[start_byte:start_byte + copy_len] = pcm[:copy_len]
 
             voiceover_edl_segments.append(
@@ -224,15 +236,9 @@ async def run_milestone():
             wf.setframerate(24000)
             wf.writeframes(track_pcm)
 
-        edl = EditDecisionList(
-            edl_id="edl_acceptance_01",
-            production_id=PRODUCTION_ID,
-            source_duration_ms=transcript.duration_ms,
-            voiceover_segments=voiceover_edl_segments,
-            version=1,
-            created_at=prod.created_at,
-        )
-
+        # Update active EDL with voiceover segments
+        edl = active_edl.model_copy(update={"voiceover_segments": voiceover_edl_segments})
+        await edl_repo.save_edl(edl)
         # 6. Render Voiceover Preview
         print("Rendering Voiceover Preview...")
         vo_res = render_service.render_voiceover_preview(
@@ -251,7 +257,7 @@ async def run_milestone():
             "calm focused mood, clean professional mix, instrumental only, consistent low intensity throughout. "
             "Designed to sit quietly underneath spoken tutorial narration."
         )
-        req_music_dur_s = int(transcript.duration_ms / 1000)
+        req_music_dur_s = int(target_dur_ms / 1000) + 1
         print(f"Generating Google Lyria background music (model: lyria-3-pro-preview, requested duration: {req_music_dur_s}s)...")
         music_bytes, fmt, actual_music_dur_ms = await genai_client.generate_background_music(
             prompt=lyria_prompt,
@@ -290,6 +296,94 @@ async def run_milestone():
         print(f"  TRUE PEAK: {loudness.true_peak_dbtp:.1f} dBTP")
         print(f"  LOUDNESS RANGE: {loudness.loudness_range_lu:.1f} LU")
 
+        # Upload to GCS and update Firestore records
+        fm_gcs_obj = f"workspaces/ws_27iEBUMcu6ToDYwp2OdEIHBuwIA3/productions/{PRODUCTION_ID}/renders/{edl.edl_id}/final_mix.mp4"
+        sv_gcs_obj = f"workspaces/ws_27iEBUMcu6ToDYwp2OdEIHBuwIA3/productions/{PRODUCTION_ID}/renders/{edl.edl_id}/studio_voice_preview.mp4"
+        music_gcs_obj = f"workspaces/ws_27iEBUMcu6ToDYwp2OdEIHBuwIA3/productions/{PRODUCTION_ID}/music/lyria_underscore.wav"
+
+        print(f"Uploading Final Mix to gs://{prod.source_media.gcs_bucket}/{fm_gcs_obj}...")
+        await storage.upload_object_from_path(
+            bucket=prod.source_media.gcs_bucket,
+            object_name=fm_gcs_obj,
+            source_path=final_mix_path,
+            content_type="video/mp4",
+        )
+        print(f"Uploading Voiceover Preview to gs://{prod.source_media.gcs_bucket}/{sv_gcs_obj}...")
+        await storage.upload_object_from_path(
+            bucket=prod.source_media.gcs_bucket,
+            object_name=sv_gcs_obj,
+            source_path=voiceover_preview_path,
+            content_type="video/mp4",
+        )
+        print(f"Uploading Music to gs://{prod.source_media.gcs_bucket}/{music_gcs_obj}...")
+        await storage.upload_object_from_path(
+            bucket=prod.source_media.gcs_bucket,
+            object_name=music_gcs_obj,
+            source_path=music_path,
+            content_type="audio/wav",
+        )
+
+        now = datetime.now(timezone.utc)
+        fm_artifact = RenderArtifact(
+            artifact_id="art_fm_c1aeea59",
+            production_id=PRODUCTION_ID,
+            edl_id=edl.edl_id,
+            artifact_type=ArtifactType.FINAL_MIX,
+            status=ArtifactStatus.completed,
+            gcs_bucket=prod.source_media.gcs_bucket,
+            gcs_object=fm_gcs_obj,
+            content_type="video/mp4",
+            size_bytes=final_res.size_bytes,
+            duration_ms=final_res.duration_ms,
+            width=final_res.width,
+            height=final_res.height,
+            frame_rate=final_res.frame_rate,
+            video_codec=final_res.video_codec,
+            audio_codec=final_res.audio_codec,
+            created_at=now,
+            completed_at=now,
+        )
+        await render_repo.save_render_artifact(fm_artifact)
+
+        sv_artifact = RenderArtifact(
+            artifact_id="art_sv_c1aeea59",
+            production_id=PRODUCTION_ID,
+            edl_id=edl.edl_id,
+            artifact_type=ArtifactType.STUDIO_VOICE_PREVIEW,
+            status=ArtifactStatus.completed,
+            gcs_bucket=prod.source_media.gcs_bucket,
+            gcs_object=sv_gcs_obj,
+            content_type="video/mp4",
+            size_bytes=vo_res.size_bytes,
+            duration_ms=vo_res.duration_ms,
+            width=vo_res.width,
+            height=vo_res.height,
+            frame_rate=vo_res.frame_rate,
+            video_codec=vo_res.video_codec,
+            audio_codec=vo_res.audio_codec,
+            created_at=now,
+            completed_at=now,
+        )
+        await render_repo.save_render_artifact(sv_artifact)
+
+        # Update EDL background music metadata
+        edl_with_music = edl.model_copy(
+            update={
+                "background_music": BackgroundMusicMix(
+                    style="Minimal modern technology documentary underscore",
+                    model_id="lyria-3-pro-preview",
+                    prompt=lyria_prompt,
+                    duration_ms=actual_music_dur_ms,
+                    volume_db=-24.0,
+                    ducking_db=-14.0,
+                    target_lufs=-32.0,
+                    music_gcs_object=music_gcs_obj,
+                    is_muted=False,
+                )
+            }
+        )
+        await edl_repo.save_edl(edl_with_music)
+
         # Copy artifacts to docs/artifacts or temp for preservation
         out_dir = Path("docs/acceptance_artifacts")
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -297,7 +391,6 @@ async def run_milestone():
         (out_dir / "voiceover_preview.mp4").write_bytes(voiceover_preview_path.read_bytes())
         (out_dir / "lyria_music.wav").write_bytes(music_bytes)
         print(f"Saved artifacts to {out_dir}/")
-
     print("\n==================================================")
     print("IRIS QA AUDIT VERDICT")
     print("==================================================")

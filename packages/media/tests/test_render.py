@@ -368,3 +368,85 @@ def test_render_broll_placement_isolates_audio_and_trims_duration(synthetic_5s_v
     )
     assert fake_res.artifact_type == ArtifactType.BROLL_PREVIEW
     assert fake_res.duration_ms == 5000
+
+
+def test_render_final_mix_with_cuts_preserves_edited_timeline_duration(synthetic_5s_video: Path, tmp_path: Path):
+    """Verify Final Mix strictly preserves EDL cut duration (~3s) despite 10s music track."""
+    renderer = FFmpegRenderService()
+    now = datetime.now(timezone.utc)
+    cut = CutInstruction(
+        cut_id="cut_01",
+        decision_id="dec_01",
+        decision_type=EditorDecisionType.TRIM_PAUSE,
+        transcript_start_word=1,
+        transcript_end_word=2,
+        requested_start_ms=1000,
+        requested_end_ms=3000,
+        safe_start_ms=1000,
+        safe_end_ms=3000,
+        removed_duration_ms=2000,
+        left_anchor="hello",
+        right_anchor="world",
+        transition_ms=20,
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="clean silence boundary",
+        confidence=0.98,
+    )
+    edl = EditDecisionList(
+        edl_id="edl_final_mix_cut_test",
+        production_id="prod_fm_cut",
+        source_duration_ms=5000,
+        cuts=[cut],
+        created_at=now,
+    )
+
+    # Create 10s synthetic music WAV file
+    music_path = tmp_path / "music_10s.wav"
+    cmd = [
+        "ffmpeg", "-y", "-v", "error",
+        "-f", "lavfi", "-i", "sine=frequency=440:duration=10",
+        "-ar", "24000", "-ac", "1",
+        str(music_path),
+    ]
+    subprocess.run(cmd, check=True)
+
+    # Create 3s synthetic voiceover WAV file (matching 3000ms edited target duration)
+    narr_path = tmp_path / "voiceover_3s.wav"
+    cmd_narr = [
+        "ffmpeg", "-y", "-v", "error",
+        "-f", "lavfi", "-i", "sine=frequency=880:duration=3",
+        "-ar", "24000", "-ac", "1",
+        str(narr_path),
+    ]
+    subprocess.run(cmd_narr, check=True)
+
+    out_path = tmp_path / "final_mix_cut.mp4"
+    res = renderer.render_final_mix(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        music_audio_path=music_path,
+        narration_audio_path=narr_path,
+        speech_intervals_ms=[(500, 1500)],
+        output_path=out_path,
+        music_volume_db=-24.0,
+        music_ducking_db=-14.0,
+    )
+
+    assert res.output_path.exists()
+    assert res.artifact_type == ArtifactType.FINAL_MIX
+    # Duration MUST match EDL target duration (3000ms = 5000ms - 2000ms cut), not 5000ms source or 10000ms music!
+    assert abs(res.duration_ms - 3000) <= 200
+    assert res.video_codec == "h264"
+    assert res.audio_codec == "aac"
+
+    # Verify with FakeRenderService as well
+    fake = FakeRenderService()
+    fake_res = fake.render_final_mix(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        music_audio_path=music_path,
+        narration_audio_path=narr_path,
+        speech_intervals_ms=[(500, 1500)],
+    )
+    assert fake_res.artifact_type == ArtifactType.FINAL_MIX
+    assert fake_res.duration_ms == 3000

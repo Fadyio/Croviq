@@ -22,7 +22,7 @@ from croviq_api.productions.render_repository import RenderRepository
 from croviq_api.productions.repository import ProductionRepository
 from croviq_api.productions.transcript_repository import TranscriptRepository
 from croviq_domain.channel_provider import SampleChannelDataProvider
-from croviq_domain.edl import EditDecisionList
+from croviq_domain.edl import EditDecisionList, map_source_time_to_edited
 from croviq_domain.editorial import (
     AgentActivity,
     EditorDecision,
@@ -377,8 +377,8 @@ class EditorialService:
                     source_path=source_path,
                     edl=edl,
                     broll_path=broll_path,
-                    coverage_start_ms=start_ms,
-                    coverage_end_ms=end_ms,
+                    coverage_start_ms=map_source_time_to_edited(start_ms, edl),
+                    coverage_end_ms=map_source_time_to_edited(end_ms, edl),
                     output_path=preview_path,
                 )
                 await _save_rendered_preview(
@@ -459,11 +459,14 @@ class EditorialService:
                     object_name=production.source_media.gcs_object,
                     target_path=source_path,
                 )
-                total_samples = int(24_000 * edl.source_duration_ms / 1000)
+                ed_start_ms = map_source_time_to_edited(start_ms, edl)
+                ed_end_ms = map_source_time_to_edited(end_ms, edl)
+                total_samples = int(24_000 * edl.estimated_target_duration_ms / 1000)
                 track = bytearray(total_samples * 2)
-                start_byte = int(24_000 * start_ms / 1000) * 2
+                start_byte = int(24_000 * ed_start_ms / 1000) * 2
                 copy_length = min(len(pcm_bytes), len(track) - start_byte)
-                track[start_byte:start_byte + copy_length] = pcm_bytes[:copy_length]
+                if copy_length > 0 and start_byte < len(track):
+                    track[start_byte:start_byte + copy_length] = pcm_bytes[:copy_length]
                 with wave.open(str(narration_path), "wb") as wav_file:
                     wav_file.setnchannels(1)
                     wav_file.setsampwidth(2)
@@ -474,7 +477,7 @@ class EditorialService:
                     source_path=source_path,
                     edl=edl,
                     narration_audio_path=narration_path,
-                    speech_intervals_ms=[(start_ms, end_ms)],
+                    speech_intervals_ms=[(ed_start_ms, ed_end_ms)],
                     output_path=preview_path,
                 )
                 artifact = await _save_rendered_preview(
@@ -528,7 +531,8 @@ class EditorialService:
                     edl=edl,
                     music_audio_path=music_path,
                     speech_intervals_ms=[
-                        (segment.start_ms, segment.end_ms) for segment in transcript.segments
+                        (map_source_time_to_edited(segment.start_ms, edl), map_source_time_to_edited(segment.end_ms, edl))
+                        for segment in transcript.segments
                     ],
                     output_path=preview_path,
                     volume_db=volume_db,
