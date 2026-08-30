@@ -281,8 +281,9 @@ import {
 }
 
 resource "google_secret_manager_secret" "youtube_oauth_client_secret" {
-  project   = var.project_id
-  secret_id = "youtube-oauth-client-secret"
+  project    = var.project_id
+  secret_id  = "youtube-oauth-client-secret"
+  depends_on = [google_project_service.required_services]
 
   replication {
     auto {}
@@ -292,8 +293,6 @@ resource "google_secret_manager_secret" "youtube_oauth_client_secret" {
     environment = var.environment
     managed_by  = "terraform"
   }
-
-  depends_on = [google_project_service.required_services]
 }
 
 resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_secret_accessor" {
@@ -310,8 +309,9 @@ import {
 }
 
 resource "google_secret_manager_secret" "youtube_oauth_client_id" {
-  project   = var.project_id
-  secret_id = "youtube-oauth-client-id"
+  project    = var.project_id
+  secret_id  = "youtube-oauth-client-id"
+  depends_on = [google_project_service.required_services]
 
   replication {
     auto {}
@@ -321,8 +321,6 @@ resource "google_secret_manager_secret" "youtube_oauth_client_id" {
     environment = var.environment
     managed_by  = "terraform"
   }
-
-  depends_on = [google_project_service.required_services]
 }
 
 resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_client_id_accessor" {

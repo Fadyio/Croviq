@@ -120,12 +120,12 @@ def test_youtube_oauth_secret_manager_wiring_and_groq_removal() -> None:
     assert 'member  = "serviceAccount:${google_service_account.github_deployer.email}"' in content
 
     secret_resource = re.search(
-        r'resource\s+"google_secret_manager_secret"\s+"youtube_oauth_client_secret"\s*{(.*?)\n}',
+        r'resource\s+"google_secret_manager_secret"\s+"youtube_oauth_client_secret"\s*\{(.*?)\n\}',
         content,
         re.DOTALL,
     )
     assert secret_resource is not None
-    assert 'secret_id = "youtube-oauth-client-secret"' in secret_resource.group(1)
+    assert 'secret_id  = "youtube-oauth-client-secret"' in secret_resource.group(1) or 'secret_id = "youtube-oauth-client-secret"' in secret_resource.group(1)
     assert "depends_on = [google_project_service.required_services]" in secret_resource.group(1)
 
     assert 'resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_secret_accessor"' in content
@@ -134,14 +134,13 @@ def test_youtube_oauth_secret_manager_wiring_and_groq_removal() -> None:
     assert 'member    = "serviceAccount:${google_service_account.api_runtime.email}"' in content
 
     client_id_resource = re.search(
-        r'resource\s+"google_secret_manager_secret"\s+"youtube_oauth_client_id"\s*{(.*?)\n}',
+        r'resource\s+"google_secret_manager_secret"\s+"youtube_oauth_client_id"\s*\{(.*?)\n\}',
         content,
         re.DOTALL,
     )
     assert client_id_resource is not None
-    assert 'secret_id = "youtube-oauth-client-id"' in client_id_resource.group(1)
+    assert 'secret_id  = "youtube-oauth-client-id"' in client_id_resource.group(1) or 'secret_id = "youtube-oauth-client-id"' in client_id_resource.group(1)
     assert "depends_on = [google_project_service.required_services]" in client_id_resource.group(1)
-
     assert 'resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_client_id_accessor"' in content
     assert 'secret_id = google_secret_manager_secret.youtube_oauth_client_id.id' in content
 
