@@ -412,10 +412,18 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                     {segmentWords.length > 0
                       ? segmentWords.map((word, wordPosition) => {
                           const isActive = word.index === activeWordIndex;
+                          const decisionsAtWord = segmentDecisions.filter(
+                            (decision) =>
+                              word.index >= decision.transcript_start_word &&
+                              word.index <= decision.transcript_end_word,
+                          );
+                          const wordDecision = decisionsAtWord[0];
+                          const isSelectedDecision = decisionsAtWord.some(
+                            (decision) => decision.decision_id === selectedDecisionId,
+                          );
                           const { isCut, cut } = isWordInExecutableCut(word, edl);
                           const isEditedMode = mode !== "original";
                           const isRemovedInEdited = isCut && isEditedMode;
-
                           // Check if there is an inter-word pause cut immediately preceding this word
                           const prevWord = wordPosition > 0 ? segmentWords[wordPosition - 1] : null;
                           const precedingCut = prevWord
@@ -451,6 +459,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                             }
                             setRemovedWordNotice(null);
                             selectRange(wordSelection);
+                            if (wordDecision) onSelectDecision(wordDecision);
                           };
 
                           return (
@@ -485,7 +494,9 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                                         ? "text-text-primary hover:bg-surface-3 border-b border-dotted border-danger/50"
                                         : selectedRange?.id === wordSelection.id
                                           ? "bg-primary/20 text-text-primary"
-                                          : "hover:bg-surface-3 hover:text-text-primary"
+                                          : isSelectedDecision
+                                            ? "bg-surface-3 text-text-primary"
+                                            : "hover:bg-surface-3 hover:text-text-primary"
                                 }`}
                                 aria-label={`${word.text}, ${formatModeTimecode(word.start_ms)}`}
                                 aria-pressed={selectedRange?.id === wordSelection.id}

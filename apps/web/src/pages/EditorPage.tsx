@@ -874,7 +874,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             mediaOutputs={mediaOutputs}
             hasStudioVoice={mediaOutputs.voiceover.available}
             hasFinalMix={mediaOutputs.final_mix.available}
-            hasRenderedPreview={mediaOutputs.edited.available}
           />
           {editorialRun?.status !== "failed" &&
             !failedProcessingStage &&
