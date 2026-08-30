@@ -153,7 +153,7 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({ agentId,
         >
           <CroviqLogo height={24} className="h-6 w-auto" />
         </button>
-        <div className="hidden md:flex items-center gap-3 border-l border-border-subtle pl-3">
+        <div className="hidden md:flex items-center gap-3">
           <span className="max-w-[130px] truncate text-xs text-text-secondary">{user?.email}</span>
           <button
             type="button"
