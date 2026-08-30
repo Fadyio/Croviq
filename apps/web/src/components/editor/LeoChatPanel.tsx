@@ -1,18 +1,10 @@
 import { Loader2, MessageSquare, Send, Sparkles, User, Wrench, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import leoAvatar from "../../assets/agents/leo.webp";
-import { type EditDecisionList, formatTimecode } from "../../lib/edl-adapter";
+import { type EditDecisionList, type EditorSelection, formatTimecode } from "../../lib/edl-adapter";
 import { MarkdownRenderer } from "../MarkdownRenderer";
 
-export interface LeoChatContext {
-  kind: "element" | "range";
-  label: string;
-  startMs: number;
-  endMs: number;
-  elementType?: string;
-  elementId?: string;
-}
-
+export type LeoChatContext = EditorSelection;
 interface ToolExecution {
   tool_name?: string;
   name?: string;
@@ -56,11 +48,129 @@ const QUICK_PROMPTS = [
   "Add B-roll here",
 ];
 
-const contextLabel = (context: LeoChatContext): string => {
-  const prefix = context.kind === "range" ? "Selected range" : "Selected";
-  return `${prefix}: ${formatTimecode(context.startMs)} – ${formatTimecode(context.endMs)} · ${context.label}`;
-};
+const renderSelectionAttachment = (
+  selection: EditorSelection,
+  onClear: () => void,
+): React.ReactNode => {
+  const isCut = selection.selection_type === "CUT";
+  const isPoint = selection.selection_type === "POINT";
+  const isWord = selection.selection_type === "TRANSCRIPT_WORD";
+  const isSegment = selection.selection_type === "TRANSCRIPT_SEGMENT";
+  const isChapter = selection.selection_type === "CHAPTER";
 
+  const sourceDurationSec = ((selection.source_end_ms - selection.source_start_ms) / 1000).toFixed(
+    1,
+  );
+  const removedDurationSec = selection.removed_duration_ms
+    ? (selection.removed_duration_ms / 1000).toFixed(1)
+    : null;
+
+  return (
+    <div
+      className="mb-2 rounded-lg border border-primary/30 bg-primary/10 p-2 text-text-primary shadow-xs transition-all"
+      data-testid="leo-chat-selection-attachment"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-start gap-1.5">
+          <Sparkles className="mt-0.5 size-3 shrink-0 text-primary" aria-hidden="true" />
+          <div className="min-w-0 flex-1 space-y-0.5 text-[10px]">
+            {isCut ? (
+              <>
+                <div className="flex items-center gap-1.5 font-semibold text-danger">
+                  <span>Selected cut</span>
+                  <span className="font-mono tabular-nums text-text-muted">
+                    {formatTimecode(selection.source_start_ms)} →{" "}
+                    {formatTimecode(selection.source_end_ms)}
+                  </span>
+                  {removedDurationSec && (
+                    <span className="rounded bg-danger/15 px-1 py-0.2 text-[9px] font-medium text-danger">
+                      {removedDurationSec}s removed
+                    </span>
+                  )}
+                </div>
+                {selection.cut_reason && (
+                  <p className="truncate text-text-secondary">
+                    <span className="text-text-muted">Reason: </span>
+                    {selection.cut_reason}
+                  </p>
+                )}
+                {selection.transcript_text && (
+                  <p className="truncate italic text-text-muted">
+                    &ldquo;{selection.transcript_text}&rdquo;
+                  </p>
+                )}
+              </>
+            ) : isPoint ? (
+              <>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-semibold text-primary">
+                  <span>Selected point</span>
+                  {selection.coordinate_space === "EDITED" && selection.edited_start_ms !== null ? (
+                    <span className="font-mono tabular-nums text-text-secondary">
+                      Edited {formatTimecode(selection.edited_start_ms)}{" "}
+                      <span className="text-text-muted">&middot;</span> Source{" "}
+                      {formatTimecode(selection.source_start_ms)}
+                    </span>
+                  ) : (
+                    <span className="font-mono tabular-nums text-text-secondary">
+                      Source {formatTimecode(selection.source_start_ms)}
+                      {selection.edited_start_ms !== null && (
+                        <span className="text-text-muted">
+                          {" "}
+                          (Edited {formatTimecode(selection.edited_start_ms)})
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                {selection.transcript_text && (
+                  <p className="truncate italic text-text-muted">
+                    &ldquo;{selection.transcript_text}&rdquo;
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5 font-semibold text-primary">
+                  <span>
+                    {isChapter
+                      ? "Selected chapter"
+                      : isWord
+                        ? "Selected word"
+                        : isSegment
+                          ? "Selected transcript"
+                          : "Selected range"}
+                  </span>
+                  <span className="font-mono tabular-nums text-text-secondary">
+                    {formatTimecode(selection.source_start_ms)} →{" "}
+                    {formatTimecode(selection.source_end_ms)}
+                  </span>
+                  {selection.source_end_ms > selection.source_start_ms && (
+                    <span className="text-text-muted">({sourceDurationSec}s)</span>
+                  )}
+                </div>
+                {selection.transcript_text && (
+                  <p className="line-clamp-2 italic text-text-secondary">
+                    &ldquo;{selection.transcript_text}&rdquo;
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClear}
+          className="shrink-0 rounded p-1 text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+          aria-label="Clear selection"
+          title="Clear selection"
+          data-testid="btn-clear-selection"
+        >
+          <X className="size-3" />
+        </button>
+      </div>
+    </div>
+  );
+};
 const toolDisplayName = (tool: ToolExecution): string => {
   const raw = String(tool.tool_name || tool.name || tool.tool || "Editor tool");
   return raw.replaceAll("_", " ").replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -151,18 +261,18 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
           current_playhead_ms: Math.round(currentPlayheadMs),
           ...(context
             ? {
-                selected_range_ms: [Math.round(context.startMs), Math.round(context.endMs)],
-                ...(context.kind === "element"
-                  ? {
-                      selected_element: {
-                        type: context.elementType || "timeline",
-                        id: context.elementId || "selection",
-                        label: context.label,
-                        start_ms: Math.round(context.startMs),
-                        end_ms: Math.round(context.endMs),
-                      },
-                    }
-                  : {}),
+                editor_context: context,
+                selected_range_ms: [
+                  Math.round(context.source_start_ms),
+                  Math.round(context.source_end_ms),
+                ],
+                selected_element: {
+                  type: context.selection_type.toLowerCase(),
+                  id: context.cut_id || context.chapter_id || "selection",
+                  label: context.label || "selection",
+                  start_ms: Math.round(context.source_start_ms),
+                  end_ms: Math.round(context.source_end_ms),
+                },
               }
             : {}),
         }),
@@ -316,20 +426,7 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
           ))}
         </div>
 
-        {context && (
-          <div className="mb-2 flex items-start gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5 text-[9px] leading-relaxed text-text-secondary">
-            <Sparkles className="mt-0.5 size-2.5 shrink-0 text-primary" aria-hidden="true" />
-            <span className="min-w-0 flex-1">{contextLabel(context)}</span>
-            <button
-              type="button"
-              onClick={onClearContext}
-              className="shrink-0 rounded p-0.5 text-text-muted hover:bg-surface-3 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-              aria-label="Remove selected timeline context"
-            >
-              <X className="size-2.5" />
-            </button>
-          </div>
-        )}
+        {context && renderSelectionAttachment(context, onClearContext)}
 
         <form
           className="flex items-end gap-2"

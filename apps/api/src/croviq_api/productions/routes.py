@@ -91,7 +91,7 @@ from croviq_domain.transcript import (
     ScriptCorrectionChangeType,
 )
 from croviq_domain.edl import BackgroundMusicMix, VoiceoverSegment, map_source_time_to_edited
-from croviq_domain.editorial import EditorVoiceMode
+from croviq_domain.editorial import EditorSelectionContext, EditorVoiceMode
 from croviq_api.productions.release_review_repository import (
     ReleaseReviewRepository,
     get_release_review_repository,
@@ -228,10 +228,10 @@ class ProductionChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message: str = Field(..., min_length=1, max_length=10_000)
+    editor_context: EditorSelectionContext | None = None
     selected_range_ms: tuple[int, int] | None = None
     selected_element: ProductionChatSelectedElement | None = None
     current_playhead_ms: int | None = Field(default=None, ge=0)
-
 
 class ProductionChatResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -1206,6 +1206,7 @@ async def chat_with_leo(
         current_user=current_user,
         chat_service=chat_service,
         message=payload.message,
+        editor_context=payload.editor_context,
         current_playhead_ms=payload.current_playhead_ms,
         selected_range=list(payload.selected_range_ms) if payload.selected_range_ms else None,
         selected_element=(

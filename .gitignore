@@ -42,3 +42,8 @@ apps/web/production-*.png
 .coverage
 coverage/
 *.pyc
+
+# Screenshots and local acceptance test artifacts
+docs/screenshots/
+apps/web/e2e/screenshots/
+download/

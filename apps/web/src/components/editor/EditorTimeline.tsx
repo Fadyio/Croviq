@@ -26,6 +26,7 @@ interface EditorTimelineProps {
   onSelectBlock: (block: TimelineBlock | null) => void;
   onSeek: (targetMs: number) => void;
   onSelectRange?: (startMs: number, endMs: number) => void;
+  onSelectPoint?: (targetMs: number) => void;
   isPlaying?: boolean;
   className?: string;
 }
@@ -38,6 +39,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   onSelectBlock,
   onSeek,
   onSelectRange,
+  onSelectPoint,
   className = "",
 }) => {
   const _containerRef = useRef<HTMLDivElement>(null);
@@ -143,7 +145,11 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
       const endMs = latestScrubMsRef.current;
       scrubStartMsRef.current = null;
       latestScrubMsRef.current = null;
-      if (startMs === null || endMs === null || Math.abs(endMs - startMs) < 250) return;
+      if (startMs === null) return;
+      if (endMs === null || Math.abs(endMs - startMs) < 250) {
+        onSelectPoint?.(startMs);
+        return;
+      }
       const range: [number, number] = [Math.min(startMs, endMs), Math.max(startMs, endMs)];
       setSelectedTimeRange(range);
       onSelectRange?.(range[0], range[1]);
@@ -157,7 +163,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isScrubbing, onSeek, onSelectRange, pixelsToMs]);
+  }, [isScrubbing, onSeek, onSelectRange, onSelectPoint, pixelsToMs]);
 
   // Generate ruler tick marks based on zoom level
   const effectiveZoomScale =

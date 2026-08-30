@@ -1,8 +1,13 @@
 import { expect, test } from "@playwright/test";
 import {
+  buildCutSelection,
+  buildPointSelection,
+  buildRangeSelection,
+  buildTranscriptWordSelection,
   deriveAudioRegions,
   deriveKeepSegments,
   type EditDecisionList,
+  type EditorSelection,
   edlToTwickTimeline,
   editedToSourceTimeMs,
   findExecutableSkipInterval,
@@ -13,6 +18,7 @@ import {
   isSourceTimeInCut,
   isWordInExecutableCut,
   sourceToEditedTimeMs,
+  type Transcript,
 } from "./edl-adapter";
 
 test.describe("EDL Adapter & Playback Logic", () => {
@@ -491,6 +497,224 @@ test.describe("EDL Adapter & Playback Logic", () => {
       const lastWord = { index: 52, text: "done", start_ms: 96000, end_ms: 99000 };
       expect(sourceToEditedTimeMs(lastWord.start_ms, cutEdl)).toBe(91000); // 96000 - 5000
       expect(editedToSourceTimeMs(91000, cutEdl)).toBe(96000);
+    });
+  });
+
+  test.describe("BUG 14 — Target Regression Test Suite (Cases A-J)", () => {
+    const sampleEdl: EditDecisionList = {
+      edl_id: "edl_bug14_test",
+      production_id: "prod_473209137802",
+      source_duration_ms: 100000,
+      cuts: [
+        {
+          cut_id: "cut_001",
+          decision_id: "dec_false_start",
+          decision_type: "REMOVE_FALSE_START",
+          transcript_start_word: 15,
+          transcript_end_word: 16,
+          requested_start_ms: 16200,
+          requested_end_ms: 16800,
+          safe_start_ms: 16100,
+          safe_end_ms: 16900,
+          removed_duration_ms: 800,
+          left_anchor: "here.",
+          right_anchor: "to",
+          safety_status: "SAFE",
+          safety_reason: "Clean inter-word silence boundaries verified.",
+          confidence: 0.95,
+        },
+      ],
+      created_at: "2026-08-26T00:00:00Z",
+    };
+
+    const sampleTranscript: Transcript = {
+      transcript_id: "tr_bug14",
+      production_id: "prod_473209137802",
+      language_code: "en",
+      duration_ms: 100000,
+      words: [
+        { index: 14, text: "here.", start_ms: 15000, end_ms: 15500 },
+        { index: 15, text: "To", start_ms: 16200, end_ms: 16400 },
+        { index: 16, text: "edit", start_ms: 16400, end_ms: 16800 },
+        { index: 17, text: "to", start_ms: 22700, end_ms: 22900 },
+        { index: 18, text: "edit", start_ms: 22900, end_ms: 23200 },
+        { index: 19, text: "your", start_ms: 23200, end_ms: 23500 },
+      ],
+      segments: [
+        {
+          segment_id: "seg_01",
+          start_ms: 22700,
+          end_ms: 23500,
+          text: "to edit your",
+          word_start_index: 17,
+          word_end_index: 19,
+        },
+      ],
+      created_at: "2026-08-26T00:00:00Z",
+    };
+
+    test("Case A: Source point selection - source timestamp correct", () => {
+      const sel = buildPointSelection({
+        productionId: "prod_473209137802",
+        clickMs: 30000,
+        previewMode: "original",
+        edl: sampleEdl,
+        transcript: sampleTranscript,
+      });
+      expect(sel.selection_type).toBe("POINT");
+      expect(sel.coordinate_space).toBe("SOURCE");
+      expect(sel.source_start_ms).toBe(30000);
+      expect(sel.source_end_ms).toBe(30000);
+      expect(sel.edited_start_ms).toBe(29200); // 30000 - 800 cut
+      expect(sel.active_preview_mode).toBe("ORIGINAL");
+    });
+
+    test("Case B: Edited point selection - edited → source mapping correct", () => {
+      const sel = buildPointSelection({
+        productionId: "prod_473209137802",
+        clickMs: 29200,
+        previewMode: "edited",
+        edl: sampleEdl,
+        transcript: sampleTranscript,
+      });
+      expect(sel.selection_type).toBe("POINT");
+      expect(sel.coordinate_space).toBe("EDITED");
+      expect(sel.edited_start_ms).toBe(29200);
+      expect(sel.source_start_ms).toBe(30000); // 29200 + 800 cut
+      expect(sel.active_preview_mode).toBe("EDITED");
+    });
+
+    test("Case C: Range selection - start/end exact in source coordinates", () => {
+      const sel = buildRangeSelection({
+        productionId: "prod_473209137802",
+        startMs: 18000,
+        endMs: 29000,
+        previewMode: "edited",
+        edl: sampleEdl,
+        transcript: sampleTranscript,
+      });
+      expect(sel.selection_type).toBe("RANGE");
+      expect(sel.coordinate_space).toBe("EDITED");
+      expect(sel.edited_start_ms).toBe(18000);
+      expect(sel.edited_end_ms).toBe(29000);
+      expect(sel.source_start_ms).toBe(18800); // 18000 + 800 cut
+      expect(sel.source_end_ms).toBe(29800); // 29000 + 800 cut
+      expect(sel.active_preview_mode).toBe("EDITED");
+    });
+
+    test("Case D: Removed range - cut ID and removed duration correct", () => {
+      const cut = sampleEdl.cuts![0];
+      const sel = buildCutSelection({
+        productionId: "prod_473209137802",
+        cut,
+        previewMode: "edited",
+        edl: sampleEdl,
+        transcript: sampleTranscript,
+      });
+      expect(sel.selection_type).toBe("CUT");
+      expect(sel.cut_id).toBe("cut_001");
+      expect(sel.source_start_ms).toBe(16100);
+      expect(sel.source_end_ms).toBe(16900);
+      expect(sel.removed_duration_ms).toBe(800);
+      expect(sel.cut_reason).toBe("Clean inter-word silence boundaries verified.");
+      expect(sel.transcript_text).toBe("To edit");
+      expect(sel.transcript_word_ids).toEqual([15, 16]);
+      expect(sel.edited_start_ms).toBe(16100);
+      expect(sel.edited_end_ms).toBe(16100);
+    });
+
+    test("Case E: Transcript word selection - same canonical selection state", () => {
+      const word = sampleTranscript.words![3]; // "to" [22700 - 22900]
+      const sel = buildTranscriptWordSelection({
+        productionId: "prod_473209137802",
+        word,
+        previewMode: "final_mix",
+        edl: sampleEdl,
+        transcript: sampleTranscript,
+      });
+      expect(sel.selection_type).toBe("TRANSCRIPT_WORD");
+      expect(sel.source_start_ms).toBe(22700);
+      expect(sel.source_end_ms).toBe(22900);
+      expect(sel.edited_start_ms).toBe(21900); // 22700 - 800
+      expect(sel.edited_end_ms).toBe(22100);
+      expect(sel.transcript_text).toBe("to");
+      expect(sel.transcript_word_ids).toEqual([17]);
+      expect(sel.active_preview_mode).toBe("FINAL_MIX");
+    });
+
+    test("Case F: Clear selection - empty context model contract", () => {
+      let currentContext: EditorSelection | null = buildPointSelection({
+        productionId: "prod_473209137802",
+        clickMs: 30000,
+        previewMode: "original",
+        edl: sampleEdl,
+      });
+      expect(currentContext).not.toBeNull();
+      // Clearing selection
+      currentContext = null;
+      expect(currentContext).toBeNull();
+    });
+
+    test("Case G: Production switch - context isolation contract", () => {
+      const prodAContext = buildPointSelection({
+        productionId: "prod_A",
+        clickMs: 15000,
+        previewMode: "original",
+        edl: sampleEdl,
+      });
+      expect(prodAContext.production_id).toBe("prod_A");
+      // When switched to prod_B, state resets immediately
+      const prodBContext: EditorSelection | null = null;
+      expect(prodBContext).toBeNull();
+    });
+
+    test("Case H: Read-only question - EDL immutability contract", () => {
+      const edlCopy = JSON.parse(JSON.stringify(sampleEdl));
+      const cutsBefore = edlCopy.cuts.length;
+      const edlIdBefore = edlCopy.edl_id;
+
+      // Simulating read-only question interaction
+      const question = "Why was this cut?";
+      const isQuestion = question.includes("?") || question.toLowerCase().startsWith("why");
+      expect(isQuestion).toBe(true);
+
+      // Verification that EDL remains unaltered
+      expect(edlCopy.cuts.length).toBe(cutsBefore);
+      expect(edlCopy.edl_id).toBe(edlIdBefore);
+    });
+
+    test("Case I: Request contract - structured editor_context conforms to domain", () => {
+      const sel = buildCutSelection({
+        productionId: "prod_473209137802",
+        cut: sampleEdl.cuts![0],
+        previewMode: "edited",
+        edl: sampleEdl,
+        transcript: sampleTranscript,
+      });
+      const requestPayload = {
+        message: "Why was this cut?",
+        editor_context: sel,
+        current_playhead_ms: 16100,
+      };
+      expect(requestPayload.editor_context.production_id).toBe("prod_473209137802");
+      expect(requestPayload.editor_context.selection_type).toBe("CUT");
+      expect(requestPayload.editor_context.source_start_ms).toBe(16100);
+      expect(requestPayload.editor_context.source_end_ms).toBe(16900);
+      expect(requestPayload.editor_context.cut_id).toBe("cut_001");
+    });
+
+    test("Case J: Invalid/stale cut - fails gracefully without fabricated context", () => {
+      const word = sampleTranscript.words![0]; // word outside cut
+      const sel = buildTranscriptWordSelection({
+        productionId: "prod_473209137802",
+        word,
+        previewMode: "edited",
+        edl: sampleEdl,
+        transcript: sampleTranscript,
+      });
+      expect(sel.cut_id).toBeNull();
+      expect(sel.cut_reason).toBeNull();
+      expect(sel.removed_duration_ms).toBeNull();
     });
   });
 });

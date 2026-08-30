@@ -431,6 +431,22 @@ class GenAIClient(ABC):
     ) -> tuple[bytes, str, int]:
         """Invoke Google Lyria (lyria-3-pro-preview or lyria-3-clip-preview) to generate instrumental background music."""
         pass
+    @abstractmethod
+    async def generate_leo_chat_reply(
+        self,
+        *,
+        message: str,
+        system_instruction: str,
+        context_prompt: str,
+        conversation_history: list[dict[str, Any]] | None = None,
+        video_uri: str | None = None,
+        mime_type: str = "video/mp4",
+        production_id: str = "unknown",
+        request_id: str = "unknown",
+    ) -> tuple[str, AgentUsageMetadata]:
+        """Invoke Leo (Video Editor) conversational reasoning with Gemini on Vertex AI."""
+        pass
+
 
 
 class GoogleGenAIClient(GenAIClient):
@@ -1347,7 +1363,63 @@ class GoogleGenAIClient(GenAIClient):
             wf.writeframes(pcm_bytes)
         wav_data = buf.getvalue()
         return wav_data, "audio/wav", clamped_duration_s * 1000
+    async def generate_leo_chat_reply(
+        self,
+        *,
+        message: str,
+        system_instruction: str,
+        context_prompt: str,
+        conversation_history: list[dict[str, Any]] | None = None,
+        video_uri: str | None = None,
+        mime_type: str = "video/mp4",
+        production_id: str = "unknown",
+        request_id: str = "unknown",
+    ) -> tuple[str, AgentUsageMetadata]:
+        from google.genai import types
 
+        client = self._get_client()
+        sys_content = f"{system_instruction}\n\nCURRENT PRODUCTION CONTEXT:\n{context_prompt}"
+
+        contents: list[types.Content] = []
+        if conversation_history:
+            for msg in conversation_history[-6:]:
+                role = "model" if msg.get("role") == "assistant" else "user"
+                contents.append(types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(text=msg.get("content", ""))],
+                ))
+
+        user_parts: list[types.Part] = []
+        if video_uri and video_uri.startswith("gs://"):
+            try:
+                user_parts.append(types.Part.from_uri(file_uri=video_uri, mime_type=mime_type))
+            except Exception as e:
+                logger.warning("Could not attach video URI to Leo chat: %s", e)
+
+        user_parts.append(types.Part.from_text(text=message))
+        contents.append(types.Content(role="user", parts=user_parts))
+
+        config = types.GenerateContentConfig(
+            system_instruction=sys_content,
+            temperature=0.2,
+            max_output_tokens=2048,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+
+        start_time = time.perf_counter()
+        response = await client.aio.models.generate_content(
+            model=self._model_id,
+            contents=contents,
+            config=config,
+        )
+        latency_ms = (time.perf_counter() - start_time) * 1000
+
+        text = response.text.strip() if response.text else "I inspected the timeline and current edit decisions."
+        usage = AgentUsageMetadata(
+            input_tokens=getattr(response.usage_metadata, "prompt_token_count", 0) or 0,
+            output_tokens=getattr(response.usage_metadata, "candidates_token_count", 0) or 0,
+            latency_ms=int(latency_ms),
+        )
 
 
 class FakeGenAIClient(GenAIClient):
@@ -1886,3 +1958,68 @@ class FakeGenAIClient(GenAIClient):
             wf.writeframes(pcm_bytes)
         wav_data = buf.getvalue()
         return wav_data, "audio/wav", clamped_duration_s * 1000
+    async def generate_leo_chat_reply(
+        self,
+        *,
+        message: str,
+        system_instruction: str,
+        context_prompt: str,
+        conversation_history: list[dict[str, Any]] | None = None,
+        video_uri: str | None = None,
+        mime_type: str = "video/mp4",
+        production_id: str = "unknown",
+        request_id: str = "unknown",
+    ) -> tuple[str, AgentUsageMetadata]:
+        self.call_history.append({
+            "agent": "leo_chat",
+            "production_id": production_id,
+            "message": message,
+            "video_uri": video_uri,
+        })
+        msg_lower = message.lower()
+
+        is_cleared = "no point or range is currently selected" in context_prompt.lower() or "selection is empty/cleared" in context_prompt.lower()
+
+        selected_text = ""
+        if 'Selected Transcript: "' in context_prompt:
+            selected_text = context_prompt.split('Selected Transcript: "', 1)[1].split('"', 1)[0]
+
+        cut_info = ""
+        if "Cut ID: " in context_prompt:
+            cut_id = context_prompt.split("Cut ID: ", 1)[1].split("\n", 1)[0].strip()
+            reason = ""
+            if "Cut Reason / Decision: " in context_prompt:
+                reason = context_prompt.split("Cut Reason / Decision: ", 1)[1].split("\n", 1)[0].strip()
+            cut_info = f"Cut {cut_id} ({reason})" if reason else f"Cut {cut_id}"
+
+        if is_cleared and any(w in msg_lower for w in ["what section", "what did i select", "what is selected", "which section"]):
+            reply = "No section is currently selected on the timeline. Click or drag any region on the timeline or transcript to select it."
+        elif any(w in msg_lower for w in ["why was this cut", "why did you cut", "why cut", "why remove", "why did you remove", "why was it cut"]):
+            if cut_info:
+                reply = f"This section was cut ({cut_info}) to eliminate dead air or false start phrasing while keeping clean word transitions."
+            else:
+                reply = "This cut removed a stumble and pause to maintain a steady, concise tutorial pace."
+        elif any(w in msg_lower for w in ["what's happening", "what is happening", "what is this section", "what happened"]):
+            if selected_text:
+                reply = f"In this section, you are explaining: \"{selected_text}\", demonstrating the technical setup on screen."
+            else:
+                reply = "In this section, you are walking through the screen demonstration and explaining the technical workflow steps."
+        elif any(w in msg_lower for w in ["tighter", "too slow", "faster", "tighten", "pace", "pacing"]):
+            if selected_text:
+                reply = f"The selected speech (\"{selected_text}\") is relatively clear, but we could tighten the surrounding breath pause by ~0.4s for a snappier delivery."
+            else:
+                reply = "This section has a solid cadence, but trimming the trailing pause could make the transition to the next step crisper."
+        elif any(w in msg_lower for w in ["b-roll", "broll", "visual", "coverage"]):
+            reply = "Adding B-roll visual coverage here would work well to illustrate the concepts while keeping your original spoken explanation intact."
+        elif any(w in msg_lower for w in ["why did you leave", "why keep", "why retain"]):
+            if selected_text:
+                reply = f"I kept this part (\"{selected_text}\") because it provides essential technical context for the tutorial walkthrough."
+            else:
+                reply = "I preserved this section because it provides essential context for the technical demonstration."
+        else:
+            if selected_text:
+                reply = f"Looking at this selected section (\"{selected_text}\"), the pacing is steady and aligned with the screen demonstration."
+            else:
+                reply = "I inspected the timeline at your selected position. Everything is cleanly aligned with the current editorial plan."
+        usage = AgentUsageMetadata(input_tokens=100, output_tokens=50, latency_ms=5)
+        return reply, usage

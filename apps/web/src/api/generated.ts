@@ -523,6 +523,7 @@ export interface paths {
 
 export interface components {
   schemas: {
+    ActivePreviewMode: "ORIGINAL" | "EDITED" | "VOICEOVER" | "FINAL_MIX";
     AgentActivity: {
       /** Unique identifier for the activity item */
       activity_id: string;
@@ -911,6 +912,7 @@ export interface components {
     CodeExecutionRequest: {
       analysis_goal?: string;
     };
+    CoordinateSpace: "SOURCE" | "EDITED";
     CorrectedScriptResponse: {
       /** Unique production identifier */
       production_id: string;
@@ -1206,6 +1208,26 @@ export interface components {
       /** Overall confidence in the proposal */
       overall_confidence: number;
     };
+    EditorSelectionContext: {
+      production_id: string;
+      selection_type: components["schemas"]["EditorSelectionType"];
+      coordinate_space: components["schemas"]["CoordinateSpace"];
+      source_start_ms: number;
+      source_end_ms: number;
+      edited_start_ms?: number | null;
+      edited_end_ms?: number | null;
+      transcript_text?: string | null;
+      transcript_word_ids?: number[] | null;
+      cut_id?: string | null;
+      chapter_id?: string | null;
+      active_edl_id?: string | null;
+      active_preview_mode?: components["schemas"]["ActivePreviewMode"];
+      label?: string | null;
+      cut_reason?: string | null;
+      removed_duration_ms?: number | null;
+    };
+    EditorSelectionType:
+      "POINT" | "RANGE" | "TRANSCRIPT_WORD" | "TRANSCRIPT_SEGMENT" | "CUT" | "CHAPTER";
     EditorVoiceMode:
       "ORIGINAL_VOICE" | "ORIGINAL_AUDIO" | "REPLICATED_MY_VOICE" | "PREBUILT_STUDIO_VOICE";
     EditorialRun: {
@@ -1217,6 +1239,10 @@ export interface components {
       status?: components["schemas"]["EditorialRunStatus"];
       /** Identifier of the generated EditorProposal record */
       editor_proposal_id?: string | null;
+      /** Identifier of the generated DirectorReview record */
+      director_review_id?: string | null;
+      /** Identifier of the generated EditorSelfReview record */
+      self_review_id?: string | null;
       /** Run start timestamp in UTC */
       started_at?: string;
       /** Run completion timestamp in UTC */
@@ -1494,6 +1520,7 @@ export interface components {
     };
     ProductionChatRequest: {
       message: string;
+      editor_context?: components["schemas"]["EditorSelectionContext"] | null;
       selected_range_ms?: unknown[] | null;
       selected_element?: components["schemas"]["ProductionChatSelectedElement"] | null;
       current_playhead_ms?: number | null;

@@ -124,8 +124,12 @@ jobs:
           git diff --exit-code openapi.json apps/web/src/api/generated.ts
 
   e2e-browser-test:
-    name: Browser E2E
+    name: Browser E2E (${{ matrix.shard }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/2", "2/2"]
 
     steps:
       - name: Checkout repository
@@ -140,8 +144,20 @@ jobs:
           node-version: 22
           cache: "pnpm"
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --directory packages/domain --frozen
+          uv sync --directory packages/observability --frozen
+          uv sync --directory packages/media --frozen
+          uv sync --directory packages/agents --frozen
+          uv sync --directory apps/api --frozen
 
       - name: Get Playwright version
         id: playwright-version
@@ -162,19 +178,29 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm --filter @croviq/web exec playwright install-deps chromium
 
-      - name: Start Docker Compose environment
-        run: docker compose up -d --build
+      - name: Start Backend API and Frontend Web servers
+        env:
+          ENVIRONMENT: development
+          PORT: 8080
+          CROVIQ_ALLOWED_EMAILS: demo@croviq.app,fadynagh10@gmail.com
+          API_PROXY_TARGET: http://127.0.0.1:8080
+          VITE_FIREBASE_API_KEY: mock-firebase-api-key-for-local-testing
+          VITE_FIREBASE_AUTH_DOMAIN: croviq-506602.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: croviq-506602
+        run: |
+          nohup uv run --directory apps/api uvicorn croviq_api.main:app --host 127.0.0.1 --port 8080 > /tmp/api.log 2>&1 &
+          nohup pnpm --filter @croviq/web dev --host 127.0.0.1 --port 5173 > /tmp/web.log 2>&1 &
 
       - name: Wait for services to be ready
         run: |
-          echo "Waiting for http://localhost:5173 and http://localhost:8080/api/health..."
-          for i in {1..60}; do
+          echo "Waiting for http://127.0.0.1:5173 and http://127.0.0.1:8080/api/health..."
+          for i in {1..30}; do
             web_ok=0
             api_ok=0
-            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:5173 > /dev/null 2>&1; then
               web_ok=1
             fi
-            if curl -sf http://localhost:8080/api/health > /dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:8080/api/health > /dev/null 2>&1; then
               api_ok=1
             fi
             if [ "$web_ok" -eq 1 ] && [ "$api_ok" -eq 1 ]; then
@@ -184,24 +210,21 @@ jobs:
             sleep 1
           done
           echo "Timed out waiting for services to be ready."
-          docker compose ps
-          docker compose logs
+          echo "=== Backend API Log ==="
+          cat /tmp/api.log || true
+          echo "=== Frontend Web Log ==="
+          cat /tmp/web.log || true
           exit 1
 
-      - name: Run E2E tests via Makefile
-        run: make e2e
+      - name: Run Sharded E2E tests
+        run: pnpm --filter @croviq/web exec playwright test --shard=${{ matrix.shard }}
 
       - name: Upload Playwright artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts
+          name: playwright-artifacts-${{ strategy.job-index }}
           path: |
             apps/web/test-results/
             apps/web/playwright-report/
-            apps/web/e2e/screenshots/
           retention-days: 7
-
-      - name: Stop Docker Compose environment
-        if: always()
-        run: docker compose down -v

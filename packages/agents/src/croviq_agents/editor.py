@@ -13,11 +13,16 @@ from croviq_agents.tools import (
     build_default_editor_tool_registry,
     build_editor_chat_tool_registry,
 )
+from croviq_agents.prompts import (
+    LEO_CHAT_SYSTEM_INSTRUCTION,
+    build_leo_chat_context_prompt,
+)
 from croviq_domain.editorial import (
     AgentActivity,
     EditorDecision,
     EditorDecisionType,
     EditorProposal,
+    EditorSelectionContext,
     SectionAction,
     VideoSectionDecision,
 )
@@ -365,6 +370,7 @@ class LeoVideoEditor:
         proposal: EditorProposal | None = None,
         edl: EditDecisionList | None = None,
         artifacts: Sequence[Any] | None = None,
+        editor_context: EditorSelectionContext | Any | None = None,
         current_playhead_ms: int | None = None,
         selected_range: Sequence[int] | None = None,
         selected_element: dict[str, Any] | None = None,
@@ -374,7 +380,7 @@ class LeoVideoEditor:
     ) -> dict[str, Any]:
         """Respond in the Editor workspace and execute one canonical typed editing tool."""
         tools = self._tool_registry or build_editor_chat_tool_registry(
-            production_id=production.production_id,
+            production_id=getattr(production, "production_id", "unknown"),
             transcript=transcript,
             proposal=proposal,
             edl=edl,
@@ -382,12 +388,21 @@ class LeoVideoEditor:
             media_metadata=media_metadata,
         )
         lower = message.lower().strip()
-        selected = list(selected_range or [])
-        if len(selected) == 2:
-            start_ms, end_ms = int(selected[0]), int(selected[1])
+
+        # 1. Normalize selection coordinates and element context
+        element_id = None
+        if editor_context:
+            start_ms = int(getattr(editor_context, "source_start_ms", 0))
+            end_ms = int(getattr(editor_context, "source_end_ms", start_ms))
+            element_id = getattr(editor_context, "cut_id", None) or getattr(editor_context, "chapter_id", None)
+        elif selected_range and len(selected_range) == 2:
+            start_ms, end_ms = int(selected_range[0]), int(selected_range[1])
+            if selected_element:
+                element_id = selected_element.get("id")
         else:
             start_ms = int(current_playhead_ms or 0)
-            end_ms = min(edl.source_duration_ms, start_ms + 3000)
+            source_dur = getattr(edl, "source_duration_ms", 0) or getattr(transcript, "duration_ms", 100_000)
+            end_ms = min(source_dur, start_ms + 3000)
             timecodes = re.findall(r"\b(\d+):(\d+(?:\.\d+)?)\b", message)
             parsed_times = [
                 int((int(minutes) * 60 + float(seconds)) * 1000)
@@ -401,162 +416,178 @@ class LeoVideoEditor:
                 parsed_times = [int(float(value) * 1000) for value in second_values[:2]]
             if len(parsed_times) == 2:
                 start_ms, end_ms = parsed_times
-        element_id = None
-        if selected_element:
-            element_id = selected_element.get("id")
-            if selected_element.get("start_ms") is not None:
-                start_ms = int(selected_element["start_ms"])
-            if selected_element.get("end_ms") is not None:
-                end_ms = int(selected_element["end_ms"])
+            if selected_element:
+                element_id = selected_element.get("id")
+                if selected_element.get("start_ms") is not None:
+                    start_ms = int(selected_element["start_ms"])
+                if selected_element.get("end_ms") is not None:
+                    end_ms = int(selected_element["end_ms"])
         end_ms = max(start_ms + 1, end_ms)
+
+        # 2. Check if this is a conversational question / inquiry vs explicit mutation command
+        is_explicit_question = (
+            "?" in message
+            or any(
+                lower.startswith(p)
+                for p in (
+                    "why", "what", "how", "should", "would", "could", "is ", "can ",
+                    "tell me", "explain", "where", "does "
+                )
+            )
+            or any(
+                phrase in lower
+                for phrase in (
+                    "why was this cut", "why did you cut", "why did you remove", "why remove",
+                    "why was it cut", "why did you leave", "why keep this", "why preserve",
+                    "what's happening", "what is happening", "what happened",
+                    "should this be tighter", "can you make this tighter", "make this tighter?",
+                    "would b-roll help", "would visual coverage help", "where would b-roll help",
+                    "what section did i select", "what did i select", "what is selected",
+                    "is this too slow", "how is the pacing", "what does this cut do"
+                )
+            )
+        )
 
         tool_name: str | None = None
         arguments: dict[str, Any] = {}
-        if any(phrase in lower for phrase in ("lower music", "raise music", "music is too loud", "music too loud", "music volume")):
-            current_bg = edl.background_music
-            curr_vol = current_bg.volume_db if current_bg else -24.0
-            db_delta = -4.0
-            match_db = re.search(r"(\d+(?:\.\d+)?)\s*db", lower)
-            if match_db:
-                val = float(match_db.group(1))
-                db_delta = val if "raise" in lower else -val
-            elif "raise" in lower:
-                db_delta = 2.0
-            elif "lower" in lower or "too loud" in lower:
+
+        # Only trigger mutation tools when NOT an explicit question and imperative action is requested
+        if not is_explicit_question:
+            if any(phrase in lower for phrase in ("lower music", "raise music", "music is too loud", "music too loud", "music volume")):
+                current_bg = getattr(edl, "background_music", None)
+                curr_vol = current_bg.volume_db if current_bg else -24.0
                 db_delta = -4.0
-            new_vol = max(-45.0, min(-6.0, curr_vol + db_delta))
-            tool_name = "add_background_music"
-            arguments = {
-                "style": current_bg.style if current_bg else "Minimal modern technology documentary underscore",
-                "volume_db": new_vol,
-                "ducking_db": current_bg.ducking_db if current_bg else -14.0,
-            }
-        elif "remove background music" in lower or "mute music" in lower:
-            tool_name = "remove_background_music"
-        elif any(phrase in lower for phrase in ("add background music", "background music", "music bed")):
-            tool_name = "add_background_music"
-            arguments = {
-                "style": message.split(":", 1)[-1].strip() if ":" in message else "Minimal modern technology documentary underscore",
-                "volume_db": -24.0,
-                "ducking_db": -14.0,
-            }
-        elif any(phrase in lower for phrase in ("restore my original audio", "restore original audio", "use my original voice", "use original voice", "restore original speech")):
-            tool_name = "remove_voiceover"
-            arguments = {"segment_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
-        elif any(phrase in lower for phrase in ("remove voiceover", "delete voiceover")):
-            tool_name = "remove_voiceover"
-            arguments = {"segment_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
-        elif any(phrase in lower for phrase in (
-            "fix the grammar", "fix grammar", "clean up what i said", "clean up this sentence",
-            "clean this sentence", "make this sentence clearer", "make this clearer",
-            "sound more natural", "make this sentence sound more natural",
-            "replace this phrase", "generate voiceover", "add voiceover", "voice over"
-        )):
-            tool_name = "generate_voiceover"
-            # Extract text from transcript range if not explicitly provided after a colon
-            text_to_use = message.split(":", 1)[-1].strip() if ":" in message else ""
-            if not text_to_use and transcript:
-                words_in_range = transcript.get_words_in_range(start_ms, end_ms)
-                orig_speech = " ".join(w.text for w in words_in_range)
-                if "we gonna basically deploy" in orig_speech.lower() or "what we're gonna... what we're gonna do" in orig_speech.lower():
-                    text_to_use = "We're going to deploy this now."
-                elif orig_speech:
-                    # Basic clean up rule
-                    cleaned = re.sub(r"\b(um|uh|you know|basically|like)\b,?\s*", "", orig_speech, flags=re.IGNORECASE).strip()
-                    cleaned = cleaned.replace("we is", "we are").replace("he don't", "he doesn't").replace("we gonna", "we are going to")
-                    text_to_use = cleaned if cleaned else orig_speech
-                else:
-                    text_to_use = "We're going to deploy this now."
-            arguments = {
-                "start_ms": start_ms,
-                "end_ms": end_ms,
-                "text": text_to_use or "We're going to deploy this now.",
-                "voice_mode": (
-                    "REPLICATED_MY_VOICE" if "my voice" in lower
-                    else "ORIGINAL_VOICE" if "original voice" in lower
-                    else "PREBUILT_STUDIO_VOICE"
-                ),
-            }
-        elif any(phrase in lower for phrase in ("remove b-roll", "remove broll", "delete b-roll")):
-            tool_name = "remove_broll"
-            arguments = {"marker_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
-        elif any(phrase in lower for phrase in ("add b-roll", "add broll", "generate b-roll", "generate broll")):
-            tool_name = "add_broll"
-            arguments = {
-                "start_ms": start_ms,
-                "end_ms": end_ms,
-                "prompt": message.split(":", 1)[-1].strip() if ":" in message else message,
-                "quality_mode": (
-                    "4k" if "4k" in lower
-                    else "finishing" if "finishing" in lower or "1080" in lower
-                    else "standard" if "standard" in lower or "720" in lower
-                    else "draft"
-                ),
-            }
-        elif "rename chapter" in lower:
-            tool_name = "rename_chapter"
-            arguments = {
-                "chapter_id_or_title": element_id or (
-                    selected_element.get("label") if selected_element else ""
-                ),
-                "new_title": message.split(" to ", 1)[-1].strip().strip("\"'"),
-            }
-        elif "add chapter" in lower:
-            tool_name = "add_chapter"
-            title = message.split(":", 1)[-1].strip() if ":" in message else "New chapter"
-            arguments = {
-                "title": title[:120],
-                "start_ms": start_ms,
-                "end_ms": end_ms,
-                "summary": f"Chapter created from the selected source range: {title}",
-            }
-        elif any(phrase in lower for phrase in ("mark keep", "keep this", "protect this")):
-            tool_name = "mark_keep"
-            arguments = {"start_ms": start_ms, "end_ms": end_ms, "reason": message}
-        elif any(phrase in lower for phrase in ("restore", "undo cut")):
-            tool_name = "restore_source_range"
-            arguments = {"start_ms": start_ms, "end_ms": end_ms}
-        elif any(phrase in lower for phrase in ("remove cut", "delete cut")):
-            tool_name = "remove_cut"
-            arguments = {"cut_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
-        elif "adjust cut" in lower:
-            tool_name = "adjust_cut"
-            arguments = {
-                "cut_id": element_id or "",
-                "safe_start_ms": start_ms,
-                "safe_end_ms": end_ms,
-            }
-        elif any(phrase in lower for phrase in ("add cut", "cut this", "remove this range", "delete this range")):
-            tool_name = "add_cut"
-            decision_type = (
-                EditorDecisionType.REMOVE_FILLER
-                if "filler" in lower
-                else EditorDecisionType.REMOVE_REPETITION
-                if "repeat" in lower
-                else EditorDecisionType.REMOVE_FALSE_START
-                if "false start" in lower
-                else EditorDecisionType.REMOVE_LOW_VALUE_SECTION
-            )
-            arguments = {
-                "start_ms": start_ms,
-                "end_ms": end_ms,
-                "decision_type": decision_type.value,
-                "reason": message,
-            }
-        elif any(phrase in lower for phrase in ("explain", "why did you", "why this edit")):
-            tool_name = "explain_edit"
-            arguments = {"decision_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
-        elif any(phrase in lower for phrase in ("rerender", "re-render", "render preview")):
-            tool_name = "rerender_preview"
-        elif any(phrase in lower for phrase in ("seek", "go to", "show me")):
-            tool_name = "seek_range"
-            arguments = {"start_ms": start_ms, "end_ms": end_ms}
-        elif selected_range or selected_element or "inspect" in lower:
-            tool_name = "inspect_range"
-            arguments = {"start_ms": start_ms, "end_ms": end_ms}
+                match_db = re.search(r"(\d+(?:\.\d+)?)\s*db", lower)
+                if match_db:
+                    val = float(match_db.group(1))
+                    db_delta = val if "raise" in lower else -val
+                elif "raise" in lower:
+                    db_delta = 2.0
+                elif "lower" in lower or "too loud" in lower:
+                    db_delta = -4.0
+                new_vol = max(-45.0, min(-6.0, curr_vol + db_delta))
+                tool_name = "add_background_music"
+                arguments = {
+                    "style": current_bg.style if current_bg else "Minimal modern technology documentary underscore",
+                    "volume_db": new_vol,
+                    "ducking_db": current_bg.ducking_db if current_bg else -14.0,
+                }
+            elif "remove background music" in lower or "mute music" in lower:
+                tool_name = "remove_background_music"
+            elif any(phrase in lower for phrase in ("add background music", "music bed")):
+                tool_name = "add_background_music"
+                arguments = {
+                    "style": message.split(":", 1)[-1].strip() if ":" in message else "Minimal modern technology documentary underscore",
+                    "volume_db": -24.0,
+                    "ducking_db": -14.0,
+                }
+            elif any(phrase in lower for phrase in ("restore my original audio", "restore original audio", "use my original voice", "use original voice", "restore original speech")):
+                tool_name = "remove_voiceover"
+                arguments = {"segment_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
+            elif any(phrase in lower for phrase in ("remove voiceover", "delete voiceover")):
+                tool_name = "remove_voiceover"
+                arguments = {"segment_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
+            elif any(phrase in lower for phrase in (
+                "generate voiceover", "add voiceover", "voice over", "replace this phrase with voiceover"
+            )):
+                tool_name = "generate_voiceover"
+                text_to_use = message.split(":", 1)[-1].strip() if ":" in message else ""
+                if not text_to_use and transcript:
+                    words_in_range = transcript.get_words_in_range(start_ms, end_ms)
+                    orig_speech = " ".join(w.text for w in words_in_range)
+                    if "we gonna basically deploy" in orig_speech.lower() or "what we're gonna... what we're gonna do" in orig_speech.lower():
+                        text_to_use = "We're going to deploy this now."
+                    elif orig_speech:
+                        cleaned = re.sub(r"\b(um|uh|you know|basically|like)\b,?\s*", "", orig_speech, flags=re.IGNORECASE).strip()
+                        cleaned = cleaned.replace("we is", "we are").replace("he don't", "he doesn't").replace("we gonna", "we are going to")
+                        text_to_use = cleaned if cleaned else orig_speech
+                    else:
+                        text_to_use = "We're going to deploy this now."
+                arguments = {
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "text": text_to_use or "We're going to deploy this now.",
+                    "voice_mode": (
+                        "REPLICATED_MY_VOICE" if "my voice" in lower
+                        else "ORIGINAL_VOICE" if "original voice" in lower
+                        else "PREBUILT_STUDIO_VOICE"
+                    ),
+                }
+            elif any(phrase in lower for phrase in ("remove b-roll", "remove broll", "delete b-roll")):
+                tool_name = "remove_broll"
+                arguments = {"marker_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
+            elif any(phrase in lower for phrase in ("add b-roll", "add broll", "generate b-roll", "generate broll")):
+                tool_name = "add_broll"
+                arguments = {
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "prompt": message.split(":", 1)[-1].strip() if ":" in message else message,
+                    "quality_mode": (
+                        "4k" if "4k" in lower
+                        else "finishing" if "finishing" in lower or "1080" in lower
+                        else "standard" if "standard" in lower or "720" in lower
+                        else "draft"
+                    ),
+                }
+            elif "rename chapter" in lower:
+                tool_name = "rename_chapter"
+                arguments = {
+                    "chapter_id_or_title": element_id or (
+                        selected_element.get("label") if selected_element else ""
+                    ),
+                    "new_title": message.split(" to ", 1)[-1].strip().strip("\"'"),
+                }
+            elif "add chapter" in lower:
+                tool_name = "add_chapter"
+                title = message.split(":", 1)[-1].strip() if ":" in message else "New chapter"
+                arguments = {
+                    "title": title[:120],
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "summary": f"Chapter created from the selected source range: {title}",
+                }
+            elif any(phrase in lower for phrase in ("mark keep", "keep this range", "protect this range")):
+                tool_name = "mark_keep"
+                arguments = {"start_ms": start_ms, "end_ms": end_ms, "reason": message}
+            elif any(phrase in lower for phrase in ("restore source range", "undo cut")):
+                tool_name = "restore_source_range"
+                arguments = {"start_ms": start_ms, "end_ms": end_ms}
+            elif any(phrase in lower for phrase in ("remove cut", "delete cut")):
+                tool_name = "remove_cut"
+                arguments = {"cut_id_or_time_ms": element_id or int(current_playhead_ms or start_ms)}
+            elif "adjust cut" in lower:
+                tool_name = "adjust_cut"
+                arguments = {
+                    "cut_id": element_id or "",
+                    "safe_start_ms": start_ms,
+                    "safe_end_ms": end_ms,
+                }
+            elif any(phrase in lower for phrase in ("add cut", "cut this out", "remove this range", "delete this range", "make a cut")):
+                tool_name = "add_cut"
+                decision_type = (
+                    EditorDecisionType.REMOVE_FILLER
+                    if "filler" in lower
+                    else EditorDecisionType.REMOVE_REPETITION
+                    if "repeat" in lower
+                    else EditorDecisionType.REMOVE_FALSE_START
+                    if "false start" in lower
+                    else EditorDecisionType.REMOVE_LOW_VALUE_SECTION
+                )
+                arguments = {
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "decision_type": decision_type.value,
+                    "reason": message,
+                }
+            elif any(phrase in lower for phrase in ("rerender", "re-render", "render preview")):
+                tool_name = "rerender_preview"
+            elif any(phrase in lower for phrase in ("seek to", "jump to")):
+                tool_name = "seek_range"
+                arguments = {"start_ms": start_ms, "end_ms": end_ms}
 
         executions: list[dict[str, Any]] = []
         content: str
+
         if tool_name:
             result = await tools.execute_async(tool_name, arguments)
             executions.append({
@@ -588,17 +619,39 @@ class LeoVideoEditor:
                         "latency_ms": render_result.latency_ms,
                     })
         else:
-            active_cuts = edl.active_cuts_count
-            coverage_count = len(edl.coverage_markers)
-            context_note = (
-                f" The selected context is {start_ms / 1000:.1f}s–{end_ms / 1000:.1f}s."
-                if selected_range or selected_element else ""
+            # 3. Conversational response with Gemini reasoning on real media/transcript context
+            media_fn = getattr(getattr(production, "source_media", None), "original_filename", None)
+            media_dur = getattr(edl, "source_duration_ms", 0) or (getattr(transcript, "duration_ms", 0) if transcript else 0)
+            video_uri = None
+            if production and getattr(production, "source_media", None):
+                b = getattr(production.source_media, "gcs_bucket", "")
+                o = getattr(production.source_media, "gcs_object", "")
+                if b and o:
+                    video_uri = f"gs://{b}/{o}"
+
+            context_prompt = build_leo_chat_context_prompt(
+                production_id=getattr(production, "production_id", "unknown") if production else "unknown",
+                media_filename=media_fn,
+                media_duration_ms=media_dur,
+                media_metadata=media_metadata,
+                edl=edl,
+                transcript=transcript,
+                editor_context=editor_context,
+                channel_profile=channel_profile,
+                lessons=lessons,
             )
-            content = (
-                f"I’m looking at the current edit: {active_cuts} active cuts and "
-                f"{coverage_count} coverage markers.{context_note} "
-                "Select a range and tell me to cut, restore, keep, explain, add B-roll, "
-                "add voiceover, or add background music."
+            sys_parts = [LEO_CHAT_SYSTEM_INSTRUCTION]
+            if custom_prompt and custom_prompt.strip():
+                sys_parts.append(f"Creator Working Directives:\n{custom_prompt.strip()}")
+            full_sys = "\n\n".join(sys_parts)
+
+            content, _usage = await self._client.generate_leo_chat_reply(
+                message=message,
+                system_instruction=full_sys,
+                context_prompt=context_prompt,
+                conversation_history=conversation_history,
+                video_uri=video_uri,
+                production_id=getattr(production, "production_id", "unknown") if production else "unknown",
             )
 
         state = getattr(tools, "state", {})

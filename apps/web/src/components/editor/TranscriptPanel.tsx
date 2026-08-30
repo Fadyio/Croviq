@@ -11,6 +11,7 @@ import {
   sourceToEditedTimeMs,
   type Transcript,
   type TranscriptSegment,
+  type TranscriptWord,
 } from "../../lib/edl-adapter";
 import type { PreviewMode } from "./PreviewToggle";
 
@@ -40,6 +41,8 @@ interface TranscriptPanelProps {
   onModeChange?: (mode: PreviewMode) => void;
   onRangeSelect?: (selection: TranscriptRangeSelection) => void;
   onSendRangeToChat?: (selection: TranscriptRangeSelection) => void;
+  onSelectWord?: (word: TranscriptWord) => void;
+  onSelectSegment?: (segment: TranscriptSegment) => void;
   className?: string;
 }
 
@@ -85,6 +88,8 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   onModeChange,
   onRangeSelect,
   onSendRangeToChat,
+  onSelectWord,
+  onSelectSegment,
   className = "",
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -391,7 +396,10 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                     <button
                       type="button"
                       className="font-mono text-[10px] tabular-nums text-text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                      onClick={() => selectRange(segmentSelection)}
+                      onClick={() => {
+                        selectRange(segmentSelection);
+                        onSelectSegment?.(segment);
+                      }}
                       title={`Select sentence at ${formatModeTimecode(segment.start_ms)}`}
                     >
                       {formatModeTimecode(segment.start_ms)}
@@ -399,7 +407,10 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                     {isRangeInSegment && selectedRange && onSendRangeToChat && (
                       <button
                         type="button"
-                        onClick={() => onSendRangeToChat(selectedRange)}
+                        onClick={() => {
+                          onSendRangeToChat?.(selectedRange);
+                          onSelectSegment?.(segment);
+                        }}
                         className="flex items-center gap-1 rounded bg-primary/10 px-1.5 py-1 text-[9px] font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                       >
                         <MessageSquare className="size-2.5" aria-hidden="true" />
@@ -455,10 +466,13 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                                     )
                                   : "Removed by edit decision",
                               });
+                              onSelectWord?.(word);
+                              onRangeSelect?.(wordSelection);
                               return;
                             }
                             setRemovedWordNotice(null);
                             selectRange(wordSelection);
+                            onSelectWord?.(word);
                             if (wordDecision) onSelectDecision(wordDecision);
                           };
 

@@ -1,6 +1,7 @@
 """Canonical Editorial domain models for Leo (Video Editor)."""
 from datetime import datetime, timezone
 from enum import StrEnum
+from typing import Any
 import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -25,6 +26,66 @@ class EditorDecisionType(StrEnum):
     CHAPTER_MARKER = "CHAPTER_MARKER"
     NARRATION_REWRITE = "NARRATION_REWRITE"
     CAPTION_EMPHASIS = "CAPTION_EMPHASIS"
+
+class EditorSelectionType(StrEnum):
+    """Canonical timeline selection type in Croviq Editor."""
+    POINT = "POINT"
+    RANGE = "RANGE"
+    TRANSCRIPT_WORD = "TRANSCRIPT_WORD"
+    TRANSCRIPT_SEGMENT = "TRANSCRIPT_SEGMENT"
+    CUT = "CUT"
+    CHAPTER = "CHAPTER"
+
+
+class CoordinateSpace(StrEnum):
+    """Coordinate space of the selected timestamp/range."""
+    SOURCE = "SOURCE"
+    EDITED = "EDITED"
+
+
+class ActivePreviewMode(StrEnum):
+    """Preview mode active in the video player during selection."""
+    ORIGINAL = "ORIGINAL"
+    EDITED = "EDITED"
+    VOICEOVER = "VOICEOVER"
+    FINAL_MIX = "FINAL_MIX"
+
+
+class EditorSelectionContext(BaseModel):
+    """Single canonical editor selection context for agent reasoning."""
+
+    model_config = ConfigDict(
+        extra="ignore",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    production_id: str = Field(..., min_length=1)
+    selection_type: EditorSelectionType
+    coordinate_space: CoordinateSpace
+    source_start_ms: int = Field(..., ge=0)
+    source_end_ms: int = Field(..., ge=0)
+    edited_start_ms: int | None = Field(default=None, ge=0)
+    edited_end_ms: int | None = Field(default=None, ge=0)
+    transcript_text: str | None = None
+    transcript_word_ids: list[int] | None = None
+    cut_id: str | None = None
+    chapter_id: str | None = None
+    active_edl_id: str | None = None
+    active_preview_mode: ActivePreviewMode = ActivePreviewMode.FINAL_MIX
+    label: str | None = None
+    cut_reason: str | None = None
+    removed_duration_ms: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _validate_ranges(self) -> "EditorSelectionContext":
+        if self.source_end_ms < self.source_start_ms:
+            self.source_end_ms = self.source_start_ms
+        if self.edited_start_ms is not None and self.edited_end_ms is not None:
+            if self.edited_end_ms < self.edited_start_ms:
+                self.edited_end_ms = self.edited_start_ms
+        return self
+
 
 class EditorVoiceMode(StrEnum):
     """Truthful audio provenance modes surfaced by Leo's editor tools."""
@@ -284,7 +345,7 @@ class EditorProposal(BaseModel):
     """Complete batch proposal emitted by Leo (Video Editor)."""
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="ignore",
         str_strip_whitespace=True,
         validate_assignment=True,
     )
@@ -326,8 +387,6 @@ class EditorProposal(BaseModel):
         le=1.0,
         description="Overall confidence in the proposal",
     )
-
-
 
 
 class AgentActivity(BaseModel):
@@ -392,7 +451,7 @@ class EditorialRun(BaseModel):
     """Operational record representing an editorial analysis run lifecycle."""
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="ignore",
         str_strip_whitespace=True,
         validate_assignment=True,
     )
@@ -414,6 +473,14 @@ class EditorialRun(BaseModel):
     editor_proposal_id: str | None = Field(
         default=None,
         description="Identifier of the generated EditorProposal record",
+    )
+    director_review_id: str | None = Field(
+        default=None,
+        description="Identifier of the generated DirectorReview record",
+    )
+    self_review_id: str | None = Field(
+        default=None,
+        description="Identifier of the generated EditorSelfReview record",
     )
     started_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

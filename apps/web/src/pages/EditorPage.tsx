@@ -34,6 +34,11 @@ import {
   type AgentActivity,
   type ApiMediaOutputState,
   apiMediaOutputToState,
+  buildCutSelection,
+  buildPointSelection,
+  buildRangeSelection,
+  buildTranscriptSegmentSelection,
+  buildTranscriptWordSelection,
   type CanonicalMediaOutputs,
   type CorrectedTranscript,
   type CoverageMarker,
@@ -42,11 +47,16 @@ import {
   type EditDecisionList,
   type EditorDecision,
   type EditorProposal,
+  type EditorSelection,
   edlToTwickTimeline,
+  findCutAtSourceTime,
+  findCutById,
+  formatTimecode,
   type MediaOutputState,
   type TimelineBlock,
-  type TimelineTrackId,
   type Transcript,
+  type TranscriptSegment,
+  type TranscriptWord,
 } from "../lib/edl-adapter";
 import {
   nextMissingProcessingStage,
@@ -590,33 +600,62 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       setSelectedBlock(block);
       if (!block) return;
 
-      const labelPrefix: Record<TimelineTrackId, string> = {
-        video: "Video",
-        audio: "Audio",
-        edits: "Edit",
-        broll: "Visual",
-        voiceover: "Voiceover",
-        music: "Music",
-        narration: "Voiceover",
-        captions: "Caption",
-        chapters: "Chapter",
-        "source-video": "Video",
-        "dialogue-edits": "Edit",
-        coverage: "Visual",
-      };
       setSelectedDecisionId(block.decisionId || null);
       handleSeek(block.startMs);
-      setChatContext({
-        kind: "element",
-        label: `${labelPrefix[block.trackId]}: ${block.label}`,
-        startMs: block.startMs,
-        endMs: block.endMs,
-        elementType: block.trackId,
-        elementId: block.id,
-      });
+
+      const cut = block.decisionId
+        ? (edl?.cuts || []).find((c) => c.decision_id === block.decisionId || c.cut_id === block.id)
+        : null;
+      let selection: EditorSelection;
+      if (cut || block.trackId === "edits" || block.trackId === "dialogue-edits") {
+        const cutObj = cut || findCutById(block.id, edl) || findCutAtSourceTime(block.startMs, edl);
+        if (cutObj) {
+          selection = buildCutSelection({
+            productionId,
+            cut: cutObj,
+            previewMode,
+            edl,
+            transcript,
+          });
+        } else {
+          selection = buildRangeSelection({
+            productionId,
+            startMs: block.startMs,
+            endMs: block.endMs,
+            previewMode,
+            edl,
+            transcript,
+          });
+          selection.selection_type = "CUT";
+          selection.label = block.label;
+        }
+      } else if (block.trackId === "chapters") {
+        selection = buildRangeSelection({
+          productionId,
+          startMs: block.startMs,
+          endMs: block.endMs,
+          previewMode,
+          edl,
+          transcript,
+        });
+        selection.selection_type = "CHAPTER";
+        selection.chapter_id = block.id;
+        selection.label = `Chapter: ${block.label}`;
+      } else {
+        selection = buildRangeSelection({
+          productionId,
+          startMs: block.startMs,
+          endMs: block.endMs,
+          previewMode,
+          edl,
+          transcript,
+        });
+        selection.label = `${block.label} (${formatTimecode(block.startMs)} → ${formatTimecode(block.endMs)})`;
+      }
+      setChatContext(selection);
       setRightPanelTab("chat");
     },
-    [handleSeek],
+    [handleSeek, edl, productionId, previewMode, transcript],
   );
 
   const handleSelectDecision = useCallback(
@@ -624,40 +663,102 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       setSelectedDecisionId(decision?.decision_id || null);
       if (decision) {
         handleSeek(decision.source_start_ms);
+        const selection = buildRangeSelection({
+          productionId,
+          startMs: decision.source_start_ms,
+          endMs: decision.source_end_ms,
+          previewMode,
+          edl,
+          transcript,
+        });
+        selection.label =
+          decision.concise_reason || `Edit at ${formatTimecode(decision.source_start_ms)}`;
+        setChatContext(selection);
         setRightPanelTab("agent-log");
       }
     },
-    [handleSeek],
+    [handleSeek, productionId, previewMode, edl, transcript],
+  );
+
+  const handleTimelinePoint = useCallback(
+    (targetMs: number) => {
+      handleSeek(targetMs);
+      const selection = buildPointSelection({
+        productionId,
+        clickMs: targetMs,
+        previewMode,
+        edl,
+        transcript,
+      });
+      setChatContext(selection);
+    },
+    [handleSeek, productionId, previewMode, edl, transcript],
   );
 
   const handleTimelineRange = useCallback(
     (startMs: number, endMs: number) => {
       handleSeek(startMs);
-      setChatContext({
-        kind: "range",
-        label: "Timeline selection",
+      const selection = buildRangeSelection({
+        productionId,
         startMs,
         endMs,
+        previewMode,
+        edl,
+        transcript,
       });
+      setChatContext(selection);
       setRightPanelTab("chat");
     },
-    [handleSeek],
+    [handleSeek, productionId, previewMode, edl, transcript],
+  );
+
+  const handleTranscriptWord = useCallback(
+    (word: TranscriptWord) => {
+      handleSeek(word.start_ms);
+      const selection = buildTranscriptWordSelection({
+        productionId,
+        word,
+        previewMode,
+        edl,
+        transcript,
+      });
+      setChatContext(selection);
+    },
+    [handleSeek, productionId, previewMode, edl, transcript],
+  );
+
+  const handleTranscriptSegment = useCallback(
+    (segment: TranscriptSegment, openChat = false) => {
+      handleSeek(segment.start_ms);
+      const selection = buildTranscriptSegmentSelection({
+        productionId,
+        segment,
+        previewMode,
+        edl,
+        transcript,
+      });
+      setChatContext(selection);
+      if (openChat) setRightPanelTab("chat");
+    },
+    [handleSeek, productionId, previewMode, edl, transcript],
   );
 
   const handleTranscriptRange = useCallback(
     (selection: TranscriptRangeSelection, openChat = false) => {
       handleSeek(selection.startMs);
-      setChatContext({
-        kind: "element",
-        label: selection.label,
+      const canonical = buildRangeSelection({
+        productionId,
         startMs: selection.startMs,
         endMs: selection.endMs,
-        elementType: "transcript",
-        elementId: selection.id,
+        previewMode,
+        edl,
+        transcript,
       });
+      canonical.label = selection.label;
+      setChatContext(canonical);
       if (openChat) setRightPanelTab("chat");
     },
-    [handleSeek],
+    [handleSeek, productionId, previewMode, edl, transcript],
   );
 
   const getAuthToken = useCallback(async (): Promise<string> => {
@@ -1109,6 +1210,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                 onModeChange={setPreviewMode}
                 onRangeSelect={(selection) => handleTranscriptRange(selection)}
                 onSendRangeToChat={(selection) => handleTranscriptRange(selection, true)}
+                onSelectWord={handleTranscriptWord}
+                onSelectSegment={handleTranscriptSegment}
                 className="h-full"
               />
             )}
@@ -1125,8 +1228,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           selectedBlockId={selectedBlock?.id || null}
           onSelectBlock={handleSelectBlock}
           onSeek={handleSeek}
+          onSelectPoint={handleTimelinePoint}
           onSelectRange={handleTimelineRange}
-          isPlaying={isPlaying}
           className="h-full"
         />
       </div>

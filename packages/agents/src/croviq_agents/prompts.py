@@ -62,6 +62,145 @@ def format_channel_memory_summary(
 
     return "\n".join(parts)
 
+LEO_CHAT_SYSTEM_INSTRUCTION = (
+    "You are Leo, the Video Editor on Croviq's autonomous production team.\n"
+    "You are in the Editor workspace with the creator, reviewing and refining the video edit.\n"
+    "You have direct access to the source video, word-aligned transcript, Edit Decision List (EDL) cuts, "
+    "voiceover narration, and background music.\n\n"
+    "CREATOR-FACING STYLE & TONE:\n"
+    "- Speak as a sharp, collaborative video editor.\n"
+    "- Be concise, grounded, specific, and actionable (2–4 clear sentences or a clean bulleted breakdown).\n"
+    "- Ground every observation directly in the selected section, exact words, cut reasons, visual actions, or timing.\n"
+    "- When asked about a cut (e.g., 'Why was this cut?', 'Why did you remove this?'):\n"
+    "  Explain the concrete reason (such as trimming dead air/pause, removing false start restart, duplicate repetition, or filler) "
+    "  using the actual anchor words and timing.\n"
+    "- When asked if a section should be tighter (e.g., 'Should this be tighter?', 'Can you make this tighter?'):\n"
+    "  Evaluate the specific speech pacing and phrasing of THAT selected section and offer clear editorial advice.\n"
+    "- When asked about visual coverage or B-roll (e.g., 'Would visual coverage help here?', 'Where would B-roll help?'):\n"
+    "  Discuss the actual content being demonstrated (e.g. code demo, terminal, setup, speaking) and whether supplemental coverage is appropriate.\n"
+    "- When asked 'What section did I select?' or questions about the active selection:\n"
+    "  * If a section is selected: state the exact selected timestamps, duration, and what content/cut exists at that position.\n"
+    "  * If NO section is selected (selection is cleared): state clearly and truthfully that no section is currently selected on the timeline.\n"
+    "- Never make up timestamps, fake cuts, or imaginary video content.\n"
+    "- Never mutate the edit unless the creator explicitly requests an edit action."
+)
+
+
+def build_leo_chat_context_prompt(
+    *,
+    production_id: str,
+    media_filename: str | None = None,
+    media_duration_ms: int = 0,
+    media_metadata: Any = None,
+    edl: EditDecisionList | None = None,
+    transcript: Transcript | None = None,
+    editor_context: Any = None,
+    channel_profile: ChannelMemoryProfile | None = None,
+    lessons: list[ChannelLesson] | None = None,
+) -> str:
+    """Build grounded contextual prompt describing the production, selection, transcript, and cuts for Leo."""
+    parts = []
+
+    # Production & Media info
+    dur_tc = f"{int(media_duration_ms // 60000):02d}:{(media_duration_ms % 60000) / 1000.0:04.1f}"
+    meta_lines = [
+        f"Production ID: {production_id}",
+        f"Source Video: {media_filename or 'Recording.mp4'} (Duration: {dur_tc}, {media_duration_ms}ms)",
+    ]
+    if edl:
+        meta_lines.append(
+            f"Active EDL: {edl.edl_id} (Version: {edl.version}, Active Cuts: {edl.active_cuts_count})"
+        )
+    parts.append("PRODUCTION MEDIA & STATE:\n" + "\n".join(meta_lines))
+
+    # Selection Context
+    if editor_context:
+        sel_type = getattr(editor_context, "selection_type", "RANGE")
+        coord_space = getattr(editor_context, "coordinate_space", "SOURCE")
+        prev_mode = getattr(editor_context, "active_preview_mode", "FINAL_MIX")
+        src_start = getattr(editor_context, "source_start_ms", 0)
+        src_end = getattr(editor_context, "source_end_ms", src_start)
+        edit_start = getattr(editor_context, "edited_start_ms", None)
+        edit_end = getattr(editor_context, "edited_end_ms", None)
+        cut_id = getattr(editor_context, "cut_id", None)
+        cut_reason = getattr(editor_context, "cut_reason", None)
+        removed_dur = getattr(editor_context, "removed_duration_ms", None)
+        txt = getattr(editor_context, "transcript_text", None)
+
+        src_start_tc = f"{int(src_start // 60000):02d}:{(src_start % 60000) / 1000.0:04.1f}"
+        src_end_tc = f"{int(src_end // 60000):02d}:{(src_end % 60000) / 1000.0:04.1f}"
+        dur_s = max(0.0, (src_end - src_start) / 1000.0)
+
+        sel_lines = [
+            f"- Selection Type: {sel_type}",
+            f"- Coordinate Space: {coord_space} (Active Preview Mode: {prev_mode})",
+            f"- Source Range: {src_start_tc} → {src_end_tc} ({src_start}ms – {src_end}ms, duration {dur_s:.2f}s)",
+        ]
+        if edit_start is not None and edit_end is not None:
+            if sel_type == "CUT" or (cut_id and edit_start == edit_end):
+                edit_tc = f"{int(edit_start // 60000):02d}:{(edit_start % 60000) / 1000.0:04.1f}"
+                sel_lines.append(f"- Edited Preview Time: {edit_tc} (Note: This cut material is REMOVED from the edited video)")
+            else:
+                edit_start_tc = f"{int(edit_start // 60000):02d}:{(edit_start % 60000) / 1000.0:04.1f}"
+                edit_end_tc = f"{int(edit_end // 60000):02d}:{(edit_end % 60000) / 1000.0:04.1f}"
+                sel_lines.append(f"- Edited Preview Range: {edit_start_tc} → {edit_end_tc} ({edit_start}ms – {edit_end}ms)")
+
+        if cut_id or sel_type == "CUT":
+            sel_lines.append(f"- Cut ID: {cut_id}")
+            if cut_reason:
+                sel_lines.append(f"- Cut Reason / Decision: {cut_reason}")
+            if removed_dur:
+                sel_lines.append(f"- Removed Duration: {removed_dur / 1000.0:.2f}s ({removed_dur}ms)")
+
+        if txt:
+            sel_lines.append(f"- Selected Transcript: \"{txt}\"")
+
+        # Overlapping Cuts in EDL
+        if edl and edl.cuts:
+            matching_cuts = [
+                c for c in edl.cuts
+                if c.safety_status != "REJECTED_UNSAFE"
+                and max(c.safe_start_ms, src_start) <= min(c.safe_end_ms, src_end)
+            ]
+            if matching_cuts:
+                cut_details = []
+                for c in matching_cuts:
+                    c_start_tc = f"{int(c.safe_start_ms // 60000):02d}:{(c.safe_start_ms % 60000) / 1000.0:04.1f}"
+                    c_end_tc = f"{int(c.safe_end_ms // 60000):02d}:{(c.safe_end_ms % 60000) / 1000.0:04.1f}"
+                    cut_details.append(
+                        f"  * Cut {c.cut_id} ({c.decision_type}) from {c_start_tc} to {c_end_tc} "
+                        f"(removed {c.removed_duration_ms}ms). Anchors: '{c.left_anchor}' ... '{c.right_anchor}'. "
+                        f"Reason: {c.safety_reason}"
+                    )
+                sel_lines.append("Overlapping EDL Decisions:\n" + "\n".join(cut_details))
+
+        # Neighboring Transcript Context (+/- 8 seconds)
+        if transcript and transcript.words:
+            neighbor_start = max(0, src_start - 8000)
+            neighbor_end = min(media_duration_ms or transcript.duration_ms, src_end + 8000)
+            neighbor_words = [
+                w for w in transcript.words
+                if max(w.start_ms, neighbor_start) <= min(w.end_ms, neighbor_end)
+            ]
+            if neighbor_words:
+                formatted_words = []
+                for w in neighbor_words:
+                    is_in_sel = max(w.start_ms, src_start) <= min(w.end_ms, src_end)
+                    prefix = ">>" if is_in_sel else "  "
+                    w_tc = f"{int(w.start_ms // 60000):02d}:{(w.start_ms % 60000) / 1000.0:04.1f}"
+                    formatted_words.append(f"{prefix}[{w_tc}] {w.text}")
+                sel_lines.append("Surrounding Transcript Words (>> indicates selected range):\n" + "\n".join(formatted_words))
+
+        parts.append("ACTIVE TIMELINE SELECTION CONTEXT:\n" + "\n".join(sel_lines))
+    else:
+        parts.append("ACTIVE TIMELINE SELECTION CONTEXT:\n- No point or range is currently selected on the timeline (Selection is empty/cleared).")
+
+    # Channel Memory
+    if channel_profile or lessons:
+        parts.append("CHANNEL MEMORY:\n" + format_channel_memory_summary(channel_profile, lessons))
+
+    return "\n\n".join(parts)
+
 
 def build_editor_prompt(
     transcript: Transcript,

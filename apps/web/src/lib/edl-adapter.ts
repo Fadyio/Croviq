@@ -23,6 +23,317 @@ export type TranscriptWord = components["schemas"]["TranscriptWord"];
 export type TranscriptSegment = components["schemas"]["TranscriptSegment"];
 export type ChapterMarker = components["schemas"]["ChapterMarker"];
 
+export type EditorSelectionType =
+  "POINT" | "RANGE" | "TRANSCRIPT_WORD" | "TRANSCRIPT_SEGMENT" | "CUT" | "CHAPTER";
+
+export type CoordinateSpace = "SOURCE" | "EDITED";
+
+export type ActivePreviewMode = "ORIGINAL" | "EDITED" | "VOICEOVER" | "FINAL_MIX";
+
+export interface EditorSelection {
+  production_id: string;
+  selection_type: EditorSelectionType;
+  coordinate_space: CoordinateSpace;
+  source_start_ms: number;
+  source_end_ms: number;
+  edited_start_ms: number | null;
+  edited_end_ms: number | null;
+  transcript_text: string | null;
+  transcript_word_ids: number[] | null;
+  cut_id: string | null;
+  chapter_id: string | null;
+  active_edl_id: string | null;
+  active_preview_mode: ActivePreviewMode;
+  label?: string | null;
+  cut_reason?: string | null;
+  removed_duration_ms?: number | null;
+}
+
+export function normalizePreviewModeToActive(mode: string): ActivePreviewMode {
+  const m = mode.toLowerCase();
+  if (m === "original") return "ORIGINAL";
+  if (m === "edited") return "EDITED";
+  if (m === "voiceover") return "VOICEOVER";
+  return "FINAL_MIX";
+}
+
+export function findCutAtSourceTime(
+  sourceMs: number,
+  edl?: EditDecisionList | null,
+): CutInstruction | null {
+  if (!edl?.cuts) return null;
+  return (
+    edl.cuts.find(
+      (c) =>
+        c.safety_status !== "REJECTED_UNSAFE" &&
+        sourceMs >= (c.safe_start_ms ?? c.requested_start_ms) &&
+        sourceMs <= (c.safe_end_ms ?? c.requested_end_ms),
+    ) || null
+  );
+}
+
+export function findCutById(cutId: string, edl?: EditDecisionList | null): CutInstruction | null {
+  if (!edl?.cuts) return null;
+  return edl.cuts.find((c) => c.cut_id === cutId) || null;
+}
+
+export function getWordsInSourceRange(
+  startMs: number,
+  endMs: number,
+  transcript?: Transcript | null,
+): TranscriptWord[] {
+  if (!transcript?.words) return [];
+  return transcript.words.filter((w) => Math.max(w.start_ms, startMs) <= Math.min(w.end_ms, endMs));
+}
+
+export function buildPointSelection({
+  productionId,
+  clickMs,
+  previewMode,
+  edl,
+  transcript,
+}: {
+  productionId: string;
+  clickMs: number;
+  previewMode: string;
+  edl?: EditDecisionList | null;
+  transcript?: Transcript | null;
+}): EditorSelection {
+  const isOriginal = previewMode.toLowerCase() === "original";
+  const coordinate_space: CoordinateSpace = isOriginal ? "SOURCE" : "EDITED";
+  const active_preview_mode = normalizePreviewModeToActive(previewMode);
+
+  let sourceMs = clickMs;
+  let editedMs: number | null = null;
+
+  if (isOriginal) {
+    sourceMs = clickMs;
+    editedMs = sourceToEditedTimeMs(sourceMs, edl);
+  } else {
+    editedMs = clickMs;
+    sourceMs = editedToSourceTimeMs(editedMs, edl);
+  }
+
+  const cut = findCutAtSourceTime(sourceMs, edl);
+  const words = getWordsInSourceRange(Math.max(0, sourceMs - 300), sourceMs + 300, transcript);
+  const word =
+    words.find((w) => sourceMs >= w.start_ms && sourceMs <= w.end_ms) || words[0] || null;
+
+  return {
+    production_id: productionId,
+    selection_type: "POINT",
+    coordinate_space,
+    source_start_ms: sourceMs,
+    source_end_ms: sourceMs,
+    edited_start_ms: editedMs,
+    edited_end_ms: editedMs,
+    transcript_text: word ? word.text : null,
+    transcript_word_ids: word ? [word.index] : null,
+    cut_id: cut?.cut_id || null,
+    chapter_id: null,
+    active_edl_id: edl?.edl_id || null,
+    active_preview_mode,
+    label: `Point at ${formatTimecode(sourceMs)}`,
+    cut_reason: cut?.safety_reason || cut?.decision_type || null,
+    removed_duration_ms: cut
+      ? (cut.removed_duration_ms ?? cut.safe_end_ms - cut.safe_start_ms)
+      : null,
+  };
+}
+
+export function buildRangeSelection({
+  productionId,
+  startMs,
+  endMs,
+  previewMode,
+  edl,
+  transcript,
+}: {
+  productionId: string;
+  startMs: number;
+  endMs: number;
+  previewMode: string;
+  edl?: EditDecisionList | null;
+  transcript?: Transcript | null;
+}): EditorSelection {
+  const isOriginal = previewMode.toLowerCase() === "original";
+  const coordinate_space: CoordinateSpace = isOriginal ? "SOURCE" : "EDITED";
+  const active_preview_mode = normalizePreviewModeToActive(previewMode);
+
+  const cleanStart = Math.min(startMs, endMs);
+  const cleanEnd = Math.max(startMs, endMs);
+
+  let sourceStart = cleanStart;
+  let sourceEnd = cleanEnd;
+  let editedStart: number | null = null;
+  let editedEnd: number | null = null;
+
+  if (isOriginal) {
+    sourceStart = cleanStart;
+    sourceEnd = cleanEnd;
+    editedStart = sourceToEditedTimeMs(sourceStart, edl);
+    editedEnd = sourceToEditedTimeMs(sourceEnd, edl);
+  } else {
+    editedStart = cleanStart;
+    editedEnd = cleanEnd;
+    sourceStart = editedToSourceTimeMs(cleanStart, edl);
+    sourceEnd = editedToSourceTimeMs(cleanEnd, edl);
+  }
+
+  const words = getWordsInSourceRange(sourceStart, sourceEnd, transcript);
+  const text = words.length > 0 ? words.map((w) => w.text).join(" ") : null;
+  const wordIds = words.length > 0 ? words.map((w) => w.index) : null;
+
+  return {
+    production_id: productionId,
+    selection_type: "RANGE",
+    coordinate_space,
+    source_start_ms: sourceStart,
+    source_end_ms: sourceEnd,
+    edited_start_ms: editedStart,
+    edited_end_ms: editedEnd,
+    transcript_text: text,
+    transcript_word_ids: wordIds,
+    cut_id: null,
+    chapter_id: null,
+    active_edl_id: edl?.edl_id || null,
+    active_preview_mode,
+    label: `Range: ${formatTimecode(sourceStart)} → ${formatTimecode(sourceEnd)}`,
+    cut_reason: null,
+    removed_duration_ms: null,
+  };
+}
+
+export function buildCutSelection({
+  productionId,
+  cut,
+  previewMode,
+  edl,
+  transcript,
+}: {
+  productionId: string;
+  cut: CutInstruction;
+  previewMode: string;
+  edl?: EditDecisionList | null;
+  transcript?: Transcript | null;
+}): EditorSelection {
+  const active_preview_mode = normalizePreviewModeToActive(previewMode);
+  const sourceStart = cut.safe_start_ms ?? cut.requested_start_ms;
+  const sourceEnd = cut.safe_end_ms ?? cut.requested_end_ms;
+  const removedDuration = cut.removed_duration_ms ?? Math.max(0, sourceEnd - sourceStart);
+  const editedAt = sourceToEditedTimeMs(sourceStart, edl);
+
+  const words = getWordsInSourceRange(sourceStart, sourceEnd, transcript);
+  const text = words.length > 0 ? words.map((w) => w.text).join(" ") : null;
+  const wordIds = words.length > 0 ? words.map((w) => w.index) : null;
+
+  return {
+    production_id: productionId,
+    selection_type: "CUT",
+    coordinate_space: "SOURCE",
+    source_start_ms: sourceStart,
+    source_end_ms: sourceEnd,
+    edited_start_ms: editedAt,
+    edited_end_ms: editedAt,
+    transcript_text: text,
+    transcript_word_ids: wordIds,
+    cut_id: cut.cut_id,
+    chapter_id: null,
+    active_edl_id: edl?.edl_id || null,
+    active_preview_mode,
+    label: `Cut: ${formatCutLabel(cut.decision_type, removedDuration)}`,
+    cut_reason: cut.safety_reason || cut.decision_type,
+    removed_duration_ms: removedDuration,
+  };
+}
+
+export function buildTranscriptWordSelection({
+  productionId,
+  word,
+  previewMode,
+  edl,
+  transcript,
+}: {
+  productionId: string;
+  word: TranscriptWord;
+  previewMode: string;
+  edl?: EditDecisionList | null;
+  transcript?: Transcript | null;
+}): EditorSelection {
+  const active_preview_mode = normalizePreviewModeToActive(previewMode);
+  const cut = findCutAtSourceTime(word.start_ms, edl);
+  const editedStart = sourceToEditedTimeMs(word.start_ms, edl);
+  const editedEnd = sourceToEditedTimeMs(word.end_ms, edl);
+
+  if (cut) {
+    return buildCutSelection({
+      productionId,
+      cut,
+      previewMode,
+      edl,
+      transcript,
+    });
+  }
+
+  return {
+    production_id: productionId,
+    selection_type: "TRANSCRIPT_WORD",
+    coordinate_space: "SOURCE",
+    source_start_ms: word.start_ms,
+    source_end_ms: word.end_ms,
+    edited_start_ms: editedStart,
+    edited_end_ms: editedEnd,
+    transcript_text: word.text,
+    transcript_word_ids: [word.index],
+    cut_id: null,
+    chapter_id: null,
+    active_edl_id: edl?.edl_id || null,
+    active_preview_mode,
+    label: `Transcript word: ${word.text}`,
+    cut_reason: null,
+    removed_duration_ms: null,
+  };
+}
+
+export function buildTranscriptSegmentSelection({
+  productionId,
+  segment,
+  previewMode,
+  edl,
+  transcript,
+}: {
+  productionId: string;
+  segment: TranscriptSegment;
+  previewMode: string;
+  edl?: EditDecisionList | null;
+  transcript?: Transcript | null;
+}): EditorSelection {
+  const active_preview_mode = normalizePreviewModeToActive(previewMode);
+  const editedStart = sourceToEditedTimeMs(segment.start_ms, edl);
+  const editedEnd = sourceToEditedTimeMs(segment.end_ms, edl);
+  const words = getWordsInSourceRange(segment.start_ms, segment.end_ms, transcript);
+  const wordIds = words.length > 0 ? words.map((w) => w.index) : null;
+
+  return {
+    production_id: productionId,
+    selection_type: "TRANSCRIPT_SEGMENT",
+    coordinate_space: "SOURCE",
+    source_start_ms: segment.start_ms,
+    source_end_ms: segment.end_ms,
+    edited_start_ms: editedStart,
+    edited_end_ms: editedEnd,
+    transcript_text: segment.text,
+    transcript_word_ids: wordIds,
+    cut_id: null,
+    chapter_id: null,
+    active_edl_id: edl?.edl_id || null,
+    active_preview_mode,
+    label: `Transcript: ${segment.text}`,
+    cut_reason: null,
+    removed_duration_ms: null,
+  };
+}
+
 export type MediaOutputStatus = "ready" | "generating" | "failed" | "unavailable";
 
 export interface MediaOutputState {

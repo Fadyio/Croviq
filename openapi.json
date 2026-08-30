@@ -3118,6 +3118,12 @@
   },
   "components": {
     "schemas": {
+      "ActivePreviewMode": {
+        "type": "string",
+        "enum": ["ORIGINAL", "EDITED", "VOICEOVER", "FINAL_MIX"],
+        "title": "ActivePreviewMode",
+        "description": "Preview mode active in the video player during selection."
+      },
       "AgentActivity": {
         "properties": {
           "activity_id": {
@@ -5033,6 +5039,12 @@
         "type": "object",
         "title": "CodeExecutionRequest"
       },
+      "CoordinateSpace": {
+        "type": "string",
+        "enum": ["SOURCE", "EDITED"],
+        "title": "CoordinateSpace",
+        "description": "Coordinate space of the selected timestamp/range."
+      },
       "CorrectedScriptResponse": {
         "properties": {
           "production_id": {
@@ -6196,11 +6208,171 @@
             "description": "Overall confidence in the proposal"
           }
         },
-        "additionalProperties": false,
         "type": "object",
         "required": ["production_id", "model", "summary", "overall_confidence"],
         "title": "EditorProposal",
         "description": "Complete batch proposal emitted by Leo (Video Editor)."
+      },
+      "EditorSelectionContext": {
+        "properties": {
+          "production_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Production Id"
+          },
+          "selection_type": {
+            "$ref": "#/components/schemas/EditorSelectionType"
+          },
+          "coordinate_space": {
+            "$ref": "#/components/schemas/CoordinateSpace"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source End Ms"
+          },
+          "edited_start_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited Start Ms"
+          },
+          "edited_end_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited End Ms"
+          },
+          "transcript_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Text"
+          },
+          "transcript_word_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Word Ids"
+          },
+          "cut_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cut Id"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "active_edl_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Edl Id"
+          },
+          "active_preview_mode": {
+            "$ref": "#/components/schemas/ActivePreviewMode",
+            "default": "FINAL_MIX"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "cut_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cut Reason"
+          },
+          "removed_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed Duration Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "production_id",
+          "selection_type",
+          "coordinate_space",
+          "source_start_ms",
+          "source_end_ms"
+        ],
+        "title": "EditorSelectionContext",
+        "description": "Single canonical editor selection context for agent reasoning."
+      },
+      "EditorSelectionType": {
+        "type": "string",
+        "enum": ["POINT", "RANGE", "TRANSCRIPT_WORD", "TRANSCRIPT_SEGMENT", "CUT", "CHAPTER"],
+        "title": "EditorSelectionType",
+        "description": "Canonical timeline selection type in Croviq Editor."
       },
       "EditorVoiceMode": {
         "type": "string",
@@ -6244,6 +6416,30 @@
             "title": "Editor Proposal Id",
             "description": "Identifier of the generated EditorProposal record"
           },
+          "director_review_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Director Review Id",
+            "description": "Identifier of the generated DirectorReview record"
+          },
+          "self_review_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Self Review Id",
+            "description": "Identifier of the generated EditorSelfReview record"
+          },
           "started_at": {
             "type": "string",
             "format": "date-time",
@@ -6276,7 +6472,6 @@
             "description": "Sanitized failure code if run status is FAILED"
           }
         },
-        "additionalProperties": false,
         "type": "object",
         "required": ["run_id", "production_id"],
         "title": "EditorialRun",
@@ -7521,6 +7716,16 @@
             "maxLength": 10000,
             "minLength": 1,
             "title": "Message"
+          },
+          "editor_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditorSelectionContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "selected_range_ms": {
             "anyOf": [
