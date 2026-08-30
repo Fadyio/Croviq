@@ -37,3 +37,8 @@ real_*_acceptance_result.json
 **/real_*_acceptance_result.json
 production-*.png
 apps/web/production-*.png
+
+# Coverage & Python Bytecode
+.coverage
+coverage/
+*.pyc

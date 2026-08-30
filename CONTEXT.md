@@ -31,7 +31,7 @@ The statistical intelligence agent who evaluates channel baselines, detects rete
 _Avoid_: Analytics Narrator, Reporting Bot, Dashboard Summarizer
 
 **Editor (Leo)**:
-The dialogue and narrative editing agent who performs semantic dialogue passes, cleans transcript/timeline segments, eliminates filler/dead air/redundancy, applies natural cut safety, reports batch edits, and renders the master and vertical Short.
+The dialogue and narrative editing agent who performs semantic dialogue passes, cleans transcript/timeline segments, eliminates filler/dead air/redundancy, applies natural cut safety, reports batch edits, synthesizes Studio Voice audio, and renders the master video.
 _Avoid_: Post-Production, Cutter, Video Processor
 
 **Quality Control / QA (Iris)**:
@@ -98,9 +98,6 @@ _Avoid_: Blend, Fade Effect
 The full-length, high-resolution rendered video output produced deterministically by FFmpeg from the approved EDL.
 _Avoid_: Final Video, Export, Rendered File
 
-**Short**:
-A standalone vertical (9:16) excerpt (20–60s) extracted from the production with synchronized burned-in captions.
-_Avoid_: Clip, Reel, Snippet, Highlight
 
 ---
 
@@ -111,7 +108,7 @@ A bounded, executable unit of work within a Run owned by an Agent or the determi
 _Avoid_: Task, Step, Stage, Action
 
 **Artifact**:
-An immutable, versioned digital asset produced or consumed during a Run (source video, EDL, master render, Short, thumbnail concept, QA report).
+An immutable, versioned digital asset produced or consumed during a Run (source video, EDL, master render, Studio Voice narration, B-roll overlay, QA report).
 _Avoid_: Output, File, Result, Asset
 
 **Approval Gate**:

@@ -62,6 +62,8 @@ export const EChartsWrapper: React.FC<EChartsWrapperProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+  const onChartClickRef = useRef(onChartClick);
+  onChartClickRef.current = onChartClick;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -71,9 +73,10 @@ export const EChartsWrapper: React.FC<EChartsWrapperProps> = ({
     });
     chartInstanceRef.current = chart;
 
-    if (onChartClick) {
-      chart.on("click", onChartClick);
-    }
+    const clickHandler = (params: echarts.ECElementEvent) => {
+      onChartClickRef.current?.(params);
+    };
+    chart.on("click", clickHandler);
 
     const resizeObserver = new ResizeObserver(() => {
       chart.resize({
@@ -84,13 +87,11 @@ export const EChartsWrapper: React.FC<EChartsWrapperProps> = ({
 
     return () => {
       resizeObserver.disconnect();
-      if (onChartClick) {
-        chart.off("click", onChartClick);
-      }
+      chart.off("click", clickHandler);
       chart.dispose();
       chartInstanceRef.current = null;
     };
-  }, [onChartClick]);
+  }, []);
 
   useEffect(() => {
     if (chartInstanceRef.current) {

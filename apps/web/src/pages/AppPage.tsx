@@ -70,6 +70,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
   // Unified deterministic connection & dashboard loading
   useEffect(() => {
     if (!firebaseUser) return;
+    void _refreshKey;
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -169,7 +170,18 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser, period, channelMode, loadFindings]);
+  }, [firebaseUser, period, channelMode, loadFindings, _refreshKey]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setEvidenceModalInsight(null);
+        setYoutubeModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
   const startYouTubeConnect = async () => {
     if (!firebaseUser) return;
     setIsConnectingYt(true);
@@ -512,6 +524,9 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.15 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="evidence-modal-title"
               className="w-full max-w-lg rounded-xl border border-border-strong bg-surface-1 p-6 shadow-2xl space-y-4"
             >
               <div className="flex items-start justify-between gap-4">
@@ -520,7 +535,10 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
                     <TrendingUp className="h-3 w-3" />
                     Evidence Analysis
                   </span>
-                  <h3 className="mt-1 text-base font-semibold text-text-primary">
+                  <h3
+                    id="evidence-modal-title"
+                    className="mt-1 text-base font-semibold text-text-primary"
+                  >
                     {evidenceModalInsight.title}
                   </h3>
                 </div>
@@ -588,13 +606,20 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
       {/* Connect YouTube Modal */}
       {youtubeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-border-strong bg-surface-1 p-6 shadow-2xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="yt-modal-title"
+            className="w-full max-w-md rounded-xl border border-border-strong bg-surface-1 p-6 shadow-2xl"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="flex h-7 w-7 items-center justify-center rounded bg-red-500/15 text-xs font-bold text-red-400">
                   YT
                 </span>
-                <h3 className="text-sm font-semibold">Connect YouTube Channel</h3>
+                <h3 id="yt-modal-title" className="text-sm font-semibold">
+                  Connect YouTube Channel
+                </h3>
               </div>
               <button
                 type="button"

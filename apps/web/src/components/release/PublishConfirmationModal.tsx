@@ -102,6 +102,15 @@ export const PublishConfirmationModal: React.FC<PublishConfirmationModalProps> =
     prepData?.verified_thumbnail_frames as VerifiedThumbnailFrame[] | undefined
   )?.[selectedFrameIndex];
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isPublishing) onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, isPublishing, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -109,7 +118,12 @@ export const PublishConfirmationModal: React.FC<PublishConfirmationModalProps> =
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-fade-in select-none"
       data-testid="publish-confirmation-modal"
     >
-      <div className="bg-surface-1 border border-border-subtle rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="publish-modal-title"
+        className="bg-surface-1 border border-border-subtle rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-surface-2/60 shrink-0">
           <div className="flex items-center gap-3">
@@ -117,7 +131,10 @@ export const PublishConfirmationModal: React.FC<PublishConfirmationModalProps> =
               <YouTubeIcon className="size-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+              <h2
+                id="publish-modal-title"
+                className="text-base font-bold text-text-primary flex items-center gap-2"
+              >
                 Publish to YouTube
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                   Creator Confirmation

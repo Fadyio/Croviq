@@ -450,3 +450,103 @@ def test_render_final_mix_with_cuts_preserves_edited_timeline_duration(synthetic
     )
     assert fake_res.artifact_type == ArtifactType.FINAL_MIX
     assert fake_res.duration_ms == 3000
+
+def test_single_segment_narration_audio_is_not_dropped(synthetic_5s_video: Path, tmp_path: Path):
+    """Verify single keep segment with narration produces audio mix including narration, not dropping it."""
+    renderer = FFmpegRenderService()
+    now = datetime.now(timezone.utc)
+    # Single keep segment (trimmed from 1000ms to 4000ms)
+    edl = EditDecisionList(
+        edl_id="edl_single_narr",
+        production_id="prod_narr",
+        source_duration_ms=5000,
+        cuts=[
+            CutInstruction(
+                cut_id="cut_0",
+                decision_id="dec_0",
+                decision_type=EditorDecisionType.TRIM_PAUSE,
+                transcript_start_word=1,
+                transcript_end_word=2,
+                requested_start_ms=0,
+                requested_end_ms=1000,
+                safe_start_ms=0,
+                safe_end_ms=1000,
+                removed_duration_ms=1000,
+                left_anchor="start",
+                right_anchor="mid",
+                transition_ms=20,
+                safety_status=CutSafetyStatus.SAFE,
+                safety_reason="clean",
+                confidence=0.99,
+            ),
+            CutInstruction(
+                cut_id="cut_1",
+                decision_id="dec_1",
+                decision_type=EditorDecisionType.TRIM_PAUSE,
+                transcript_start_word=3,
+                transcript_end_word=4,
+                requested_start_ms=4000,
+                requested_end_ms=5000,
+                safe_start_ms=4000,
+                safe_end_ms=5000,
+                removed_duration_ms=1000,
+                left_anchor="mid",
+                right_anchor="end",
+                transition_ms=20,
+                safety_status=CutSafetyStatus.SAFE,
+                safety_reason="clean",
+                confidence=0.99,
+            ),
+        ],
+        created_at=now,
+    )
+    from croviq_media.render import derive_keep_segments
+    assert len(derive_keep_segments(edl)) == 1
+
+    narr_path = tmp_path / "narr_3s.wav"
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error",
+        "-f", "lavfi", "-i", "sine=frequency=880:duration=3",
+        "-ar", "24000", "-ac", "1",
+        str(narr_path),
+    ], check=True)
+
+    out_path = tmp_path / "single_narr.mp4"
+    res = renderer.render_studio_voice_master(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        narration_audio_path=narr_path,
+        speech_intervals_ms=[(1000, 3000)],
+        output_path=out_path,
+    )
+    assert res.output_path.exists()
+    assert abs(res.duration_ms - 3000) <= 250
+
+
+def test_broll_placement_pts_offset(synthetic_5s_video: Path, tmp_path: Path):
+    """Verify B-roll overlay filter includes start time PTS offset to prevent early termination."""
+    renderer = FFmpegRenderService()
+    fg, maps = renderer._build_filtergraph(
+        keep_segments=[(0, 5000)],
+        source_duration_ms=5000,
+        broll_path=synthetic_5s_video,
+        coverage_start_ms=2000,
+        coverage_end_ms=4000,
+    )
+    assert fg is not None
+    # Must have PTS offset of +2.0000/TB (coverage_start_s)
+    assert "setpts=PTS-STARTPTS+2.0000/TB" in fg
+    assert "between(t,2.0000,4.0000)" in fg
+
+
+def test_render_service_abstract_interface_contract_parity():
+    """Verify RenderService, FakeRenderService, and FFmpegRenderService share identical method signatures."""
+    import inspect
+    from croviq_media.render import RenderService, FakeRenderService, FFmpegRenderService
+
+    abc_sig = inspect.signature(RenderService.render_broll_placement)
+    fake_sig = inspect.signature(FakeRenderService.render_broll_placement)
+    ffmpeg_sig = inspect.signature(FFmpegRenderService.render_broll_placement)
+
+    assert list(abc_sig.parameters.keys()) == list(fake_sig.parameters.keys())
+    assert list(abc_sig.parameters.keys()) == list(ffmpeg_sig.parameters.keys())

@@ -415,9 +415,7 @@ source = { editable = "../../packages/media" }
 dependencies = [
     { name = "croviq-domain" },
     { name = "croviq-observability" },
-    { name = "google-cloud-storage" },
     { name = "google-genai" },
-    { name = "httpx" },
     { name = "pydantic" },
 ]
 
@@ -425,9 +423,7 @@ dependencies = [
 requires-dist = [
     { name = "croviq-domain", editable = "../../packages/domain" },
     { name = "croviq-observability", editable = "../../packages/observability" },
-    { name = "google-cloud-storage", specifier = ">=2.18.0" },
     { name = "google-genai", specifier = ">=2.20.0" },
-    { name = "httpx", specifier = ">=0.28.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
 ]
 

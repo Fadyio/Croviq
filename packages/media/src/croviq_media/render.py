@@ -97,6 +97,7 @@ class RenderService(ABC):
     @abstractmethod
     def render_broll_placement(
         self,
+        source_path: Path | str,
         edl: EditDecisionList,
         broll_path: Path | str,
         coverage_start_ms: int,
@@ -557,7 +558,7 @@ class FFmpegRenderService(RenderService):
             placement_dur_s = cov_end_s - cov_start_s
             broll_filter = (
                 f"[{broll_input_idx}:v]trim=start=0:duration={placement_dur_s:.4f},"
-                f"setpts=PTS-STARTPTS,scale=1920:1080:force_original_aspect_ratio=increase,"
+                f"setpts=PTS-STARTPTS+{cov_start_s:.4f}/TB,scale=1920:1080:force_original_aspect_ratio=increase,"
                 f"crop=1920:1080,setsar=1[broll_v_trim]"
             )
 
@@ -619,7 +620,7 @@ class FFmpegRenderService(RenderService):
                 )
             return ";".join(audio_parts), ["-map", "0:v", "-map", "[aout]"]
 
-        if num_segs == 1 and not has_broll and not has_music:
+        if num_segs == 1 and not has_broll and not has_music and not has_narration:
             start_ms, end_ms = keep_segments[0]
             start_s = start_ms / 1000.0
             end_s = end_ms / 1000.0

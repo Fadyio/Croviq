@@ -1,6 +1,6 @@
 import { ExternalLink, Sparkles, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import React from "react";
+import React, { useEffect } from "react";
 import type { components } from "../../api/generated";
 
 type ResearchFinding = components["schemas"]["ResearchFinding"];
@@ -26,6 +26,15 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
   findings,
   onClose,
 }) => {
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -35,6 +44,9 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 30 }}
             transition={{ duration: 0.2 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="drawer-findings-title"
             className="flex h-full w-full max-w-xl flex-col border-l border-border-strong bg-surface-1 shadow-2xl"
           >
             {/* Drawer Header */}
@@ -44,7 +56,12 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
                   <Sparkles className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-text-primary">Ideas Worth Making</h2>
+                  <h2
+                    id="drawer-findings-title"
+                    className="text-sm font-semibold text-text-primary"
+                  >
+                    Ideas Worth Making
+                  </h2>
                   <p className="text-xs text-text-muted">
                     {findings.length} channel-aligned video opportunities
                   </p>

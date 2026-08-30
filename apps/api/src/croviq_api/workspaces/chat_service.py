@@ -260,17 +260,18 @@ class AgentChatService:
         self,
         *,
         workspace_id: str,
+        user_id: str | None = None,
         agent_config_repo: AgentConfigRepository,
         memory_store: ChannelMemoryStore,
         youtube_repo: YouTubeConnectionRepository | None = None,
         research_repo: ResearchRepository | None = None,
     ) -> None:
         self.workspace_id = workspace_id
+        self.user_id = user_id
         self.agent_config_repo = agent_config_repo
         self.memory_store = memory_store
         self.youtube_repo = youtube_repo
         self.research_repo = research_repo
-
     async def handle_alex_message(
         self,
         message: str,
@@ -333,7 +334,7 @@ class AgentChatService:
                 pass
 
         # 4. Get conversation history
-        history = get_conversation_history(self.workspace_id, "alex")
+        history = get_conversation_history(self.workspace_id, "alex", self.user_id)
 
         # 5. Execute Alex chat
         settings = get_settings()
@@ -356,7 +357,7 @@ class AgentChatService:
         tool_executions = chat_result.get("tool_executions", [])
         structured_artifact = chat_result.get("structured_artifact")
 
-        append_conversation_message(self.workspace_id, "alex", "user", message)
+        append_conversation_message(self.workspace_id, "alex", "user", message, user_id=self.user_id)
         return append_conversation_message(
             self.workspace_id,
             "alex",
@@ -364,6 +365,7 @@ class AgentChatService:
             reply,
             tool_executions=tool_executions,
             structured_artifact=structured_artifact,
+            user_id=self.user_id,
         )
 
     async def handle_leo_message(

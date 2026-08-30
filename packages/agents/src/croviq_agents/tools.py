@@ -907,7 +907,19 @@ def build_default_editor_tool_registry(
                     media_storage.simulate_uploaded_object(bucket, gcs_object, len(raw_video_bytes), "video/mp4", raw_video_bytes)
                 elif hasattr(media_storage, "upload_bytes"):
                     if inspect.iscoroutinefunction(media_storage.upload_bytes):
-                        asyncio.run(media_storage.upload_bytes(bucket, gcs_object, raw_video_bytes, "video/mp4"))
+                        try:
+                            loop = asyncio.get_running_loop()
+                        except RuntimeError:
+                            loop = None
+                        if loop and loop.is_running():
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                                pool.submit(
+                                    asyncio.run,
+                                    media_storage.upload_bytes(bucket, gcs_object, raw_video_bytes, "video/mp4"),
+                                ).result()
+                        else:
+                            asyncio.run(media_storage.upload_bytes(bucket, gcs_object, raw_video_bytes, "video/mp4"))
                     else:
                         media_storage.upload_bytes(bucket, gcs_object, raw_video_bytes, "video/mp4")
 

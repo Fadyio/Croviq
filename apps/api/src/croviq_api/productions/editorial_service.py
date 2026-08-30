@@ -623,13 +623,16 @@ class EditorialService:
         return profile, lessons or []
 
     def _build_analysis_input(
-        self, production: Production, transcript: Transcript
+        self,
+        production: Production,
+        transcript: Transcript,
+        video_path: Path | str | None = None,
     ) -> SourceVideoAnalysisInput:
-        try:
-            metadata = self._media_inspector.inspect_media(
-                production.source_media.original_filename
-            )
-        except Exception:
+        if getattr(production.source_media, "media_metadata", None) is not None:
+            metadata = production.source_media.media_metadata
+        elif video_path is not None and Path(video_path).is_file():
+            metadata = self._media_inspector.inspect_media(video_path)
+        else:
             metadata = MediaMetadata(
                 duration_ms=transcript.duration_ms,
                 width=1920,

@@ -9,8 +9,8 @@ Croviq is an autonomous, visible multi-agent production team that learns a creat
 ## Implemented Autonomous Production Team
 
 - **Alex (Data Scientist)**: Channel intelligence and research agent. Alex analyzes channel performance trends, executes automated Google Search-grounded research on configurable cadences with verifiable citations, runs Python code execution for statistical correlations, and distills falsifiable lessons into the persistent Channel Memory Bank.
-- **Leo (Video Editor)**: Full-timeline dialogue and narrative editing agent. Leo inspects raw footage, demuxes multi-track audio, detects speech boundaries, eliminates filler/redundancy, generates candidates for vertical Shorts (9:16), rewrites Studio Voice voiceover scripts, and generates context-aware B-roll coverage.
-- **Iris (Quality Control)**: Independent verification and release gatekeeper agent. Iris inspects the actual rendered video artifact for editing continuity, bad cuts, dead air, audio loudness (~ -16 LUFS target), caption sync, vertical Short framing, and factual consistency.
+- **Leo (Video Editor)**: Full-timeline dialogue and narrative editing agent. Leo inspects raw footage, demuxes multi-track audio, detects speech boundaries, eliminates filler/redundancy, rewrites Studio Voice voiceover scripts, and generates context-aware B-roll coverage.
+- **Iris (Quality Control)**: Independent verification and release gatekeeper agent. Iris inspects the actual rendered video artifact for editing continuity, bad cuts, dead air, audio loudness (~ -16 LUFS target), caption sync, and factual consistency.
 ---
 
 ## Current AI Stack (Vertex AI & Google GenAI SDK)
@@ -34,7 +34,7 @@ Croviq is an autonomous, visible multi-agent production team that learns a creat
 
 ## Data & Storage Architecture
 
-- **Google Cloud Storage (GCS)** (`croviq-media-raw`): Private, uniform-access bucket storing raw source footage, extracted 16kHz WAV audio, rendered Master MP4s, vertical Short MP4s, Studio Voice synthesis audio, and generative B-roll clips. Client uploads use short-lived V4 signed URLs with zero API server proxying.
+- **Google Cloud Storage (GCS)** (`croviq-media-raw`): Private, uniform-access bucket storing raw source footage, extracted 16kHz WAV audio, rendered Master MP4s, Studio Voice synthesis audio, and B-roll clips. Client uploads use short-lived V4 signed URLs with zero API server proxying.
 - **Google Cloud Firestore (Native Mode)**: Native document database managing workspaces, productions, transcripts, editorial runs, assembled EDLs, render metadata, research runs, findings, and KMS-encrypted OAuth connection payloads.
 - **Deterministic Rendering**: FFmpeg running in Cloud Run container worker threads executing typed Edit Decision Lists (EDLs) with natural cut-safety micro-crossfades and audio envelope padding.
 

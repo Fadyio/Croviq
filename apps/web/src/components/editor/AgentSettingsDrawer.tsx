@@ -11,7 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/generated";
 import { useAuth } from "../../auth/AuthContext";
 import { AGENT_IDENTITIES, type AgentId } from "../AgentTeamSelector";
@@ -91,6 +91,16 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
 
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+        activeAudioRef.current = null;
+      }
+    };
+  }, []);
   // General loading & error
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -353,6 +363,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
   };
 
   const handlePreviewVoice = async (voiceName: string) => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
     setIsPlayingAudio(true);
     try {
       const headers = await getAuthHeaders();
@@ -368,12 +382,21 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
         const data = await res.json();
         if (data.audio_base64) {
           const audio = new Audio(`data:audio/mp3;base64,${data.audio_base64}`);
+          activeAudioRef.current = audio;
+          audio.onended = () => {
+            setIsPlayingAudio(false);
+            activeAudioRef.current = null;
+          };
+          audio.onerror = () => {
+            setIsPlayingAudio(false);
+            activeAudioRef.current = null;
+          };
           await audio.play();
+          return;
         }
       }
+      setIsPlayingAudio(false);
     } catch {
-      // Audio preview error non-blocking
-    } finally {
       setIsPlayingAudio(false);
     }
   };
@@ -721,7 +744,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => setDeletingMemoryId(null)}
-                                    className="rounded bg-surface-3 px-3 py-1 text-xs font-medium text-text-primary hover:bg-surface-4 transition-colors cursor-pointer"
+                                    className="rounded bg-surface-3 px-3 py-1 text-xs font-medium text-text-primary hover:bg-elevated transition-colors cursor-pointer"
                                   >
                                     Cancel
                                   </button>
@@ -909,7 +932,7 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                             setResearch((cur) => (cur ? { ...cur, prompts: updatedPrompts } : cur));
                             setNewSourceDraft("");
                           }}
-                          className="rounded-lg bg-surface-3 p-2 text-text-primary hover:bg-surface-4 transition-colors cursor-pointer"
+                          className="rounded-lg bg-surface-3 p-2 text-text-primary hover:bg-elevated transition-colors cursor-pointer"
                         >
                           <Plus className="h-3.5 w-3.5" />
                         </button>

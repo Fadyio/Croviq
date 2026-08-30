@@ -1,5 +1,8 @@
 # 0009: Frontend UI Stack, Design System, and Motion Discipline
 
+
+> **Status**: Accepted / Amended (Production web client simplified to a lean, high-performance stack composed of pure React 19, Tailwind CSS v4, Motion, Lucide React, ECharts, and Firebase JS SDK).
+
 ## Context
 Video creators expect dense, responsive, high-precision creative tooling (reminiscent of Premiere Pro or DaVinci Resolve) combined with the modern speed and polish of tools like Linear and Raycast. Proliferation of redundant animation libraries, unstructured styling, or generic SaaS dashboard templates undermines product coherence and performance.
 

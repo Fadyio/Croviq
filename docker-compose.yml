@@ -35,5 +35,5 @@ services:
     environment:
       - ENVIRONMENT=development
       - PORT=8080
-      - CROVIQ_ALLOWED_EMAILS=fadynagh10@gmail.com
+      - CROVIQ_ALLOWED_EMAILS=demo@croviq.app,fadynagh10@gmail.com
     restart: unless-stopped

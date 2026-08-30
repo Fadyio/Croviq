@@ -2559,6 +2559,19 @@ async def generate_release_review(
         }
     )
     await release_review_repo.save_release_review(review)
+    if review.approved_for_release or review.verdict == ReleaseVerdict.PASS:
+        try:
+            from croviq_observability import log_master_approved_event
+            request_id = getattr(request.state, "request_id", "unknown")
+            log_master_approved_event(
+                production_id=prod.production_id,
+                edl_id=effective_edl_id,
+                preview_artifact_id=master_artifact.artifact_id,
+                review_id=review.review_id,
+                request_id=request_id,
+            )
+        except Exception:
+            pass
     return await _build_release_review_response(
         production_id=prod.production_id,
         review=review,

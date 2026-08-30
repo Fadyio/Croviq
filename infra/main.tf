@@ -29,6 +29,13 @@ locals {
   ]
 }
 
+# -----------------------------------------------------------------------------
+# 1.1 Project Data Source
+# -----------------------------------------------------------------------------
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 resource "google_project_service" "required_services" {
   for_each           = toset(local.required_services)
   project            = var.project_id
@@ -1244,7 +1251,7 @@ resource "google_bigquery_dataset_iam_member" "aiplatform_sa_bq_editor" {
   project    = var.project_id
   dataset_id = google_bigquery_dataset.ai_observability.dataset_id
   role       = "roles/bigquery.dataEditor"
-  member     = "serviceAccount:service-705994694330@gcp-sa-aiplatform.iam.gserviceaccount.com"
+  member     = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-aiplatform.iam.gserviceaccount.com"
 }
 
 # Allow API Runtime Service Account to read/query request/response logs from BigQuery dataset

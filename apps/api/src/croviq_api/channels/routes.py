@@ -815,9 +815,18 @@ async def distill_research_finding(
     finding_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
     research_repo: Annotated[ResearchRepository, Depends(get_research_repository)],
+    workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)],
 ) -> DistillFindingResponse:
+    workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     finding = await research_repo.get_finding(finding_id)
     if finding is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Research finding '{finding_id}' not found.",
+        )
+    run = await research_repo.get_run(finding.run_id)
+    if run is not None and run.workspace_id != workspace.workspace_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Research finding '{finding_id}' not found.",
@@ -831,6 +840,7 @@ async def distill_research_finding(
             confidence=None,
             status="insufficient_evidence_for_long_term_memory",
         )
+    await memory_store.add_lesson(lesson)
     return DistillFindingResponse(
         lesson_id=lesson.lesson_id,
         directive=lesson.directive,

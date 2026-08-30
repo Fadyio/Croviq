@@ -241,6 +241,13 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       // Fullscreen not supported or blocked
     }
   };
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
 
   const handleRestart = () => {
     onSeek(0);
@@ -261,6 +268,27 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       onSeek(sourceMs);
     } else {
       onSeek(targetModeMs);
+    }
+  };
+  const handleScrubberKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    let target = activeCurrentTimeMs;
+    if (e.key === "ArrowLeft") {
+      target = Math.max(0, activeCurrentTimeMs - 5000);
+    } else if (e.key === "ArrowRight") {
+      target = Math.min(activeDurationMs, activeCurrentTimeMs + 5000);
+    } else if (e.key === "Home") {
+      target = 0;
+    } else if (e.key === "End") {
+      target = activeDurationMs;
+    } else {
+      return;
+    }
+    e.preventDefault();
+    if (previewMode === "edited" && edl) {
+      const sourceMs = editedToSourceTimeMs(target, edl);
+      onSeek(sourceMs);
+    } else {
+      onSeek(target);
     }
   };
 
@@ -330,8 +358,9 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       <div className="bg-surface-2 border-t border-border-subtle px-3 py-2 flex flex-col gap-1.5">
         {/* Playhead Progress Bar */}
         <div
-          className="relative w-full h-2 bg-surface-3 rounded-full cursor-pointer overflow-hidden group/scrub"
+          className="relative w-full h-2 bg-surface-3 rounded-full cursor-pointer overflow-hidden group/scrub focus:outline-none focus:ring-2 focus:ring-primary"
           onClick={handleScrubberClick}
+          onKeyDown={handleScrubberKeyDown}
           role="slider"
           aria-label="Video scrubber"
           aria-valuemin={0}
@@ -392,6 +421,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
               }}
               className="p-1 rounded text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors"
               title={isMuted ? "Unmute" : "Mute"}
+              aria-label={isMuted ? "Unmute audio" : "Mute audio"}
             >
               {isMuted ? (
                 <VolumeX className="w-4 h-4 text-danger" />
@@ -406,6 +436,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
               onClick={handleToggleFullscreen}
               className="p-1 rounded text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors"
               title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>

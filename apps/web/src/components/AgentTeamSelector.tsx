@@ -153,7 +153,7 @@ export const AgentTeamSelector: React.FC<AgentTeamSelectorProps> = ({
                   <button
                     type="button"
                     onClick={() => handleAgentAction(agentId, "settings")}
-                    className="flex items-center justify-center gap-1 rounded-md bg-surface-1 px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:bg-surface-4 hover:text-text-primary transition-colors cursor-pointer"
+                    className="flex items-center justify-center gap-1 rounded-md bg-surface-1 px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors cursor-pointer"
                     title={`${agent.name} Settings`}
                     data-testid={`btn-team-settings-${agentId}`}
                   >

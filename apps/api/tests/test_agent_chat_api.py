@@ -237,3 +237,30 @@ def test_bounded_conversation_store_eviction_and_isolation() -> None:
     assert len(hist) == 5
     assert hist[-1]["content"] == "msg 9"
     assert hist[0]["content"] == "msg 5"
+
+
+def test_alex_chat_http_endpoint_user_isolation(client: TestClient, verifier: FakeTokenVerifier, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CROVIQ_ALLOWED_EMAILS", "creator@example.com,collaborator@example.com")
+    get_settings.cache_clear()
+
+    verifier.tokens["collab-token"] = {
+        "uid": "collaborator-2",
+        "email": "collaborator@example.com",
+        "name": "Collaborator",
+    }
+
+    # User 1 sends message
+    resp1 = client.post(
+        "/api/workspace/agents/alex/chat",
+        headers={"Authorization": "Bearer creator-token"},
+        json={"message": "Query from User 1"},
+    )
+    assert resp1.status_code == 200
+
+    # User 1 checks history -> has messages
+    hist1 = client.get("/api/workspace/agents/alex/chat", headers={"Authorization": "Bearer creator-token"}).json()
+    assert len(hist1["messages"]) >= 2
+
+    # User 2 checks history -> must be empty (isolated)
+    hist2 = client.get("/api/workspace/agents/alex/chat", headers={"Authorization": "Bearer collab-token"}).json()
+    assert len(hist2["messages"]) == 0

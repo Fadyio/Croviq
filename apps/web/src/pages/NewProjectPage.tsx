@@ -79,6 +79,24 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
   useEffect(() => {
     void loadProductions();
   }, [loadProductions]);
+  useEffect(() => {
+    return () => {
+      if (activeXhrRef.current) {
+        activeXhrRef.current.abort();
+        activeXhrRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && deletingTarget && !isDeletingProduction) {
+        setDeletingTarget(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [deletingTarget, isDeletingProduction]);
 
   // Navigate to editor helper
   const handleOpenEditor = (productionId: string) => {
@@ -387,6 +405,12 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
                   role="button"
                   tabIndex={0}
                   aria-label="Upload video area"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
                 >
                   <input
                     type="file"

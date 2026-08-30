@@ -412,7 +412,7 @@ async def get_agent_chat_history(
     workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
 ) -> AgentConversationHistoryResponse:
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
-    history = get_conversation_history(workspace.workspace_id, agent_id)
+    history = get_conversation_history(workspace.workspace_id, agent_id, current_user.user_id)
     return AgentConversationHistoryResponse(
         agent_id=agent_id.lower(),
         messages=[AgentChatMessageResponse.model_validate(m) for m in history],
@@ -429,7 +429,7 @@ async def clear_agent_chat_history(
     workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
 ) -> AgentConversationHistoryResponse:
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
-    clear_conversation_history(workspace.workspace_id, agent_id)
+    clear_conversation_history(workspace.workspace_id, agent_id, current_user.user_id)
     return AgentConversationHistoryResponse(
         agent_id=agent_id.lower(),
         messages=[],
@@ -461,6 +461,7 @@ async def send_agent_chat_message(
 
     service = AgentChatService(
         workspace_id=workspace.workspace_id,
+        user_id=current_user.user_id,
         agent_config_repo=agent_config_repo,
         memory_store=memory_store,
         youtube_repo=youtube_repo,

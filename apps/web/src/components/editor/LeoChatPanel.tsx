@@ -122,8 +122,10 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
   }, [authHeaders, productionId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  });
+    if (messages.length > 0 || isSending) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages.length, isSending]);
 
   const sendMessage = async (message?: string) => {
     const content = (message ?? inputMessage).trim();

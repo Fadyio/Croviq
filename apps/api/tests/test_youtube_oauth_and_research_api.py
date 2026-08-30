@@ -603,9 +603,18 @@ def test_alex_code_execution_endpoint(client: TestClient) -> None:
     assert data["calculation_performed"] != ""
 
 
-def test_distill_research_finding_endpoint(client: TestClient, repos: tuple) -> None:
+def test_distill_research_finding_endpoint(client: TestClient, repos: tuple, other_user: User) -> None:
     ws_repo, research_repo, yt_repo, agent_config_repo = repos
     now = datetime.now(UTC)
+    from croviq_domain.channel_intelligence import ResearchRun, ResearchRunStatus
+    run = ResearchRun(
+        run_id="run_test",
+        workspace_id="ws_usr_creator_01",
+        channel_id="croviq_syn_ai_eng_01",
+        scheduled_at=now,
+        status=ResearchRunStatus.COMPLETED,
+        model="gemini-3.7-flash",
+    )
     finding = ResearchFinding(
         finding_id="fnd_test_distill",
         run_id="run_test",
@@ -628,8 +637,9 @@ def test_distill_research_finding_endpoint(client: TestClient, repos: tuple) -> 
         discovered_at=now,
     )
     import asyncio
+    asyncio.run(research_repo.save_run(run))
     asyncio.run(research_repo.save_findings([finding]))
-
+    # 1. Owner user distills finding successfully
     response = client.post("/api/channels/research/findings/fnd_test_distill/distill")
     assert response.status_code == 200, response.text
     data = response.json()
@@ -638,6 +648,18 @@ def test_distill_research_finding_endpoint(client: TestClient, repos: tuple) -> 
     assert "Dynamic Thinking Budgets" in data["directive"]
     assert data["confidence"] == 0.95
 
+    # 2. Cross-workspace / unauthorized user attempts to distill the same finding (IDOR attempt)
+    intruder_app = create_app()
+    intruder_app.dependency_overrides[get_current_user] = lambda: other_user
+    intruder_app.dependency_overrides[get_workspace_repository] = lambda: ws_repo
+    intruder_app.dependency_overrides[get_research_repository] = lambda: research_repo
+    intruder_app.dependency_overrides[get_youtube_connection_repository] = lambda: yt_repo
+    intruder_app.dependency_overrides[get_agent_config_repository] = lambda: agent_config_repo
+    intruder_client = TestClient(intruder_app)
+
+    intruder_resp = intruder_client.post("/api/channels/research/findings/fnd_test_distill/distill")
+    assert intruder_resp.status_code == 404
+    assert "not found" in intruder_resp.json()["detail"].lower()
 
 def test_alex_custom_prompt_persisted_and_passed_to_research(client: TestClient, repos: tuple) -> None:
     ws_repo, research_repo, yt_repo, agent_config_repo = repos

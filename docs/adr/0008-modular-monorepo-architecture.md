@@ -1,5 +1,8 @@
 # 0008: Modular Monorepo Architecture and Package Boundaries
 
+
+> **Status**: Accepted / Consolidated (Workflow state machine logic was consolidated directly into `packages/domain` and `apps/api/src/croviq_api/productions/editorial_service.py` to maintain a streamlined 4-package Python structure).
+
 ## Context
 Croviq encompasses client-side video editing interfaces, deterministic workflow state machines, multimodal LLM agent coordinators, heavy FFmpeg media processing, and Google Cloud observability. Bundling all logic into a single monolithic web application creates brittle dependencies and bloated builds. Conversely, microservices introduce excessive deployment and networking overhead for a rapid development cycle.
 
