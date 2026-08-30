@@ -49,6 +49,47 @@ def test_latest_video_analysis_uses_channel_baselines() -> None:
     assert latest.retention_delta_points == pytest.approx(-25.61, abs=0.01)
 
 
+def test_recent_video_performance_ordering_and_comparisons() -> None:
+    dashboard = asyncio.run(
+        build_channel_dashboard(
+            SampleChannelDataProvider(), days=28, end_date=date(2026, 8, 26)
+        )
+    )
+
+    assert len(dashboard.recent_videos) == 5
+    assert dashboard.channel_baselines is not None
+    assert dashboard.channel_baselines.sample_size == 100
+    assert dashboard.channel_baselines.median_views == pytest.approx(29769.5, abs=0.5)
+    assert dashboard.channel_baselines.median_retention == pytest.approx(58.98, abs=0.1)
+    assert dashboard.channel_baselines.median_ctr == pytest.approx(7.78, abs=0.1)
+
+    # Verify ordered descending by published_at
+    for i in range(len(dashboard.recent_videos) - 1):
+        assert dashboard.recent_videos[i].published_at >= dashboard.recent_videos[i + 1].published_at
+
+    # Latest video
+    v1 = dashboard.recent_videos[0]
+    assert v1.video_id == "vid_syn_100"
+    assert v1.is_latest is True
+    assert v1.views == 23_314
+    assert v1.average_retention == pytest.approx(33.4, abs=0.01)
+    assert v1.ctr_percentage == pytest.approx(4.29, abs=0.01)
+    assert v1.subscribers_gained == 334
+    assert v1.subscribers_lost == 31
+    assert v1.net_subscribers == 303
+    assert v1.subs_per_1k == pytest.approx(14.33, abs=0.01)
+    assert v1.retention_delta_points == pytest.approx(-25.58, abs=0.1)
+    assert v1.alex_interpretation is not None
+    assert "Retention is the main weakness here" in v1.alex_interpretation
+    assert "25.6 points below your channel median" in v1.alex_interpretation
+    assert v1.alex_next_action == "Inspect the first 30 seconds for delayed demonstration or setup."
+
+    # Non-latest videos
+    v2 = dashboard.recent_videos[1]
+    assert v2.video_id == "vid_syn_099"
+    assert v2.is_latest is False
+    assert v2.alex_interpretation is None
+
 def test_dashboard_contains_evidence_backed_insight_and_experiment() -> None:
     dashboard = asyncio.run(
         build_channel_dashboard(

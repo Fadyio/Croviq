@@ -637,8 +637,8 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await expect(kpiSection.getByText("Net subscribers", { exact: true })).toBeVisible();
     await expect(kpiSection.getByText("Average retention", { exact: true })).toBeVisible();
 
-    // Check latest video summary
-    await expect(page.getByText("Since your last upload")).toBeVisible();
+    // Check recent videos summary
+    await expect(page.getByText("Recent video performance")).toBeVisible();
     await expect(page.getByText("Google GenAI SDK Tutorial for Beginners (Part 5)")).toBeVisible();
 
     // Check dominant trend chart

@@ -146,25 +146,31 @@ from croviq_domain.publish import (
     derive_synthetic_media_status,
 )
 from croviq_domain.channel_dashboard import (
+    ChannelBaselines,
     ChannelDashboard,
     DashboardChannel,
     DashboardKpi,
     DashboardTrendPoint,
     LatestVideoAnalysis,
+    RecentVideoPerformance,
     TopicClusterPerformance,
     VideoPerformancePoint,
     compute_latest_video_analysis,
+    compute_recent_video_performance,
 )
 
 __all__ = [
+    "ChannelBaselines",
     "ChannelDashboard",
     "DashboardChannel",
     "DashboardKpi",
     "DashboardTrendPoint",
     "LatestVideoAnalysis",
+    "RecentVideoPerformance",
     "TopicClusterPerformance",
     "VideoPerformancePoint",
     "compute_latest_video_analysis",
+    "compute_recent_video_performance",
     "AgentActivity",
     "ChapterMarker",
     "VideoSectionDecision",

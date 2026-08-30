@@ -80,6 +80,41 @@ class LatestVideoAnalysis(BaseModel):
     ctr: float | None = None
     retention: float | None = None
     subscriber_gain: int | None = None
+
+
+class ChannelBaselines(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    median_views: float
+    median_retention: float
+    median_ctr: float | None = None
+    median_subs_per_1k: float | None = None
+    median_net_subscribers: float | None = None
+    sample_size: int = 0
+
+
+class RecentVideoPerformance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    video_id: str
+    title: str
+    published_at: datetime
+    views: int
+    views_delta_percentage: float | None = None
+    average_retention: float
+    retention_delta_points: float | None = None
+    ctr_percentage: float | None = None
+    ctr_delta_points: float | None = None
+    subscribers_gained: int
+    subscribers_lost: int = 0
+    net_subscribers: int
+    subs_per_1k: float | None = None
+    subs_per_1k_delta_percentage: float | None = None
+    is_latest: bool = False
+    alex_interpretation: str | None = None
+    alex_next_action: str | None = None
+
+
 class VideoPerformancePoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -114,13 +149,14 @@ class ChannelDashboard(BaseModel):
     trend: list[DashboardTrendPoint]
     latest_video: LatestVideoAnalysis
     video_performance: list[VideoPerformancePoint]
+    recent_videos: list[RecentVideoPerformance] = Field(default_factory=list)
+    channel_baselines: ChannelBaselines | None = None
     topic_clusters: list[TopicClusterPerformance]
     traffic_sources: list[TrafficSourceMetric]
     insights: list[ChannelInsight]
     active_experiment: ChannelExperiment | None
     proposed_experiment: ChannelExperiment | None = None
     is_sample_modeled_timeseries: bool
-
 
 def _percent_change(current: float, previous: float) -> float | None:
     if previous == 0:
@@ -271,6 +307,131 @@ def compute_latest_video_analysis(
         subscriber_gain=latest_subs_gained,
     )
 
+def compute_recent_video_performance(
+    videos: list[Any],
+    limit: int = 5,
+) -> tuple[list[RecentVideoPerformance], ChannelBaselines]:
+    """Compute recent video performance rows with median comparisons and Alex actionable signal."""
+    if not videos:
+        return [], ChannelBaselines(
+            median_views=0.0,
+            median_retention=0.0,
+            median_ctr=None,
+            median_subs_per_1k=None,
+            median_net_subscribers=None,
+            sample_size=0,
+        )
+
+    def _get_pub_date(v: Any) -> datetime:
+        pub = getattr(getattr(v, "public", None), "published_at", None) or getattr(v, "published_at", None)
+        if isinstance(pub, str):
+            return datetime.fromisoformat(pub.replace("Z", "+00:00"))
+        if isinstance(pub, datetime):
+            return pub
+        return datetime.min.replace(tzinfo=UTC)
+
+    sorted_videos = sorted(videos, key=_get_pub_date, reverse=True)
+
+    all_views = [int(getattr(getattr(v, "analytics", None), "views", 0)) for v in videos]
+    all_ret = [float(getattr(getattr(v, "analytics", None), "avg_view_percentage", 0.0)) for v in videos]
+    all_ctr = [
+        float(getattr(getattr(v, "analytics", None), "ctr_percentage", 0.0))
+        for v in videos
+        if getattr(getattr(v, "analytics", None), "ctr_percentage", None) is not None
+    ]
+    all_subs_g = [int(getattr(getattr(v, "analytics", None), "subscribers_gained", 0)) for v in videos]
+    all_subs_l = [int(getattr(getattr(v, "analytics", None), "subscribers_lost", 0)) for v in videos]
+    all_net = [g - l for g, l in zip(all_subs_g, all_subs_l, strict=True)]
+    all_subs_per_1k = [
+        (1000.0 * g / v)
+        for g, v in zip(all_subs_g, all_views, strict=True)
+        if v > 0
+    ]
+
+    median_views = float(median(all_views)) if all_views else 0.0
+    median_ret = float(median(all_ret)) if all_ret else 0.0
+    median_ctr = float(median(all_ctr)) if all_ctr else None
+    median_subs_1k = float(median(all_subs_per_1k)) if all_subs_per_1k else None
+    median_net = float(median(all_net)) if all_net else None
+
+    baselines = ChannelBaselines(
+        median_views=median_views,
+        median_retention=median_ret,
+        median_ctr=median_ctr,
+        median_subs_per_1k=median_subs_1k,
+        median_net_subscribers=median_net,
+        sample_size=len(videos),
+    )
+
+    recent_list: list[RecentVideoPerformance] = []
+    for idx, v in enumerate(sorted_videos[:limit]):
+        v_id = getattr(v, "video_id", f"vid_{idx}")
+        title = getattr(getattr(v, "public", None), "title", "Untitled Video")
+        pub = _get_pub_date(v)
+        views = int(getattr(getattr(v, "analytics", None), "views", 0))
+        ret = float(getattr(getattr(v, "analytics", None), "avg_view_percentage", 0.0))
+        ctr_raw = getattr(getattr(v, "analytics", None), "ctr_percentage", None)
+        ctr = float(ctr_raw) if ctr_raw is not None else None
+        subs_g = int(getattr(getattr(v, "analytics", None), "subscribers_gained", 0))
+        subs_l = int(getattr(getattr(v, "analytics", None), "subscribers_lost", 0))
+        net = subs_g - subs_l
+        subs_per_1k = (1000.0 * subs_g / views) if views > 0 else None
+
+        views_delta_pct = _percent_change(views, median_views) if median_views > 0 else None
+        ret_delta_pts = (ret - median_ret) if median_ret > 0 else None
+        ctr_delta_pts = (ctr - median_ctr) if (ctr is not None and median_ctr is not None) else None
+        subs_1k_delta_pct = _percent_change(subs_per_1k, median_subs_1k) if (subs_per_1k is not None and median_subs_1k is not None and median_subs_1k > 0) else None
+
+        is_latest = (idx == 0)
+        alex_interp: str | None = None
+        alex_action: str | None = None
+        if is_latest:
+            if ret_delta_pts is not None and ret_delta_pts <= -10.0:
+                alex_interp = (
+                    f"Retention is the main weakness here. The video is "
+                    f"{abs(ret_delta_pts):.1f} points below your channel median despite normal subscriber conversion."
+                )
+                alex_action = "Inspect the first 30 seconds for delayed demonstration or setup."
+            elif ctr_delta_pts is not None and ctr_delta_pts <= -2.0:
+                alex_interp = (
+                    f"Click-through rate is the main bottleneck. Thumbnail CTR is "
+                    f"{abs(ctr_delta_pts):.1f} points below your channel median."
+                )
+                alex_action = "Test alternative thumbnail compositions and high-contrast typography."
+            elif views_delta_pct is not None and views_delta_pct >= 20.0:
+                alex_interp = (
+                    f"Strong top-of-funnel momentum. Views are "
+                    f"{views_delta_pct:+.1f}% vs channel median."
+                )
+                alex_action = "Evaluate audience retention curve to optimize long-tail engagement."
+            else:
+                alex_interp = "Performance across views, retention, and conversion aligns closely with your channel median."
+                alex_action = "Maintain format consistency for upcoming uploads."
+
+        recent_list.append(
+            RecentVideoPerformance(
+                video_id=v_id,
+                title=title,
+                published_at=pub,
+                views=views,
+                views_delta_percentage=views_delta_pct,
+                average_retention=ret,
+                retention_delta_points=ret_delta_pts,
+                ctr_percentage=ctr,
+                ctr_delta_points=ctr_delta_pts,
+                subscribers_gained=subs_g,
+                subscribers_lost=subs_l,
+                net_subscribers=net,
+                subs_per_1k=subs_per_1k,
+                subs_per_1k_delta_percentage=subs_1k_delta_pct,
+                is_latest=is_latest,
+                alex_interpretation=alex_interp,
+                alex_next_action=alex_action,
+            )
+        )
+
+    return recent_list, baselines
+
 
 async def build_channel_dashboard(
     provider: ChannelDataProvider,
@@ -361,6 +522,7 @@ async def build_channel_dashboard(
         )
 
     latest_analysis = compute_latest_video_analysis(channel.channel_id, videos)
+    recent_videos, channel_baselines = compute_recent_video_performance(videos, limit=5)
 
     video_performance = [
         VideoPerformancePoint(
@@ -520,6 +682,8 @@ async def build_channel_dashboard(
         trend=trend,
         latest_video=latest_analysis,
         video_performance=video_performance,
+        recent_videos=recent_videos,
+        channel_baselines=channel_baselines,
         topic_clusters=topic_clusters,
         traffic_sources=channel.analytics.top_traffic_sources,
         insights=[insight],

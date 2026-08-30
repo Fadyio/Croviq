@@ -64,9 +64,14 @@ def test_sample_channel_dashboard_returns_computed_fixture_data(client: TestClie
     assert len(payload["trend"]) == 28
     assert payload["latest_video"]["video_id"] == "vid_syn_100"
     assert payload["latest_video"]["net_subscribers"] == 303
+    assert len(payload["recent_videos"]) == 5
+    assert payload["recent_videos"][0]["video_id"] == "vid_syn_100"
+    assert payload["recent_videos"][0]["is_latest"] is True
+    assert payload["recent_videos"][0]["alex_interpretation"]
+    assert payload["recent_videos"][0]["alex_next_action"]
+    assert payload["channel_baselines"]["sample_size"] == 100
     assert payload["insights"][0]["evidence"]
     assert payload["proposed_experiment"]["status"] == "PROPOSED"
-
 
 def test_sample_channel_dashboard_requires_authentication(client: TestClient) -> None:
     response = client.get("/api/channels/sample/dashboard?days=28")
