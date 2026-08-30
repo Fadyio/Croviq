@@ -23,8 +23,9 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
   mediaOutputs,
   className = "",
 }) => {
+  const isEditedAvailable = mediaOutputs ? mediaOutputs.edited.available : true;
   const isEditedGenerating = mediaOutputs?.edited.status === "generating";
-
+  const isEditedVisible = isEditedAvailable || isEditedGenerating;
   const isVoiceoverAvailable = mediaOutputs ? mediaOutputs.voiceover.available : hasStudioVoice;
   const isVoiceoverGenerating = mediaOutputs?.voiceover.status === "generating";
   const isVoiceoverVisible = isVoiceoverAvailable || isVoiceoverGenerating;
@@ -54,38 +55,40 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
         <span>Original</span>
       </button>
 
-      <button
-        type="button"
-        onClick={() => onModeChange("edited")}
-        className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-          mode === "edited"
-            ? "bg-primary text-white shadow-sm font-semibold"
-            : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
-        }`}
-        aria-pressed={mode === "edited"}
-        title="Play with executable dialogue cuts skipped in real time"
-        data-testid="preview-toggle-edited"
-      >
-        {isEditedGenerating ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-        ) : (
-          <Scissors
-            className={`w-3.5 h-3.5 ${mode === "edited" ? "text-white" : "text-primary"}`}
-          />
-        )}
-        <span>{isEditedGenerating ? "Generating…" : "Edited Preview"}</span>
-        {!isEditedGenerating && activeCutCount > 0 && (
-          <span
-            className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-              mode === "edited"
-                ? "bg-white/20 text-white"
-                : "bg-primary/10 text-primary border border-primary/20"
-            }`}
-          >
-            {activeCutCount}
-          </span>
-        )}
-      </button>
+      {isEditedVisible && (
+        <button
+          type="button"
+          onClick={() => onModeChange("edited")}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+            mode === "edited"
+              ? "bg-primary text-white shadow-sm font-semibold"
+              : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
+          }`}
+          aria-pressed={mode === "edited"}
+          title="Play with executable dialogue cuts skipped in real time"
+          data-testid="preview-toggle-edited"
+        >
+          {isEditedGenerating ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+          ) : (
+            <Scissors
+              className={`w-3.5 h-3.5 ${mode === "edited" ? "text-white" : "text-primary"}`}
+            />
+          )}
+          <span>{isEditedGenerating ? "Generating…" : "Edited Preview"}</span>
+          {!isEditedGenerating && activeCutCount > 0 && (
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                mode === "edited"
+                  ? "bg-white/20 text-white"
+                  : "bg-primary/10 text-primary border border-primary/20"
+              }`}
+            >
+              {activeCutCount}
+            </span>
+          )}
+        </button>
+      )}
       {isVoiceoverVisible && (
         <button
           type="button"

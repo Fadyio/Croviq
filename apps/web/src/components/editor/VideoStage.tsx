@@ -97,16 +97,16 @@ export const VideoStage: React.FC<VideoStageProps> = ({
 
   const activeVideoUrl = currentOutput
     ? currentOutput.available
-      ? currentOutput.url
+      ? currentOutput.url ||
+        (previewMode === "edited" || previewMode === "original" ? playbackUrl : null)
       : null
     : previewMode === "final_mix"
       ? finalMixUrl || null
       : previewMode === "studio_voice"
         ? studioVoicePreviewUrl || null
         : previewMode === "edited"
-          ? renderedPreviewUrl || null
+          ? renderedPreviewUrl || playbackUrl || null
           : playbackUrl || null;
-
   const outputStatus = currentOutput
     ? currentOutput.status
     : activeVideoUrl

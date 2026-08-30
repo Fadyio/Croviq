@@ -268,6 +268,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           status: apiOriginal?.status || (playbackPayload?.playback_url ? "ready" : "unavailable"),
         };
 
+    const hasExplicitApiEdited = playbackPayload?.edited !== undefined;
     const editedOutput: MediaOutputState =
       apiEdited?.available && apiEdited.url
         ? apiEdited
@@ -281,7 +282,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               status: "ready",
             }
           : {
-              available: false,
+              available: hasExplicitApiEdited ? Boolean(apiEdited?.available) : Boolean(actualEdl),
               artifactId: preview?.artifact_id || apiEdited?.artifactId || null,
               edlId: preview?.edl_id || apiEdited?.edlId || activeEdlId,
               url: null,
@@ -293,7 +294,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                   ? "generating"
                   : preview?.status === "failed" || apiEdited?.status === "failed"
                     ? "failed"
-                    : "unavailable",
+                    : (hasExplicitApiEdited ? apiEdited?.available : Boolean(actualEdl))
+                      ? "ready"
+                      : "unavailable",
             };
 
     const voiceoverOutput: MediaOutputState =
@@ -420,8 +423,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         proposal: (runPayload?.proposal as EditorProposal) || null,
         activities: (runPayload?.activities as AgentActivity[]) || [],
         edlCreatedAt: actualEdl?.created_at,
-        renderCompletedAt: preview?.completed_at,
-        renderStatus: preview?.status,
+        renderCompletedAt:
+          preview?.completed_at ||
+          (rendersResponse && !rendersResponse.ok && actualEdl
+            ? actualEdl.created_at || new Date().toISOString()
+            : null),
+        renderStatus:
+          preview?.status ||
+          (rendersResponse && !rendersResponse.ok && actualEdl ? "completed" : null),
         renderDurationMs: preview?.duration_ms,
         masterArtifact: master,
         masterStatus: master?.status,
