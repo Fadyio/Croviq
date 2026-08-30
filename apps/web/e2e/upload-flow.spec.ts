@@ -224,17 +224,36 @@ const mockBackendApis = async (page: Page, productions: unknown[] = []) => {
             type: "RETENTION",
             title: "First demonstration timing tracks retention",
             statement:
-              "Across 100 videos, first-demo timing and average retention have a negative correlation.",
+              "Videos demonstrating the core result within 00:30 retained 60.6% of viewers on average versus 37.6% for later demonstrations.",
             evidence: [
               {
                 kind: "FACT",
-                statement: "Pearson correlation calculated across 100 videos.",
-                metric_refs: ["video:firstDemoSeconds"],
+                statement:
+                  "MEASUREMENT: Videos with early demonstrations (<=00:30) average 60.6% retention vs 37.6% for later demonstrations across 100 eligible videos (delta +23.0%).",
+                metric_refs: ["video:firstDemoSeconds", "video:averageViewPercentage"],
+                citation_urls: [],
+              },
+              {
+                kind: "INFERENCE",
+                statement:
+                  "INTERPRETATION: Observational correlation of r=-0.96 across 100 videos indicates early demonstration strongly tracks higher retention, but represents observational correlation rather than causal proof.",
+                metric_refs: ["analysis:first-demo-retention-correlation"],
                 citation_urls: [],
               },
             ],
-            confidence: 0.9,
-            recommended_action: "Test the first practical demonstration before 00:30.",
+            evidence_stats: {
+              eligible_video_count: 100,
+              early_count: 65,
+              late_count: 35,
+              early_mean_retention: 60.56,
+              late_mean_retention: 37.6,
+              delta_percentage_points: 22.96,
+              correlation: -0.9638,
+              threshold_seconds: 30,
+            },
+            confidence: null,
+            recommended_action:
+              "Recommended target: reach the first usable demonstration by 00:25 on the next upload while holding topic and format stable.",
             created_at: "2026-08-26T00:00:00Z",
             expires_at: null,
           },
@@ -515,7 +534,10 @@ test.describe("Product Home and Creator Flow", () => {
     page.on("console", (msg) => {
       if (msg.type() === "error") consoleErrors.push(msg.text());
     });
-
+    const failedRequests: string[] = [];
+    page.on("requestfailed", (req) => {
+      failedRequests.push(`${req.method()} ${req.url()}: ${req.failure()?.errorText}`);
+    });
     await mockFirebasePasswordSignIn(page);
     await mockBackendApis(page, []);
     await login(page, false);
@@ -551,17 +573,29 @@ test.describe("Product Home and Creator Flow", () => {
     await expect(alexRail.getByText("FACT")).toHaveCount(0);
     await expect(alexRail.getByText("INFERENCE")).toHaveCount(0);
 
-    // Verify progressive disclosure: View Evidence opens modal with FACT/INFERENCE
+    // Verify progressive disclosure: View Evidence opens modal with canonical Evidence Analysis
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole("button", { name: "View evidence" }).first().click();
-    const evidenceModal = page
-      .getByRole("dialog", { name: "Evidence Analysis" })
-      .or(page.locator("div.fixed.inset-0"));
+    const evidenceModal = page.getByRole("dialog");
     await expect(evidenceModal).toBeVisible();
-    await expect(page.getByText("Supporting Evidence")).toBeVisible();
-    await page.getByRole("button", { name: "Close" }).last().click();
-    await expect(page.getByText("Supporting Evidence")).toHaveCount(0);
-    await page.waitForTimeout(300);
+    await expect(evidenceModal.getByText("Evidence Analysis")).toBeVisible();
+    await expect(
+      evidenceModal.getByRole("heading", { name: "First demonstration timing tracks retention" }),
+    ).toBeVisible();
+    await expect(evidenceModal.getByText("Measurement", { exact: true })).toBeVisible();
+    await expect(evidenceModal.getByText("Relationship", { exact: true })).toBeVisible();
+    await expect(evidenceModal.getByText("Interpretation", { exact: true })).toBeVisible();
+    await expect(evidenceModal.getByText("Recommended Action", { exact: true })).toBeVisible();
+    await expect(evidenceModal.getByText("Confidence:", { exact: false })).toHaveCount(0);
+    await expect(evidenceModal.getByText("Next: ACTION:", { exact: false })).toHaveCount(0);
+    await expect(evidenceModal.getByText("ACTION: ACTION:", { exact: false })).toHaveCount(0);
 
+    // Capture screenshot of opened evidence modal at 1440x900
+    await page.screenshot({ path: "e2e/screenshots/alex-evidence-modal-1440x900.png" });
+
+    await page.getByRole("button", { name: "Close" }).last().click();
+    await expect(evidenceModal).toHaveCount(0);
+    await page.waitForTimeout(300);
     // Capture Evidence Screenshots at 1600x900, 1440x900, and 1280x800 (Top and Scrolled)
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.screenshot({ path: "e2e/screenshots/channel-intelligence-1600x900-top.png" });
@@ -596,6 +630,7 @@ test.describe("Product Home and Creator Flow", () => {
     await page.screenshot({ path: "e2e/screenshots/production-home-scrolled-1280x800.png" });
 
     expect(consoleErrors).toEqual([]);
+    expect(failedRequests).toEqual([]);
   });
 
   test("persists Alex research schedule and custom public sources", async ({ page }) => {
