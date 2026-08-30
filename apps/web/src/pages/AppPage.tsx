@@ -31,6 +31,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
   const [findings, setFindings] = useState<ResearchFinding[]>([]);
   const [researchConfig, setResearchConfig] = useState<ResearchConfig | null>(null);
   const [youtubeConnection, setYoutubeConnection] = useState<YouTubeConnection | null>(null);
+  const [isConnectionLoaded, setIsConnectionLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnectingYt, setIsConnectingYt] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +43,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
   const [evidenceModalInsight, setEvidenceModalInsight] = useState<Insight | null>(null);
   const [allFindingsDrawerOpen, setAllFindingsDrawerOpen] = useState(false);
   const selectorRef = useRef<HTMLDivElement>(null);
+  const currentRequestSeqRef = useRef(0);
   const prefersReducedMotion = useReducedMotion();
 
   const loadFindings = useCallback(async () => {
@@ -67,15 +69,12 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
     }
   }, [firebaseUser]);
 
-  // Unified deterministic connection & dashboard loading
+  // 1. Initial Connection Status & OAuth Callback Verification (Runs once on auth ready)
   useEffect(() => {
     if (!firebaseUser) return;
-    void _refreshKey;
     let cancelled = false;
-    setIsLoading(true);
-    setError(null);
 
-    const load = async () => {
+    const initConnection = async () => {
       try {
         const token = await firebaseUser.getIdToken();
         const params = new URLSearchParams(window.location.search);
@@ -83,11 +82,10 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
         const state = params.get("state");
         const errorParam = params.get("error");
 
-        let activeMode: ChannelMode = channelMode;
-
         if (errorParam) {
           setError(`YouTube OAuth authorization was cancelled or denied: ${errorParam}`);
           window.history.replaceState({}, document.title, "/app");
+          if (!cancelled) setIsConnectionLoaded(true);
         } else if (code && state) {
           setIsConnectingYt(true);
           const callbackResp = await fetch("/api/channels/youtube/callback", {
@@ -107,11 +105,15 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
             const connSummary = (await callbackResp.json()) as YouTubeConnection;
             setYoutubeConnection(connSummary);
             if (connSummary.connected) {
-              activeMode = "youtube";
-              if (channelMode !== "youtube") {
-                setChannelMode("youtube");
-              }
+              setChannelMode("youtube");
             }
+          } else if (!callbackResp.ok && !cancelled) {
+            const errData = (await callbackResp.json().catch(() => ({}))) as { detail?: string };
+            setError(errData.detail || "YouTube connection callback failed");
+          }
+          if (!cancelled) {
+            setIsConnectingYt(false);
+            setIsConnectionLoaded(true);
           }
         } else {
           const connResp = await fetch("/api/channels/youtube/connection", {
@@ -121,56 +123,86 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
             const connData = (await connResp.json()) as YouTubeConnection;
             setYoutubeConnection(connData);
             if (connData.connected) {
-              activeMode = "youtube";
-              if (channelMode !== "youtube") {
-                setChannelMode("youtube");
-              }
+              setChannelMode("youtube");
+            } else {
+              setChannelMode("sample");
             }
           }
+          if (!cancelled) {
+            setIsConnectionLoaded(true);
+          }
         }
+      } catch {
+        if (!cancelled) {
+          setIsConnectionLoaded(true);
+        }
+      }
+    };
 
+    void initConnection();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser]);
+
+  // 2. Deterministic Dashboard Loading for Selected Mode & Time Period
+  useEffect(() => {
+    if (!firebaseUser || !isConnectionLoaded) return;
+    void _refreshKey;
+    const requestSeq = ++currentRequestSeqRef.current;
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    const loadDashboard = async () => {
+      try {
+        const token = await firebaseUser.getIdToken();
         const endpoint =
-          activeMode === "youtube"
+          channelMode === "youtube"
             ? `/api/channels/youtube/dashboard?days=${period}`
             : `/api/channels/sample/dashboard?days=${period}`;
+
         const dashResp = await fetch(endpoint, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!dashResp.ok) {
-          if (!cancelled) {
-            setDashboard(null);
-            const errData = await dashResp.json().catch(() => ({}));
-            throw new Error(
-              (errData as { detail?: string }).detail || "Channel intelligence could not be loaded",
-            );
-          }
+
+        if (cancelled || requestSeq !== currentRequestSeqRef.current) {
           return;
         }
+
+        if (!dashResp.ok) {
+          setDashboard(null);
+          const errData = (await dashResp.json().catch(() => ({}))) as { detail?: string };
+          throw new Error(
+            errData.detail || "Channel intelligence could not be loaded",
+          );
+        }
         const dashData = (await dashResp.json()) as ChannelDashboard;
-        if (!cancelled) {
+        if (!cancelled && requestSeq === currentRequestSeqRef.current) {
           setDashboard(dashData);
         }
         await loadFindings();
       } catch (reason) {
-        if (!cancelled) {
+        if (!cancelled && requestSeq === currentRequestSeqRef.current) {
           setDashboard(null);
           setError(
             reason instanceof Error ? reason.message : "Channel intelligence could not be loaded",
           );
         }
       } finally {
-        if (!cancelled) {
-          setIsConnectingYt(false);
+        if (!cancelled && requestSeq === currentRequestSeqRef.current) {
           setIsLoading(false);
         }
       }
     };
-    void load();
+
+    void loadDashboard();
 
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser, period, channelMode, loadFindings, _refreshKey]);
+  }, [firebaseUser, isConnectionLoaded, channelMode, period, loadFindings, _refreshKey]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -201,7 +233,6 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
       });
       if (!authUrlResp.ok) throw new Error("Could not initialize YouTube connection");
       const authData = (await authUrlResp.json()) as { auth_url: string; state_token: string };
-      sessionStorage.setItem("croviq_yt_oauth_state", authData.state_token);
       window.location.href = authData.auth_url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "YouTube connection failed");
@@ -282,6 +313,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
                 <button
                   type="button"
                   onClick={() => {
+                    setDashboard(null);
                     setChannelMode("sample");
                     setChannelSelectorOpen(false);
                   }}
@@ -310,6 +342,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
                     <button
                       type="button"
                       onClick={() => {
+                        setDashboard(null);
                         setChannelMode("youtube");
                         setChannelSelectorOpen(false);
                       }}
@@ -325,10 +358,12 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate font-medium">
-                            {youtubeConnection.channel_title}
+                            {youtubeConnection.channel_title || "Connected YouTube Channel"}
                           </span>
                           <span className="text-[10px] text-text-muted">
-                            {youtubeConnection.subscriber_count?.toLocaleString()} subscribers
+                            {youtubeConnection.subscriber_count != null
+                              ? `${youtubeConnection.subscriber_count.toLocaleString()} subscribers`
+                              : ""}
                           </span>
                         </span>
                       </span>
@@ -413,8 +448,10 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
                         Reconnect YouTube
                       </button>
                       <button
-                        type="button"
-                        onClick={() => setChannelMode("sample")}
+                        onClick={() => {
+                          setDashboard(null);
+                          setChannelMode("sample");
+                        }}
                         className="rounded-md border border-danger/30 px-2.5 py-1 font-medium text-danger hover:bg-danger/10 transition-colors"
                       >
                         Switch to Sample
@@ -443,7 +480,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
                         ? youtubeConnection?.channel_title ||
                           dashboard?.channel.title ||
                           "Connected YouTube"
-                        : (dashboard?.channel.title ?? "Croviq")}
+                        : "Croviq"}
                     </h1>
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${

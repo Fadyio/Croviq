@@ -339,9 +339,6 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
         };
         const targetUrl = data.auth_url || data.authorization_url;
         if (targetUrl) {
-          if (data.state_token) {
-            sessionStorage.setItem("croviq_yt_oauth_state", data.state_token);
-          }
           window.location.href = targetUrl;
         }
       }
