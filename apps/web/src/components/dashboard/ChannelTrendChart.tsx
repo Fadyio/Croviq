@@ -1,13 +1,17 @@
 import type { EChartsOption } from "echarts";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import type { components } from "../../api/generated";
 import { EChartsWrapper, GRAPHITE_THEME } from "../charts/EChartsWrapper";
 
 type TrendPoint = components["schemas"]["DashboardTrendPoint"];
+type DashboardKpi = components["schemas"]["DashboardKpi"];
 type TrendMetric = "views" | "watch_time_hours" | "net_subscribers";
 
 interface ChannelTrendChartProps {
   data: TrendPoint[];
+  kpis?: DashboardKpi[];
+  periodDays?: number;
   title?: string;
   compact?: boolean;
 }
@@ -36,24 +40,10 @@ const formatTooltipValue = (metric: TrendMetric, value: number): string => {
   return String(value);
 };
 
-const computeRollingMean = (values: (number | null)[], windowSize = 7): (number | null)[] => {
-  const result: (number | null)[] = [];
-  for (let i = 0; i < values.length; i++) {
-    const windowVals = values
-      .slice(Math.max(0, i - windowSize + 1), i + 1)
-      .filter((v): v is number => typeof v === "number" && !Number.isNaN(v));
-    if (windowVals.length === 0) {
-      result.push(null);
-    } else {
-      const avg = windowVals.reduce((sum, v) => sum + v, 0) / windowVals.length;
-      result.push(Math.round(avg * 10) / 10);
-    }
-  }
-  return result;
-};
-
 export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
   data,
+  kpis,
+  periodDays = 28,
   title = "Channel Performance",
   compact = false,
 }) => {
@@ -64,87 +54,92 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
     return data.map((_, idx) => `Day ${idx + 1}`);
   }, [data]);
 
-  const { currentDaily, currentRolling7, previousRolling7, calendarDates, maxObservationIndex } =
-    useMemo(() => {
-      const curr = data.map((point) => point[metric] ?? null);
-      const prev = data.map(
-        (point) => (point[`previous_${metric}` as keyof TrendPoint] as number | undefined) ?? null,
-      );
-      const dates = data.map((p) => {
-        try {
-          return new Intl.DateTimeFormat("en", {
-            month: "short",
-            day: "numeric",
-            timeZone: "UTC",
-          }).format(new Date(`${p.date}T00:00:00Z`));
-        } catch {
-          return p.date;
-        }
-      });
+  const activeKpi = useMemo(() => {
+    return kpis?.find((k) => k.metric === metric);
+  }, [kpis, metric]);
 
-      const currRolling = computeRollingMean(curr, 7);
-      const prevRolling = computeRollingMean(prev, 7);
+  const summaryTotal = useMemo(() => {
+    if (activeKpi && activeKpi.current_value !== undefined) {
+      const val = activeKpi.current_value;
+      if (metric === "views") return `${compactNumber.format(val)} views`;
+      if (metric === "watch_time_hours") return `${compactNumber.format(val)} hours`;
+      if (metric === "net_subscribers")
+        return `${val >= 0 ? "+" : ""}${standardNumber.format(val)} subscribers`;
+    }
+    const sumVal = data.reduce((sum, p) => sum + (p[metric] ?? 0), 0);
+    if (metric === "views") return `${compactNumber.format(sumVal)} views`;
+    if (metric === "watch_time_hours") return `${compactNumber.format(sumVal)} hours`;
+    if (metric === "net_subscribers")
+      return `${sumVal >= 0 ? "+" : ""}${standardNumber.format(sumVal)} subscribers`;
+    return compactNumber.format(sumVal);
+  }, [activeKpi, data, metric]);
 
-      // Find peak daily observation for evidence-backed annotation (max 1 peak annotation)
-      let maxIdx = -1;
-      let maxVal = -Infinity;
-      curr.forEach((val, i) => {
-        if (typeof val === "number" && val > maxVal) {
-          maxVal = val;
-          maxIdx = i;
-        }
-      });
+  const summaryDelta = useMemo(() => {
+    if (activeKpi && activeKpi.change_percentage !== undefined) {
+      return activeKpi.change_percentage;
+    }
+    const currSum = data.reduce((sum, p) => sum + (p[metric] ?? 0), 0);
+    const prevSum = data.reduce(
+      (sum, p) => sum + ((p[`previous_${metric}` as keyof TrendPoint] as number | undefined) ?? 0),
+      0,
+    );
+    if (prevSum === 0) return null;
+    return ((currSum - prevSum) / Math.abs(prevSum)) * 100;
+  }, [activeKpi, data, metric]);
 
-      return {
-        currentDaily: curr,
-        currentRolling7: currRolling,
-        previousRolling7: prevRolling,
-        calendarDates: dates,
-        maxObservationIndex: maxIdx,
-      };
-    }, [data, metric]);
+  const { currentDaily, previousDaily, calendarDates, previousCalendarDates } = useMemo(() => {
+    const curr = data.map((point) => point[metric] ?? null);
+    const prev = data.map(
+      (point) => (point[`previous_${metric}` as keyof TrendPoint] as number | undefined) ?? null,
+    );
+    const dates = data.map((p) => {
+      try {
+        return new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        }).format(new Date(`${p.date}T00:00:00Z`));
+      } catch {
+        return p.date;
+      }
+    });
+
+    const prevDates = data.map((p) => {
+      try {
+        const d = new Date(`${p.date}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() - (periodDays || data.length));
+        return new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        }).format(d);
+      } catch {
+        return p.date;
+      }
+    });
+
+    return {
+      currentDaily: curr,
+      previousDaily: prev,
+      calendarDates: dates,
+      previousCalendarDates: prevDates,
+    };
+  }, [data, metric, periodDays]);
 
   const chartOption = useMemo<EChartsOption>(() => {
-    // Evidence-backed annotations: at most 2 (e.g. Period Peak and Latest Day)
-    const markData: Array<{
-      name: string;
-      coord: [number, number];
-      value: string;
-    }> = [];
-
-    if (maxObservationIndex >= 0 && typeof currentDaily[maxObservationIndex] === "number") {
-      markData.push({
-        name: "Peak",
-        coord: [maxObservationIndex, currentDaily[maxObservationIndex] as number],
-        value: "Peak",
-      });
-    }
-
     return {
       backgroundColor: GRAPHITE_THEME.background,
       animation: false,
       grid: {
-        top: compact ? 24 : 32,
+        top: compact ? 16 : 24,
         right: 16,
-        bottom: 30,
-        left: 54,
-        containLabel: false,
-      },
-      legend: {
-        show: !compact,
-        top: 0,
-        right: 16,
-        itemWidth: 14,
-        itemHeight: 8,
-        textStyle: {
-          color: GRAPHITE_THEME.textSecondary,
-          fontSize: 11,
-          fontFamily: GRAPHITE_THEME.fontFamily,
-        },
-        data: ["Current 7-Day Mean", "Previous 7-Day Baseline", "Daily Observations"],
+        bottom: 24,
+        left: 48,
+        containLabel: true,
       },
       tooltip: {
         trigger: "axis",
+        confine: true,
         backgroundColor: GRAPHITE_THEME.tooltipBg,
         borderColor: GRAPHITE_THEME.borderStrong,
         borderWidth: 1,
@@ -171,42 +166,47 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
           if (!items?.length) return "";
           const idx = items[0].dataIndex;
           const dayLabel = relativeDays[idx] || `Day ${idx + 1}`;
-          const dateStr = calendarDates[idx] || "";
-          const curr = currentDaily[idx];
-          const currRolling = currentRolling7[idx];
-          const prevRolling = previousRolling7[idx];
+          const currDateStr = calendarDates[idx] || "";
+          const prevDateStr = previousCalendarDates[idx] || "";
+          const currVal = currentDaily[idx];
+          const prevVal = previousDaily[idx];
 
           let deltaHtml = "";
-          if (currRolling !== null && prevRolling !== null && prevRolling > 0) {
-            const delta = ((currRolling - prevRolling) / prevRolling) * 100;
+          if (currVal !== null && prevVal !== null && prevVal !== 0) {
+            const delta = ((currVal - prevVal) / Math.abs(prevVal)) * 100;
             const isPos = delta >= 0;
-            deltaHtml = `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid ${GRAPHITE_THEME.borderSubtle}; font-weight: 600; font-size: 11px; color: ${isPos ? GRAPHITE_THEME.success : GRAPHITE_THEME.danger};">${isPos ? "+" : ""}${delta.toFixed(1)}% vs previous baseline</div>`;
+            deltaHtml = `
+              <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${GRAPHITE_THEME.borderSubtle}; display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
+                <span style="color: ${GRAPHITE_THEME.textSecondary}; font-weight: 500;">Difference</span>
+                <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 600; color: ${isPos ? GRAPHITE_THEME.success : GRAPHITE_THEME.danger};">
+                  ${isPos ? "+" : ""}${delta.toFixed(1)}%
+                </span>
+              </div>
+            `;
           }
 
           return `
-            <div style="font-weight: 600; margin-bottom: 6px; color: ${GRAPHITE_THEME.textPrimary}; font-size: 12px;">
-              ${dayLabel} <span style="font-size: 11px; font-weight: 400; color: ${GRAPHITE_THEME.textMuted}; margin-left: 4px;">(${dateStr})</span>
+            <div style="font-weight: 600; margin-bottom: 8px; color: ${GRAPHITE_THEME.textPrimary}; font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+              <span>${currDateStr}</span>
+              <span style="font-size: 10px; font-weight: 500; color: ${GRAPHITE_THEME.textMuted}; font-family: ${GRAPHITE_THEME.monoFontFamily};">${dayLabel}</span>
             </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 3px; font-size: 11px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 6px; font-size: 11px;">
               <span style="color: ${GRAPHITE_THEME.textSecondary}; display: flex; align-items: center; gap: 6px;">
-                <span style="width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; display: inline-block;"></span>
-                Daily Actual
+                <span style="width: 8px; height: 2.5px; background: #3b82f6; border-radius: 1px; display: inline-block;"></span>
+                Current
               </span>
-              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 600; color: ${GRAPHITE_THEME.textPrimary};">${curr !== null ? formatTooltipValue(metric, curr) : "—"}</span>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 3px; font-size: 11px;">
-              <span style="color: ${GRAPHITE_THEME.textSecondary}; display: flex; align-items: center; gap: 6px;">
-                <span style="width: 8px; height: 2px; background: ${GRAPHITE_THEME.primary}; display: inline-block;"></span>
-                7-Day Rolling Mean
+              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 600; color: ${GRAPHITE_THEME.textPrimary};">
+                ${currVal !== null ? formatTooltipValue(metric, currVal) : "—"}
               </span>
-              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 600; color: ${GRAPHITE_THEME.textPrimary};">${currRolling !== null ? formatTooltipValue(metric, currRolling) : "—"}</span>
             </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 11px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; font-size: 11px;">
               <span style="color: ${GRAPHITE_THEME.textMuted}; display: flex; align-items: center; gap: 6px;">
-                <span style="width: 8px; height: 2px; border-top: 1px dashed ${GRAPHITE_THEME.textMuted}; display: inline-block;"></span>
-                Previous Baseline
+                <span style="width: 8px; height: 2px; border-top: 1.5px dashed #94a3b8; display: inline-block;"></span>
+                Previous comparable day (${prevDateStr})
               </span>
-              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 500; color: ${GRAPHITE_THEME.textSecondary};">${prevRolling !== null ? formatTooltipValue(metric, prevRolling) : "—"}</span>
+              <span style="font-family: ${GRAPHITE_THEME.monoFontFamily}; font-weight: 500; color: ${GRAPHITE_THEME.textSecondary};">
+                ${prevVal !== null ? formatTooltipValue(metric, prevVal) : "—"}
+              </span>
             </div>
             ${deltaHtml}
           `;
@@ -244,39 +244,21 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
           lineStyle: {
             color: GRAPHITE_THEME.borderSubtle,
             type: "dashed",
-            opacity: 0.6,
+            opacity: 0.4,
           },
         },
       },
       series: [
-        // 1. Subtle daily observations
+        // 1. Visually dominant current period series
         {
-          name: "Daily Observations",
+          name: "Current period",
           type: "line",
           data: currentDaily,
-          showSymbol: true,
-          symbolSize: 4,
-          itemStyle: {
-            color: "#38bdf8",
-            opacity: 0.5,
-          },
-          lineStyle: {
-            width: 1,
-            color: "#38bdf8",
-            opacity: 0.25,
-          },
-          z: 2,
-        },
-        // 2. Dominant 7-Day Rolling Mean
-        {
-          name: "Current 7-Day Mean",
-          type: "line",
-          data: currentRolling7,
-          smooth: true,
+          smooth: 0.2,
           showSymbol: false,
           lineStyle: {
             width: 2.5,
-            color: GRAPHITE_THEME.primary,
+            color: "#3b82f6",
           },
           areaStyle: {
             color: {
@@ -286,76 +268,90 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: "rgba(37, 99, 235, 0.18)" },
-                { offset: 1, color: "rgba(37, 99, 235, 0.0)" },
+                { offset: 0, color: "rgba(59, 130, 246, 0.16)" },
+                { offset: 1, color: "rgba(59, 130, 246, 0.0)" },
               ],
             },
           },
-          markPoint:
-            markData.length > 0
-              ? {
-                  data: markData,
-                  symbol: "circle",
-                  symbolSize: 6,
-                  itemStyle: {
-                    color: "#f59e0b",
-                  },
-                  label: {
-                    show: true,
-                    position: "top",
-                    fontSize: 9,
-                    color: GRAPHITE_THEME.textSecondary,
-                    formatter: "{b}",
-                  },
-                }
-              : undefined,
-          z: 4,
+          z: 3,
         },
-        // 3. Muted Previous-Period 7-Day Rolling Baseline
+        // 2. Muted dashed previous period series
         {
-          name: "Previous 7-Day Baseline",
+          name: "Previous period",
           type: "line",
-          data: previousRolling7,
-          smooth: true,
+          data: previousDaily,
+          smooth: 0.2,
           showSymbol: false,
           lineStyle: {
             width: 1.75,
             type: "dashed",
-            color: "#64748b",
-            opacity: 0.75,
+            color: "#94a3b8",
+            opacity: 0.7,
           },
-          z: 3,
+          z: 2,
         },
       ],
     };
   }, [
-    compact,
-    relativeDays,
     calendarDates,
+    compact,
     currentDaily,
-    currentRolling7,
-    previousRolling7,
-    maxObservationIndex,
     metric,
+    previousCalendarDates,
+    previousDaily,
+    relativeDays,
   ]);
 
+  const isPositive = summaryDelta !== null && summaryDelta > 0;
+  const isNegative = summaryDelta !== null && summaryDelta < 0;
+  const deltaText =
+    summaryDelta !== null
+      ? `${isPositive ? "+" : ""}${summaryDelta.toFixed(1)}% vs previous ${periodDays} days`
+      : "No previous comparison";
+
   return (
-    <div className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm space-y-4">
+    <section
+      className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm space-y-4"
+      aria-label={title}
+    >
       {/* Header & Metric Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
-          <p className="text-xs text-text-muted mt-0.5">
-            Relative period baseline comparison · 7-day rolling mean
-          </p>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+            {title}
+          </h2>
+          {/* Summary Above Graph */}
+          <div className="mt-1 flex flex-wrap items-baseline gap-2.5">
+            <span className="font-mono text-2xl font-bold tracking-tight text-text-primary tabular-nums">
+              {summaryTotal}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                isPositive ? "text-success" : isNegative ? "text-danger" : "text-text-muted"
+              }`}
+            >
+              {isPositive ? (
+                <TrendingUp className="h-3.5 w-3.5" />
+              ) : isNegative ? (
+                <TrendingDown className="h-3.5 w-3.5" />
+              ) : null}
+              <span>{deltaText}</span>
+            </span>
+          </div>
         </div>
 
         {/* Metric Selector Tabs */}
-        <div className="flex items-center rounded-lg bg-surface-2 p-1 border border-border-subtle text-xs">
+        <div
+          role="tablist"
+          aria-label="Performance Metric"
+          className="flex items-center rounded-lg bg-surface-2 p-1 border border-border-subtle text-xs"
+        >
           <button
+            role="tab"
+            aria-selected={metric === "views"}
             type="button"
             onClick={() => setMetric("views")}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-md font-medium transition-all ${
               metric === "views"
                 ? "bg-surface-3 text-text-primary shadow-xs font-semibold"
                 : "text-text-muted hover:text-text-primary"
@@ -364,9 +360,11 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
             Views
           </button>
           <button
+            role="tab"
+            aria-selected={metric === "watch_time_hours"}
             type="button"
             onClick={() => setMetric("watch_time_hours")}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-md font-medium transition-all ${
               metric === "watch_time_hours"
                 ? "bg-surface-3 text-text-primary shadow-xs font-semibold"
                 : "text-text-muted hover:text-text-primary"
@@ -375,9 +373,11 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
             Watch time
           </button>
           <button
+            role="tab"
+            aria-selected={metric === "net_subscribers"}
             type="button"
             onClick={() => setMetric("net_subscribers")}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-md font-medium transition-all ${
               metric === "net_subscribers"
                 ? "bg-surface-3 text-text-primary shadow-xs font-semibold"
                 : "text-text-muted hover:text-text-primary"
@@ -394,25 +394,21 @@ export const ChannelTrendChart: React.FC<ChannelTrendChartProps> = ({
       </div>
 
       {/* Legend & Semantics Note */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border-subtle/50 text-[11px] text-text-muted">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-primary" />
-            Current 7-day mean
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-0.5 w-3 border-t border-dashed border-slate-500" />
-            Previous 7-day baseline
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-sky-400 opacity-60" />
-            Daily observations
-          </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border-subtle/50 text-xs text-text-secondary">
+        <div className="flex items-center gap-5">
+          <div className="flex items-center gap-2">
+            <span className="h-0.5 w-4 rounded-full bg-primary inline-block" />
+            <span className="text-[11.5px] font-medium text-text-primary">Current period</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="h-0.5 w-4 border-t-2 border-dashed border-slate-400 inline-block opacity-75" />
+            <span className="text-[11.5px] font-medium text-text-secondary">Previous period</span>
+          </div>
         </div>
-        <span className="text-[10px] font-mono text-text-muted">
-          Aligned by relative day index (Day 1..{data.length})
+        <span className="text-[11px] font-mono text-text-muted">
+          Aligned by relative day (Day 1..{data.length})
         </span>
       </div>
-    </div>
+    </section>
   );
 };

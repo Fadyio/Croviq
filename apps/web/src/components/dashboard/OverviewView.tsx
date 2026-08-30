@@ -339,7 +339,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
       {/* Dominant Trend Chart */}
       {dashboard.trend && dashboard.trend.length > 0 && (
-        <ChannelTrendChart data={dashboard.trend} title="Channel Performance" compact={true} />
+        <ChannelTrendChart
+          data={dashboard.trend}
+          kpis={dashboard.kpis}
+          periodDays={dashboard.period_days}
+          title="Channel Performance"
+          compact={true}
+        />
       )}
 
       {/* Alex Primary Insight */}

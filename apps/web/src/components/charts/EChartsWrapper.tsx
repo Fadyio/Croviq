@@ -72,6 +72,7 @@ export const EChartsWrapper: React.FC<EChartsWrapperProps> = ({
       renderer: "canvas",
     });
     chartInstanceRef.current = chart;
+    (containerRef.current as unknown as Record<string, unknown>).__echarts_instance__ = chart;
 
     const clickHandler = (params: echarts.ECElementEvent) => {
       onChartClickRef.current?.(params);
