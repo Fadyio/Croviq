@@ -677,3 +677,105 @@ def test_alex_custom_prompt_persisted_and_passed_to_research(client: TestClient,
     assert run_resp.status_code == 200, run_resp.text
     findings = run_resp.json()
     assert len(findings) >= 2
+
+
+def test_youtube_dashboard_nullable_comparison_metrics_regression(
+    client: TestClient,
+    repos: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    from datetime import datetime, UTC, date
+    from croviq_domain.channel_dashboard import (
+        ChannelDashboard,
+        DashboardChannel,
+        DashboardKpi,
+        DashboardTrendPoint,
+        LatestVideoAnalysis,
+        VideoPerformancePoint,
+    )
+
+    _, _, youtube_repo, _ = repos
+    connection = _youtube_connection(
+        token_expiry=datetime.now(UTC) + timedelta(hours=1),
+    )
+    asyncio.run(youtube_repo.save_connection(connection))
+
+    async def mock_dashboard_with_null_deltas(*args: Any, **kwargs: Any) -> ChannelDashboard:
+        now = datetime.now(UTC)
+        return ChannelDashboard(
+            channel=DashboardChannel(
+                channel_id="UC_real_live_channel",
+                source_type="youtube",
+                title="Alex Tech Engineering",
+                description="Live tech tutorials",
+                subscriber_count=84200,
+                video_count=12,
+                avatar_url=None,
+            ),
+            period_days=28,
+            period_end=date(2026, 8, 28),
+            kpis=[
+                DashboardKpi(
+                    metric="views",
+                    current_value=12000,
+                    previous_value=10000,
+                    change_percentage=20.0,
+                ),
+            ],
+            trend=[
+                DashboardTrendPoint(
+                    date=date(2026, 8, 1),
+                    views=500,
+                    previous_views=400,
+                    watch_time_hours=20.0,
+                    previous_watch_time_hours=18.0,
+                    net_subscribers=5,
+                    previous_net_subscribers=4,
+                ),
+            ],
+            latest_video=LatestVideoAnalysis(
+                channel_id="UC_real_live_channel",
+                video_id="vid_live_01",
+                title="Building Production Multi-Agent Systems on Cloud Run (Live Take)",
+                published_at=now,
+                views=2500,
+                watch_time_hours=15.0,
+                subscribers_gained=15,
+                subscribers_lost=0,
+                net_subscribers=15,
+                view_delta_percentage=None,
+                subscriber_conversion_delta_percentage=None,
+                retention_percentage=48.5,
+                retention_delta_points=None,
+            ),
+            video_performance=[],
+            recent_videos=[],
+            channel_baselines=None,
+            topic_clusters=[],
+            traffic_sources=[],
+            insights=[],
+            active_experiment=None,
+            proposed_experiment=None,
+            is_sample_modeled_timeseries=False,
+        )
+
+    monkeypatch.setattr(
+        "croviq_api.channels.routes.build_channel_dashboard",
+        mock_dashboard_with_null_deltas,
+    )
+    response = client.get("/api/channels/youtube/dashboard?days=28")
+    assert response.status_code == 200, response.text
+    data = response.json()
+
+    # Assert API returns valid dashboard response and null stays null
+    assert data["channel"]["channel_id"] == "UC_real_live_channel"
+    assert data["channel"]["title"] == "Alex Tech Engineering"
+    assert data["latest_video"]["view_delta_percentage"] is None
+    assert data["latest_video"]["subscriber_conversion_delta_percentage"] is None
+    assert data["latest_video"]["retention_delta_points"] is None
+    assert data["latest_video"]["views"] == 2500
+    assert data["latest_video"]["retention_percentage"] == 48.5
+    assert data["latest_video"]["net_subscribers"] == 15
+    # Assert no sample fallback occurs
+    assert data["channel"]["source_type"] == "youtube"

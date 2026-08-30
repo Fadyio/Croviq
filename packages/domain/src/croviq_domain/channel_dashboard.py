@@ -65,10 +65,10 @@ class LatestVideoAnalysis(BaseModel):
     subscribers_gained: int
     subscribers_lost: int = 0
     net_subscribers: int
-    view_delta_percentage: float
-    subscriber_conversion_delta_percentage: float
+    view_delta_percentage: float | None = None
+    subscriber_conversion_delta_percentage: float | None = None
     retention_percentage: float
-    retention_delta_points: float
+    retention_delta_points: float | None = None
     views_percentile: float = 50.0
     retention_percentile: float = 50.0
     ctr_percentile: float | None = None
@@ -200,10 +200,10 @@ def compute_latest_video_analysis(
             subscribers_gained=0,
             subscribers_lost=0,
             net_subscribers=0,
-            view_delta_percentage=0.0,
-            subscriber_conversion_delta_percentage=0.0,
+            view_delta_percentage=None,
+            subscriber_conversion_delta_percentage=None,
             retention_percentage=0.0,
-            retention_delta_points=0.0,
+            retention_delta_points=None,
             views_percentile=50.0,
             retention_percentile=50.0,
             ctr_percentile=None,
@@ -293,7 +293,7 @@ def compute_latest_video_analysis(
             latest_conversion, baseline_conversion
         ),
         retention_percentage=latest_retention,
-        retention_delta_points=latest_retention - baseline_retention,
+        retention_delta_points=(latest_retention - baseline_retention) if baseline_retention > 0 else None,
         views_percentile=views_percentile,
         retention_percentile=retention_percentile,
         ctr_percentile=ctr_percentile,

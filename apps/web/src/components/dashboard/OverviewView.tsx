@@ -47,7 +47,7 @@ const formatDeltaPercent = (
   label = "vs channel median",
 ): { text: string; isPositive: boolean; isNeutral: boolean } => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return { text: "—", isPositive: false, isNeutral: true };
+    return { text: "Comparison unavailable", isPositive: false, isNeutral: true };
   }
   const num = Number(value);
   if (Math.abs(num) < 0.05) {
@@ -68,7 +68,7 @@ const formatDeltaPoints = (
   label = "vs channel median",
 ): { text: string; isPositive: boolean; isNeutral: boolean } => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return { text: "—", isPositive: false, isNeutral: true };
+    return { text: "Comparison unavailable", isPositive: false, isNeutral: true };
   }
   const num = Number(value);
   if (Math.abs(num) < 0.05) {
@@ -112,6 +112,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 dashboard.latest_video.subscriber_conversion_delta_percentage,
               is_latest: true,
               alex_interpretation:
+                dashboard.latest_video.retention_delta_points != null &&
                 dashboard.latest_video.retention_delta_points <= -10
                   ? `Retention is the main weakness here. The video is ${Math.abs(
                       dashboard.latest_video.retention_delta_points,
@@ -120,6 +121,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     )} points below your channel median despite normal subscriber conversion.`
                   : null,
               alex_next_action:
+                dashboard.latest_video.retention_delta_points != null &&
                 dashboard.latest_video.retention_delta_points <= -10
                   ? "Inspect the first 30 seconds for delayed demonstration or setup."
                   : null,

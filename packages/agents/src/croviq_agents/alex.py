@@ -1914,12 +1914,14 @@ class AlexDataScientist:
                     "views_delta_percentage": latest_analysis.view_delta_percentage,
                     "retention_delta_points": latest_analysis.retention_delta_points,
                 }
+                v_delta_disp = f"delta: {latest_analysis.view_delta_percentage:+.1f}%" if latest_analysis.view_delta_percentage is not None else "delta: unavailable"
+                r_delta_disp = f"delta: {latest_analysis.retention_delta_points:+.1f} percentage points" if latest_analysis.retention_delta_points is not None else "delta: unavailable"
                 tool_context_summary = (
                     f"Tool executed: channel_analytics_inspection on latest published video '{latest_analysis.title}' "
                     f"(ID: {latest_analysis.video_id}, Published: {latest_analysis.published_at.strftime('%B %d, %Y')}).\n"
                     f"Immutable Provenance Object (LatestVideoAnalysis):\n"
-                    f"- Views: {latest_analysis.views:,} (channel median: {int(latest_analysis.median_views):,}, delta: {latest_analysis.view_delta_percentage:+.1f}%, percentile: {latest_analysis.views_percentile:.1f}th)\n"
-                    f"- Retention: {latest_analysis.retention_percentage:.1f}% (channel median: {latest_analysis.median_retention:.1f}%, delta: {latest_analysis.retention_delta_points:+.1f} percentage points, percentile: {latest_analysis.retention_percentile:.1f}th)\n"
+                    f"- Views: {latest_analysis.views:,} (channel median: {int(latest_analysis.median_views):,}, {v_delta_disp}, percentile: {latest_analysis.views_percentile:.1f}th)\n"
+                    f"- Retention: {latest_analysis.retention_percentage:.1f}% (channel median: {latest_analysis.median_retention:.1f}%, {r_delta_disp}, percentile: {latest_analysis.retention_percentile:.1f}th)\n"
                     f"- CTR: {latest_analysis.ctr:.1f}% (channel median: {latest_analysis.median_ctr:.1f}%, percentile: {latest_analysis.ctr_percentile:.1f}th)\n"
                     f"- Subscribers Gained: +{latest_analysis.subscribers_gained} (conversion: {latest_analysis.subscriber_conversion_per_1k_views:.1f} per 1k views)\n"
                     f"- Baseline Sample Size: {latest_analysis.baseline_sample_size} catalog videos"
@@ -2065,8 +2067,10 @@ class AlexDataScientist:
                     baseline_ret = latest_analysis.median_retention
                     baseline_ctr = latest_analysis.median_ctr or 7.8
 
-                    v_delta_str = f"{abs(latest_analysis.view_delta_percentage):.1f}% {'above' if latest_analysis.view_delta_percentage >= 0 else 'below'}"
-                    r_delta_str = f"{abs(latest_analysis.retention_delta_points):.1f} percentage points {'above' if latest_analysis.retention_delta_points >= 0 else 'below'}"
+                    v_delta_str = f"{abs(latest_analysis.view_delta_percentage):.1f}% {'above' if latest_analysis.view_delta_percentage >= 0 else 'below'}" if latest_analysis.view_delta_percentage is not None else "comparison unavailable"
+                    r_delta_str = f"{abs(latest_analysis.retention_delta_points):.1f} percentage points {'above' if latest_analysis.retention_delta_points >= 0 else 'below'}" if latest_analysis.retention_delta_points is not None else "comparison unavailable"
+                    v_delta_part = f"{latest_analysis.view_delta_percentage:+.1f}% vs channel median of {baseline_views:,}" if latest_analysis.view_delta_percentage is not None else "comparison unavailable"
+                    r_delta_part = f"{latest_analysis.retention_delta_points:+.1f} percentage points vs channel median of {baseline_ret:.1f}%" if latest_analysis.retention_delta_points is not None else "comparison unavailable"
 
                     is_detailed = any(w in msg_lower for w in ["detailed", "statistical", "statistics", "deep analysis", "deep", "percentile", "distribution", "explain your reasoning", "breakdown"])
 
@@ -2075,8 +2079,8 @@ class AlexDataScientist:
                             f"{prefix}### Latest Upload Statistical Breakdown\n\n"
                             f"**Video**: {v_title} (ID: `{latest_analysis.video_id}`, Published: {latest_analysis.published_at.strftime('%B %d, %Y')})\n\n"
                             f"#### Catalog Percentile Distribution (n={latest_analysis.baseline_sample_size} baseline)\n"
-                            f"- **Views**: {v_views:,} ({latest_analysis.views_percentile:.1f}th percentile, {latest_analysis.view_delta_percentage:+.1f}% vs channel median of {baseline_views:,})\n"
-                            f"- **Average Retention**: {v_ret:.1f}% ({latest_analysis.retention_percentile:.1f}th percentile, {latest_analysis.retention_delta_points:+.1f} percentage points vs channel median of {baseline_ret:.1f}%)\n"
+                            f"- **Views**: {v_views:,} ({latest_analysis.views_percentile:.1f}th percentile, {v_delta_part})\n"
+                            f"- **Average Retention**: {v_ret:.1f}% ({latest_analysis.retention_percentile:.1f}th percentile, {r_delta_part})\n"
                             f"- **CTR**: {v_ctr:.1f}% ({latest_analysis.ctr_percentile or 10.1:.1f}th percentile, {v_ctr - baseline_ctr:+.1f} percentage points vs channel median of {baseline_ctr:.1f}%)\n"
                             f"- **Subscriber Conversion**: {latest_analysis.subscriber_conversion_per_1k_views:.1f} subscribers per 1,000 views (+{v_subs} net subscribers)\n\n"
                             f"#### Diagnostic Analysis\n"

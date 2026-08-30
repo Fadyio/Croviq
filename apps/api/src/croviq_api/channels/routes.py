@@ -529,6 +529,12 @@ async def get_youtube_channel_dashboard(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=f"YouTube API quota limit exceeded: {exc}",
             ) from exc
+        if "validation error" in err_msg or "pydantic" in err_msg or "input_value=none" in err_msg:
+            logger.error("Data validation error during YouTube dashboard calculation: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Unable to process YouTube analytics data. Please try again later.",
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to fetch YouTube analytics: {exc}",

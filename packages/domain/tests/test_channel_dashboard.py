@@ -227,3 +227,139 @@ def test_canonical_kpis_end_to_end_audit_and_independent_arithmetic() -> None:
     assert sum(p.previous_views for p in dashboard.trend) == views_kpi.previous_value
     assert sum(p.previous_watch_time_hours for p in dashboard.trend) == pytest.approx(wt_kpi.previous_value, abs=0.001)
     assert sum(p.previous_net_subscribers for p in dashboard.trend) == subs_kpi.previous_value
+
+
+def test_latest_video_analysis_preserves_none_deltas_when_baseline_is_missing_or_zero() -> None:
+    from datetime import datetime, UTC
+    from croviq_domain.channel import ChannelVideo, VideoPublicMetadata, VideoPrivateAnalytics, DerivedVideoFeatures, ContentPillar, VideoFormat, TitleStyle
+    from croviq_domain.channel_dashboard import compute_latest_video_analysis, LatestVideoAnalysis
+
+    # Create single video with 1500 views, 0 subscribers gained, and no other baseline video (baseline_views=1500, baseline_conversion=0.0)
+    # Or 2 videos where baseline has 0 views and 0 conversion
+    video1 = ChannelVideo(
+        video_id="vid_baseline",
+        public=VideoPublicMetadata(
+            video_id="vid_baseline",
+            title="Old Video",
+            description="",
+            tags=[],
+            duration_seconds=300,
+            published_at=datetime(2026, 1, 1, tzinfo=UTC),
+            view_count=0,
+            like_count=0,
+            comment_count=0,
+            thumbnail_url="",
+            category_id="28",
+        ),
+        analytics=VideoPrivateAnalytics(
+            views=0,
+            watch_time_minutes=0.0,
+            avg_view_duration_seconds=0.0,
+            avg_view_percentage=0.0,
+            subscribers_gained=0,
+            subscribers_lost=0,
+            likes=0,
+            comments=0,
+            shares=0,
+            impressions=None,
+            ctr_percentage=None,
+            estimated_revenue_usd=None,
+            retention_curve=[],
+            traffic_sources=[],
+            geography=[],
+            device_types=[],
+        ),
+        derived=DerivedVideoFeatures(
+            content_pillar=ContentPillar.EMERGING_AI,
+            video_format=VideoFormat.TUTORIAL,
+            title_style=TitleStyle.OUTCOME_FOCUSED,
+            topic_cluster="ai",
+            is_time_sensitive_topic=False,
+        ),
+    )
+    video2 = ChannelVideo(
+        video_id="vid_latest",
+        public=VideoPublicMetadata(
+            video_id="vid_latest",
+            title="Latest Video",
+            description="",
+            tags=[],
+            duration_seconds=300,
+            published_at=datetime(2026, 2, 1, tzinfo=UTC),
+            view_count=2500,
+            like_count=100,
+            comment_count=10,
+            thumbnail_url="",
+            category_id="28",
+        ),
+        analytics=VideoPrivateAnalytics(
+            views=2500,
+            watch_time_minutes=150.0,
+            avg_view_duration_seconds=120.0,
+            avg_view_percentage=45.0,
+            subscribers_gained=15,
+            subscribers_lost=0,
+            likes=100,
+            comments=10,
+            shares=5,
+            impressions=None,
+            ctr_percentage=None,
+            estimated_revenue_usd=None,
+            retention_curve=[],
+            traffic_sources=[],
+            geography=[],
+            device_types=[],
+        ),
+        derived=DerivedVideoFeatures(
+            content_pillar=ContentPillar.EMERGING_AI,
+            video_format=VideoFormat.TUTORIAL,
+            title_style=TitleStyle.OUTCOME_FOCUSED,
+            topic_cluster="ai",
+            is_time_sensitive_topic=False,
+        ),
+    )
+
+    analysis = compute_latest_video_analysis("UC_test_channel", [video1, video2])
+    assert isinstance(analysis, LatestVideoAnalysis)
+    # Baseline views is 0 -> view_delta_percentage is None
+    assert analysis.view_delta_percentage is None
+    # Baseline conversion is 0.0 -> subscriber_conversion_delta_percentage is None
+    assert analysis.subscriber_conversion_delta_percentage is None
+    # Real available metrics are preserved truthfully
+    assert analysis.views == 2500
+    assert analysis.retention_percentage == 45.0
+    assert analysis.subscribers_gained == 15
+    assert analysis.net_subscribers == 15
+    assert analysis.subscriber_conversion_per_1k_views == 6.0
+
+
+def test_latest_video_analysis_direct_instantiation_with_none_deltas() -> None:
+    from datetime import datetime, UTC
+    from croviq_domain.channel_dashboard import LatestVideoAnalysis
+
+    analysis = LatestVideoAnalysis(
+        channel_id="UC_test",
+        video_id="vid_001",
+        title="Live Test Video",
+        published_at=datetime.now(UTC),
+        views=4500,
+        watch_time_hours=32.5,
+        subscribers_gained=25,
+        subscribers_lost=2,
+        net_subscribers=23,
+        view_delta_percentage=None,
+        subscriber_conversion_delta_percentage=None,
+        retention_percentage=52.4,
+        retention_delta_points=None,
+    )
+    assert analysis.view_delta_percentage is None
+    assert analysis.subscriber_conversion_delta_percentage is None
+    assert analysis.retention_delta_points is None
+    assert analysis.views == 4500
+    assert analysis.net_subscribers == 23
+    # Verify serialization preserves None / null
+    dumped = analysis.model_dump()
+    assert dumped["view_delta_percentage"] is None
+    assert dumped["subscriber_conversion_delta_percentage"] is None
+    assert dumped["retention_delta_points"] is None
+    assert dumped["views"] == 4500
