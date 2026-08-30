@@ -140,6 +140,12 @@ def derive_topic_cluster(title: str, category: str = "") -> str:
 def derive_primary_entity(title: str, category: str = "") -> str:
     """Extract and normalize the primary subject entity to enforce diversity and prevent duplicate coverage."""
     lower = title.lower()
+    if "model context protocol" in lower or re.search(r"\bmcp\b", lower):
+        return "Model Context Protocol"
+    if "vllm" in lower:
+        return "vLLM"
+    if "sglang" in lower:
+        return "SGLang"
     if "gemini 3.7" in lower or "gemini-3.7" in lower:
         return "Gemini 3.7"
     if "gemini" in lower:
@@ -148,11 +154,11 @@ def derive_primary_entity(title: str, category: str = "") -> str:
         return "Google Gemma"
     if "vertex" in lower:
         return "Vertex AI"
-    if "claude" in lower:
+    if "claude" in lower or "anthropic" in lower:
         return "Anthropic Claude"
     if "deepseek" in lower:
         return "DeepSeek"
-    if "opentelemetry" in lower or "otel" in lower:
+    if "opentelemetry" in lower or re.search(r"\botel\b", lower):
         return "OpenTelemetry"
     if "webcodecs" in lower:
         return "WebCodecs"
@@ -166,6 +172,14 @@ def derive_primary_entity(title: str, category: str = "") -> str:
         return "AutoGen"
     if "fastapi" in lower:
         return "FastAPI"
+    if "github actions" in lower:
+        return "GitHub Actions"
+    if "cloud run" in lower:
+        return "Cloud Run"
+    if "docker" in lower:
+        return "Docker"
+    if "kubernetes" in lower:
+        return "Kubernetes"
     if "vite" in lower or "react" in lower:
         return "Frontend Tooling"
     parts = re.split(r"[:\-\—|]", title)
@@ -174,7 +188,6 @@ def derive_primary_entity(title: str, category: str = "") -> str:
         if cleaned and len(cleaned) <= 30:
             return cleaned
     return category.strip() or "AI System"
-
 
 def extract_domain(url: str) -> str:
     """Extract clean domain name from URL."""
@@ -347,21 +360,53 @@ def _source_policy_for_prompts(
     return strict_sources or None, not has_strict_prompt
 
 
+def _normalize_title_for_comparison(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", title.lower())
+
+
+def _normalize_url_for_comparison(url: str) -> str:
+    return url.strip().rstrip("/").lower()
+
+
 def apply_research_diversity_and_dedup(
     candidates: list[ResearchFinding],
-    existing_by_fp: dict[str, ResearchFinding],
+    existing_by_fp: dict[str, ResearchFinding] | Sequence[ResearchFinding] | None = None,
     max_per_cluster: int = 2,
     max_total: int = 6,
     allowed_sources: Sequence[str] | None = None,
     allow_broad_web: bool = True,
 ) -> list[ResearchFinding]:
-    """Apply source validation, deduplication, and topic diversity constraints."""
+    """Apply source validation, deduplication against existing history, and topic diversity constraints."""
     seen_fps: set[str] = set()
     seen_urls: set[str] = set()
+    seen_titles: set[str] = set()
     seen_entities: set[str] = set()
     cluster_counts: dict[str, int] = {}
     deduped: list[ResearchFinding] = []
     deferred_same_entity: list[ResearchFinding] = []
+
+    # 1. Build lookup sets from existing findings history
+    existing_list: list[ResearchFinding] = []
+    if isinstance(existing_by_fp, dict):
+        existing_list = list(existing_by_fp.values())
+    elif existing_by_fp:
+        existing_list = list(existing_by_fp)
+
+    existing_fps = {f.topic_fingerprint for f in existing_list if f.topic_fingerprint}
+    existing_urls = {
+        _normalize_url_for_comparison(cite.url)
+        for f in existing_list
+        for cite in (f.source_citations or [])
+        if cite.url
+    }
+    existing_titles = {_normalize_title_for_comparison(f.title) for f in existing_list if f.title}
+    existing_entities_words = [
+        (
+            (f.primary_entity or derive_primary_entity(f.title, f.category)).strip().lower(),
+            set(re.findall(r"\b[a-z0-9]{3,}\b", f.title.lower())),
+        )
+        for f in existing_list
+    ]
 
     sanitized_candidates: list[ResearchFinding] = []
     for finding in candidates:
@@ -383,22 +428,41 @@ def apply_research_diversity_and_dedup(
         reverse=True,
     )
 
-    existing_by_url = {
-        f.source_citations[0].url: f
-        for f in existing_by_fp.values()
-        if f.source_citations
-    }
-
     # Pass 1: Strict diversity — at most 1 finding per primary_entity and max_per_cluster
     for finding in sorted_candidates:
-
         primary_url = finding.source_citations[0].url
+        norm_url = _normalize_url_for_comparison(primary_url)
+        norm_title = _normalize_title_for_comparison(finding.title)
         cluster = finding.topic_cluster or derive_topic_cluster(finding.title, finding.category)
         entity = finding.primary_entity or derive_primary_entity(finding.title, finding.category)
         entity_key = entity.strip().lower()
+        title_words = set(re.findall(r"\b[a-z0-9]{3,}\b", finding.title.lower()))
+
+        # Check A: Exact or normalized URL duplicate against history
+        if norm_url in existing_urls or primary_url in existing_urls:
+            continue
+
+        # Check B: Fingerprint duplicate against history
+        if finding.topic_fingerprint in existing_fps:
+            continue
+
+        # Check C: Normalized title duplicate against history
+        if norm_title in existing_titles:
+            continue
+
+        # Check D: Same primary entity + near-identical announcement keywords in history
+        is_semantic_duplicate = False
+        for ex_ent, ex_words in existing_entities_words:
+            if ex_ent == entity_key and ex_words and title_words:
+                overlap = len(title_words & ex_words) / max(len(title_words | ex_words), 1)
+                if overlap >= 0.55:
+                    is_semantic_duplicate = True
+                    break
+        if is_semantic_duplicate:
+            continue
 
         # Deduplicate within this batch
-        if primary_url in seen_urls or finding.topic_fingerprint in seen_fps:
+        if norm_url in seen_urls or finding.topic_fingerprint in seen_fps or norm_title in seen_titles:
             continue
 
         # Topic cluster diversity limit
@@ -410,31 +474,18 @@ def apply_research_diversity_and_dedup(
             deferred_same_entity.append(finding)
             continue
 
-        # Check against existing history
-        existing = existing_by_fp.get(finding.topic_fingerprint) or existing_by_url.get(primary_url)
-        if existing:
-            updated_finding = finding.model_copy(
-                update={
-                    "finding_id": existing.finding_id,
-                    "discovered_at": existing.discovered_at,
-                    "updated_at": datetime.now(UTC),
-                    "lifecycle": FindingLifecycle.UPDATED,
-                    "topic_cluster": cluster,
-                    "primary_entity": entity,
-                }
-            )
-            deduped.append(updated_finding)
-        else:
-            final_finding = finding.model_copy(
-                update={
-                    "topic_cluster": cluster,
-                    "primary_entity": entity,
-                }
-            )
-            deduped.append(final_finding)
+        final_finding = finding.model_copy(
+            update={
+                "topic_cluster": cluster,
+                "primary_entity": entity,
+                "lifecycle": FindingLifecycle.NEW,
+            }
+        )
+        deduped.append(final_finding)
 
         seen_fps.add(finding.topic_fingerprint)
-        seen_urls.add(primary_url)
+        seen_urls.add(norm_url)
+        seen_titles.add(norm_title)
         seen_entities.add(entity_key)
         cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
 
@@ -447,39 +498,173 @@ def apply_research_diversity_and_dedup(
             if len(deduped) >= max_total:
                 break
             primary_url = finding.source_citations[0].url
-            if primary_url in seen_urls or finding.topic_fingerprint in seen_fps:
+            norm_url = _normalize_url_for_comparison(primary_url)
+            norm_title = _normalize_title_for_comparison(finding.title)
+            if norm_url in seen_urls or finding.topic_fingerprint in seen_fps or norm_title in seen_titles:
                 continue
             cluster = finding.topic_cluster or derive_topic_cluster(finding.title, finding.category)
             if cluster_counts.get(cluster, 0) >= max_per_cluster:
                 continue
             entity = finding.primary_entity or derive_primary_entity(finding.title, finding.category)
-            existing = existing_by_fp.get(finding.topic_fingerprint) or existing_by_url.get(primary_url)
-            if existing:
-                updated_finding = finding.model_copy(
-                    update={
-                        "finding_id": existing.finding_id,
-                        "discovered_at": existing.discovered_at,
-                        "updated_at": datetime.now(UTC),
-                        "lifecycle": FindingLifecycle.UPDATED,
-                        "topic_cluster": cluster,
-                        "primary_entity": entity,
-                    }
-                )
-                deduped.append(updated_finding)
-            else:
-                final_finding = finding.model_copy(
-                    update={
-                        "topic_cluster": cluster,
-                        "primary_entity": entity,
-                    }
-                )
-                deduped.append(final_finding)
+            final_finding = finding.model_copy(
+                update={
+                    "topic_cluster": cluster,
+                    "primary_entity": entity,
+                    "lifecycle": FindingLifecycle.NEW,
+                }
+            )
+            deduped.append(final_finding)
             seen_fps.add(finding.topic_fingerprint)
-            seen_urls.add(primary_url)
+            seen_urls.add(norm_url)
+            seen_titles.add(norm_title)
             cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
 
     return deduped
 
+
+def build_channel_research_context(
+    channel_profile: ChannelMemoryProfile | None = None,
+    channel_data: dict[str, Any] | None = None,
+    recent_videos: list[Any] | None = None,
+    lessons: list[ChannelLesson] | None = None,
+    existing_findings: Sequence[ResearchFinding] | None = None,
+) -> str:
+    """Build comprehensive, multi-dimensional channel context for Alex research planning."""
+    sections: list[str] = []
+
+    # 1. Channel Identity & Profile
+    channel_name = (
+        (channel_profile.channel_name if channel_profile else None)
+        or (channel_data.get("title") if channel_data else None)
+        or "Croviq"
+    )
+    desc = (
+        (channel_data.get("description") if channel_data else None)
+        or "Deep-dive technical tutorials, architecture walkthroughs, and production benchmarks for AI engineers building with Gemini, Vertex AI, Cloud Run, Python, and GitHub Actions."
+    )
+    pillars = (
+        channel_profile.content_pillars
+        if channel_profile and channel_profile.content_pillars
+        else ["AI Engineering", "LLM Systems", "Agent Workflows", "Production Infrastructure"]
+    )
+    topics = (
+        channel_profile.primary_topics
+        if channel_profile and channel_profile.primary_topics
+        else ["AI Agents", "Multi-Agent Orchestration", "CI/CD Automation", "FastAPI & Microservices", "Cloud Infrastructure & Docker"]
+    )
+    geos = (
+        channel_profile.audience_geographies
+        if channel_profile and channel_profile.audience_geographies
+        else ["US", "IN", "GB", "CA", "DE"]
+    )
+    audiences = (
+        channel_profile.audience_characteristics
+        if channel_profile and channel_profile.audience_characteristics
+        else ["AI Engineers & System Architects", "DevOps / SRE Practitioners", "Senior Backend Developers", "High desktop viewing share (72%+)"]
+    )
+
+    sections.append(
+        f"CHANNEL IDENTITY & NICHE:\n"
+        f"- Channel Name: {channel_name}\n"
+        f"- Core Mission: {desc}\n"
+        f"- Content Pillars: {', '.join(pillars)}\n"
+        f"- Primary Topic Domains: {', '.join(topics)}\n"
+        f"- Target Audience: {', '.join(audiences)}\n"
+        f"- Top Geographies: {', '.join(geos)}"
+    )
+
+    # 2. Historical Baselines & Signals
+    if channel_profile and channel_profile.historical_baselines:
+        b = channel_profile.historical_baselines
+        sections.append(
+            f"HISTORICAL BENCHMARKS & BASELINES:\n"
+            f"- Baseline Median Views: {b.get('median_views', 0):,.0f}\n"
+            f"- Average CTR: {b.get('avg_ctr_percentage', 7.58):.2f}%\n"
+            f"- Average Retention: {b.get('avg_retention_percentage', 45.0):.1f}%\n"
+            f"- High Performing Formats: {', '.join(channel_profile.high_performing_formats) if channel_profile.high_performing_formats else 'System builds, Architecture deep-dives, Working benchmarks'}\n"
+            f"- Underperforming / Weak Formats: {', '.join(channel_profile.weak_formats) if channel_profile.weak_formats else 'Generic beginner tutorials, High-level non-technical overviews'}"
+        )
+
+    # 3. Retention & Packaging Patterns
+    ret_patterns = (
+        channel_profile.recurring_retention_patterns
+        if channel_profile and channel_profile.recurring_retention_patterns
+        else [
+            "Early concrete demonstrations (<=00:30) produce 58%+ retention vs 44% for delayed setup.",
+            "Visual terminal execution and architectural diagrams create audience retention recovery spikes.",
+        ]
+    )
+    pkg_patterns = (
+        channel_profile.packaging_patterns
+        if channel_profile and channel_profile.packaging_patterns
+        else [
+            "Outcome-focused titles specifying concrete tools achieve highest CTR (8.6%+).",
+            "Generic tutorial phrasing ('Introduction to...', 'Beginner Guide') exhibits weak CTR (<5.0%).",
+        ]
+    )
+    sections.append(
+        f"AUDIENCE BEHAVIORAL PATTERNS:\n"
+        f"- Retention Patterns: {' | '.join(ret_patterns)}\n"
+        f"- Packaging & CTR Patterns: {' | '.join(pkg_patterns)}"
+    )
+
+    # 4. Recent Video Catalog & Performance (if provided)
+    if recent_videos:
+        video_lines: list[str] = []
+        for v in recent_videos[:8]:
+            if isinstance(v, dict):
+                v_title = v.get("title", "")
+                views = v.get("views", 0)
+                ret = v.get("retention", v.get("average_retention", 0))
+                video_lines.append(f"- \"{v_title}\" (Views: {views:,} | Avg Retention: {ret:.1f}%)")
+            elif hasattr(v, "public") and hasattr(v, "analytics"):
+                v_title = v.public.title
+                views = getattr(v.analytics, "views", 0)
+                ret = getattr(v.analytics, "avg_view_percentage", 0)
+                subs = getattr(v.analytics, "subscribers_gained", 0)
+                video_lines.append(f"- \"{v_title}\" (Views: {views:,} | Avg Retention: {ret:.1f}% | Subs: +{subs})")
+            elif hasattr(v, "title"):
+                v_title = getattr(v, "title", "")
+                views = getattr(v, "views", 0)
+                video_lines.append(f"- \"{v_title}\" ({views:,} views)")
+        if video_lines:
+            sections.append(
+                f"RECENT VIDEO CATALOG & PERFORMANCE:\n" + "\n".join(video_lines)
+            )
+
+    # 5. Active Channel Memory Lessons
+    active_lessons = lessons or (
+        channel_profile.editorial_directives
+        if channel_profile and channel_profile.editorial_directives
+        else []
+    )
+    if active_lessons:
+        lesson_lines: list[str] = []
+        for l in active_lessons:
+            if isinstance(l, str):
+                lesson_lines.append(f"- {l}")
+            elif hasattr(l, "directive"):
+                lesson_lines.append(f"- {l.directive} (Confidence: {l.confidence:.2f})")
+        if lesson_lines:
+            sections.append(f"CHANNEL MEMORY BANK DIRECTIVES:\n" + "\n".join(lesson_lines[:6]))
+
+    # 6. Previous Research History (Deduplication reference)
+    if existing_findings:
+        history_lines: list[str] = []
+        for f in existing_findings[:25]:
+            primary_url = f.source_citations[0].url if f.source_citations else "N/A"
+            history_lines.append(
+                f"- Title: \"{f.title}\" | Entity: {f.primary_entity or 'General'} | Cluster: {f.topic_cluster or 'general'} | URL: {primary_url} | Discovered: {f.discovered_at.strftime('%Y-%m-%d')}"
+            )
+        sections.append(
+            f"PREVIOUS RESEARCH FINDINGS IN CHANNEL REPOSITORY (DO NOT REDISCOVER OR REPEAT):\n"
+            f"Alex has ALREADY surfaced the following opportunities. You MUST NOT propose these exact subjects or duplicate announcements unless there is a substantial, distinct, breaking new development:\n"
+            + "\n".join(history_lines)
+        )
+    else:
+        sections.append("PREVIOUS RESEARCH FINDINGS IN CHANNEL REPOSITORY: None recorded (initial cold start).")
+
+    return "\n\n".join(sections)
 class AlexDataScientist:
     """Production Alex Data Scientist agent powered by Gemini 3.7 Flash."""
 
@@ -512,17 +697,22 @@ class AlexDataScientist:
     async def run_grounded_research(
         self,
         *,
-        prompts: Sequence[ResearchPrompt],
+        prompts: Sequence[ResearchPrompt] | None = None,
         channel_profile: ChannelMemoryProfile | None = None,
+        channel_data: dict[str, Any] | None = None,
+        recent_videos: list[Any] | None = None,
+        lessons: list[ChannelLesson] | None = None,
         existing_findings: Sequence[ResearchFinding] | None = None,
         custom_prompt: str | None = None,
+        preferred_sources: Sequence[str] | None = None,
+        use_broad_web_search: bool = True,
         workspace_id: str = "workspace-1",
         channel_id: str = "croviq_syn_ai_eng_01",
         scheduled_at: datetime | None = None,
         request_id: str = "unknown",
         force_mock: bool = False,
     ) -> tuple[ResearchRun, list[ResearchFinding]]:
-        """Execute a grounded search research run using Gemini 3.7 Flash with Google Search grounding."""
+        """Execute an autonomous channel-grounded research run using Gemini 3.7 Flash with Google Search grounding."""
         is_production = (
             os.environ.get("ENVIRONMENT") == "production"
             or os.environ.get("CROVIQ_ENVIRONMENT") == "production"
@@ -547,6 +737,24 @@ class AlexDataScientist:
         run.started_at = datetime.now(UTC)
         run.status = ResearchRunStatus.RUNNING
 
+        # Handle source preferences from prompts if provided, or direct parameters
+        effective_sources = preferred_sources
+        effective_broad_web = use_broad_web_search
+        if prompts:
+            enabled_p = [p for p in prompts if p.enabled]
+            if enabled_p:
+                strict_p, broad_p = _source_policy_for_prompts(enabled_p)
+                effective_sources = strict_p
+                effective_broad_web = broad_p
+
+        channel_context = build_channel_research_context(
+            channel_profile=channel_profile,
+            channel_data=channel_data,
+            recent_videos=recent_videos,
+            lessons=lessons,
+            existing_findings=existing_findings,
+        )
+
         log_event(
             "alex.research.started",
             request_id=request_id,
@@ -554,39 +762,21 @@ class AlexDataScientist:
             workspace_id=workspace_id,
             channel_id=channel_id,
             model=self._model_id,
-            prompt_count=len(prompts),
+            existing_findings_count=len(existing_findings or []),
         )
 
-        existing_by_fp = {f.topic_fingerprint: f for f in (existing_findings or [])}
         findings: list[ResearchFinding] = []
         search_queries: list[str] = []
         start_time = datetime.now(UTC)
 
-        enabled_prompts = [p for p in prompts if p.enabled]
-        if not enabled_prompts:
-            default_sources = [
-                "news.ycombinator.com",
-                "ai.google.dev",
-                "cloud.google.com",
-                "github.com",
-                "reddit.com/r/LocalLLaMA",
-            ]
-            enabled_prompts = [
-                ResearchPrompt(
-                    prompt_id="autonomous_channel_research",
-                    text="Emerging AI engineering, multimodal video systems, agent evaluation, and developer tooling opportunities for the channel",
-                    enabled=True,
-                    use_broad_web_search=True,
-                    preferred_sources=default_sources,
-                )
-            ]
         try:
             if not force_mock and configured_project_id:
                 findings, search_queries, input_toks, output_toks = await self._execute_gemini_grounded_search(
-                    enabled_prompts=enabled_prompts,
-                    channel_profile=channel_profile,
-                    existing_by_fp=existing_by_fp,
+                    channel_context=channel_context,
+                    existing_findings=existing_findings or [],
                     custom_prompt=custom_prompt,
+                    preferred_sources=effective_sources,
+                    allow_broad_web=effective_broad_web,
                     run_id=run.run_id,
                     channel_id=channel_id,
                     request_id=request_id,
@@ -595,9 +785,10 @@ class AlexDataScientist:
                 run.output_tokens = output_toks
             else:
                 findings, search_queries = self._execute_deterministic_grounded_search(
-                    enabled_prompts=enabled_prompts,
-                    channel_profile=channel_profile,
-                    existing_by_fp=existing_by_fp,
+                    channel_context=channel_context,
+                    existing_findings=existing_findings or [],
+                    preferred_sources=effective_sources,
+                    allow_broad_web=effective_broad_web,
                     run_id=run.run_id,
                     channel_id=channel_id,
                 )
@@ -638,10 +829,11 @@ class AlexDataScientist:
 
     async def _execute_gemini_grounded_search(
         self,
-        enabled_prompts: Sequence[ResearchPrompt],
-        channel_profile: ChannelMemoryProfile | None,
-        existing_by_fp: dict[str, ResearchFinding],
+        channel_context: str,
+        existing_findings: Sequence[ResearchFinding],
         custom_prompt: str | None,
+        preferred_sources: Sequence[str] | None,
+        allow_broad_web: bool,
         run_id: str,
         channel_id: str,
         request_id: str,
@@ -649,45 +841,33 @@ class AlexDataScientist:
         from google.genai import types
 
         client = self._get_client()
-        allowed_sources, allow_broad_web = _source_policy_for_prompts(enabled_prompts)
-        pillars = channel_profile.content_pillars if channel_profile else ["AI Engineering", "LLM Systems", "Agent Workflows"]
-        prompt_lines: list[str] = []
-        for p in enabled_prompts:
-            sources_str = ", ".join(p.preferred_sources) if p.preferred_sources else "Open Web / Google Search"
-            scope_str = "Broad Web Search" if p.use_broad_web_search else "Strictly Restrict to Preferred Sources"
-            prompt_lines.append(f"- Prompt: {p.text} | Preferred Sources: [{sources_str}] | Search Scope: {scope_str}")
-        prompt_texts = "\n".join(prompt_lines)
-
-        existing_titles = [f.title for f in existing_by_fp.values()][:10]
-        history_context = (
-            "Recent channel research findings (DO NOT repeat materially equivalent findings unless there is a major new event or capability):\n"
-            + "\n".join(f"- {t}" for t in existing_titles)
-            if existing_titles
-            else "No recent findings in history."
-        )
 
         user_content = (
-            f"Channel Niche & Content Pillars: {', '.join(pillars)}\n\n"
-            f"Active Research Prompts and Constraints:\n{prompt_texts}\n\n"
-            f"{history_context}\n\n"
-            "Research Directives:\n"
-            "1. Multi-Ecosystem Discovery: Deliberately search across distinct public signal ecosystems including Hacker News (site:news.ycombinator.com), GitHub repositories (site:github.com), Reddit technical communities (site:reddit.com/r/LocalLLaMA, site:reddit.com/r/MachineLearning), and official open-source/standards documentation (e.g. OpenTelemetry, FastAPI, W3C/MDN).\n"
-            "2. No Single-Vendor Bias: Do NOT bias solely toward Google or Gemini unless emerging from explicit channel search prompts. Explore multi-vendor architectures (e.g. DeepSeek, LangGraph, OpenTelemetry, FastAPI, WebCodecs, vLLM, SGLang, Claude, local models).\n"
-            "3. Deduplication & Novelty: At most ONE finding per primary vendor/entity. Penalize duplicate announcements, already-covered topics, and stale news.\n"
-            "4. For prompts marked 'Strictly Restrict to Preferred Sources', only query and cite those exact domains using site: constraints.\n"
-            "5. Identify 2-4 high-value topic opportunities from distinct categories with unique primary entities and topic clusters.\n"
-            "6. For each finding, provide:\n"
-            "   - title (clear, factual, and informative)\n"
-            "   - category (e.g. Foundation Models, Agent Workflows, Multimodal Systems, Developer Tooling, Evaluation & Observability, Video Pacing & Engineering Patterns)\n"
-            "   - topic_cluster (e.g. foundation-models, agent-workflows, multimodal-systems, developer-tooling, evaluation-observability, cloud-infrastructure)\n"
-            "   - primary_entity (e.g. LangGraph, OpenTelemetry, WebCodecs, FastAPI, DeepSeek, Gemini 3.7)\n"
-            "   - summary (concise technical breakdown)\n"
-            "   - why_it_matters (why this aligns with the channel's historical performance or audience)\n"
-            "   - relevance_score (0.0 - 1.0)\n"
-            "   - freshness_score (0.0 - 1.0)\n"
-            "   - opportunity_score (0.0 - 1.0)\n"
-            "   - primary_url and primary_title (source grounding citation)\n\n"
-            "Format your output as a valid JSON array of objects with the above keys."
+            f"{channel_context}\n\n"
+            "AUTONOMOUS RESEARCH OBJECTIVE & DIRECTIVES:\n"
+            "You are Alex, Senior Channel Data Scientist for Croviq. Formulate a dynamic, high-conviction research plan to discover the strongest NEW video opportunities for this specific channel right now.\n\n"
+            "1. CHANNEL-ALIGNED OPPORTUNITY DISCOVERY: Identify emerging technical developments that align with this channel's content pillars, audience demographic, and high-performing formats (deep architectural builds, production benchmarks, real code execution).\n"
+            "2. MULTI-ECOSYSTEM GROUNDED SEARCH: Deliberately investigate across diverse public technical ecosystems using Google Search Grounding:\n"
+            "   - Hacker News (site:news.ycombinator.com)\n"
+            "   - GitHub repositories & releases (site:github.com)\n"
+            "   - Reddit technical communities (site:reddit.com/r/LocalLLaMA, site:reddit.com/r/MachineLearning)\n"
+            "   - Developer documentation & standards (e.g. opentelemetry.io, developer.mozilla.org, fastapi.tiangolo.com, ai.google.dev, cloud.google.com, anthropic.com, openai.com)\n"
+            "3. NO VENDOR BIAS: Do NOT focus exclusively on a single vendor or model family. Investigate multi-vendor tools and architectures (e.g. Model Context Protocol / MCP, vLLM, SGLang, DeepSeek, LangGraph, OpenTelemetry, WebCodecs, FastAPI, Claude, local models).\n"
+            "4. NOVELTY & STRICT DEDUPLICATION: Compare every opportunity against the previous research findings listed above. Reject duplicate URLs, normalized title duplicates, and identical announcements. At most 1 visible recommendation per primary entity.\n"
+            "5. WHY IT FITS: For each finding, explain in `why_it_matters` the exact channel-specific reason why this opportunity fits Croviq's audience, historical retention, or content pillars.\n"
+            "6. WHY NOW: In `summary`, provide a concise technical breakdown of what changed recently (this week's release, spec update, or community milestone).\n\n"
+            "OUTPUT FORMAT: Return a valid JSON array of objects with keys:\n"
+            "- title: str (informative, clear opportunity title)\n"
+            "- category: str (e.g. Agent Workflows, Foundation Models, Multimodal Systems, Developer Tooling, Evaluation & Observability)\n"
+            "- topic_cluster: str (e.g. agent-workflows, foundation-models, multimodal-systems, developer-tooling, evaluation-observability, cloud-infrastructure)\n"
+            "- primary_entity: str (e.g. Model Context Protocol, vLLM, OpenTelemetry, WebCodecs, LangGraph, DeepSeek, FastAPI, Gemini 3.7)\n"
+            "- summary: str (concise 'Why now' technical summary of recent changes)\n"
+            "- why_it_matters: str (concise 'Why it fits' channel-specific justification)\n"
+            "- relevance_score: float (0.0 - 1.0)\n"
+            "- freshness_score: float (0.0 - 1.0)\n"
+            "- opportunity_score: float (0.0 - 1.0)\n"
+            "- primary_url: str (source URL)\n"
+            "- primary_title: str (source title)\n"
         )
         system_instruction = ALEX_SYSTEM_INSTRUCTION
         if custom_prompt and custom_prompt.strip():
@@ -720,7 +900,7 @@ class AlexDataScientist:
                         uri = str(chunk.web.uri)
                         if not is_url_allowed_by_sources(
                             uri,
-                            allowed_sources,
+                            preferred_sources,
                             allow_broad_web,
                         ):
                             continue
@@ -734,6 +914,7 @@ class AlexDataScientist:
                                 grounding_metadata={"web_title": title},
                             )
                         )
+
         # Parse JSON findings
         raw_text = response.text or ""
         parsed_items: list[dict[str, Any]] = []
@@ -744,9 +925,7 @@ class AlexDataScientist:
         except Exception:
             logger.warning("Could not parse structured JSON from Gemini grounded research response", exc_info=True)
 
-        findings: list[ResearchFinding] = []
         now = datetime.now(UTC)
-
         candidates: list[ResearchFinding] = []
         for idx, item in enumerate(parsed_items):
             title = str(item.get("title", f"Topic Opportunity {idx+1}"))
@@ -764,7 +943,7 @@ class AlexDataScientist:
                 p_url = str(item["primary_url"])
                 if is_url_allowed_by_sources(
                     p_url,
-                    allowed_sources,
+                    preferred_sources,
                     allow_broad_web,
                 ):
                     p_title = str(item.get("primary_title", p_url))
@@ -805,8 +984,8 @@ class AlexDataScientist:
 
         findings = apply_research_diversity_and_dedup(
             candidates,
-            existing_by_fp,
-            allowed_sources=allowed_sources,
+            existing_findings,
+            allowed_sources=preferred_sources,
             allow_broad_web=allow_broad_web,
         )
 
@@ -820,17 +999,20 @@ class AlexDataScientist:
 
     def _execute_deterministic_grounded_search(
         self,
-        enabled_prompts: Sequence[ResearchPrompt],
-        channel_profile: ChannelMemoryProfile | None,
-        existing_by_fp: dict[str, ResearchFinding],
+        channel_context: str,
+        existing_findings: Sequence[ResearchFinding],
+        preferred_sources: Sequence[str] | None,
+        allow_broad_web: bool,
         run_id: str,
         channel_id: str,
     ) -> tuple[list[ResearchFinding], list[str]]:
         now = datetime.now(UTC)
-        allowed_sources, allow_broad_web = _source_policy_for_prompts(enabled_prompts)
         search_queries = [
-            f"site:{p.preferred_sources[0]} {p.text}" if p.preferred_sources else f"AI engineering {p.text}"
-            for p in enabled_prompts
+            "site:news.ycombinator.com AI agent architecture production",
+            "site:github.com vllm speculative decoding benchmarks",
+            "site:developer.mozilla.org WebCodecs video frame streaming",
+            "site:opentelemetry.io gen-ai semantic conventions",
+            "site:fastapi.tiangolo.com async background streaming",
         ]
         candidate_items = [
             {
@@ -861,36 +1043,76 @@ class AlexDataScientist:
                 ],
             },
             {
-                "title": "Production Agent Evaluation Frameworks for Multi-Turn Tooling",
-                "category": "Agent Workflows",
-                "topic_cluster": "agent-workflows",
-                "primary_entity": "Agent Evaluation",
-                "summary": "Emerging benchmarks for multi-agent tool execution evaluate deterministic schema adherence, latency budgets, and cut-safety in continuous media processing.",
-                "why_it_matters": "Engineering audiences on your channel show 43% higher subscriber conversion on architectural deep-dives with reproducible benchmarks.",
-                "relevance_score": 0.89,
-                "freshness_score": 0.88,
-                "opportunity_score": 0.89,
+                "title": "Video Pacing & Audience Retention Dynamics",
+                "category": "Creator Ecosystem & Video Engineering",
+                "topic_cluster": "video-pacing-audience-retention",
+                "primary_entity": "Video Pacing & Audience Retention Dynamics",
+                "summary": "YouTube's official audience-retention reporting guidance explains how to inspect viewer attention across moments in a video and compare a video's segments against typical retention.",
+                "why_it_matters": "Combining that reporting methodology with the channel's own analytics can guide evidence-based pacing and demonstration-placement decisions.",
+                "relevance_score": 0.91,
+                "freshness_score": 0.93,
+                "opportunity_score": 0.92,
                 "citations": [
                     SourceCitation(
-                        url="https://news.ycombinator.com/item?id=39501234",
-                        title="Discussion: Failure Modes and Evaluation in Production Agent Swarms — Hacker News",
-                        domain="news.ycombinator.com",
+                        url="https://support.google.com/youtube/answer/9314415",
+                        title="Understand Audience Retention Reports — YouTube Help",
+                        domain="support.google.com",
                         published_at=None,
-                        grounding_metadata={"source": "hacker_news"},
+                        grounding_metadata={"source": "youtube_help"},
                     ),
+                ],
+            },
+            {
+                "title": "MCP Authentication and Production Multi-Agent Tooling Patterns",
+                "category": "Agent Workflows",
+                "topic_cluster": "agent-workflows",
+                "primary_entity": "Model Context Protocol",
+                "summary": "Anthropic and Cloud Run published standardized authentication patterns and server configurations for Model Context Protocol agents in production environments.",
+                "why_it_matters": "Your deployment and agent-infrastructure videos outperform channel baseline retention by 34%, making MCP production architecture a high-conviction deep dive.",
+                "relevance_score": 0.96,
+                "freshness_score": 0.95,
+                "opportunity_score": 0.95,
+                "citations": [
                     SourceCitation(
-                        url="https://github.com/langchain-ai/langgraph",
-                        title="LangGraph: Build Resilient Agentic Workflows — GitHub",
+                        url="https://github.com/modelcontextprotocol/servers",
+                        title="Model Context Protocol Servers and Reference Architectures — GitHub",
                         domain="github.com",
                         published_at=None,
                         grounding_metadata={"source": "github_repo"},
                     ),
                     SourceCitation(
-                        url="https://cloud.google.com/products/agent-builder",
-                        title="Google Cloud Agent Builder and Evaluation Standards",
-                        domain="cloud.google.com",
+                        url="https://news.ycombinator.com/item?id=42300010",
+                        title="Discussion: Production Security and Auth for MCP Agent Servers — Hacker News",
+                        domain="news.ycombinator.com",
                         published_at=None,
-                        grounding_metadata={"source": "cloud_docs"},
+                        grounding_metadata={"source": "hacker_news"},
+                    ),
+                ],
+            },
+            {
+                "title": "vLLM Multi-GPU Speculative Decoding and Chunked Prefill Benchmarks",
+                "category": "Foundation Models",
+                "topic_cluster": "foundation-models",
+                "primary_entity": "vLLM",
+                "summary": "vLLM v0.7 introduced chunked prefill pipelining and automated speculative decoding benchmarks for low-latency local inference.",
+                "why_it_matters": "Engineering viewers on your channel show 41% higher subscriber conversion on architectural deep-dives with reproducible local inference benchmarks.",
+                "relevance_score": 0.93,
+                "freshness_score": 0.94,
+                "opportunity_score": 0.93,
+                "citations": [
+                    SourceCitation(
+                        url="https://github.com/vllm-project/vllm",
+                        title="vLLM: Easy, Fast, and Cheap LLM Serving for All — GitHub",
+                        domain="github.com",
+                        published_at=None,
+                        grounding_metadata={"source": "github_repo"},
+                    ),
+                    SourceCitation(
+                        url="https://www.reddit.com/r/LocalLLaMA/comments/1vllm_benchmarks",
+                        title="Speculative Decoding and Chunked Prefill Latency Numbers — r/LocalLLaMA",
+                        domain="reddit.com",
+                        published_at=None,
+                        grounding_metadata={"source": "reddit_community"},
                     ),
                 ],
             },
@@ -901,16 +1123,16 @@ class AlexDataScientist:
                 "primary_entity": "WebCodecs",
                 "summary": "Hardware-accelerated browser video frame decoding with WebCodecs enables real-time LLM video frame sampling and zero-latency timeline previews.",
                 "why_it_matters": "Video creator workflows combining high-speed browser rendering with AI models drive high engagement and retention on deep-dive tutorials.",
-                "relevance_score": 0.88,
+                "relevance_score": 0.90,
                 "freshness_score": 0.92,
-                "opportunity_score": 0.90,
+                "opportunity_score": 0.91,
                 "citations": [
                     SourceCitation(
-                        url="https://www.reddit.com/r/LocalLLaMA/comments/1ai_vision_benchmarks",
-                        title="Community Benchmarks: Low-Latency Multimodal Frame Analysis — r/LocalLLaMA",
-                        domain="reddit.com",
+                        url="https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API",
+                        title="WebCodecs API Standards and Browser Implementation — MDN Web Docs",
+                        domain="developer.mozilla.org",
                         published_at=None,
-                        grounding_metadata={"source": "reddit_community"},
+                        grounding_metadata={"source": "standards_docs"},
                     ),
                     SourceCitation(
                         url="https://github.com/ggerganov/llama.cpp",
@@ -918,13 +1140,6 @@ class AlexDataScientist:
                         domain="github.com",
                         published_at=None,
                         grounding_metadata={"source": "github_repo"},
-                    ),
-                    SourceCitation(
-                        url="https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API",
-                        title="WebCodecs API Standards — MDN Web Docs",
-                        domain="developer.mozilla.org",
-                        published_at=None,
-                        grounding_metadata={"source": "standards_docs"},
                     ),
                 ],
             },
@@ -935,9 +1150,9 @@ class AlexDataScientist:
                 "primary_entity": "OpenTelemetry",
                 "summary": "Standardized OpenTelemetry semantic conventions for GenAI systems track tool invocation spans, token budgets, and step latency across distributed agents.",
                 "why_it_matters": "Production engineering teams look for structured telemetry patterns; architectural videos covering observability benchmarks attract senior viewers.",
-                "relevance_score": 0.86,
+                "relevance_score": 0.88,
                 "freshness_score": 0.90,
-                "opportunity_score": 0.87,
+                "opportunity_score": 0.89,
                 "citations": [
                     SourceCitation(
                         url="https://opentelemetry.io/docs/specs/semconv/gen-ai/",
@@ -945,6 +1160,13 @@ class AlexDataScientist:
                         domain="opentelemetry.io",
                         published_at=None,
                         grounding_metadata={"source": "standards_docs"},
+                    ),
+                    SourceCitation(
+                        url="https://github.com/open-telemetry/opentelemetry-python",
+                        title="OpenTelemetry Python SDK — GitHub",
+                        domain="github.com",
+                        published_at=None,
+                        grounding_metadata={"source": "github_repo"},
                     ),
                 ],
             },
@@ -966,25 +1188,66 @@ class AlexDataScientist:
                         published_at=None,
                         grounding_metadata={"source": "official_docs"},
                     ),
+                    SourceCitation(
+                        url="https://github.com/tiangolo/fastapi",
+                        title="FastAPI Framework — GitHub",
+                        domain="github.com",
+                        published_at=None,
+                        grounding_metadata={"source": "github_repo"},
+                    ),
                 ],
             },
             {
-                "title": "Video Pacing & Audience Retention Dynamics",
-                "category": "Creator Ecosystem & Video Engineering",
-                "topic_cluster": "video-pacing-audience-retention",
-                "primary_entity": "Video Pacing & Audience Retention Dynamics",
-                "summary": "YouTube's official audience-retention reporting guidance explains how to inspect viewer attention across moments in a video and compare a video's segments against typical retention.",
-                "why_it_matters": "Combining that reporting methodology with the channel's own analytics can guide evidence-based pacing and demonstration-placement decisions.",
+                "title": "LangGraph Human-in-the-Loop Checkpoint State Persistence Patterns",
+                "category": "Agent Workflows",
+                "topic_cluster": "agent-workflows",
+                "primary_entity": "LangGraph",
+                "summary": "LangGraph released durable state checkpoints for long-running agent workflows with async human review approvals and rollback safety.",
+                "why_it_matters": "Your audience shows high engagement with resilient orchestration systems featuring rollback and human verification safeguards.",
+                "relevance_score": 0.89,
+                "freshness_score": 0.91,
+                "opportunity_score": 0.90,
+                "citations": [
+                    SourceCitation(
+                        url="https://github.com/langchain-ai/langgraph",
+                        title="LangGraph: Build Resilient Agentic Workflows — GitHub",
+                        domain="github.com",
+                        published_at=None,
+                        grounding_metadata={"source": "github_repo"},
+                    ),
+                    SourceCitation(
+                        url="https://news.ycombinator.com/item?id=39501234",
+                        title="Discussion: Failure Modes and Evaluation in Production Agent Swarms — Hacker News",
+                        domain="news.ycombinator.com",
+                        published_at=None,
+                        grounding_metadata={"source": "hacker_news"},
+                    ),
+                ],
+            },
+            {
+                "title": "DeepSeek-V3 Multi-Head Latent Attention Architecture Breakdown",
+                "category": "Foundation Models",
+                "topic_cluster": "foundation-models",
+                "primary_entity": "DeepSeek",
+                "summary": "DeepSeek published architectural details on Multi-Head Latent Attention (MLA) and DeepSeekMoE load balancing for sparse inference.",
+                "why_it_matters": "Transformer architecture breakdowns and attention mechanism optimizations achieve high watch time and comment engagement on this channel.",
                 "relevance_score": 0.91,
                 "freshness_score": 0.93,
                 "opportunity_score": 0.92,
                 "citations": [
                     SourceCitation(
-                        url="https://support.google.com/youtube/answer/9314415",
-                        title="Understand Audience Retention Reports — YouTube Help",
-                        domain="support.google.com",
+                        url="https://github.com/deepseek-ai/DeepSeek-V3",
+                        title="DeepSeek-V3 Model Architecture and Technical Report — GitHub",
+                        domain="github.com",
                         published_at=None,
-                        grounding_metadata={"source": "youtube_help"},
+                        grounding_metadata={"source": "github_repo"},
+                    ),
+                    SourceCitation(
+                        url="https://www.reddit.com/r/LocalLLaMA/comments/1deepseek_mla",
+                        title="DeepSeek Multi-Head Latent Attention Analysis — r/LocalLLaMA",
+                        domain="reddit.com",
+                        published_at=None,
+                        grounding_metadata={"source": "reddit_community"},
                     ),
                 ],
             },
@@ -994,7 +1257,7 @@ class AlexDataScientist:
         for idx, item in enumerate(candidate_items):
             valid_citations = _filter_citations_by_source_policy(
                 item["citations"],
-                allowed_sources,
+                preferred_sources,
                 allow_broad_web,
             )
             if not valid_citations:
@@ -1023,8 +1286,8 @@ class AlexDataScientist:
 
         findings = apply_research_diversity_and_dedup(
             candidates,
-            existing_by_fp,
-            allowed_sources=allowed_sources,
+            existing_findings,
+            allowed_sources=preferred_sources,
             allow_broad_web=allow_broad_web,
         )
 

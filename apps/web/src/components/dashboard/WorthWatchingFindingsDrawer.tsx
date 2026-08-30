@@ -98,8 +98,15 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
                     {finding.title}
                   </h3>
 
-                  <p className="text-xs text-text-secondary leading-relaxed">{finding.summary}</p>
+                  {/* Why now */}
+                  {finding.summary && (
+                    <div className="text-xs leading-relaxed text-text-secondary">
+                      <span className="font-semibold text-text-primary">Why now: </span>
+                      <span>{finding.summary}</span>
+                    </div>
+                  )}
 
+                  {/* Why it fits */}
                   <div className="rounded-lg border-l-2 border-primary/70 bg-surface-3/50 p-3 text-xs leading-relaxed">
                     <span className="font-semibold text-text-primary">Why it fits: </span>
                     <span className="text-text-secondary">{finding.why_it_matters}</span>

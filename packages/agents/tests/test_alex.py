@@ -97,13 +97,14 @@ async def test_alex_deduplicates_existing_findings() -> None:
         force_mock=True,
     )
 
+    # Duplicate candidate matching existing history must be rejected, not returned as a new finding
     matched = [f for f in findings if f.topic_fingerprint == fp]
-    assert len(matched) == 1
-    assert matched[0].finding_id == "fnd_old_1"
-    assert matched[0].lifecycle == FindingLifecycle.UPDATED
-    assert matched[0].discovered_at == now
-    assert matched[0].updated_at is not None
-
+    assert len(matched) == 0
+    # Genuinely new candidates from other entities/topics should be returned
+    assert len(findings) >= 2
+    for f in findings:
+        assert f.lifecycle == FindingLifecycle.NEW
+        assert f.finding_id != "fnd_old_1"
 
 @pytest.mark.asyncio
 async def test_alex_runs_code_execution_analysis() -> None:
@@ -212,12 +213,11 @@ async def test_alex_research_exact_url_deduplication() -> None:
         existing_findings=[existing_finding],
         force_mock=True,
     )
-    # The finding matching this exact URL/fingerprint should update the existing finding, not create a duplicate
-    matching = [f for f in findings if f.finding_id == "fnd_url_test"]
-    assert len(matching) == 1
-    assert matching[0].discovered_at == now
-    assert matching[0].lifecycle == FindingLifecycle.UPDATED
-
+    # The candidate matching this exact URL must be rejected and not duplicated
+    matching = [f for f in findings if any(c.url == "https://ai.google.dev/gemini-api/docs/models/gemini" for c in f.source_citations)]
+    assert len(matching) == 0
+    # Genuinely new distinct opportunities are returned
+    assert len(findings) >= 2
 
 @pytest.mark.asyncio
 async def test_alex_enforces_primary_entity_diversity_in_top_findings() -> None:

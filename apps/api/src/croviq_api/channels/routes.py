@@ -51,7 +51,7 @@ from croviq_domain.channel_intelligence import (
 )
 from croviq_domain.channel_provider import SampleChannelDataProvider
 from croviq_api.channels.scheduler_auth import verify_scheduler_identity
-from croviq_domain.memory import ChannelLesson
+from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile, ChannelProfileBuilder
 from croviq_domain.user import User
 from croviq_observability import log_event
 
@@ -582,6 +582,36 @@ async def update_research_config(
     return await research_repo.save_config(updated)
 
 
+async def _load_channel_context_for_research(
+    channel_id: str,
+    memory_store: ChannelMemoryStore,
+) -> tuple[ChannelMemoryProfile | None, list[ChannelLesson], list[Any]]:
+    """Load or build canonical channel memory profile, lessons, and video catalog for research context."""
+    sample_provider = SampleChannelDataProvider()
+    channel = await sample_provider.get_channel()
+    videos = await sample_provider.get_videos(limit=10)
+
+    profile = await memory_store.get_profile(channel_id)
+    if profile is None:
+        profile = ChannelProfileBuilder.build_profile(channel)
+        try:
+            await memory_store.upsert_profile(profile)
+        except Exception:
+            pass
+
+    lessons = await memory_store.get_lessons(channel_id)
+    if not lessons:
+        derived_lessons = ChannelProfileBuilder.build_lessons(channel)
+        lessons = derived_lessons
+        for l in derived_lessons:
+            try:
+                await memory_store.add_lesson(l)
+            except Exception:
+                pass
+
+    return profile, lessons, videos
+
+
 @router.get(
     "/research/findings",
     response_model=list[ResearchFinding],
@@ -604,9 +634,11 @@ async def get_research_findings(
         limit=limit,
     )
     if not findings:
-        # If no findings yet in repository, execute initial research run
+        # If no findings yet in repository (cold start), execute initial channel-grounded research run
         alex_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.ALEX)
-        channel_profile = await memory_store.get_profile(config.channel_id)
+        channel_profile, lessons, recent_videos = await _load_channel_context_for_research(
+            config.channel_id, memory_store
+        )
         alex = AlexDataScientist(
             project_id=get_settings().gcp_project_id,
             location=get_settings().vertexai_location,
@@ -614,15 +646,23 @@ async def get_research_findings(
         run, seeded = await alex.run_grounded_research(
             prompts=config.prompts,
             channel_profile=channel_profile,
+            recent_videos=recent_videos,
+            lessons=lessons,
             custom_prompt=alex_prompt.prompt_text if alex_prompt.is_custom else None,
             workspace_id=workspace.workspace_id,
             channel_id=config.channel_id,
             force_mock=not get_settings().gcp_project_id,
         )
         await research_repo.save_run(run)
-        await research_repo.save_findings(seeded)
-        findings = seeded
+        if seeded:
+            await research_repo.save_findings(seeded)
+        findings = await research_repo.list_findings(
+            workspace_id=workspace.workspace_id,
+            channel_id=config.channel_id,
+            limit=limit,
+        )
     return findings
+
 
 @router.post(
     "/research/run",
@@ -640,17 +680,23 @@ async def trigger_manual_research_run(
     request_id = getattr(request.state, "request_id", "unknown")
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
     config = await research_repo.get_config(workspace.workspace_id)
-    existing = await research_repo.list_findings(workspace_id=workspace.workspace_id, channel_id=config.channel_id)
+    existing = await research_repo.list_findings(
+        workspace_id=workspace.workspace_id, channel_id=config.channel_id, limit=50
+    )
     alex_prompt = await agent_config_repo.get_agent_prompt(workspace.workspace_id, AgentId.ALEX)
-    channel_profile = await memory_store.get_profile(config.channel_id)
+    channel_profile, lessons, recent_videos = await _load_channel_context_for_research(
+        config.channel_id, memory_store
+    )
 
     alex = AlexDataScientist(
         project_id=get_settings().gcp_project_id,
         location=get_settings().vertexai_location,
     )
-    run, findings = await alex.run_grounded_research(
+    run, new_findings = await alex.run_grounded_research(
         prompts=config.prompts,
         channel_profile=channel_profile,
+        recent_videos=recent_videos,
+        lessons=lessons,
         existing_findings=existing,
         custom_prompt=alex_prompt.prompt_text if alex_prompt.is_custom else None,
         workspace_id=workspace.workspace_id,
@@ -658,7 +704,8 @@ async def trigger_manual_research_run(
         request_id=request_id,
     )
     await research_repo.save_run(run)
-    await research_repo.save_findings(findings)
+    if new_findings:
+        await research_repo.save_findings(new_findings)
     now = datetime.now(UTC)
     updated_config = config.model_copy(
         update={
@@ -668,7 +715,10 @@ async def trigger_manual_research_run(
         }
     )
     await research_repo.save_config(updated_config)
-    return findings
+    return await research_repo.list_findings(
+        workspace_id=workspace.workspace_id, channel_id=config.channel_id, limit=10
+    )
+
 
 @router.post(
     "/research/tick",
@@ -712,15 +762,19 @@ async def process_scheduler_tick(
 
         try:
             existing_findings = await research_repo.list_findings(
-                workspace_id=cfg.workspace_id, channel_id=cfg.channel_id
+                workspace_id=cfg.workspace_id, channel_id=cfg.channel_id, limit=50
             )
             alex_prompt = await agent_config_repo.get_agent_prompt(
                 cfg.workspace_id, AgentId.ALEX
             )
-            channel_profile = await memory_store.get_profile(cfg.channel_id)
-            run, findings = await alex.run_grounded_research(
+            channel_profile, lessons, recent_videos = await _load_channel_context_for_research(
+                cfg.channel_id, memory_store
+            )
+            run, new_findings = await alex.run_grounded_research(
                 prompts=cfg.prompts,
                 channel_profile=channel_profile,
+                recent_videos=recent_videos,
+                lessons=lessons,
                 existing_findings=existing_findings,
                 custom_prompt=alex_prompt.prompt_text
                 if alex_prompt.is_custom
@@ -731,8 +785,9 @@ async def process_scheduler_tick(
                 request_id=request_id,
             )
             await research_repo.save_run(run)
-            await research_repo.save_findings(findings)
-            total_findings += len(findings)
+            if new_findings:
+                await research_repo.save_findings(new_findings)
+            total_findings += len(new_findings)
             executed += 1
         except Exception as exc:
             logger.exception(
@@ -759,7 +814,6 @@ async def process_scheduler_tick(
                 }
             )
             await research_repo.save_config(updated_cfg)
-
     status_label = "completed" if executed == len(due_configs) else "partial_failure" if executed > 0 else "failed"
     log_event(
         "research.scheduler.completed",

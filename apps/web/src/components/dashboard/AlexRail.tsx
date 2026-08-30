@@ -179,6 +179,14 @@ export const AlexRail: React.FC<AlexRailProps> = ({
                     <span>{finding.why_it_matters}</span>
                   </div>
 
+                  {/* Why now */}
+                  {finding.summary && (
+                    <p className="text-xs leading-relaxed text-text-secondary">
+                      <span className="font-semibold text-text-primary">Why now: </span>
+                      <span>{finding.summary}</span>
+                    </p>
+                  )}
+
                   {/* Sources Pill & Popover */}
                   {finding.source_citations && finding.source_citations.length > 0 && (
                     <div className="pt-1">
@@ -187,7 +195,12 @@ export const AlexRail: React.FC<AlexRailProps> = ({
                         onClick={() => toggleSources(finding.finding_id)}
                         className="inline-flex items-center gap-1 rounded bg-surface-3 px-2.5 py-1 text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
                       >
-                        <span>Sources ({finding.source_citations.length})</span>
+                        <span className="truncate max-w-[150px]">
+                          {finding.source_citations[0]?.domain || "Source"}
+                          {finding.source_citations.length > 1
+                            ? ` (+${finding.source_citations.length - 1})`
+                            : ""}
+                        </span>
                         <ChevronDown
                           className={`h-3 w-3 transition-transform ${
                             openSourcesMap[finding.finding_id] ? "rotate-180" : ""
@@ -234,7 +247,7 @@ export const AlexRail: React.FC<AlexRailProps> = ({
                   : "Alex checked recently."}
               </p>
               <p className="text-[11px] text-text-muted">
-                No strong new opportunities since the previous research run.
+                No stronger channel-fit opportunities were found.
               </p>
             </div>
           )}
