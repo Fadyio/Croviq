@@ -24,6 +24,15 @@ from croviq_domain.channel_provider import (
     ChannelDataProvider,
     SampleChannelDataProvider,
 )
+from croviq_domain.channel_intelligence import (
+    ChannelExperiment,
+    ChannelInsight,
+    EvidenceKind,
+    ExperimentStatus,
+    InsightEvidence,
+    InsightEvidenceStats,
+    InsightType,
+)
 from croviq_domain.editorial import (
     AgentActivity,
     ChapterMarker,
@@ -171,6 +180,13 @@ __all__ = [
     "VideoPerformancePoint",
     "compute_latest_video_analysis",
     "compute_recent_video_performance",
+    "ChannelExperiment",
+    "ChannelInsight",
+    "EvidenceKind",
+    "ExperimentStatus",
+    "InsightEvidence",
+    "InsightEvidenceStats",
+    "InsightType",
     "AgentActivity",
     "ChapterMarker",
     "VideoSectionDecision",

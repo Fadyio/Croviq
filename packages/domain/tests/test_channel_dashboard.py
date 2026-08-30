@@ -97,11 +97,24 @@ def test_dashboard_contains_evidence_backed_insight_and_experiment() -> None:
         )
     )
 
-    assert dashboard.insights
-    assert all(insight.evidence for insight in dashboard.insights)
+    assert len(dashboard.insights) == 1
+    insight = dashboard.insights[0]
+    assert insight.title == "First demonstration timing tracks retention"
+    assert "60.6%" in insight.statement
+    assert "37.6%" in insight.statement
+    assert insight.confidence is None
+    assert not insight.recommended_action.startswith("ACTION:")
+    assert insight.evidence_stats is not None
+    assert insight.evidence_stats.eligible_video_count == 100
+    assert insight.evidence_stats.early_count == 65
+    assert insight.evidence_stats.late_count == 35
+    assert insight.evidence_stats.early_mean_retention == pytest.approx(60.56, abs=0.01)
+    assert insight.evidence_stats.late_mean_retention == pytest.approx(37.60, abs=0.01)
+    assert insight.evidence_stats.delta_percentage_points == pytest.approx(22.96, abs=0.01)
+    assert insight.evidence_stats.correlation == pytest.approx(-0.9638, abs=0.01)
+    assert insight.evidence_stats.threshold_seconds == 30.0
     assert all(
         evidence.kind in {EvidenceKind.FACT, EvidenceKind.INFERENCE}
-        for insight in dashboard.insights
         for evidence in insight.evidence
     )
     assert dashboard.proposed_experiment.status is ExperimentStatus.PROPOSED

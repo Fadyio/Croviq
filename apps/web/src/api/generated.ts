@@ -11,456 +11,513 @@
 
 export interface paths {
   "/api/health": {
-      get: {
-        responses: {
-          200: components['schemas']['HealthResponse'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["HealthResponse"];
       };
+    };
   };
   "/api/client-events": {
-      post: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/auth/me": {
-      get: {
-        responses: {
-          200: components['schemas']['User'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["User"];
       };
+    };
   };
   "/api/auth/logout": {
-      post: {
-        responses: {
-          200: unknown;
-        };
+    post: {
+      responses: {
+        200: unknown;
       };
+    };
   };
   "/api/workspace": {
-      get: {
-        responses: {
-          200: components['schemas']['Workspace'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["Workspace"];
       };
+    };
   };
   "/api/workspace/agent-settings": {
-      get: {
-        responses: {
-          200: components['schemas']['AgentSettingsResponse'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["AgentSettingsResponse"];
       };
+    };
   };
   "/api/workspace/agent-settings/prompts/{agent_id}": {
-      put: {
-        responses: {
-          200: components['schemas']['AgentPromptConfig']; 422: components['schemas']['HTTPValidationError'];
-        };
+    put: {
+      responses: {
+        200: components["schemas"]["AgentPromptConfig"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/workspace/agent-settings/prompts/{agent_id}/reset": {
-      post: {
-        responses: {
-          200: components['schemas']['AgentPromptConfig']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["AgentPromptConfig"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/workspace/agent-settings/memory": {
-      get: {
-        responses: {
-          200: components['schemas']['AgentMemorySummaryResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["AgentMemorySummaryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      post: {
-        responses: {
-          200: components['schemas']['MemoryCardResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    post: {
+      responses: {
+        200: components["schemas"]["MemoryCardResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/workspace/agent-settings/memory/{memory_id}": {
-      delete: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    delete: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/workspace/agent-settings/memory/search": {
-      post: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/workspace/agent-settings/voice": {
-      get: {
-        responses: {
-          200: components['schemas']['VoiceSettingsConfig'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["VoiceSettingsConfig"];
       };
-      put: {
-        responses: {
-          200: components['schemas']['VoiceSettingsConfig']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    put: {
+      responses: {
+        200: components["schemas"]["VoiceSettingsConfig"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/workspace/agent-settings/voice/sample": {
-      post: {
-        responses: {
-          200: components['schemas']['VoiceSampleResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["VoiceSampleResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/workspace/agents/{agent_id}/chat": {
-      get: {
-        responses: {
-          200: components['schemas']['AgentConversationHistoryResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["AgentConversationHistoryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      delete: {
-        responses: {
-          200: components['schemas']['AgentConversationHistoryResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    delete: {
+      responses: {
+        200: components["schemas"]["AgentConversationHistoryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      post: {
-        responses: {
-          200: components['schemas']['AgentChatMessageResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    post: {
+      responses: {
+        200: components["schemas"]["AgentChatMessageResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channel/memory/profile": {
-      get: {
-        responses: {
-          200: components['schemas']['ChannelMemoryProfile']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ChannelMemoryProfile"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channel/memory/lessons": {
-      get: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/uploads": {
-      post: {
-        responses: {
-          201: components['schemas']['CreateUploadResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        201: components["schemas"]["CreateUploadResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/uploads/{upload_id}/complete": {
-      post: {
-        responses: {
-          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["Production"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions": {
-      get: {
-        responses: {
-          200: components['schemas']['ProductionListResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ProductionListResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}": {
-      get: {
-        responses: {
-          200: components['schemas']['Production']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["Production"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      delete: {
-        responses: {
-          200: components['schemas']['DeleteProductionResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    delete: {
+      responses: {
+        200: components["schemas"]["DeleteProductionResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/transcribe": {
-      post: {
-        responses: {
-          200: components['schemas']['TranscribeProductionResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["TranscribeProductionResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/transcript": {
-      get: {
-        responses: {
-          200: components['schemas']['Transcript']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["Transcript"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/corrected-script": {
-      get: {
-        responses: {
-          200: components['schemas']['CorrectedScriptResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["CorrectedScriptResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/source-analysis-input": {
-      get: {
-        responses: {
-          200: components['schemas']['SourceVideoAnalysisInput']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["SourceVideoAnalysisInput"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/analyze": {
-      post: {
-        responses: {
-          200: components['schemas']['AnalyzeProductionResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["AnalyzeProductionResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/editorial-run": {
-      get: {
-        responses: {
-          200: components['schemas']['EditorialRunDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["EditorialRunDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/chat": {
-      post: {
-        responses: {
-          200: components['schemas']['ProductionChatResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["ProductionChatResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/chat/history": {
-      get: {
-        responses: {
-          200: components['schemas']['ProductionChatHistoryResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ProductionChatHistoryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      delete: {
-        responses: {
-          200: components['schemas']['ProductionChatHistoryResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    delete: {
+      responses: {
+        200: components["schemas"]["ProductionChatHistoryResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/edl": {
-      post: {
-        responses: {
-          200: components['schemas']['AssembleEDLResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["AssembleEDLResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      get: {
-        responses: {
-          200: components['schemas']['EDLDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    get: {
+      responses: {
+        200: components["schemas"]["EDLDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/renders/preview": {
-      post: {
-        responses: {
-          200: components['schemas']['RenderArtifactResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/renders/master": {
-      post: {
-        responses: {
-          200: components['schemas']['RenderArtifactResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/renders/voiceover-preview": {
-      post: {
-        responses: {
-          200: components['schemas']['RenderArtifactResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/renders/final-mix": {
-      post: {
-        responses: {
-          200: components['schemas']['RenderArtifactResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["RenderArtifactResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/music/generate": {
-      post: {
-        responses: {
-          200: components['schemas']['EDLDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["EDLDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/music": {
-      patch: {
-        responses: {
-          200: components['schemas']['EDLDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    patch: {
+      responses: {
+        200: components["schemas"]["EDLDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/renders": {
-      get: {
-        responses: {
-          200: components['schemas']['RenderListResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["RenderListResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/playback": {
-      get: {
-        responses: {
-          200: components['schemas']['ProductionPlaybackResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ProductionPlaybackResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/studio-voice": {
-      post: {
-        responses: {
-          200: components['schemas']['StudioVoiceGenerationResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["StudioVoiceGenerationResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      get: {
-        responses: {
-          200: components['schemas']['StudioVoiceResult']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    get: {
+      responses: {
+        200: components["schemas"]["StudioVoiceResult"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/broll": {
-      get: {
-        responses: {
-          200: components['schemas']['BRollListResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["BRollListResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/packaging": {
-      get: {
-        responses: {
-          200: components['schemas']['PackagingDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["PackagingDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      patch: {
-        responses: {
-          200: components['schemas']['PackagingDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    patch: {
+      responses: {
+        200: components["schemas"]["PackagingDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/release-review": {
-      post: {
-        responses: {
-          200: components['schemas']['ReleaseReviewDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["ReleaseReviewDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      get: {
-        responses: {
-          200: components['schemas']['ReleaseReviewDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    get: {
+      responses: {
+        200: components["schemas"]["ReleaseReviewDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/publish/prep": {
-      get: {
-        responses: {
-          200: components['schemas']['PublishPreparationResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["PublishPreparationResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/publish": {
-      post: {
-        responses: {
-          200: components['schemas']['PublishJobDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["PublishJobDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
-      get: {
-        responses: {
-          200: components['schemas']['PublishJobDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    get: {
+      responses: {
+        200: components["schemas"]["PublishJobDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/productions/{production_id}/publish/cancel": {
-      post: {
-        responses: {
-          200: components['schemas']['PublishJobDetailResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["PublishJobDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channels/sample/dashboard": {
-      get: {
-        responses: {
-          200: components['schemas']['ChannelDashboard']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ChannelDashboard"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channels/youtube/auth-url": {
-      post: {
-        responses: {
-          200: components['schemas']['YouTubeAuthUrlResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["YouTubeAuthUrlResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channels/youtube/callback": {
-      post: {
-        responses: {
-          200: components['schemas']['YouTubeConnectionPublicSummary']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["YouTubeConnectionPublicSummary"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channels/youtube/connection": {
-      get: {
-        responses: {
-          200: components['schemas']['YouTubeConnectionPublicSummary'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["YouTubeConnectionPublicSummary"];
       };
+    };
   };
   "/api/channels/youtube/disconnect": {
-      post: {
-        responses: {
-          204: unknown;
-        };
+    post: {
+      responses: {
+        204: unknown;
       };
+    };
   };
   "/api/channels/youtube/dashboard": {
-      get: {
-        responses: {
-          200: components['schemas']['ChannelDashboard']; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ChannelDashboard"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channels/research/config": {
-      get: {
-        responses: {
-          200: components['schemas']['ResearchConfig'];
-        };
+    get: {
+      responses: {
+        200: components["schemas"]["ResearchConfig"];
       };
-      put: {
-        responses: {
-          200: components['schemas']['ResearchConfig']; 422: components['schemas']['HTTPValidationError'];
-        };
+    };
+    put: {
+      responses: {
+        200: components["schemas"]["ResearchConfig"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channels/research/findings": {
-      get: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    get: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channels/research/run": {
-      post: {
-        responses: {
-          200: unknown;
-        };
+    post: {
+      responses: {
+        200: unknown;
       };
+    };
   };
   "/api/channels/research/tick": {
-      post: {
-        responses: {
-          200: components['schemas']['SchedulerTickResponse'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["SchedulerTickResponse"];
       };
+    };
   };
   "/api/channels/analysis/code-execution": {
-      post: {
-        responses: {
-          200: unknown; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: unknown;
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
   "/api/channels/research/findings/{finding_id}/distill": {
-      post: {
-        responses: {
-          200: components['schemas']['DistillFindingResponse']; 422: components['schemas']['HTTPValidationError'];
-        };
+    post: {
+      responses: {
+        200: components["schemas"]["DistillFindingResponse"];
+        422: components["schemas"]["HTTPValidationError"];
       };
+    };
   };
 }
 
@@ -502,19 +559,19 @@ export interface components {
     };
     AgentConversationHistoryResponse: {
       agent_id: string;
-      messages?: components['schemas']['AgentChatMessageResponse'][];
+      messages?: components["schemas"]["AgentChatMessageResponse"][];
     };
     AgentId: "leo" | "alex" | "iris";
     AgentMemorySummaryResponse: {
       channel_title: string;
       style_guide?: string;
-      memories?: components['schemas']['MemoryCardResponse'][];
+      memories?: components["schemas"]["MemoryCardResponse"][];
       creator_preferences?: string[];
-      lessons?: components['schemas']['MemoryItemResponse'][];
+      lessons?: components["schemas"]["MemoryItemResponse"][];
     };
     AgentPromptConfig: {
       /** Target agent identifier (alex, leo, or iris) */
-      agent_id: components['schemas']['AgentId'];
+      agent_id: components["schemas"]["AgentId"];
       /** Complete agent working prompt text */
       prompt_text: string;
       /** Monotonically increasing version number */
@@ -525,11 +582,11 @@ export interface components {
       is_custom?: boolean;
     };
     AgentSettingsResponse: {
-      leo_prompt: components['schemas']['AgentPromptConfig'];
-      alex_prompt: components['schemas']['AgentPromptConfig'];
-      iris_prompt: components['schemas']['AgentPromptConfig'];
-      voice_settings: components['schemas']['VoiceSettingsConfig'];
-      voices: components['schemas']['VoiceCatalogItem'][];
+      leo_prompt: components["schemas"]["AgentPromptConfig"];
+      alex_prompt: components["schemas"]["AgentPromptConfig"];
+      iris_prompt: components["schemas"]["AgentPromptConfig"];
+      voice_settings: components["schemas"]["VoiceSettingsConfig"];
+      voices: components["schemas"]["VoiceCatalogItem"][];
     };
     AnalyzeProductionResponse: {
       /** Unique identifier for the editorial run */
@@ -537,7 +594,7 @@ export interface components {
       /** Associated production entity identifier */
       production_id: string;
       /** Operational status of the run */
-      status: components['schemas']['EditorialRunStatus'];
+      status: components["schemas"]["EditorialRunStatus"];
       /** Identifier of the generated EditorProposal record */
       editor_proposal_id?: string | null;
       /** Identifier of the assembled canonical EDL */
@@ -550,7 +607,16 @@ export interface components {
       completed_at?: string | null;
     };
     ArtifactStatus: "pending" | "rendering" | "completed" | "failed";
-    ArtifactType: "PREVIEW" | "MASTER" | "SHORT" | "VOICEOVER_PREVIEW" | "STUDIO_VOICE_PREVIEW" | "STUDIO_VOICE_MASTER" | "BROLL_PREVIEW" | "BROLL_MASTER" | "FINAL_MIX";
+    ArtifactType:
+      | "PREVIEW"
+      | "MASTER"
+      | "SHORT"
+      | "VOICEOVER_PREVIEW"
+      | "STUDIO_VOICE_PREVIEW"
+      | "STUDIO_VOICE_MASTER"
+      | "BROLL_PREVIEW"
+      | "BROLL_MASTER"
+      | "FINAL_MIX";
     AssembleEDLResponse: {
       /** Unique identifier for the assembled Edit Decision List */
       edl_id: string;
@@ -626,11 +692,11 @@ export interface components {
       gcs_object: string;
       /** Target clip duration in ms (~2000-10000ms) */
       duration_ms: number;
-      status?: components['schemas']['BRollArtifactStatus'];
+      status?: components["schemas"]["BRollArtifactStatus"];
       /** Human summary of B-roll visual intent */
       prompt_summary?: string;
       /** Generation quality mode */
-      quality_mode?: components['schemas']['BRollQualityMode'];
+      quality_mode?: components["schemas"]["BRollQualityMode"];
       /** Requested output resolution: 360p, 720p, 1080p, 4k */
       requested_resolution?: string;
       /** Output resolution: 360p, 720p, 1080p, 4k */
@@ -680,7 +746,7 @@ export interface components {
       /** Unique production identifier */
       production_id: string;
       /** List of generated B-roll clips */
-      artifacts?: components['schemas']['BRollArtifact'][];
+      artifacts?: components["schemas"]["BRollArtifact"][];
     };
     BRollQualityMode: "draft" | "standard" | "finishing" | "4k";
     BackgroundMusicMix: {
@@ -714,20 +780,20 @@ export interface components {
       sample_size?: number;
     };
     ChannelDashboard: {
-      channel: components['schemas']['DashboardChannel'];
+      channel: components["schemas"]["DashboardChannel"];
       period_days: number;
       period_end: string;
-      kpis: components['schemas']['DashboardKpi'][];
-      trend: components['schemas']['DashboardTrendPoint'][];
-      latest_video: components['schemas']['LatestVideoAnalysis'];
-      video_performance: components['schemas']['VideoPerformancePoint'][];
-      recent_videos?: components['schemas']['RecentVideoPerformance'][];
-      channel_baselines?: components['schemas']['ChannelBaselines'] | null;
-      topic_clusters: components['schemas']['TopicClusterPerformance'][];
-      traffic_sources: components['schemas']['TrafficSourceMetric'][];
-      insights: components['schemas']['ChannelInsight'][];
-      active_experiment: components['schemas']['ChannelExperiment'] | null;
-      proposed_experiment?: components['schemas']['ChannelExperiment'] | null;
+      kpis: components["schemas"]["DashboardKpi"][];
+      trend: components["schemas"]["DashboardTrendPoint"][];
+      latest_video: components["schemas"]["LatestVideoAnalysis"];
+      video_performance: components["schemas"]["VideoPerformancePoint"][];
+      recent_videos?: components["schemas"]["RecentVideoPerformance"][];
+      channel_baselines?: components["schemas"]["ChannelBaselines"] | null;
+      topic_clusters: components["schemas"]["TopicClusterPerformance"][];
+      traffic_sources: components["schemas"]["TrafficSourceMetric"][];
+      insights: components["schemas"]["ChannelInsight"][];
+      active_experiment: components["schemas"]["ChannelExperiment"] | null;
+      proposed_experiment?: components["schemas"]["ChannelExperiment"] | null;
       is_sample_modeled_timeseries: boolean;
     };
     ChannelExperiment: {
@@ -737,7 +803,7 @@ export interface components {
       primary_metric: string;
       baseline_value: number;
       expected_direction: string;
-      status: components['schemas']['ExperimentStatus'];
+      status: components["schemas"]["ExperimentStatus"];
       started_at: string | null;
       completed_at: string | null;
       video_ids: string[];
@@ -749,11 +815,12 @@ export interface components {
     ChannelInsight: {
       insight_id: string;
       channel_id: string;
-      type: components['schemas']['InsightType'];
+      type: components["schemas"]["InsightType"];
       title: string;
       statement: string;
-      evidence: components['schemas']['InsightEvidence'][];
-      confidence: number;
+      evidence?: components["schemas"]["InsightEvidence"][];
+      evidence_stats?: components["schemas"]["InsightEvidenceStats"] | null;
+      confidence?: number | null;
       recommended_action: string;
       created_at: string;
       expires_at?: string | null;
@@ -766,7 +833,7 @@ export interface components {
       /** Actionable instruction for the agent. */
       directive: string;
       /** Agent role this lesson directs (director, editor, packaging, qa). */
-      target_agent: components['schemas']['TargetAgent'];
+      target_agent: components["schemas"]["TargetAgent"];
       /** Statistical or qualitative summary of evidence supporting this directive. */
       evidence_summary: string;
       /** Confidence score for this lesson (0.0 to 1.0). */
@@ -820,14 +887,15 @@ export interface components {
       /** Confidence score for this chapter boundary */
       confidence?: number;
     };
-    ClaimSupportStatus: "SUPPORTED_BY_VIDEO" | "SUPPORTED_EXTERNALLY" | "UNSUPPORTED" | "MANUAL_REVIEW";
+    ClaimSupportStatus:
+      "SUPPORTED_BY_VIDEO" | "SUPPORTED_EXTERNALLY" | "UNSUPPORTED" | "MANUAL_REVIEW";
     ClaimVerification: {
       /** Specific factual claim examined */
       claim_text: string;
       /** Where the claim appears (title, description, video, or chapter) */
       location?: string;
       /** Claim support status */
-      status: components['schemas']['ClaimSupportStatus'];
+      status: components["schemas"]["ClaimSupportStatus"];
       /** Evidence or rationale supporting status */
       evidence: string;
       /** External reference URL if verified externally */
@@ -847,7 +915,7 @@ export interface components {
       /** Unique production identifier */
       production_id: string;
       /** Canonical corrected transcript */
-      corrected_transcript: components['schemas']['CorrectedTranscript'];
+      corrected_transcript: components["schemas"]["CorrectedTranscript"];
       /** Total count of corrected segments */
       corrections_count: number;
       /** Count of transcription error fixes */
@@ -865,7 +933,7 @@ export interface components {
       /** Associated production identifier */
       production_id: string;
       /** Ordered list of corrected script segments */
-      segments?: components['schemas']['CorrectedTranscriptSegment'][];
+      segments?: components["schemas"]["CorrectedTranscriptSegment"][];
       /** Timestamp when the corrected transcript was generated (UTC) */
       created_at: string;
     };
@@ -881,7 +949,7 @@ export interface components {
       /** Source-grounded corrected spoken performance text */
       corrected_text: string;
       /** Classification of the applied correction */
-      change_type?: components['schemas']['ScriptCorrectionChangeType'];
+      change_type?: components["schemas"]["ScriptCorrectionChangeType"];
       /** Detailed justification for the correction */
       reason?: string;
       /** Screen, IDE, or visual context confirming the correction */
@@ -893,7 +961,7 @@ export interface components {
       /** Confidence score of the correction proposal */
       confidence?: number;
       /** Result of the second-pass closed-world entailment check */
-      entailment_verdict?: components['schemas']['EntailmentVerdict'];
+      entailment_verdict?: components["schemas"]["EntailmentVerdict"];
       /** Whether a synthesized voiceover replacement is active for this segment */
       is_voiceover_active?: boolean;
       /** Voice mode used for synthesis (e.g. REPLICATED_MY_VOICE, PREBUILT_STUDIO_VOICE) */
@@ -913,7 +981,7 @@ export interface components {
       /** End timestamp in source video milliseconds */
       source_end_ms: number;
       /** Coverage category (e.g. SOURCE_SCREEN, BROLL_CANDIDATE) */
-      coverage_type: components['schemas']['CoverageType'];
+      coverage_type: components["schemas"]["CoverageType"];
       /** Editorial justification for the visual coverage */
       reason: string;
     };
@@ -956,7 +1024,7 @@ export interface components {
       /** Creator-edited custom description */
       custom_description?: string | null;
       /** Creator-edited chapter titles */
-      custom_chapters?: components['schemas']['PackagingChapter'][] | null;
+      custom_chapters?: components["schemas"]["PackagingChapter"][] | null;
       /** ID of creator-selected thumbnail concept */
       selected_thumbnail_concept_id?: string | null;
       /** Timestamp of last creator edit (UTC) */
@@ -968,7 +1036,7 @@ export interface components {
       /** Originating Editor decision identifier */
       decision_id: string;
       /** Semantic decision type (e.g. REMOVE_FILLER, REMOVE_FALSE_START, etc.) */
-      decision_type: components['schemas']['EditorDecisionType'];
+      decision_type: components["schemas"]["EditorDecisionType"];
       /** 0-indexed start word boundary in canonical transcript */
       transcript_start_word: number;
       /** 0-indexed end word boundary in canonical transcript */
@@ -990,7 +1058,7 @@ export interface components {
       /** Micro-crossfade transition duration in milliseconds (canonical 20ms) */
       transition_ms?: number;
       /** Cut safety classification: SAFE, NEEDS_COVERAGE, or REJECTED_UNSAFE */
-      safety_status: components['schemas']['CutSafetyStatus'];
+      safety_status: components["schemas"]["CutSafetyStatus"];
       /** Deterministic explanation for safety status determination */
       safety_reason: string;
       /** Confidence score for this cut instruction */
@@ -1043,7 +1111,7 @@ export interface components {
     };
     EDLDetailResponse: {
       /** Canonical EditDecisionList domain entity */
-      edl: components['schemas']['EditDecisionList'];
+      edl: components["schemas"]["EditDecisionList"];
       /** Ordered list of contiguous (start_ms, end_ms) media intervals to KEEP for master video render */
       keep_segments: unknown[][];
     };
@@ -1059,13 +1127,13 @@ export interface components {
       /** Monotonically increasing version number for this production's EDL */
       version?: number;
       /** Ordered list of deterministic cut instructions */
-      cuts?: components['schemas']['CutInstruction'][];
+      cuts?: components["schemas"]["CutInstruction"][];
       /** Visual coverage markers for B-roll and screen recordings */
-      coverage_markers?: components['schemas']['CoverageMarker'][];
+      coverage_markers?: components["schemas"]["CoverageMarker"][];
       /** Persisted generated narration segments mixed into the preview */
-      voiceover_segments?: components['schemas']['VoiceoverSegment'][];
+      voiceover_segments?: components["schemas"]["VoiceoverSegment"][];
       /** Active persisted background music mix, if any */
-      background_music?: components['schemas']['BackgroundMusicMix'] | null;
+      background_music?: components["schemas"]["BackgroundMusicMix"] | null;
       /** Timestamp when the EDL was generated (UTC) */
       created_at: string;
     };
@@ -1073,7 +1141,7 @@ export interface components {
       /** Unique identifier for the decision within the proposal */
       decision_id: string;
       /** Semantic category of the editing decision */
-      decision_type: components['schemas']['EditorDecisionType'];
+      decision_type: components["schemas"]["EditorDecisionType"];
       /** Canonical 0-indexed transcript start word index */
       transcript_start_word: number;
       /** Canonical 0-indexed transcript end word index */
@@ -1097,7 +1165,23 @@ export interface components {
       /** Potential editorial or audio risk associated with the cut */
       risk?: string | null;
     };
-    EditorDecisionType: "KEEP" | "REMOVE_SILENCE" | "REMOVE_FILLER" | "REMOVE_FALSE_START" | "REMOVE_REPETITION" | "TRIM_PAUSE" | "TIGHTEN_PAUSE" | "TIGHTEN_EXPLANATION" | "REMOVE_LOW_VALUE_SECTION" | "KEEP_FOR_CLARITY" | "BROLL_COVER" | "BROLL_COVER_CANDIDATE" | "SOURCE_COVER" | "CHAPTER_MARKER" | "NARRATION_REWRITE" | "CAPTION_EMPHASIS";
+    EditorDecisionType:
+      | "KEEP"
+      | "REMOVE_SILENCE"
+      | "REMOVE_FILLER"
+      | "REMOVE_FALSE_START"
+      | "REMOVE_REPETITION"
+      | "TRIM_PAUSE"
+      | "TIGHTEN_PAUSE"
+      | "TIGHTEN_EXPLANATION"
+      | "REMOVE_LOW_VALUE_SECTION"
+      | "KEEP_FOR_CLARITY"
+      | "BROLL_COVER"
+      | "BROLL_COVER_CANDIDATE"
+      | "SOURCE_COVER"
+      | "CHAPTER_MARKER"
+      | "NARRATION_REWRITE"
+      | "CAPTION_EMPHASIS";
     EditorProposal: {
       /** Associated Production entity identifier */
       production_id: string;
@@ -1108,22 +1192,23 @@ export interface components {
       /** High-level summary of dialogue pass findings and proposed improvements */
       summary: string;
       /** List of proposed editorial decisions */
-      decisions?: components['schemas']['EditorDecision'][];
+      decisions?: components["schemas"]["EditorDecision"][];
       /** Full-timeline editorial section plan covering the whole production */
-      section_plan?: components['schemas']['VideoSectionDecision'][];
+      section_plan?: components["schemas"]["VideoSectionDecision"][];
       /** Multimodal semantic chapter markers across the video timeline */
-      chapters?: components['schemas']['ChapterMarker'][];
+      chapters?: components["schemas"]["ChapterMarker"][];
       /** Overall confidence in the proposal */
       overall_confidence: number;
     };
-    EditorVoiceMode: "ORIGINAL_VOICE" | "ORIGINAL_AUDIO" | "REPLICATED_MY_VOICE" | "PREBUILT_STUDIO_VOICE";
+    EditorVoiceMode:
+      "ORIGINAL_VOICE" | "ORIGINAL_AUDIO" | "REPLICATED_MY_VOICE" | "PREBUILT_STUDIO_VOICE";
     EditorialRun: {
       /** Unique identifier for the editorial run */
       run_id: string;
       /** Associated production entity identifier */
       production_id: string;
       /** Current operational status of the run */
-      status?: components['schemas']['EditorialRunStatus'];
+      status?: components["schemas"]["EditorialRunStatus"];
       /** Identifier of the generated EditorProposal record */
       editor_proposal_id?: string | null;
       /** Run start timestamp in UTC */
@@ -1135,11 +1220,11 @@ export interface components {
     };
     EditorialRunDetailResponse: {
       /** Operational record for the editorial run */
-      run: components['schemas']['EditorialRun'];
+      run: components["schemas"]["EditorialRun"];
       /** Leo's structured dialogue proposal */
-      proposal?: components['schemas']['EditorProposal'] | null;
+      proposal?: components["schemas"]["EditorProposal"] | null;
       /** Product-facing agent activities generated during the run */
-      activities?: components['schemas']['AgentActivity'][];
+      activities?: components["schemas"]["AgentActivity"][];
     };
     EditorialRunStatus: "pending" | "analyzing" | "reviewing" | "completed" | "failed";
     EntailmentVerdict: "SUPPORTED" | "UNSUPPORTED" | "UNCERTAIN";
@@ -1161,7 +1246,7 @@ export interface components {
       force_regenerate?: boolean;
     };
     HTTPValidationError: {
-      detail?: components['schemas']['ValidationError'][];
+      detail?: components["schemas"]["ValidationError"][];
     };
     HealthResponse: {
       /** Service health status */
@@ -1172,10 +1257,20 @@ export interface components {
       git_sha: string;
     };
     InsightEvidence: {
-      kind: components['schemas']['EvidenceKind'];
+      kind: components["schemas"]["EvidenceKind"];
       statement: string;
       metric_refs?: string[];
       citation_urls?: string[];
+    };
+    InsightEvidenceStats: {
+      eligible_video_count: number;
+      early_count: number;
+      late_count: number;
+      early_mean_retention: number;
+      late_mean_retention: number;
+      delta_percentage_points: number;
+      correlation?: number | null;
+      threshold_seconds?: number;
     };
     InsightType: "PERFORMANCE" | "RETENTION" | "AUDIENCE" | "TRAFFIC" | "TOPIC" | "EXPERIMENT";
     LatestVideoAnalysis: {
@@ -1268,7 +1363,7 @@ export interface components {
       voice_id: string;
       /** Actual measured TTS audio duration in ms */
       generated_duration_ms?: number;
-      status?: components['schemas']['NarrationSegmentStatus'];
+      status?: components["schemas"]["NarrationSegmentStatus"];
       /** GCS object or storage key */
       audio_artifact_reference?: string | null;
       /** Number of TTS synthesis/rewrite attempts */
@@ -1293,19 +1388,19 @@ export interface components {
       /** Unique production identifier */
       production_id: string;
       /** Latest packaging proposal if present */
-      proposal?: components['schemas']['PackagingProposal'] | null;
+      proposal?: components["schemas"]["PackagingProposal"] | null;
       /** Creator-defined package overrides */
-      overrides?: components['schemas']['CreatorPackageOverrides'] | null;
+      overrides?: components["schemas"]["CreatorPackageOverrides"] | null;
       /** Active title to publish */
       effective_title: string;
       /** Active description to publish */
       effective_description?: string;
       /** Active canonical video chapters */
-      effective_chapters?: components['schemas']['PackagingChapter'][];
+      effective_chapters?: components["schemas"]["PackagingChapter"][];
       /** Active selected thumbnail concept ID */
       effective_thumbnail_concept_id?: string | null;
       /** Master video artifact details */
-      master_artifact?: components['schemas']['RenderArtifactResponse'] | null;
+      master_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
       /** Signed playback URL for master video */
       master_url?: string | null;
       /** Whether an approved master video artifact exists */
@@ -1325,15 +1420,15 @@ export interface components {
       /** Recommended primary title */
       primary_title: string;
       /** List of distinct title candidates across strategic angles */
-      title_candidates: components['schemas']['TitleCandidate'][];
+      title_candidates: components["schemas"]["TitleCandidate"][];
       /** Publish-ready YouTube description text with chapters */
       description: string;
       /** List of canonical video chapters */
-      chapters?: components['schemas']['PackagingChapter'][];
+      chapters?: components["schemas"]["PackagingChapter"][];
       /** Tags and keywords for search / discovery */
       keywords?: string[];
       /** Top thumbnail concepts with supporting frame references */
-      thumbnail_concepts: components['schemas']['ThumbnailConcept'][];
+      thumbnail_concepts: components["schemas"]["ThumbnailConcept"][];
       /** Concise product-facing packaging rationale */
       packaging_summary: string;
       /** Product-facing channel evidence supporting primary recommendation */
@@ -1355,9 +1450,9 @@ export interface components {
       /** Identifier of the user who owns this production */
       owner_user_id: string;
       /** Raw source media metadata associated with this production */
-      source_media?: components['schemas']['SourceMedia'] | null;
+      source_media?: components["schemas"]["SourceMedia"] | null;
       /** Current production status */
-      status?: components['schemas']['ProductionStatus'];
+      status?: components["schemas"]["ProductionStatus"];
       /** Timestamp when the production was created (UTC) */
       created_at: string;
       /** Timestamp when the production was last updated (UTC) */
@@ -1370,7 +1465,7 @@ export interface components {
     ProductionChatRequest: {
       message: string;
       selected_range_ms?: unknown[] | null;
-      selected_element?: components['schemas']['ProductionChatSelectedElement'] | null;
+      selected_element?: components["schemas"]["ProductionChatSelectedElement"] | null;
       current_playhead_ms?: number | null;
     };
     ProductionChatResponse: {
@@ -1379,7 +1474,7 @@ export interface components {
       content: string;
       tool_executions?: Record<string, unknown>[];
       created_at: string;
-      edl?: components['schemas']['EditDecisionList'] | null;
+      edl?: components["schemas"]["EditDecisionList"] | null;
       timeline_updated?: boolean;
       voiceover_updated?: boolean;
       preview_updated?: boolean;
@@ -1394,7 +1489,7 @@ export interface components {
     };
     ProductionListResponse: {
       /** List of recent Production records */
-      productions?: components['schemas']['Production'][];
+      productions?: components["schemas"]["Production"][];
       /** Total number of productions returned */
       total: number;
     };
@@ -1415,7 +1510,7 @@ export interface components {
     ProductionStatus: "pending" | "uploading" | "uploaded" | "deleting" | "failed";
     PublishJobDetailResponse: {
       /** Current or latest YouTube publish job */
-      job?: components['schemas']['YouTubePublishJob'] | null;
+      job?: components["schemas"]["YouTubePublishJob"] | null;
       /** True if real YouTube channel is connected */
       can_publish?: boolean;
       /** True if youtube.upload OAuth scope is granted */
@@ -1425,7 +1520,14 @@ export interface components {
       /** True if synthetic sample channel is active */
       is_sample_channel?: boolean;
     };
-    PublishJobStatus: "pending" | "auth_required" | "uploading" | "processing" | "completed" | "failed" | "cancelled";
+    PublishJobStatus:
+      | "pending"
+      | "auth_required"
+      | "uploading"
+      | "processing"
+      | "completed"
+      | "failed"
+      | "cancelled";
     PublishPreparationResponse: {
       /** Production identifier */
       production_id: string;
@@ -1448,7 +1550,7 @@ export interface components {
       /** Active description with embedded chapters */
       suggested_description: string;
       /** Verified YouTube chapters */
-      suggested_chapters?: components['schemas']['PackagingChapter'][];
+      suggested_chapters?: components["schemas"]["PackagingChapter"][];
       /** Keywords for YouTube tags */
       suggested_tags?: string[];
       /** Default category ID (28 = Science & Technology) */
@@ -1517,9 +1619,9 @@ export interface components {
       /** Unique identifier for the issue */
       issue_id: string;
       /** Categorized issue type */
-      issue_type: components['schemas']['ReleaseIssueType'];
+      issue_type: components["schemas"]["ReleaseIssueType"];
       /** Severity level */
-      severity: components['schemas']['ReleaseIssueSeverity'];
+      severity: components["schemas"]["ReleaseIssueSeverity"];
       /** Start timestamp in video ms if time-bound */
       source_start_ms?: number | null;
       /** End timestamp in video ms if time-bound */
@@ -1536,7 +1638,28 @@ export interface components {
       evidence: string;
     };
     ReleaseIssueSeverity: "LOW" | "MEDIUM" | "HIGH" | "BLOCKING";
-    ReleaseIssueType: "AUDIO_ARTIFACT" | "AUDIO_LEVEL" | "AUDIO_SYNC" | "BAD_CUT" | "VISUAL_JUMP" | "BLACK_FRAME" | "FRAME_GLITCH" | "ENCODE_ISSUE" | "CAPTION_MISMATCH" | "CAPTION_TIMING" | "CAPTION_OVERFLOW" | "CHAPTER_MISMATCH" | "CHAPTER_TIMING" | "UNSUPPORTED_CLAIM" | "FACTUAL_INCONSISTENCY" | "TITLE_MISMATCH" | "DESCRIPTION_MISMATCH" | "THUMBNAIL_MISMATCH" | "PACKAGING_INCONSISTENCY" | "MISSING_CONTENT" | "CONTEXT_LOSS";
+    ReleaseIssueType:
+      | "AUDIO_ARTIFACT"
+      | "AUDIO_LEVEL"
+      | "AUDIO_SYNC"
+      | "BAD_CUT"
+      | "VISUAL_JUMP"
+      | "BLACK_FRAME"
+      | "FRAME_GLITCH"
+      | "ENCODE_ISSUE"
+      | "CAPTION_MISMATCH"
+      | "CAPTION_TIMING"
+      | "CAPTION_OVERFLOW"
+      | "CHAPTER_MISMATCH"
+      | "CHAPTER_TIMING"
+      | "UNSUPPORTED_CLAIM"
+      | "FACTUAL_INCONSISTENCY"
+      | "TITLE_MISMATCH"
+      | "DESCRIPTION_MISMATCH"
+      | "THUMBNAIL_MISMATCH"
+      | "PACKAGING_INCONSISTENCY"
+      | "MISSING_CONTENT"
+      | "CONTEXT_LOSS";
     ReleaseReview: {
       /** Unique review identifier */
       review_id: string;
@@ -1547,11 +1670,11 @@ export interface components {
       /** Underlying multimodal GenAI model ID */
       model?: string;
       /** Overall gate verdict (PASS, FIX_REQUIRED, MANUAL_REVIEW) */
-      verdict: components['schemas']['ReleaseVerdict'];
+      verdict: components["schemas"]["ReleaseVerdict"];
       /** Concise synthesis of evaluation findings */
       summary: string;
       /** List of identified issues */
-      issues?: components['schemas']['ReleaseIssue'][];
+      issues?: components["schemas"]["ReleaseIssue"][];
       /** True if output satisfies all quality thresholds */
       approved_for_release?: boolean;
       /** Iris assessment confidence score */
@@ -1571,25 +1694,25 @@ export interface components {
       /** SHA-256 cryptographic release fingerprint binding immutable pipeline inputs */
       release_fingerprint?: string | null;
       /** Compact component checklist summary */
-      checklist?: components['schemas']['ReleaseChecklist'];
+      checklist?: components["schemas"]["ReleaseChecklist"];
       /** Itemized factual and packaging claim audits */
-      claim_verifications?: components['schemas']['ClaimVerification'][];
+      claim_verifications?: components["schemas"]["ClaimVerification"][];
       /** Evaluations of thumbnail concepts */
-      thumbnail_evaluations?: components['schemas']['ThumbnailEvaluation'][];
+      thumbnail_evaluations?: components["schemas"]["ThumbnailEvaluation"][];
     };
     ReleaseReviewDetailResponse: {
       /** Unique production identifier */
       production_id: string;
       /** Latest Iris QA release review */
-      review?: components['schemas']['ReleaseReview'] | null;
+      review?: components["schemas"]["ReleaseReview"] | null;
       /** Creator-facing release pipeline status */
       release_status: string;
       /** Whether output satisfies all release gate conditions */
       release_ready?: boolean;
       /** Compact release verification checklist */
-      checklist?: components['schemas']['ReleaseChecklist'] | null;
+      checklist?: components["schemas"]["ReleaseChecklist"] | null;
       /** Master video artifact details */
-      master_artifact?: components['schemas']['RenderArtifactResponse'] | null;
+      master_artifact?: components["schemas"]["RenderArtifactResponse"] | null;
       /** Signed playback URL for master video */
       master_url?: string | null;
       /** Whether approved Master video artifact exists */
@@ -1610,9 +1733,9 @@ export interface components {
       /** Identifier of the source Edit Decision List */
       edl_id: string;
       /** Type of rendered artifact: PREVIEW or MASTER */
-      artifact_type: components['schemas']['ArtifactType'];
+      artifact_type: components["schemas"]["ArtifactType"];
       /** Lifecycle status: pending, rendering, completed, failed */
-      status: components['schemas']['ArtifactStatus'];
+      status: components["schemas"]["ArtifactStatus"];
       /** MIME content type of the rendered media file */
       content_type?: string;
       /** Verified file size in bytes */
@@ -1644,15 +1767,21 @@ export interface components {
       /** Canonical unique production identifier */
       production_id: string;
       /** List of all render artifacts associated with the production */
-      renders: components['schemas']['RenderArtifactResponse'][];
+      renders: components["schemas"]["RenderArtifactResponse"][];
     };
-    ResearchCadence: "EVERY_HOUR" | "EVERY_6_HOURS" | "EVERY_12_HOURS" | "EVERY_DAY" | "EVERY_3_DAYS" | "EVERY_WEEK";
+    ResearchCadence:
+      | "EVERY_HOUR"
+      | "EVERY_6_HOURS"
+      | "EVERY_12_HOURS"
+      | "EVERY_DAY"
+      | "EVERY_3_DAYS"
+      | "EVERY_WEEK";
     ResearchConfig: {
       workspace_id: string;
       channel_id: string;
       enabled?: boolean;
-      cadence: components['schemas']['ResearchCadence'];
-      prompts?: components['schemas']['ResearchPrompt'][];
+      cadence: components["schemas"]["ResearchCadence"];
+      prompts?: components["schemas"]["ResearchPrompt"][];
       last_run_at?: string | null;
       next_run_at: string;
       updated_at: string;
@@ -1668,7 +1797,7 @@ export interface components {
       relevance_score: number;
       freshness_score: number;
       opportunity_score: number;
-      source_citations: components['schemas']['SourceCitation'][];
+      source_citations: components["schemas"]["SourceCitation"][];
       topic_fingerprint: string;
       topic_cluster?: string | null;
       primary_entity?: string | null;
@@ -1676,7 +1805,7 @@ export interface components {
       discovered_at: string;
       updated_at?: string | null;
       expires_at?: string | null;
-      lifecycle?: components['schemas']['FindingLifecycle'];
+      lifecycle?: components["schemas"]["FindingLifecycle"];
     };
     ResearchPrompt: {
       prompt_id: string;
@@ -1691,7 +1820,8 @@ export interface components {
       findings_created: number;
       status: string;
     };
-    ScriptCorrectionChangeType: "GRAMMAR" | "TRANSCRIPTION_ERROR" | "FILLER" | "FALSE_START" | "REPETITION" | "KEEP";
+    ScriptCorrectionChangeType:
+      "GRAMMAR" | "TRANSCRIPTION_ERROR" | "FILLER" | "FALSE_START" | "REPETITION" | "KEEP";
     SectionAction: "KEEP" | "TIGHTEN" | "REMOVE" | "COVERAGE";
     SilenceInterval: {
       /** Silence interval start offset in milliseconds */
@@ -1722,7 +1852,7 @@ export interface components {
       /** Target Google Cloud Storage object path */
       gcs_object: string;
       /** Upload lifecycle status */
-      status?: components['schemas']['SourceMediaStatus'];
+      status?: components["schemas"]["SourceMediaStatus"];
       /** Timestamp when the upload record was created (UTC) */
       created_at: string;
       /** Timestamp when the media upload was verified and completed (UTC) */
@@ -1733,11 +1863,11 @@ export interface components {
       /** Associated Production entity identifier */
       production_id: string;
       /** Source media upload metadata and GCS reference */
-      source_media: components['schemas']['SourceMedia'];
+      source_media: components["schemas"]["SourceMedia"];
       /** Deterministic FFprobe media technical parameters */
-      media_metadata: components['schemas']['MediaMetadata'];
+      media_metadata: components["schemas"]["MediaMetadata"];
       /** Word-aligned transcript with millisecond timestamps */
-      transcript: components['schemas']['Transcript'];
+      transcript: components["schemas"]["Transcript"];
       /** Associated channel identifier */
       channel_id: string;
       /** Reference identifier to ChannelMemoryProfile in Memory Bank */
@@ -1747,7 +1877,7 @@ export interface components {
       /** Unique production identifier */
       production_id: string;
       /** Aggregated Studio Voice result and segment details */
-      result: components['schemas']['StudioVoiceResult'];
+      result: components["schemas"]["StudioVoiceResult"];
       /** Signed playback URL for Studio Voice preview */
       studio_voice_preview_url?: string | null;
     };
@@ -1755,7 +1885,7 @@ export interface components {
       production_id: string;
       voice_id: string;
       narration_mode?: string;
-      segments?: components['schemas']['NarrationSegment'][];
+      segments?: components["schemas"]["NarrationSegment"][];
       total_segments?: number;
       accepted_segments?: number;
       all_within_budget?: boolean;
@@ -1799,12 +1929,19 @@ export interface components {
       reason: string;
     };
     ThumbnailUploadStatus: "pending" | "uploading" | "completed" | "failed" | "skipped";
-    TitleAngle: "DIRECT_VALUE" | "CURIOSITY" | "PROBLEM_SOLUTION" | "CONTRARIAN" | "HOW_TO" | "COMPARISON" | "NEWS_RELEVANT";
+    TitleAngle:
+      | "DIRECT_VALUE"
+      | "CURIOSITY"
+      | "PROBLEM_SOLUTION"
+      | "CONTRARIAN"
+      | "HOW_TO"
+      | "COMPARISON"
+      | "NEWS_RELEVANT";
     TitleCandidate: {
       /** YouTube title text */
       text: string;
       /** Strategic packaging angle (DIRECT_VALUE, CURIOSITY, etc.) */
-      angle: components['schemas']['TitleAngle'];
+      angle: components["schemas"]["TitleAngle"];
       /** Clear rationale for why this packaging angle fits channel audience */
       why_it_works: string;
       /** Confidence score for this candidate (0.0 - 1.0) */
@@ -1841,7 +1978,7 @@ export interface components {
       /** Language code used for transcription */
       language_code: string;
       /** Full word-aligned transcript object */
-      transcript: components['schemas']['Transcript'];
+      transcript: components["schemas"]["Transcript"];
     };
     Transcript: {
       /** Unique identifier for the transcript entity */
@@ -1853,11 +1990,11 @@ export interface components {
       /** Total duration of the audio/speech stream in milliseconds */
       duration_ms: number;
       /** Ordered list of word-level timestamped tokens */
-      words?: components['schemas']['TranscriptWord'][];
+      words?: components["schemas"]["TranscriptWord"][];
       /** Ordered list of sentence/phrase segments */
-      segments?: components['schemas']['TranscriptSegment'][];
+      segments?: components["schemas"]["TranscriptSegment"][];
       /** Identified inter-word silence intervals */
-      silence_intervals?: components['schemas']['SilenceInterval'][];
+      silence_intervals?: components["schemas"]["SilenceInterval"][];
       /** Timestamp when the transcript was generated (UTC) */
       created_at: string;
     };
@@ -1907,7 +2044,7 @@ export interface components {
       /** Creator custom description override */
       custom_description?: string | null;
       /** Creator custom chapters override */
-      custom_chapters?: components['schemas']['PackagingChapter'][] | null;
+      custom_chapters?: components["schemas"]["PackagingChapter"][] | null;
       /** Selected thumbnail concept ID */
       selected_thumbnail_concept_id?: string | null;
     };
@@ -1917,16 +2054,16 @@ export interface components {
     };
     UpdateResearchConfigRequest: {
       enabled: boolean;
-      cadence: components['schemas']['ResearchCadence'];
-      prompts?: components['schemas']['ResearchPrompt'][];
+      cadence: components["schemas"]["ResearchCadence"];
+      prompts?: components["schemas"]["ResearchPrompt"][];
     };
     UpdateVoiceSettingsRequest: {
       /** Selected narration mode */
-      narration_mode: components['schemas']['NarrationMode'];
+      narration_mode: components["schemas"]["NarrationMode"];
       selected_voice?: string;
       language?: string;
       /** Optional My Voice replication configuration */
-      my_voice?: components['schemas']['VoiceReplicationConfig'] | null;
+      my_voice?: components["schemas"]["VoiceReplicationConfig"] | null;
     };
     User: {
       /** Unique user identifier (e.g. Firebase UID / Google sub) */
@@ -1972,7 +2109,7 @@ export interface components {
       /** Canonical 0-indexed transcript end word index */
       transcript_end_word: number;
       /** Editorial action: KEEP, TIGHTEN, REMOVE, or COVERAGE */
-      action: components['schemas']['SectionAction'];
+      action: components["schemas"]["SectionAction"];
       /** Editorial justification for why this section is kept, tightened, or removed */
       reason: string;
       /** Model confidence score for this section decision */
@@ -1998,7 +2135,7 @@ export interface components {
     };
     VoiceReplicationConfig: {
       /** Replication access and lifecycle status */
-      status?: components['schemas']['VoiceReplicationStatus'];
+      status?: components["schemas"]["VoiceReplicationStatus"];
       /** Encrypted/persisted Vertex Voices API voice key (expires in 7 days) */
       voice_key?: string | null;
       /** Expiration datetime for the replicated voice key (7-day maximum TTL) */
@@ -2030,7 +2167,7 @@ export interface components {
     };
     VoiceSettingsConfig: {
       /** Selected narration playback mode */
-      narration_mode?: components['schemas']['NarrationMode'];
+      narration_mode?: components["schemas"]["NarrationMode"];
       /** Selected Studio Voice catalog voice identifier (Gemini TTS prebuilt voice) */
       selected_voice?: string;
       /** Language code for synthesis */
@@ -2038,7 +2175,7 @@ export interface components {
       /** Timestamp when settings were updated */
       updated_at: string;
       /** My Voice replication settings and consent status */
-      my_voice?: components['schemas']['VoiceReplicationConfig'] | null;
+      my_voice?: components["schemas"]["VoiceReplicationConfig"] | null;
     };
     VoiceoverSegment: {
       segment_id: string;
@@ -2046,7 +2183,7 @@ export interface components {
       source_end_ms: number;
       text: string;
       original_text?: string | null;
-      voice_mode?: components['schemas']['EditorVoiceMode'];
+      voice_mode?: components["schemas"]["EditorVoiceMode"];
       voice_id?: string | null;
       generated_duration_ms?: number | null;
       preview_artifact_id?: string | null;
@@ -2061,7 +2198,7 @@ export interface components {
       /** Description of the YouTube channel or production context */
       channel_description?: string | null;
       /** Workspace brand kit configuration */
-      brand_kit?: components['schemas']['BrandKit'];
+      brand_kit?: components["schemas"]["BrandKit"];
       /** Timestamp when the workspace was created (UTC) */
       created_at: string;
       /** Timestamp when the workspace was last updated (UTC) */
@@ -2117,7 +2254,7 @@ export interface components {
       /** Artifact type (MASTER) */
       artifact_type?: string;
       /** Current lifecycle status */
-      status?: components['schemas']['PublishJobStatus'];
+      status?: components["schemas"]["PublishJobStatus"];
       /** Creator requested privacy (private, unlisted, public) */
       requested_privacy?: string;
       /** Actual privacy status confirmed by YouTube response */
@@ -2135,7 +2272,7 @@ export interface components {
       /** Canonical watch URL (https://youtu.be/{video_id}) */
       youtube_url?: string | null;
       /** Thumbnail upload status */
-      thumbnail_status?: components['schemas']['ThumbnailUploadStatus'];
+      thumbnail_status?: components["schemas"]["ThumbnailUploadStatus"];
       /** ThumbnailArtifact ID uploaded to thumbnails.set */
       thumbnail_artifact_id?: string | null;
       /** Actual bytes uploaded so far */

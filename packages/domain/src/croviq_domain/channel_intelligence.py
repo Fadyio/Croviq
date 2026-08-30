@@ -231,6 +231,18 @@ class InsightEvidence(BaseModel):
     metric_refs: list[str] = Field(default_factory=list)
     citation_urls: list[str] = Field(default_factory=list)
 
+class InsightEvidenceStats(BaseModel):
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    eligible_video_count: int
+    early_count: int
+    late_count: int
+    early_mean_retention: float
+    late_mean_retention: float
+    delta_percentage_points: float
+    correlation: float | None = None
+    threshold_seconds: float = 30.0
+
 
 class ChannelInsight(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
@@ -240,12 +252,12 @@ class ChannelInsight(BaseModel):
     type: InsightType
     title: str = Field(..., min_length=1, max_length=500)
     statement: str = Field(..., min_length=1, max_length=2000)
-    evidence: list[InsightEvidence] = Field(..., min_length=1)
-    confidence: float = Field(..., ge=0, le=1)
+    evidence: list[InsightEvidence] = Field(default_factory=list)
+    evidence_stats: InsightEvidenceStats | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
     recommended_action: str = Field(..., min_length=1, max_length=2000)
     created_at: datetime
     expires_at: datetime | None = None
-
     @field_validator("created_at", "expires_at")
     @classmethod
     def validate_timestamps(cls, value: datetime | None) -> datetime | None:

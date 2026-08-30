@@ -104,13 +104,19 @@ export const AlexRail: React.FC<AlexRailProps> = ({
 
                 <p className="text-xs leading-relaxed text-text-secondary">{insight.statement}</p>
 
-                <div className="rounded-md border-l-2 border-primary/70 bg-surface-3/60 px-3 py-2 text-xs leading-relaxed">
-                  <span className="font-semibold text-text-primary">Next: </span>
-                  <span className="text-text-secondary">{insight.recommended_action}</span>
+                <div className="rounded-md border-l-2 border-primary/70 bg-surface-3/60 px-3 py-2 text-xs leading-relaxed space-y-1">
+                  <p className="font-semibold text-text-primary">Next</p>
+                  <p className="text-text-secondary">
+                    {insight.recommended_action.replace(/^(ACTION:\s*|Next:\s*)/i, "")}
+                  </p>
                 </div>
 
                 <div className="flex items-center justify-between pt-1 text-[11px] text-text-muted">
-                  <span>Based on channel history</span>
+                  <span>
+                    {insight.evidence_stats
+                      ? `Based on ${insight.evidence_stats.eligible_video_count} eligible videos`
+                      : "Based on channel history"}
+                  </span>
                   <button
                     type="button"
                     onClick={() => onOpenEvidence(insight)}

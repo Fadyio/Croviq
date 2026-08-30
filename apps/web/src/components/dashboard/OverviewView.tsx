@@ -43,7 +43,7 @@ const formatChange = (value: number | null | undefined): string => {
 
 const formatDeltaPercent = (
   value: number | null | undefined,
-  label = "vs channel median"
+  label = "vs channel median",
 ): { text: string; isPositive: boolean; isNeutral: boolean } => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return { text: "—", isPositive: false, isNeutral: true };
@@ -64,7 +64,7 @@ const formatDeltaPercent = (
 
 const formatDeltaPoints = (
   value: number | null | undefined,
-  label = "vs channel median"
+  label = "vs channel median",
 ): { text: string; isPositive: boolean; isNeutral: boolean } => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return { text: "—", isPositive: false, isNeutral: true };
@@ -89,40 +89,42 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     dashboard.recent_videos && dashboard.recent_videos.length > 0
       ? dashboard.recent_videos
       : dashboard.latest_video
-      ? [
-          {
-            video_id: dashboard.latest_video.video_id,
-            title: dashboard.latest_video.title,
-            published_at: String(dashboard.latest_video.published_at),
-            views: dashboard.latest_video.views,
-            views_delta_percentage: dashboard.latest_video.view_delta_percentage,
-            average_retention: dashboard.latest_video.retention_percentage,
-            retention_delta_points: dashboard.latest_video.retention_delta_points,
-            ctr_percentage: dashboard.latest_video.ctr,
-            ctr_delta_points:
-              dashboard.latest_video.ctr != null && dashboard.latest_video.median_ctr != null
-                ? dashboard.latest_video.ctr - dashboard.latest_video.median_ctr
-                : null,
-            subscribers_gained: dashboard.latest_video.subscribers_gained,
-            subscribers_lost: dashboard.latest_video.subscribers_lost ?? 0,
-            net_subscribers: dashboard.latest_video.net_subscribers,
-            subs_per_1k: dashboard.latest_video.subscriber_conversion_per_1k_views,
-            subs_per_1k_delta_percentage:
-              dashboard.latest_video.subscriber_conversion_delta_percentage,
-            is_latest: true,
-            alex_interpretation:
-              dashboard.latest_video.retention_delta_points <= -10
-                ? `Retention is the main weakness here. The video is ${Math.abs(
-                    dashboard.latest_video.retention_delta_points
-                  ).toFixed(1)} points below your channel median despite normal subscriber conversion.`
-                : null,
-            alex_next_action:
-              dashboard.latest_video.retention_delta_points <= -10
-                ? "Inspect the first 30 seconds for delayed demonstration or setup."
-                : null,
-          },
-        ]
-      : [];
+        ? [
+            {
+              video_id: dashboard.latest_video.video_id,
+              title: dashboard.latest_video.title,
+              published_at: String(dashboard.latest_video.published_at),
+              views: dashboard.latest_video.views,
+              views_delta_percentage: dashboard.latest_video.view_delta_percentage,
+              average_retention: dashboard.latest_video.retention_percentage,
+              retention_delta_points: dashboard.latest_video.retention_delta_points,
+              ctr_percentage: dashboard.latest_video.ctr,
+              ctr_delta_points:
+                dashboard.latest_video.ctr != null && dashboard.latest_video.median_ctr != null
+                  ? dashboard.latest_video.ctr - dashboard.latest_video.median_ctr
+                  : null,
+              subscribers_gained: dashboard.latest_video.subscribers_gained,
+              subscribers_lost: dashboard.latest_video.subscribers_lost ?? 0,
+              net_subscribers: dashboard.latest_video.net_subscribers,
+              subs_per_1k: dashboard.latest_video.subscriber_conversion_per_1k_views,
+              subs_per_1k_delta_percentage:
+                dashboard.latest_video.subscriber_conversion_delta_percentage,
+              is_latest: true,
+              alex_interpretation:
+                dashboard.latest_video.retention_delta_points <= -10
+                  ? `Retention is the main weakness here. The video is ${Math.abs(
+                      dashboard.latest_video.retention_delta_points,
+                    ).toFixed(
+                      1,
+                    )} points below your channel median despite normal subscriber conversion.`
+                  : null,
+              alex_next_action:
+                dashboard.latest_video.retention_delta_points <= -10
+                  ? "Inspect the first 30 seconds for delayed demonstration or setup."
+                  : null,
+            },
+          ]
+        : [];
 
   return (
     <div className="space-y-6">
@@ -222,8 +224,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                             viewsDelta.isNeutral
                               ? "text-text-muted"
                               : viewsDelta.isPositive
-                              ? "text-success"
-                              : "text-danger"
+                                ? "text-success"
+                                : "text-danger"
                           }`}
                         >
                           {viewsDelta.text}
@@ -245,8 +247,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                             retDelta.isNeutral
                               ? "text-text-muted"
                               : retDelta.isPositive
-                              ? "text-success"
-                              : "text-danger"
+                                ? "text-success"
+                                : "text-danger"
                           }`}
                         >
                           {retDelta.text}
@@ -270,8 +272,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                             ctrDelta.isNeutral
                               ? "text-text-muted"
                               : ctrDelta.isPositive
-                              ? "text-success"
-                              : "text-danger"
+                                ? "text-success"
+                                : "text-danger"
                           }`}
                         >
                           {video.ctr_percentage != null ? ctrDelta.text : "No CTR recorded"}
@@ -299,8 +301,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                             subsDelta.isNeutral
                               ? "text-text-muted"
                               : subsDelta.isPositive
-                              ? "text-success"
-                              : "text-danger"
+                                ? "text-success"
+                                : "text-danger"
                           }`}
                         >
                           {subsDelta.text}
@@ -380,7 +382,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </span>
               <p className="text-text-primary font-medium leading-relaxed">
                 {dashboard.insights[0].recommended_action
-                  ? dashboard.insights[0].recommended_action.replace(/^ACTION:\s*/i, "")
+                  ? dashboard.insights[0].recommended_action.replace(/^(ACTION:\s*|Next:\s*)/i, "")
                   : ""}
               </p>
             </div>

@@ -14,6 +14,7 @@ from croviq_domain.channel_intelligence import (
     EvidenceKind,
     ExperimentStatus,
     InsightEvidence,
+    InsightEvidenceStats,
     InsightType,
 )
 from croviq_domain.channel_provider import ChannelDataProvider
@@ -581,68 +582,84 @@ async def build_channel_dashboard(
     )
 
     analysis_videos = [
-        video for video in videos if video.derived.first_demo_seconds is not None
+        video
+        for video in videos
+        if video.derived.first_demo_seconds is not None
+        and video.analytics.avg_view_percentage is not None
     ]
-    demo_times = [
-        float(video.derived.first_demo_seconds) for video in analysis_videos
-    ]
-    retentions = [
-        video.analytics.avg_view_percentage for video in analysis_videos
-    ]
-    correlation = _pearson(demo_times, retentions)
-    early_videos = [
-        v for v in analysis_videos if float(v.derived.first_demo_seconds) <= 30.0
-    ]
-    late_videos = [
-        v for v in analysis_videos if float(v.derived.first_demo_seconds) > 30.0
-    ]
-    early_avg = (
-        sum(v.analytics.avg_view_percentage for v in early_videos) / len(early_videos)
-        if early_videos
-        else 0.0
-    )
-    late_avg = (
-        sum(v.analytics.avg_view_percentage for v in late_videos) / len(late_videos)
-        if late_videos
-        else 0.0
-    )
-    diff = early_avg - late_avg
-    insight = ChannelInsight(
-        insight_id=f"{channel.channel_id}:first-demo-retention:{period_end.isoformat()}",
-        channel_id=channel.channel_id,
-        type=InsightType.RETENTION,
-        title="First demonstration timing tracks retention",
-        statement=(
-            f"Videos reaching the first demonstration within 00:30 average {early_avg:.1f}% retention "
-            f"vs {late_avg:.1f}% for later demonstrations (n={len(analysis_videos)} videos, r={correlation:.2f})."
-        ),
-        evidence=[
-            InsightEvidence(
-                kind=EvidenceKind.FACT,
+    insights: list[ChannelInsight] = []
+    correlation = 0.0
+    if len(analysis_videos) >= 5:
+        demo_times = [
+            float(video.derived.first_demo_seconds) for video in analysis_videos
+        ]
+        retentions = [
+            float(video.analytics.avg_view_percentage) for video in analysis_videos
+        ]
+        correlation = _pearson(demo_times, retentions)
+        early_videos = [
+            v for v in analysis_videos if float(v.derived.first_demo_seconds) <= 30.0
+        ]
+        late_videos = [
+            v for v in analysis_videos if float(v.derived.first_demo_seconds) > 30.0
+        ]
+        if early_videos and late_videos:
+            early_avg = sum(
+                v.analytics.avg_view_percentage for v in early_videos
+            ) / len(early_videos)
+            late_avg = sum(
+                v.analytics.avg_view_percentage for v in late_videos
+            ) / len(late_videos)
+            diff = early_avg - late_avg
+            evidence_stats = InsightEvidenceStats(
+                eligible_video_count=len(analysis_videos),
+                early_count=len(early_videos),
+                late_count=len(late_videos),
+                early_mean_retention=round(early_avg, 2),
+                late_mean_retention=round(late_avg, 2),
+                delta_percentage_points=round(diff, 2),
+                correlation=round(correlation, 4),
+                threshold_seconds=30.0,
+            )
+            insight = ChannelInsight(
+                insight_id=f"{channel.channel_id}:first-demo-retention:{period_end.isoformat()}",
+                channel_id=channel.channel_id,
+                type=InsightType.RETENTION,
+                title="First demonstration timing tracks retention",
                 statement=(
-                    f"MEASUREMENT: Videos with early demonstrations (<=00:30) average {early_avg:.1f}% retention "
-                    f"vs {late_avg:.1f}% for later demonstrations across n={len(analysis_videos)} videos (delta {diff:+.1f}%)."
+                    f"Videos demonstrating the core result within 00:30 retained {early_avg:.1f}% "
+                    f"of viewers on average versus {late_avg:.1f}% for later demonstrations."
                 ),
-                metric_refs=[
-                    "video:firstDemoSeconds",
-                    "video:averageViewPercentage",
+                evidence=[
+                    InsightEvidence(
+                        kind=EvidenceKind.FACT,
+                        statement=(
+                            f"MEASUREMENT: Videos with early demonstrations (<=00:30) average {early_avg:.1f}% retention "
+                            f"vs {late_avg:.1f}% for later demonstrations across {len(analysis_videos)} eligible videos (delta {diff:+.1f}%)."
+                        ),
+                        metric_refs=[
+                            "video:firstDemoSeconds",
+                            "video:averageViewPercentage",
+                        ],
+                    ),
+                    InsightEvidence(
+                        kind=EvidenceKind.INFERENCE,
+                        statement=(
+                            f"INTERPRETATION: Observational correlation of r={correlation:.2f} across "
+                            f"{len(analysis_videos)} videos indicates early demonstration strongly tracks higher retention, "
+                            f"but represents observational correlation rather than causal proof."
+                        ),
+                        metric_refs=["analysis:first-demo-retention-correlation"],
+                    ),
                 ],
-            ),
-            InsightEvidence(
-                kind=EvidenceKind.INFERENCE,
-                statement=(
-                    "INTERPRETATION: The association between early demonstration and viewer retention "
-                    f"is strong (r={correlation:.2f}), but observational rather than established causal certainty."
+                evidence_stats=evidence_stats,
+                confidence=None,
+                recommended_action=(
+                    "Recommended target: reach the first usable demonstration by 00:25 on the next upload while holding topic and format stable."
                 ),
-                metric_refs=["analysis:first-demo-retention-correlation"],
-            ),
-        ],
-        confidence=min(0.99, 0.5 + abs(correlation) / 2),
-        recommended_action=(
-            "ACTION: For the next upload, reach the first usable demonstration by 00:25 while holding topic and format stable."
-        ),
-        created_at=datetime.combine(period_end, datetime.min.time(), tzinfo=UTC),
-    )
+                created_at=datetime.combine(period_end, datetime.min.time(), tzinfo=UTC),
+            )
+            insights = [insight]
     experiment = ChannelExperiment(
         experiment_id=f"{channel.channel_id}:early-demo-retention",
         channel_id=channel.channel_id,
@@ -686,7 +703,7 @@ async def build_channel_dashboard(
         channel_baselines=channel_baselines,
         topic_clusters=topic_clusters,
         traffic_sources=channel.analytics.top_traffic_sources,
-        insights=[insight],
+        insights=insights,
         active_experiment=None,
         proposed_experiment=experiment,
         is_sample_modeled_timeseries=series.is_modeled,

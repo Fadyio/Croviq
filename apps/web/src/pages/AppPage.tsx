@@ -550,39 +550,95 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
                 {evidenceModalInsight.statement}
               </p>
 
-              <div className="space-y-2.5 pt-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold text-text-primary">Supporting Evidence</p>
-                  {evidenceModalInsight.confidence !== undefined && (
-                    <span className="text-[10px] text-text-muted font-mono">
-                      Confidence: {(evidenceModalInsight.confidence * 100).toFixed(0)}%
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  {evidenceModalInsight.evidence.map((ev) => (
-                    <div
-                      key={`${ev.kind}-${ev.statement}`}
-                      className="rounded-lg bg-surface-2 p-3 text-xs border border-border-subtle"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[9px] font-bold text-text-muted uppercase tracking-wider">
-                          {ev.kind}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-text-secondary leading-relaxed">{ev.statement}</p>
+              {/* Statistical Evidence Cards */}
+              {evidenceModalInsight.evidence_stats && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Measurement Card */}
+                  <div className="rounded-lg bg-surface-2 p-3.5 text-xs border border-border-subtle space-y-2">
+                    <div className="flex items-center gap-1.5 font-semibold text-text-primary">
+                      <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary uppercase tracking-wider">
+                        Measurement
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <ul className="space-y-1.5 text-text-secondary text-[11px]">
+                      <li className="flex justify-between">
+                        <span>Early cohort (≤00:30):</span>
+                        <span className="font-mono font-medium text-text-primary">
+                          {evidenceModalInsight.evidence_stats.early_count} videos (
+                          {evidenceModalInsight.evidence_stats.early_mean_retention.toFixed(1)}%)
+                        </span>
+                      </li>
+                      <li className="flex justify-between">
+                        <span>Late cohort (&gt;00:30):</span>
+                        <span className="font-mono font-medium text-text-primary">
+                          {evidenceModalInsight.evidence_stats.late_count} videos (
+                          {evidenceModalInsight.evidence_stats.late_mean_retention.toFixed(1)}%)
+                        </span>
+                      </li>
+                      <li className="flex justify-between border-t border-border-subtle pt-1 font-medium">
+                        <span className="text-text-primary">Mean difference:</span>
+                        <span className="font-mono text-emerald-400">
+                          +{evidenceModalInsight.evidence_stats.delta_percentage_points.toFixed(1)}{" "}
+                          pts
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
 
-              <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 text-xs">
-                <p className="font-semibold text-primary">Action Plan</p>
-                <p className="mt-1 text-text-secondary leading-relaxed">
-                  {evidenceModalInsight.recommended_action}
+                  {/* Relationship Card */}
+                  <div className="rounded-lg bg-surface-2 p-3.5 text-xs border border-border-subtle space-y-2">
+                    <div className="flex items-center gap-1.5 font-semibold text-text-primary">
+                      <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary uppercase tracking-wider">
+                        Relationship
+                      </span>
+                    </div>
+                    <ul className="space-y-1.5 text-text-secondary text-[11px]">
+                      <li className="flex justify-between">
+                        <span>Pearson r:</span>
+                        <span className="font-mono font-medium text-text-primary">
+                          {evidenceModalInsight.evidence_stats.correlation !== null &&
+                          evidenceModalInsight.evidence_stats.correlation !== undefined
+                            ? evidenceModalInsight.evidence_stats.correlation.toFixed(2)
+                            : "N/A"}
+                        </span>
+                      </li>
+                      <li className="flex justify-between">
+                        <span>Eligible videos:</span>
+                        <span className="font-mono font-medium text-text-primary">
+                          {evidenceModalInsight.evidence_stats.eligible_video_count}
+                        </span>
+                      </li>
+                      <li className="flex justify-between border-t border-border-subtle pt-1">
+                        <span>Threshold:</span>
+                        <span className="font-mono font-medium text-text-primary">
+                          00:
+                          {Math.round(evidenceModalInsight.evidence_stats.threshold_seconds || 30)
+                            .toString()
+                            .padStart(2, "0")}
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* Interpretation Note */}
+              <div className="rounded-lg bg-surface-2 p-3 text-xs border border-border-subtle space-y-1">
+                <p className="font-semibold text-text-primary text-[11px]">Interpretation</p>
+                <p className="text-text-secondary leading-relaxed text-[11px]">
+                  This calculation reflects an observational correlation across eligible historical
+                  videos, not established causal proof. External factors such as topic familiarity
+                  or pacing may also contribute to audience retention.
                 </p>
               </div>
 
+              {/* Action Plan */}
+              <div className="rounded-lg bg-primary/10 border border-primary/20 p-3.5 text-xs space-y-1">
+                <p className="font-semibold text-primary text-[11px]">Recommended Action</p>
+                <p className="text-text-secondary leading-relaxed">
+                  {evidenceModalInsight.recommended_action.replace(/^(ACTION:\s*|Next:\s*)/i, "")}
+                </p>
+              </div>
               <div className="flex justify-end pt-2">
                 <button
                   type="button"

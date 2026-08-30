@@ -70,7 +70,21 @@ def test_sample_channel_dashboard_returns_computed_fixture_data(client: TestClie
     assert payload["recent_videos"][0]["alex_interpretation"]
     assert payload["recent_videos"][0]["alex_next_action"]
     assert payload["channel_baselines"]["sample_size"] == 100
-    assert payload["insights"][0]["evidence"]
+    assert len(payload["insights"]) == 1
+    insight = payload["insights"][0]
+    assert insight["title"] == "First demonstration timing tracks retention"
+    assert "60.6%" in insight["statement"]
+    assert "37.6%" in insight["statement"]
+    assert insight.get("confidence") is None
+    assert not insight["recommended_action"].startswith("ACTION:")
+    assert insight["evidence_stats"]["eligible_video_count"] == 100
+    assert insight["evidence_stats"]["early_count"] == 65
+    assert insight["evidence_stats"]["late_count"] == 35
+    assert insight["evidence_stats"]["early_mean_retention"] == 60.56
+    assert insight["evidence_stats"]["late_mean_retention"] == 37.60
+    assert insight["evidence_stats"]["delta_percentage_points"] == 22.96
+    assert insight["evidence_stats"]["correlation"] == -0.9638
+    assert insight["evidence_stats"]["threshold_seconds"] == 30.0
     assert payload["proposed_experiment"]["status"] == "PROPOSED"
 
 def test_sample_channel_dashboard_requires_authentication(client: TestClient) -> None:
