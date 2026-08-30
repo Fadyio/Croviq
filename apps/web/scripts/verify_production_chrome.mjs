@@ -196,7 +196,9 @@ async function main() {
 
   // 6. Check My Voice in Voice Settings Drawer
   console.log("\n--- Checking Voice Settings / My Voice BLOCKED Status ---");
-  const voiceSettingsBtn = page.getByRole("button", { name: /Voice Settings|Agent Settings/i }).first();
+  const voiceSettingsBtn = page
+    .getByRole("button", { name: /Voice Settings|Agent Settings/i })
+    .first();
   if (await voiceSettingsBtn.isVisible()) {
     await voiceSettingsBtn.click();
     await page.waitForTimeout(1000);
