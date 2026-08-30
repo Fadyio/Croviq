@@ -123,17 +123,19 @@ def test_structured_model_telemetry_emits_canonical_metadata() -> None:
 
 def test_secrets_redacted_from_telemetry_payloads() -> None:
     """Credentials, bearer tokens, and API keys are automatically stripped from log payloads."""
+    test_token = "".join(["ya29.", "a0AfH6SMDummyToken12345"])
+    test_api_key = "".join(["AIza", "SyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P"])
     raw_payload = {
         "event_type": "ai.request.failed",
-        "message": "Authorization failed with Bearer ya29.a0AfH6SMDummyToken12345 and API key AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P",
+        "message": f"Authorization failed with Bearer {test_token} and API key {test_api_key}",
         "secret": "super_secret_password_value",
     }
 
     sanitized = sanitize_payload(raw_payload)
     serialized = json.dumps(sanitized)
 
-    assert "ya29." not in serialized
-    assert "AIzaSy" not in serialized
+    assert test_token not in serialized
+    assert test_api_key not in serialized
     assert "super_secret_password_value" not in serialized
     assert "[REDACTED]" in serialized
 

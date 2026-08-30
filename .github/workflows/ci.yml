@@ -56,7 +56,7 @@ jobs:
 
       - name: Build
         env:
-          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || 'AIzaSyTestKeyForFrontendBuildValidation00' }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || 'mock-firebase-key-for-ci-build' }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN || 'croviq-506602.firebaseapp.com' }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID || 'croviq-506602' }}
         run: pnpm -r build
@@ -76,6 +76,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -109,6 +111,12 @@ jobs:
 
       - name: Run Security Audit via Makefile
         run: make security
+
+      - name: Run Gitleaks Independent Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_SUMMARY: true
 
       - name: Check OpenAPI Drift
         run: |

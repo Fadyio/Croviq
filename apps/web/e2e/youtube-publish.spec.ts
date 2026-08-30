@@ -1,26 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 
-const DEMO_EMAIL = "demo@croviq.app";
-const FIREBASE_ID_TOKEN =
-  "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vY3JvdmlxLTUwNjYwMiIsImF1ZCI6ImNyb3ZpcS01MDY2MDIiLCJhdXRoX3RpbWUiOjEsInVzZXJfaWQiOiJkZW1vX3VzZXJfMTIzIiwic3ViIjoiZGVtb191c2VyXzEyMyIsImlhdCI6MSwiZXhwIjo0MTAyNDQ0ODAwLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImRlbW9AY3JvdmlxLmFwcCJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.signature";
-
-const APPROVED_USER = {
-  user_id: "demo_user_123",
-  email: DEMO_EMAIL,
-  display_name: "Croviq Demo",
-  avatar_url: null,
-  created_at: "2026-08-26T00:00:00Z",
-  updated_at: "2026-08-26T00:00:00Z",
-};
-
-const WORKSPACE = {
-  workspace_id: "ws_demo",
-  owner_user_id: APPROVED_USER.user_id,
-  name: "Croviq",
-  created_at: "2026-08-26T00:00:00Z",
-  updated_at: "2026-08-26T00:00:00Z",
-};
+import { APPROVED_USER, DEMO_EMAIL, FIREBASE_ID_TOKEN, WORKSPACE } from "./test-auth-fixtures";
 
 const FAIRPHONE_PRODUCTION_ID = "prod_0b7657f515ae";
 

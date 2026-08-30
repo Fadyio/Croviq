@@ -37,7 +37,7 @@ def test_frontend_build_fails_when_firebase_env_missing():
 
 def test_frontend_build_succeeds_and_bundle_diagnostic_passes():
     """Verify web build succeeds with provided Firebase configuration and bundle contains expected safe metadata."""
-    test_key = "AIzaSyTestKeyForFrontendBuildValidation00"
+    test_key = "mock-firebase-key-for-ci-build"
     test_domain = "croviq-test-diag.firebaseapp.com"
     test_project = "croviq-test-diag"
 
@@ -71,7 +71,7 @@ def test_frontend_build_succeeds_and_bundle_diagnostic_passes():
     assert test_domain in combined_js, f"Expected auth domain {test_domain} in built bundle"
 
     # 2. Must NOT contain dummy fallback constants or template placeholders
-    assert "AIzaSyDummyClientKeyForLocalTesting00" not in combined_js
+    assert "mock-firebase-api-key-for-local-testing" not in combined_js
     assert "your-firebase-web-api-key" not in combined_js
     assert "your-project.firebaseapp.com" not in combined_js
     assert "your-project-id" not in combined_js

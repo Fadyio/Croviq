@@ -16,8 +16,23 @@ const APPROVED_USER = {
   updated_at: "2026-08-26T00:00:00Z",
 };
 
-const FIREBASE_ID_TOKEN =
-  "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vY3JvdmlxLTUwNjYwMiIsImF1ZCI6ImNyb3ZpcS01MDY2MDIiLCJhdXRoX3RpbWUiOjEsInVzZXJfaWQiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwic3ViIjoiMjdpRUJVTWN1NlRvRFl3cDJPZEVJSEJ1d0lBMyIsImlhdCI6MSwiZXhwIjo0MTAyNDQ0ODAwLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImRlbW9AY3JvdmlxLmFwcCJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.signature";
+function createMockToken(userId = "27iEBUMcu6ToDYwp2OdEIHBuwIA3", email = "demo@croviq.app") {
+  const header = { alg: "none", typ: "JWT" };
+  const payload = {
+    iss: "https://securetoken.google.com/croviq-506602",
+    aud: "croviq-506602",
+    auth_time: 1,
+    user_id: userId,
+    sub: userId,
+    iat: 1,
+    exp: 4102444800,
+    email: email,
+    email_verified: true,
+    firebase: { identities: { email: [email] }, sign_in_provider: "password" },
+  };
+  return `${Buffer.from(JSON.stringify(header)).toString("base64url")}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.signature`;
+}
+const FIREBASE_ID_TOKEN = createMockToken();
 
 async function main() {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });

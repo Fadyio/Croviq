@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import patch
 
 from croviq_api.config import Settings
+from croviq_api.auth.exceptions import InvalidTokenError
 from croviq_api.auth.verifier import FirebaseTokenVerifier, get_token_verifier
 from croviq_api.channels.research_repository import (
     FirestoreResearchRepository,
@@ -264,3 +265,29 @@ def test_all_firestore_repositories_fail_closed_in_production_without_project_id
         mock_prod_settings.return_value = Settings(environment="production", gcp_project_id=None)
         with pytest.raises(RuntimeError, match="Production mode requires FirestoreProductionRepository"):
             get_production_repository()
+
+
+@pytest.mark.parametrize(
+    "env",
+    ["production", "staging", "", "unknown", "custom_cloud_run", "preview"],
+)
+def test_firebase_token_verifier_fails_closed_on_unsigned_token(env: str) -> None:
+    """FirebaseTokenVerifier must strictly fail closed and reject unsigned alg=none tokens across all non-dev/test environments."""
+    import base64
+    import json
+    with patch("croviq_api.auth.verifier.get_settings") as mock_settings:
+        mock_settings.return_value = Settings(environment=env, gcp_project_id="croviq-506602")
+        verifier = FirebaseTokenVerifier(project_id="croviq-506602")
+        header = {"alg": "none", "typ": "JWT"}
+        payload = {
+            "iss": "https://securetoken.google.com/croviq-506602",
+            "aud": "croviq-506602",
+            "user_id": "usr_dev_test_123",
+            "sub": "usr_dev_test_123",
+            "email": "demo@croviq.app",
+        }
+        h_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
+        p_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+        token = f"{h_b64}.{p_b64}."
+        with pytest.raises(InvalidTokenError):
+            verifier.verify_token(token)

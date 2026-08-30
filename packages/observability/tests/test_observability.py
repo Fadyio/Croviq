@@ -99,11 +99,11 @@ def test_secret_redaction_masks_sensitive_keys() -> None:
     payload = {
         "user_id": "usr-1",
         "password": "super-secret-password",
-        "id_token": "eyJhbGciOi...",
-        "authorization": "Bearer secret_bearer_token",
-        "api_key": "AIzaSySecretApiKey12345678901234567",
+        "id_token": "mock_id_token_sample",
+        "authorization": "Bearer mock_bearer_token",
+        "api_key": "mock_api_key_sample",
         "nested": {
-            "credentials": {"private_key": "-----BEGIN PRIVATE KEY-----..."},
+            "credentials": {"private_key": "mock_private_key_sample"},
             "safe_field": "visible_value",
         },
     }

@@ -17,7 +17,7 @@ import sys
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# High-confidence secret patterns (excluding test/dummy keys like AIzaSyDummyClientKey...)
+# High-confidence secret patterns (excluding test/dummy keys)
 SECRET_PATTERNS = [
     (r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----", "Private Key"),
     (r"(?i)\bghp_[A-Za-z0-9_]{36,}\b", "GitHub Personal Access Token"),
@@ -29,15 +29,8 @@ SECRET_PATTERNS = [
     (r'(?i)"private_key"\s*:\s*"-----BEGIN PRIVATE KEY-----', "Google Service Account JSON Private Key"),
 ]
 
-# Patterns for fake / dummy testing keys to ignore
-IGNORE_SUBSTRINGS = [
-    "AIzaSyDummyClientKeyForLocalTesting00",
-    "mock_v4_signature",
-    "mock_v4_signed_read",
-    "test_sha_123",
-    "testsrc=",
-    "-----BEGIN PRIVATE KEY-----...",
-]
+# Patterns for fake / dummy testing keys to ignore (0 active ignores; all fixtures dynamically generated)
+IGNORE_SUBSTRINGS: list[str] = []
 
 
 def check_tracked_files_for_secrets() -> tuple[bool, list[str]]:

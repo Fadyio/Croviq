@@ -48,20 +48,24 @@ class FirebaseTokenVerifier(TokenVerifier):
 
         token_str = token.strip()
         settings = get_settings()
-        if not settings.is_production and token_str.startswith("eyJhbGciOiJub25lI"):
+        env = (settings.environment or "").strip().lower()
+        if env in {"development", "test"} and "." in token_str:
             import base64
             import json
             try:
                 parts = token_str.split(".")
-                if len(parts) >= 2:
-                    payload_b64 = parts[1]
-                    payload_b64 += "=" * ((4 - len(payload_b64) % 4) % 4)
-                    claims = json.loads(base64.urlsafe_b64decode(payload_b64).decode("utf-8"))
-                    if claims.get("user_id") or claims.get("sub"):
-                        return claims
+                if len(parts) == 3:
+                    header_raw = parts[0]
+                    header_b64 = header_raw + "=" * ((4 - len(header_raw) % 4) % 4)
+                    header = json.loads(base64.urlsafe_b64decode(header_b64.encode("utf-8")).decode("utf-8"))
+                    if header.get("alg") == "none":
+                        payload_raw = parts[1]
+                        payload_b64 = payload_raw + "=" * ((4 - len(payload_raw) % 4) % 4)
+                        claims = json.loads(base64.urlsafe_b64decode(payload_b64.encode("utf-8")).decode("utf-8"))
+                        if claims.get("user_id") or claims.get("sub") or claims.get("uid"):
+                            return claims
             except Exception:
                 pass
-
         try:
             # Firebase Admin SDK verify_id_token validates signature, expiration, issuer, audience
             return auth.verify_id_token(token_str, check_revoked=False)

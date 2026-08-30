@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from croviq_api.auth.exceptions import ExpiredTokenError, InvalidTokenError
-from croviq_api.auth.verifier import TokenVerifier, get_token_verifier
+from croviq_api.auth.verifier import FirebaseTokenVerifier, TokenVerifier, get_token_verifier
 from croviq_api.config import get_settings
 from croviq_api.main import create_app
 
@@ -523,3 +523,61 @@ def test_client_lifecycle_events_record_safe_telemetry(
         log = auth_logs[0]
         assert log["event_type"] == payload["event_type"]
         assert log["user_id"] == "uid_123"
+
+
+@pytest.mark.parametrize("env", ["development", "test"])
+def test_firebase_token_verifier_alg_none_accepted_in_dev_and_test(
+    env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unsigned alg=none tokens are strictly permitted ONLY in explicit development and test environments."""
+    import base64
+    monkeypatch.setenv("ENVIRONMENT", env)
+    get_settings.cache_clear()
+
+    header = {"alg": "none", "typ": "JWT"}
+    payload = {
+        "iss": "https://securetoken.google.com/croviq-506602",
+        "aud": "croviq-506602",
+        "user_id": "usr_dev_test_123",
+        "sub": "usr_dev_test_123",
+        "email": "demo@croviq.app",
+        "email_verified": True,
+    }
+    h_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
+    p_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    token = f"{h_b64}.{p_b64}."
+
+    verifier = FirebaseTokenVerifier(project_id="croviq-506602")
+    claims = verifier.verify_token(token)
+    assert claims["user_id"] == "usr_dev_test_123"
+    assert claims["email"] == "demo@croviq.app"
+
+
+@pytest.mark.parametrize(
+    "env",
+    ["production", "staging", "", "unknown", "custom_cloud_run", "preview"],
+)
+def test_firebase_token_verifier_alg_none_rejected_in_production_staging_empty_unknown(
+    env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Production, staging, empty/unset, and unknown environments must fail closed and reject unsigned alg=none tokens."""
+    import base64
+    monkeypatch.setenv("ENVIRONMENT", env)
+    get_settings.cache_clear()
+
+    header = {"alg": "none", "typ": "JWT"}
+    payload = {
+        "iss": "https://securetoken.google.com/croviq-506602",
+        "aud": "croviq-506602",
+        "user_id": "usr_dev_test_123",
+        "sub": "usr_dev_test_123",
+        "email": "demo@croviq.app",
+        "email_verified": True,
+    }
+    h_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
+    p_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    token = f"{h_b64}.{p_b64}."
+
+    verifier = FirebaseTokenVerifier(project_id="croviq-506602")
+    with pytest.raises(InvalidTokenError):
+        verifier.verify_token(token)

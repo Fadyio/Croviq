@@ -2,26 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
-const DEMO_EMAIL = "demo@croviq.app";
-const FIREBASE_ID_TOKEN =
-  "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vY3JvdmlxLTUwNjYwMiIsImF1ZCI6ImNyb3ZpcS01MDYwMiIsImF1dGhfdGltZSI6MSwidXNlcl9pZCI6ImRlbW9fdXNlcl8xMjMiLCJzdWIiOiJkZW1vX3VzZXJfMTIzIiwiaWF0IjoxLCJleHAiOjQxMDI0NDQ4MDAsImVtYWlsIjoiZGVtb0Bjcm92aXEuYXBwIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsiZGVtb0Bjcm92aXEuYXBwIl19LCJzaWduX2luX3Byb3ZpZGVyIjoicGFzc3dvcmQifX0.signature";
-
-const APPROVED_USER = {
-  user_id: "demo_user_123",
-  email: DEMO_EMAIL,
-  display_name: "Croviq Demo",
-  avatar_url: null,
-  created_at: "2026-08-26T00:00:00Z",
-  updated_at: "2026-08-26T00:00:00Z",
-};
-
-const WORKSPACE = {
-  workspace_id: "ws_demo",
-  owner_user_id: APPROVED_USER.user_id,
-  name: "Croviq",
-  created_at: "2026-08-26T00:00:00Z",
-  updated_at: "2026-08-26T00:00:00Z",
-};
+import {
+  APPROVED_USER,
+  DEMO_EMAIL,
+  FIREBASE_ID_TOKEN,
+  WORKSPACE,
+  createMockFirebaseToken,
+} from "./test-auth-fixtures";
 
 const mockClientEvents = async (page: Page, events: Record<string, unknown>[]) => {
   await page.route("**/api/client-events", async (route) => {
@@ -239,8 +226,12 @@ test.describe("Email/password authentication", () => {
     const events: Record<string, unknown>[] = [];
     await mockClientEvents(page, events);
     await mockFirebasePasswordSignIn(page, true);
-    const REFRESHED_ID_TOKEN =
-      "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vY3JvdmlxLTUwNjYwMiIsImF1ZCI6ImNyb3ZpcS01MDYwMiIsInVzZXJfaWQiOiJkZW1vX3VzZXJfMTIzIiwic3ViIjoiZGVtb191c2VyXzEyMyIsImVtYWlsIjoiZGVtb0Bjcm92aXEuYXBwIn0.signature";
+    const REFRESHED_ID_TOKEN = createMockFirebaseToken({
+      aud: "croviq-50602",
+      email: "demo@croviq.app",
+      user_id: "demo_user_123",
+      sub: "demo_user_123",
+    });
     await mockFirebaseTokenRefresh(page, REFRESHED_ID_TOKEN);
 
     let authMeCalls = 0;
@@ -294,8 +285,10 @@ test.describe("Email/password authentication", () => {
     const events: Record<string, unknown>[] = [];
     await mockClientEvents(page, events);
     await mockFirebasePasswordSignIn(page, true);
-    const REFRESHED_ID_TOKEN =
-      "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJkZW1vX3VzZXJfMTIzIiwiZW1haWwiOiJkZW1vQGNyb3ZpcS5hcHAifQ.signature";
+    const REFRESHED_ID_TOKEN = createMockFirebaseToken({
+      sub: "demo_user_123",
+      email: "demo@croviq.app",
+    });
     await mockFirebaseTokenRefresh(page, REFRESHED_ID_TOKEN);
 
     await page.route("**/api/auth/me", async (route) => {

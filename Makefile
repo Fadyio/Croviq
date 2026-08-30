@@ -136,7 +136,10 @@ infra-validate:
 
 security:
 	@python3 scripts/security_audit.py
-
+	@if command -v gitleaks > /dev/null 2>&1; then \
+		echo "==> Running Gitleaks independent secret scan..."; \
+		gitleaks dir --verbose . && echo "✓ Gitleaks scan passed with 0 findings."; \
+	fi
 # -----------------------------------------------------------------------------
 # 5. CANONICAL VERIFICATION (Local & CI)
 # -----------------------------------------------------------------------------
