@@ -717,18 +717,17 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await page.getByRole("button", { name: "Close" }).last().click();
   });
 
-  test("team selector preserves distinct agent routes across navigation and refresh", async ({
+  test("navbar has no team selector and distinct agent routes are preserved across navigation and refresh", async ({
     page,
   }) => {
     await signInAndGoTo(page, "/app");
 
+    // Verify Team selector is completely removed from navbar
+    await expect(page.getByTestId("btn-team-selector")).toHaveCount(0);
+    await expect(page.getByText("Autonomous Production Team")).toHaveCount(0);
+
     const openAgent = async (agent: "Alex" | "Leo" | "Iris", route: string) => {
-      await page.getByTestId("btn-team-selector").click();
-      await page
-        .getByText("Autonomous Production Team", { exact: true })
-        .locator("..")
-        .getByRole("button", { name: new RegExp(`^${agent} `) })
-        .click();
+      await page.goto(route);
       await expect(page).toHaveURL(new RegExp(`${route}$`));
       await expect(page.getByRole("heading", { name: agent, exact: true })).toBeVisible();
       await expect(page.getByRole("tab", { name: "Chat" })).toHaveAttribute(
@@ -767,14 +766,8 @@ test.describe("Home / Channel Intelligence Redesign", () => {
   }) => {
     await signInAndGoTo(page, "/app");
 
-    // Open Alex chat
-    await page.getByTestId("btn-team-selector").click();
-    await page
-      .getByText("Autonomous Production Team", { exact: true })
-      .locator("..")
-      .getByRole("button", { name: /^Alex / })
-      .click();
-
+    // Open Alex chat workspace
+    await page.goto("/app/agents/alex");
     await expect(page).toHaveURL(/\/app\/agents\/alex$/);
     await expect(page.getByRole("heading", { name: "Alex", exact: true })).toBeVisible();
 
@@ -801,13 +794,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await expect(page.getByText("python_code_execution")).toBeVisible();
 
     // Switch to Leo
-    await page.getByTestId("btn-team-selector").click();
-    await page
-      .getByText("Autonomous Production Team", { exact: true })
-      .locator("..")
-      .getByRole("button", { name: /^Leo / })
-      .click();
-
+    await page.goto("/app/agents/leo");
     await expect(page).toHaveURL(/\/app\/agents\/leo$/);
     await expect(page.getByRole("heading", { name: "Leo", exact: true })).toBeVisible();
     const leoInput = page.getByPlaceholder(/Ask Leo a question/i);
@@ -816,13 +803,7 @@ test.describe("Home / Channel Intelligence Redesign", () => {
     await expect(page.getByText("dialogue_decision_inspector")).toBeVisible();
 
     // Switch to Iris
-    await page.getByTestId("btn-team-selector").click();
-    await page
-      .getByText("Autonomous Production Team", { exact: true })
-      .locator("..")
-      .getByRole("button", { name: /^Iris / })
-      .click();
-
+    await page.goto("/app/agents/iris");
     await expect(page).toHaveURL(/\/app\/agents\/iris$/);
     await expect(page.getByRole("heading", { name: "Iris", exact: true })).toBeVisible();
     const irisInput = page.getByPlaceholder(/Ask Iris a question/i);

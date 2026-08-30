@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   LineChart,
   Loader2,
+  LogOut,
   MessageSquare,
   Send,
   Settings,
@@ -11,7 +12,7 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { AGENT_IDENTITIES, type AgentId, AgentTeamSelector } from "../components/AgentTeamSelector";
+import { AGENT_IDENTITIES, type AgentId } from "../components/AgentTeamSelector";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { AgentSettingsDrawer } from "../components/editor/AgentSettingsDrawer";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
@@ -52,7 +53,7 @@ const STARTER_PROMPTS: Record<AgentId, string[]> = {
 };
 
 export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({ agentId, onNavigate }) => {
-  const { firebaseUser } = useAuth();
+  const { user, logout, firebaseUser } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
@@ -152,10 +153,18 @@ export const AgentWorkspacePage: React.FC<AgentWorkspacePageProps> = ({ agentId,
         >
           <CroviqLogo height={24} className="h-6 w-auto" />
         </button>
-        <AgentTeamSelector
-          activeAgent={agentId}
-          onSelect={(selectedAgent) => onNavigate(`/app/agents/${selectedAgent}`)}
-        />
+        <div className="hidden md:flex items-center gap-3 border-l border-border-subtle pl-3">
+          <span className="max-w-[130px] truncate text-xs text-text-secondary">{user?.email}</span>
+          <button
+            type="button"
+            onClick={logout}
+            className="flex items-center gap-1 text-xs text-text-muted transition-colors hover:text-text-primary cursor-pointer"
+            aria-label="Logout"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span>Logout</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../api/generated";
 import { useAuth } from "../auth/AuthContext";
 import { AgentChatDrawer } from "../components/AgentChatDrawer";
-import { type AgentId, AgentTeamSelector } from "../components/AgentTeamSelector";
+import type { AgentId } from "../components/AgentTeamSelector";
 import { CroviqLogo } from "../components/CroviqLogo";
 import { AlexRail } from "../components/dashboard/AlexRail";
 import { OverviewView } from "../components/dashboard/OverviewView";
@@ -362,23 +362,17 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
           </div>
         </div>
 
-        {/* Top Nav Right: New Project + Alex Chip + Account */}
+        {/* Top Nav Right: New Project + Account */}
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onNavigateNewProject}
             aria-label="New Project"
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-primary-hover active:scale-[0.98]"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-primary-hover active:scale-[0.98] cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>New Project</span>
           </button>
-
-          <AgentTeamSelector
-            onChat={(agentId) => setChatAgentId(agentId)}
-            onSettings={(agentId) => setSettingsAgentId(agentId)}
-            onSelect={(agentId) => onNavigateRoute?.(`/app/agents/${agentId}`)}
-          />
 
           <div className="hidden md:flex items-center gap-3 border-l border-border-subtle pl-3">
             <span className="max-w-[130px] truncate text-xs text-text-secondary">
