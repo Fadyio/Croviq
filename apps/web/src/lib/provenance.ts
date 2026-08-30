@@ -13,7 +13,10 @@ export interface ResolvedProvenance {
   supporting_sources: SupportingSourceCitation[];
 }
 
-export function classifyUrlRole(url: string, title?: string): { role: "COMMUNITY_SIGNAL" | "PRIMARY" | "SUPPORTING"; sourceType: string } {
+export function classifyUrlRole(
+  url: string,
+  title?: string,
+): { role: "COMMUNITY_SIGNAL" | "PRIMARY" | "SUPPORTING"; sourceType: string } {
   const clean = url.trim().toLowerCase();
   let domain = "";
   try {
@@ -82,10 +85,18 @@ export function classifyUrlRole(url: string, title?: string): { role: "COMMUNITY
   }
 
   // Supporting: Independent blogs, benchmarks, tutorials
-  if (["benchmark", "benchmarks", "vs", "latency", "throughput", "comparison"].some((k) => tLower.includes(k) || clean.includes(k))) {
+  if (
+    ["benchmark", "benchmarks", "vs", "latency", "throughput", "comparison"].some(
+      (k) => tLower.includes(k) || clean.includes(k),
+    )
+  ) {
     return { role: "SUPPORTING", sourceType: "Independent Benchmark" };
   }
-  if (["tutorial", "guide", "walkthrough", "how-to", "deploying"].some((k) => tLower.includes(k) || clean.includes(k))) {
+  if (
+    ["tutorial", "guide", "walkthrough", "how-to", "deploying"].some(
+      (k) => tLower.includes(k) || clean.includes(k),
+    )
+  ) {
     return { role: "SUPPORTING", sourceType: "Engineering Tutorial" };
   }
   return { role: "SUPPORTING", sourceType: "Independent Analysis" };
@@ -93,7 +104,12 @@ export function classifyUrlRole(url: string, title?: string): { role: "COMMUNITY
 
 export function getResolvedProvenance(finding: ResearchFinding): ResolvedProvenance {
   // If typed provenance is explicitly present and populated:
-  if (finding.provenance && (finding.provenance.discovery_signal || (finding.provenance.primary_sources && finding.provenance.primary_sources.length > 0) || (finding.provenance.supporting_sources && finding.provenance.supporting_sources.length > 0))) {
+  if (
+    finding.provenance &&
+    (finding.provenance.discovery_signal ||
+      (finding.provenance.primary_sources && finding.provenance.primary_sources.length > 0) ||
+      (finding.provenance.supporting_sources && finding.provenance.supporting_sources.length > 0))
+  ) {
     return {
       discovery_signal: finding.provenance.discovery_signal || null,
       primary_sources: finding.provenance.primary_sources || [],

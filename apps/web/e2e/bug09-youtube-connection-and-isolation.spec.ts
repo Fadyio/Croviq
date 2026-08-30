@@ -103,7 +103,8 @@ const SAMPLE_DASHBOARD = {
     channel_id: "croviq_syn_ai_eng_01",
     source_type: "synthetic",
     title: "Croviq",
-    description: "Deep-dive technical tutorials, architecture walkthroughs, and production benchmarks for AI engineers.",
+    description:
+      "Deep-dive technical tutorials, architecture walkthroughs, and production benchmarks for AI engineers.",
     custom_url: "@croviq",
     subscriber_count: 51317,
     video_count: 100,
@@ -277,7 +278,9 @@ const LIVE_DASHBOARD = {
 };
 
 test.describe("Bug 9 Contract & Isolation Verification: YouTube Channel Connection", () => {
-  test("Step 7 & 10: Sample mode displays truthful metadata and visible Sample label (1440x900)", async ({ page }) => {
+  test("Step 7 & 10: Sample mode displays truthful metadata and visible Sample label (1440x900)", async ({
+    page,
+  }) => {
     await setupPageRoutes(page);
     await page.setViewportSize({ width: 1440, height: 900 });
 
@@ -321,7 +324,9 @@ test.describe("Bug 9 Contract & Isolation Verification: YouTube Channel Connecti
     await page.screenshot({ path: "e2e/screenshots/bug09-sample-mode-1440x900.png" });
   });
 
-  test("Step 3, 4: Connect button opens modal and generates truthful auth URL with server state", async ({ page }) => {
+  test("Step 3, 4: Connect button opens modal and generates truthful auth URL with server state", async ({
+    page,
+  }) => {
     await setupPageRoutes(page);
     await page.setViewportSize({ width: 1440, height: 900 });
 
@@ -351,7 +356,8 @@ test.describe("Bug 9 Contract & Isolation Verification: YouTube Channel Connecti
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          auth_url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=test-client-id&redirect_uri=http%3A%2F%2Flocalhost%3A5173%2Fapp&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyt-analytics.readonly&access_type=offline&prompt=consent&state=server_generated_csrf_state_token_12345",
+          auth_url:
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=test-client-id&redirect_uri=http%3A%2F%2Flocalhost%3A5173%2Fapp&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyt-analytics.readonly&access_type=offline&prompt=consent&state=server_generated_csrf_state_token_12345",
           state_token: "server_generated_csrf_state_token_12345",
           scopes: [
             "https://www.googleapis.com/auth/youtube.readonly",
@@ -370,8 +376,12 @@ test.describe("Bug 9 Contract & Isolation Verification: YouTube Channel Connecti
     // Verify modal is open
     const modalTitle = page.getByRole("heading", { name: "Connect YouTube Channel" });
     await expect(modalTitle).toBeVisible();
-    await expect(page.getByText("youtube.readonly (channel metadata & video catalog)")).toBeVisible();
-    await expect(page.getByText("yt-analytics.readonly (retention & views analytics)")).toBeVisible();
+    await expect(
+      page.getByText("youtube.readonly (channel metadata & video catalog)"),
+    ).toBeVisible();
+    await expect(
+      page.getByText("yt-analytics.readonly (retention & views analytics)"),
+    ).toBeVisible();
 
     await page.screenshot({ path: "e2e/screenshots/bug09-connect-modal-1440x900.png" });
 
@@ -380,7 +390,9 @@ test.describe("Bug 9 Contract & Isolation Verification: YouTube Channel Connecti
     expect(authUrlRequested).toBe(true);
   });
 
-  test("Step 8, 9, 10, 11: Live mode switches cleanly, isolates recent videos, and handles mode toggle", async ({ page }) => {
+  test("Step 8, 9, 10, 11: Live mode switches cleanly, isolates recent videos, and handles mode toggle", async ({
+    page,
+  }) => {
     await setupPageRoutes(page);
     await page.setViewportSize({ width: 1440, height: 900 });
 
@@ -437,12 +449,16 @@ test.describe("Bug 9 Contract & Isolation Verification: YouTube Channel Connecti
     await loginAndNavigateToApp(page);
 
     // 1. Verify Live Mode Dashboard is loaded
-    await expect(page.getByRole("heading", { name: "Alex Tech Engineering", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Alex Tech Engineering", exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("Connected YouTube", { exact: true })).toBeVisible();
     await expect(page.getByText("84,200 subscribers · 42 videos")).toBeVisible();
 
     // 2. Step 11: Verify Recent Videos Isolation (Live title is visible, Sample title is NOT visible)
-    await expect(page.getByText("Building Production Multi-Agent Systems on Cloud Run (Live Take)")).toBeVisible();
+    await expect(
+      page.getByText("Building Production Multi-Agent Systems on Cloud Run (Live Take)"),
+    ).toBeVisible();
     await expect(page.getByText("Google GenAI SDK Tutorial for Beginners (Part 5)")).toHaveCount(0);
 
     await page.screenshot({ path: "e2e/screenshots/bug09-live-mode-1440x900.png" });
@@ -459,15 +475,21 @@ test.describe("Bug 9 Contract & Isolation Verification: YouTube Channel Connecti
 
     // 5. Verify Sample Video is now visible and Live Video is NOT visible
     await expect(page.getByText("Google GenAI SDK Tutorial for Beginners (Part 5)")).toBeVisible();
-    await expect(page.getByText("Building Production Multi-Agent Systems on Cloud Run (Live Take)")).toHaveCount(0);
+    await expect(
+      page.getByText("Building Production Multi-Agent Systems on Cloud Run (Live Take)"),
+    ).toHaveCount(0);
 
     // 6. Switch back to Live Mode
     await selectorBtn.click();
     await page.getByRole("button", { name: /Alex Tech Engineering.*84,200 subscribers/i }).click();
 
     // 7. Verify Live Mode restored without stale Sample titles
-    await expect(page.getByRole("heading", { name: "Alex Tech Engineering", exact: true })).toBeVisible();
-    await expect(page.getByText("Building Production Multi-Agent Systems on Cloud Run (Live Take)")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Alex Tech Engineering", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Building Production Multi-Agent Systems on Cloud Run (Live Take)"),
+    ).toBeVisible();
     await expect(page.getByText("Google GenAI SDK Tutorial for Beginners (Part 5)")).toHaveCount(0);
 
     // 8. Step 13: Test Disconnect
@@ -478,12 +500,16 @@ test.describe("Bug 9 Contract & Isolation Verification: YouTube Channel Connecti
     await expect(page.getByRole("heading", { name: "Croviq", exact: true })).toBeVisible();
     await expect(page.getByText("Sample channel", { exact: true })).toBeVisible();
     await expect(page.getByText("Google GenAI SDK Tutorial for Beginners (Part 5)")).toBeVisible();
-    await expect(page.getByText("Building Production Multi-Agent Systems on Cloud Run (Live Take)")).toHaveCount(0);
+    await expect(
+      page.getByText("Building Production Multi-Agent Systems on Cloud Run (Live Take)"),
+    ).toHaveCount(0);
 
     await page.screenshot({ path: "e2e/screenshots/bug09-after-disconnect-1440x900.png" });
   });
 
-  test("Step 14: Error states in live mode show truthful error without falling back to sample (1280x800)", async ({ page }) => {
+  test("Step 14: Error states in live mode show truthful error without falling back to sample (1280x800)", async ({
+    page,
+  }) => {
     await setupPageRoutes(page);
     await page.setViewportSize({ width: 1280, height: 800 });
 

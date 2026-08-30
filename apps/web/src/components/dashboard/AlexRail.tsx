@@ -198,7 +198,9 @@ export const AlexRail: React.FC<AlexRailProps> = ({
 
                     const leadLabel = prov.discovery_signal
                       ? `Spotted on ${prov.discovery_signal.source_type}`
-                      : (prov.primary_sources[0]?.domain || prov.supporting_sources[0]?.domain || "Source");
+                      : prov.primary_sources[0]?.domain ||
+                        prov.supporting_sources[0]?.domain ||
+                        "Source";
 
                     const extraCount = totalCount - 1;
 
@@ -257,7 +259,9 @@ export const AlexRail: React.FC<AlexRailProps> = ({
                                     rel="noopener noreferrer"
                                     className="flex items-center justify-between rounded px-2 py-1 text-xs text-text-secondary hover:bg-surface-2 hover:text-primary transition-colors"
                                   >
-                                    <span className="truncate max-w-[140px] font-medium">{p.title || p.domain}</span>
+                                    <span className="truncate max-w-[140px] font-medium">
+                                      {p.title || p.domain}
+                                    </span>
                                     <div className="flex items-center gap-1 shrink-0 text-text-muted text-[10px]">
                                       <span>{p.domain}</span>
                                       <ExternalLink className="h-3 w-3 shrink-0" />
@@ -280,7 +284,9 @@ export const AlexRail: React.FC<AlexRailProps> = ({
                                     rel="noopener noreferrer"
                                     className="flex items-center justify-between rounded px-2 py-1 text-xs text-text-secondary hover:bg-surface-2 hover:text-primary transition-colors"
                                   >
-                                    <span className="truncate max-w-[140px] font-medium">{s.title || s.domain}</span>
+                                    <span className="truncate max-w-[140px] font-medium">
+                                      {s.title || s.domain}
+                                    </span>
                                     <div className="flex items-center gap-1 shrink-0 text-text-muted text-[10px]">
                                       <span>{s.domain}</span>
                                       <ExternalLink className="h-3 w-3 shrink-0" />

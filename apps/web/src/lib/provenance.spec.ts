@@ -5,7 +5,7 @@ test.describe("Research Provenance Resolution & Classification", () => {
   test("classifies Reddit URLs as COMMUNITY_SIGNAL", () => {
     const res = classifyUrlRole(
       "https://www.reddit.com/r/LocalLLaMA/comments/1vllm_benchmarks",
-      "Speculative Decoding Benchmarks — r/LocalLLaMA"
+      "Speculative Decoding Benchmarks — r/LocalLLaMA",
     );
     expect(res.role).toBe("COMMUNITY_SIGNAL");
     expect(res.sourceType).toBe("Reddit");
@@ -14,7 +14,7 @@ test.describe("Research Provenance Resolution & Classification", () => {
   test("classifies Hacker News URLs as COMMUNITY_SIGNAL", () => {
     const res = classifyUrlRole(
       "https://news.ycombinator.com/item?id=42300010",
-      "Discussion: Production Security for MCP Agent Servers"
+      "Discussion: Production Security for MCP Agent Servers",
     );
     expect(res.role).toBe("COMMUNITY_SIGNAL");
     expect(res.sourceType).toBe("Hacker News");
@@ -23,7 +23,7 @@ test.describe("Research Provenance Resolution & Classification", () => {
   test("classifies GitHub repositories as PRIMARY", () => {
     const res = classifyUrlRole(
       "https://github.com/google-github-actions/deploy-cloudrun",
-      "Deploy to Cloud Run GitHub Action"
+      "Deploy to Cloud Run GitHub Action",
     );
     expect(res.role).toBe("PRIMARY");
     expect(res.sourceType).toBe("GitHub Repository");
@@ -32,14 +32,14 @@ test.describe("Research Provenance Resolution & Classification", () => {
   test("classifies official documentation and specs as PRIMARY", () => {
     const mcp = classifyUrlRole(
       "https://modelcontextprotocol.io/specification/architecture",
-      "Model Context Protocol Architecture and Transports Specification"
+      "Model Context Protocol Architecture and Transports Specification",
     );
     expect(mcp.role).toBe("PRIMARY");
     expect(mcp.sourceType).toBe("Official Specification");
 
     const gemini = classifyUrlRole(
       "https://ai.google.dev/gemini-api/docs/models/gemini",
-      "Gemini Models — Google AI"
+      "Gemini Models — Google AI",
     );
     expect(gemini.role).toBe("PRIMARY");
     expect(gemini.sourceType).toBe("Official Documentation");
@@ -48,21 +48,21 @@ test.describe("Research Provenance Resolution & Classification", () => {
   test("classifies independent blogs and benchmarks as SUPPORTING, not PRIMARY", () => {
     const particula = classifyUrlRole(
       "https://particula.tech/blog/sglang-vs-vllm",
-      "SGLang vs vLLM in 2026: Benchmarks and When to Use Each"
+      "SGLang vs vLLM in 2026: Benchmarks and When to Use Each",
     );
     expect(particula.role).toBe("SUPPORTING");
     expect(particula.sourceType).toBe("Independent Benchmark");
 
     const spheron = classifyUrlRole(
       "https://spheron.network/blog/vllm-vs-sglang-benchmarks",
-      "vLLM vs SGLang Benchmarks: Architecture Analysis"
+      "vLLM vs SGLang Benchmarks: Architecture Analysis",
     );
     expect(spheron.role).toBe("SUPPORTING");
     expect(spheron.sourceType).toBe("Independent Benchmark");
 
     const tds = classifyUrlRole(
       "https://towardsdatascience.com/scaling-agentic-tools-with-model-context-protocol",
-      "Scaling Complex Agentic Tool Plumbing"
+      "Scaling Complex Agentic Tool Plumbing",
     );
     expect(tds.role).toBe("SUPPORTING");
     expect(tds.sourceType).toBe("Independent Analysis");

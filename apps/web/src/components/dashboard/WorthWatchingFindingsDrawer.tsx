@@ -150,7 +150,10 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
                         {prov.primary_sources.length > 0 && (
                           <div className="space-y-1">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                              Primary Source {prov.primary_sources.length > 1 ? `(${prov.primary_sources.length})` : ""}
+                              Primary Source{" "}
+                              {prov.primary_sources.length > 1
+                                ? `(${prov.primary_sources.length})`
+                                : ""}
                             </p>
                             {prov.primary_sources.map((p) => (
                               <a
@@ -176,7 +179,10 @@ export const WorthWatchingFindingsDrawer: React.FC<WorthWatchingFindingsDrawerPr
                         {prov.supporting_sources.length > 0 && (
                           <div className="space-y-1">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                              Supporting Evidence {prov.supporting_sources.length > 1 ? `(${prov.supporting_sources.length})` : ""}
+                              Supporting Evidence{" "}
+                              {prov.supporting_sources.length > 1
+                                ? `(${prov.supporting_sources.length})`
+                                : ""}
                             </p>
                             {prov.supporting_sources.map((s) => (
                               <a

@@ -58,7 +58,8 @@ const BUG07_PROVENANCE_FINDINGS = [
     run_id: "ws_demo_user_123:croviq_syn_ai_eng_01:2026-08-30T07:18:29.726229+00:00",
     channel_id: "croviq_syn_ai_eng_01",
     category: "Agent Workflows",
-    title: "Architecting Centralized Tool Registries: MCP Streamable HTTP (SSE) vs Stdio in FastAPI",
+    title:
+      "Architecting Centralized Tool Registries: MCP Streamable HTTP (SSE) vs Stdio in FastAPI",
     summary:
       "The Model Context Protocol specification clarifies architectural boundaries between local Stdio transport and remote Streamable HTTP (Server-Sent Events) transports, enabling engineers to centralize shared tool registries across multiple distributed agents.",
     why_it_matters:
@@ -177,7 +178,7 @@ const BUG07_PROVENANCE_FINDINGS = [
     why_it_matters:
       "Channel tool comparisons consistently generate peak audience retention (60%+). Engineers need empirical data to decide serving stack migrations.",
     relevance_score: 0.93,
-    freshness_score: 0.90,
+    freshness_score: 0.9,
     opportunity_score: 0.92,
     topic_cluster: "inference-engines",
     primary_entity: "SGLang",
@@ -337,7 +338,9 @@ test.describe("Bug 7 Verification: Truthful Research Source Provenance & Evidenc
     // Wait for App to mount and Ideas Worth Making section to appear
     await expect(page.getByText("Ideas Worth Making").first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("heading", { name: /PydanticAI v2\.35/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Architecting Centralized Tool Registries/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Architecting Centralized Tool Registries/i }),
+    ).toBeVisible();
     // 1. Verify Card Source Pills:
     // Finding 1 (PydanticAI) has GitHub primary + pydantic.dev supporting -> lead source is github.com (+1) (NOT fake Reddit/HN)
     await expect(page.getByText("github.com (+1)").first()).toBeVisible();
@@ -360,7 +363,9 @@ test.describe("Bug 7 Verification: Truthful Research Source Provenance & Evidenc
 
     // Wait for drawer to open
     await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "Ideas Worth Making" })).toBeVisible();
+    await expect(
+      page.getByRole("dialog").getByRole("heading", { name: "Ideas Worth Making" }),
+    ).toBeVisible();
     // Verify structured sections in drawer:
     // - "Discovered via Hacker News" on vLLM finding
     await expect(page.getByText("Discovered via Hacker News")).toBeVisible();

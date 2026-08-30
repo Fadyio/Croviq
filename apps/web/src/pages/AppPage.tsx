@@ -174,9 +174,7 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
         if (!dashResp.ok) {
           setDashboard(null);
           const errData = (await dashResp.json().catch(() => ({}))) as { detail?: string };
-          throw new Error(
-            errData.detail || "Channel intelligence could not be loaded",
-          );
+          throw new Error(errData.detail || "Channel intelligence could not be loaded");
         }
         const dashData = (await dashResp.json()) as ChannelDashboard;
         if (!cancelled && requestSeq === currentRequestSeqRef.current) {
