@@ -248,6 +248,11 @@ output "youtube_oauth_client_secret_name" {
   description = "The secret ID in Secret Manager for the YouTube OAuth application client secret."
 }
 
+output "youtube_oauth_client_id_name" {
+  value       = google_secret_manager_secret.youtube_oauth_client_id.secret_id
+  description = "The secret ID in Secret Manager for the YouTube OAuth application client ID."
+}
+
 output "ai_observability_dataset_id" {
   value       = google_bigquery_dataset.ai_observability.dataset_id
   description = "The BigQuery dataset ID for Gemini request/response observability logs."

@@ -108,7 +108,7 @@ def test_identity_platform_keeps_phone_auth_disabled() -> None:
     )
 
 def test_youtube_oauth_secret_manager_wiring_and_groq_removal() -> None:
-    """Verify YouTube OAuth secret is wired via Secret Manager, Groq is removed, and speech API is removed."""
+    """Verify YouTube OAuth secrets are wired via Secret Manager, Groq is removed, and speech API is removed."""
     content = get_infra_main_content()
 
     assert '"secretmanager.googleapis.com"' in content
@@ -133,6 +133,18 @@ def test_youtube_oauth_secret_manager_wiring_and_groq_removal() -> None:
     assert 'role      = "roles/secretmanager.secretAccessor"' in content
     assert 'member    = "serviceAccount:${google_service_account.api_runtime.email}"' in content
 
+    client_id_resource = re.search(
+        r'resource\s+"google_secret_manager_secret"\s+"youtube_oauth_client_id"\s*{(.*?)\n}',
+        content,
+        re.DOTALL,
+    )
+    assert client_id_resource is not None
+    assert 'secret_id = "youtube-oauth-client-id"' in client_id_resource.group(1)
+    assert "depends_on = [google_project_service.required_services]" in client_id_resource.group(1)
+
+    assert 'resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_client_id_accessor"' in content
+    assert 'secret_id = google_secret_manager_secret.youtube_oauth_client_id.id' in content
+
     api_service = re.search(
         r'resource\s+"google_cloud_run_v2_service"\s+"api"\s*{(.*?)\n}\n\n# Public invoker',
         content,
@@ -141,7 +153,8 @@ def test_youtube_oauth_secret_manager_wiring_and_groq_removal() -> None:
     assert api_service is not None
     assert 'name = "GOOGLE_OAUTH_CLIENT_SECRET"' in api_service.group(1)
     assert "youtube_oauth_client_secret" in api_service.group(1)
-
+    assert 'name = "GOOGLE_OAUTH_CLIENT_ID"' in api_service.group(1)
+    assert "youtube_oauth_client_id" in api_service.group(1)
 def test_cloud_run_liveness_probe_configuration() -> None:
     """Verify Cloud Run API service liveness probe has adequate timeout for heavy media execution."""
     content = get_infra_main_content()

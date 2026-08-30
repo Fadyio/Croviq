@@ -298,6 +298,30 @@ resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_se
   member    = "serviceAccount:${google_service_account.api_runtime.email}"
 }
 
+# YouTube OAuth application client ID metadata only. The owner creates secret versions outside Terraform.
+resource "google_secret_manager_secret" "youtube_oauth_client_id" {
+  project   = var.project_id
+  secret_id = "youtube-oauth-client-id"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+  }
+
+  depends_on = [google_project_service.required_services]
+}
+
+resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_client_id_accessor" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.youtube_oauth_client_id.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.api_runtime.email}"
+}
+
 # -----------------------------------------------------------------------------
 # 4b. Cloud KMS: KeyRing & CryptoKey for YouTube OAuth Token Envelope Encryption
 # -----------------------------------------------------------------------------
@@ -499,6 +523,16 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name = "GOOGLE_OAUTH_CLIENT_ID"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.youtube_oauth_client_id.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
         name = "GOOGLE_OAUTH_CLIENT_SECRET"
         value_source {
           secret_key_ref {
@@ -542,6 +576,8 @@ resource "google_cloud_run_v2_service" "api" {
     google_service_account.api_runtime,
     google_secret_manager_secret.youtube_oauth_client_secret,
     google_secret_manager_secret_iam_member.api_runtime_youtube_oauth_secret_accessor,
+    google_secret_manager_secret.youtube_oauth_client_id,
+    google_secret_manager_secret_iam_member.api_runtime_youtube_oauth_client_id_accessor,
   ]
   lifecycle {
     ignore_changes = [
