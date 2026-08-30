@@ -1053,9 +1053,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
         onConfirmPublish={handleConfirmPublish}
         isPublishing={isPublishing}
         onGrantUploadAccess={handleGrantUploadAccess}
-        onConnectYouTube={() => {
-          window.location.href = "/api/channels/youtube/connect";
-        }}
+        onConnectYouTube={handleGrantUploadAccess}
       />
     </div>
   );
