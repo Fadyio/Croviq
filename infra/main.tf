@@ -275,6 +275,11 @@ resource "google_project_iam_member" "deployer_sa_admin" {
 }
 
 # YouTube OAuth application client secret metadata only. The owner creates secret versions outside Terraform.
+import {
+  to = google_secret_manager_secret.youtube_oauth_client_secret
+  id = "projects/croviq-506602/secrets/youtube-oauth-client-secret"
+}
+
 resource "google_secret_manager_secret" "youtube_oauth_client_secret" {
   project   = var.project_id
   secret_id = "youtube-oauth-client-secret"
@@ -299,6 +304,11 @@ resource "google_secret_manager_secret_iam_member" "api_runtime_youtube_oauth_se
 }
 
 # YouTube OAuth application client ID metadata only. The owner creates secret versions outside Terraform.
+import {
+  to = google_secret_manager_secret.youtube_oauth_client_id
+  id = "projects/croviq-506602/secrets/youtube-oauth-client-id"
+}
+
 resource "google_secret_manager_secret" "youtube_oauth_client_id" {
   project   = var.project_id
   secret_id = "youtube-oauth-client-id"
