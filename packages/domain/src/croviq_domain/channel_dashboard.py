@@ -496,7 +496,7 @@ async def build_channel_dashboard(
             metric="average_retention",
             current_value=current_retention,
             previous_value=previous_retention,
-            change_percentage=_percent_change(current_retention, previous_retention),
+            change_percentage=current_retention - previous_retention,
         ),
     ]
 

@@ -34,11 +34,12 @@ const formatKpiValue = (kpi: DashboardKpi): string => {
   return compactNumber.format(Number(currentVal));
 };
 
-const formatChange = (value: number | null | undefined): string => {
+const formatChange = (value: number | null | undefined, metric?: string): string => {
   if (value === null || value === undefined || Number.isNaN(Number(value)))
     return "No comparable baseline";
   const num = Number(value);
-  return `${num >= 0 ? "+" : ""}${num.toFixed(1)}% vs previous period`;
+  const unit = metric === "average_retention" ? " pts" : "%";
+  return `${num >= 0 ? "+" : ""}${num.toFixed(1)}${unit} vs previous period`;
 };
 
 const formatDeltaPercent = (
@@ -422,7 +423,7 @@ const KpiCell: React.FC<{ kpi: DashboardKpi }> = ({ kpi }) => {
             ) : (
               <TrendingDown className="h-3 w-3" />
             ))}
-          <span>{formatChange(changeVal)}</span>
+          <span>{formatChange(changeVal, kpi.metric)}</span>
         </p>
       </div>
     </article>

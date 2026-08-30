@@ -170,3 +170,60 @@ def test_build_channel_dashboard_handles_sparse_historical_timeseries() -> None:
     )
     assert len(dashboard.trend) == 28
     assert dashboard.trend[0].views > 0
+
+
+def test_canonical_kpis_end_to_end_audit_and_independent_arithmetic() -> None:
+    provider = SampleChannelDataProvider()
+    end_date = date(2026, 8, 30)
+    dashboard = asyncio.run(
+        build_channel_dashboard(
+            provider,
+            days=28,
+            end_date=end_date,
+        )
+    )
+
+    # Verify 4 KPI metrics present in exact order
+    assert [k.metric for k in dashboard.kpis] == [
+        "views",
+        "watch_time_hours",
+        "net_subscribers",
+        "average_retention",
+    ]
+
+    kpi_map = {k.metric: k for k in dashboard.kpis}
+
+    # 1. Views
+    views_kpi = kpi_map["views"]
+    assert views_kpi.current_value == 418_498
+    assert views_kpi.previous_value == 393_494
+    assert views_kpi.change_percentage == pytest.approx(6.35435, abs=0.001)
+
+    # 2. Watch time (hours converted once from minutes)
+    wt_kpi = kpi_map["watch_time_hours"]
+    assert wt_kpi.current_value == pytest.approx(50_428.027, abs=0.01)
+    assert wt_kpi.previous_value == pytest.approx(49_811.568, abs=0.01)
+    assert wt_kpi.change_percentage == pytest.approx(1.23758, abs=0.001)
+
+    # 3. Net subscribers (gained - lost)
+    subs_kpi = kpi_map["net_subscribers"]
+    assert subs_kpi.current_value == 5_473
+    assert subs_kpi.previous_value == 5_020
+    assert subs_kpi.change_percentage == pytest.approx(9.02390, abs=0.001)
+
+    # 4. Average retention (view-weighted average, delta in percentage points)
+    ret_kpi = kpi_map["average_retention"]
+    assert ret_kpi.current_value == pytest.approx(55.75219, abs=0.001)
+    assert ret_kpi.previous_value == pytest.approx(56.49649, abs=0.001)
+    assert ret_kpi.change_percentage == pytest.approx(-0.74430, abs=0.001)
+
+    # Verify trend points match current daily series
+    assert len(dashboard.trend) == 28
+    assert dashboard.trend[0].date == date(2026, 8, 3)
+    assert dashboard.trend[-1].date == date(2026, 8, 30)
+    assert sum(p.views for p in dashboard.trend) == views_kpi.current_value
+    assert sum(p.watch_time_hours for p in dashboard.trend) == pytest.approx(wt_kpi.current_value, abs=0.001)
+    assert sum(p.net_subscribers for p in dashboard.trend) == subs_kpi.current_value
+    assert sum(p.previous_views for p in dashboard.trend) == views_kpi.previous_value
+    assert sum(p.previous_watch_time_hours for p in dashboard.trend) == pytest.approx(wt_kpi.previous_value, abs=0.001)
+    assert sum(p.previous_net_subscribers for p in dashboard.trend) == subs_kpi.previous_value

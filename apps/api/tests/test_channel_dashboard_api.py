@@ -100,3 +100,40 @@ def test_sample_channel_dashboard_rejects_unsupported_period(client: TestClient)
     )
 
     assert response.status_code == 422
+
+
+def test_sample_channel_dashboard_kpis_arithmetic_and_semantics(client: TestClient) -> None:
+    response = client.get(
+        "/api/channels/sample/dashboard?days=28&endDate=2026-08-30",
+        headers={"Authorization": "Bearer creator-token"},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    kpis = {k["metric"]: k for k in payload["kpis"]}
+
+    assert set(kpis.keys()) == {
+        "views",
+        "watch_time_hours",
+        "net_subscribers",
+        "average_retention",
+    }
+
+    # Views: raw daily sum
+    assert kpis["views"]["current_value"] == 418_498
+    assert kpis["views"]["previous_value"] == 393_494
+    assert kpis["views"]["change_percentage"] == pytest.approx(6.35435, abs=0.001)
+
+    # Watch time: minutes converted to hours once
+    assert kpis["watch_time_hours"]["current_value"] == pytest.approx(50_428.027, abs=0.01)
+    assert kpis["watch_time_hours"]["previous_value"] == pytest.approx(49_811.568, abs=0.01)
+    assert kpis["watch_time_hours"]["change_percentage"] == pytest.approx(1.23758, abs=0.001)
+
+    # Net subscribers: gained - lost
+    assert kpis["net_subscribers"]["current_value"] == 5_473
+    assert kpis["net_subscribers"]["previous_value"] == 5_020
+    assert kpis["net_subscribers"]["change_percentage"] == pytest.approx(9.02390, abs=0.001)
+
+    # Average retention: view-weighted, delta in percentage points
+    assert kpis["average_retention"]["current_value"] == pytest.approx(55.75219, abs=0.001)
+    assert kpis["average_retention"]["previous_value"] == pytest.approx(56.49649, abs=0.001)
+    assert kpis["average_retention"]["change_percentage"] == pytest.approx(-0.74430, abs=0.001)
