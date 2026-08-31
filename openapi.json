@@ -7743,6 +7743,12 @@
                 "minItems": 2
               },
               {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
                 "type": "null"
               }
             ],
@@ -7769,9 +7775,19 @@
               }
             ],
             "title": "Current Playhead Ms"
+          },
+          "active_edl_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Edl Id"
           }
         },
-        "additionalProperties": false,
         "type": "object",
         "required": ["message"],
         "title": "ProductionChatRequest"
@@ -7877,7 +7893,6 @@
             "title": "End Ms"
           }
         },
-        "additionalProperties": false,
         "type": "object",
         "required": ["type", "id", "start_ms", "end_ms"],
         "title": "ProductionChatSelectedElement"

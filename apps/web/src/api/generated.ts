@@ -1521,9 +1521,10 @@ export interface components {
     ProductionChatRequest: {
       message: string;
       editor_context?: components["schemas"]["EditorSelectionContext"] | null;
-      selected_range_ms?: unknown[] | null;
+      selected_range_ms?: unknown[] | number[] | null;
       selected_element?: components["schemas"]["ProductionChatSelectedElement"] | null;
       current_playhead_ms?: number | null;
+      active_edl_id?: string | null;
     };
     ProductionChatResponse: {
       message_id: string;
