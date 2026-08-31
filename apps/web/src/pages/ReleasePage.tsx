@@ -94,15 +94,17 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   const [isSavingMetadata, setIsSavingMetadata] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [reviewMode, setReviewMode] = useState<"original" | "edited" | "voiceover" | "final_mix">(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const m = params.get("mode");
-      if (m === "original" || m === "edited" || m === "final_mix") return m;
-      if (m === "voiceover" || m === "studio_voice") return "voiceover";
-    }
-    return "final_mix";
-  });
+  const [reviewMode, setReviewMode] = useState<"original" | "edited" | "voiceover" | "final_mix">(
+    () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const m = params.get("mode");
+        if (m === "original" || m === "edited" || m === "final_mix") return m;
+        if (m === "voiceover" || m === "studio_voice") return "voiceover";
+      }
+      return "final_mix";
+    },
+  );
   // Manual creator publish fields
   const [titleInput, setTitleInput] = useState<string>("");
   const [descriptionInput, setDescriptionInput] = useState<string>("");
@@ -132,7 +134,11 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     if (firebaseUser) {
       const token = await firebaseUser.getIdToken();
       headers.Authorization = `Bearer ${token}`;
-    } else if (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    } else if (
+      import.meta.env.DEV ||
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1"
+    ) {
       headers.Authorization =
         "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
     }
@@ -228,7 +234,10 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   }, [publishJobData?.job?.status, loadPublishStatus]);
 
   // Trigger explicit Iris Quality Control pass
-  const handleRunQA = async (forceRegenerate: boolean = true, targetMode?: "original" | "edited" | "voiceover" | "final_mix") => {
+  const handleRunQA = async (
+    forceRegenerate: boolean = true,
+    targetMode?: "original" | "edited" | "voiceover" | "final_mix",
+  ) => {
     setIsRunningQA(true);
     setErrorMessage(null);
     const modeToRun = targetMode || reviewMode;
@@ -728,8 +737,10 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                 Mode:{" "}
                 <span className="font-semibold text-text-primary">
                   {((qaData?.review?.preview_mode || reviewMode) === "original" && "Original") ||
-                    ((qaData?.review?.preview_mode || reviewMode) === "edited" && "Edited Preview") ||
-                    ((qaData?.review?.preview_mode || reviewMode) === "voiceover" && "Voiceover Preview") ||
+                    ((qaData?.review?.preview_mode || reviewMode) === "edited" &&
+                      "Edited Preview") ||
+                    ((qaData?.review?.preview_mode || reviewMode) === "voiceover" &&
+                      "Voiceover Preview") ||
                     "Final Mix"}
                 </span>
               </div>
@@ -739,18 +750,31 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
               <div className="p-4 rounded-xl bg-surface-2/60 border border-border-subtle space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-text-secondary">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-emerald-400" data-testid="iris-review-mode-label">
+                    <span
+                      className="font-bold text-emerald-400"
+                      data-testid="iris-review-mode-label"
+                    >
                       Reviewing:{" "}
                       {((qaData.review.preview_mode || reviewMode) === "original" && "Original") ||
-                        ((qaData.review.preview_mode || reviewMode) === "edited" && "Edited Preview") ||
-                        ((qaData.review.preview_mode || reviewMode) === "voiceover" && "Voiceover Preview") ||
+                        ((qaData.review.preview_mode || reviewMode) === "edited" &&
+                          "Edited Preview") ||
+                        ((qaData.review.preview_mode || reviewMode) === "voiceover" &&
+                          "Voiceover Preview") ||
                         "Final Mix"}
                     </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-surface-3 text-text-muted font-mono" data-testid="iris-reviewed-artifact-id">
-                      {qaData.review.reviewed_artifact_id || qaData.master_artifact?.artifact_id || "Source Media"}
+                    <span
+                      className="text-[10px] px-2 py-0.5 rounded bg-surface-3 text-text-muted font-mono"
+                      data-testid="iris-reviewed-artifact-id"
+                    >
+                      {qaData.review.reviewed_artifact_id ||
+                        qaData.master_artifact?.artifact_id ||
+                        "Source Media"}
                     </span>
                     {qaData.review.reviewed_voice_id && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono" data-testid="iris-reviewed-voice-id">
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono"
+                        data-testid="iris-reviewed-voice-id"
+                      >
                         Voice: {qaData.review.reviewed_voice_id}
                       </span>
                     )}

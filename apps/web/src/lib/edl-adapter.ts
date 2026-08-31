@@ -1246,9 +1246,7 @@ export function getCanonicalTranscriptProjection(
     }
   } else {
     const voSegments =
-      edl?.voiceover_segments && edl.voiceover_segments.length > 0
-        ? edl.voiceover_segments
-        : null;
+      edl?.voiceover_segments && edl.voiceover_segments.length > 0 ? edl.voiceover_segments : null;
     const corrSegments =
       correctedTranscript?.segments && correctedTranscript.segments.length > 0
         ? correctedTranscript.segments

@@ -378,27 +378,38 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                             Corrected:
                           </span>
                           <span className="text-emerald-300 font-semibold">
-                            {seg.corrected_text.trim().split(/\s+/).map((wordText, wIdx) => {
-                              const wordsList = seg.corrected_text.trim().split(/\s+/);
-                              const wordTime = segStartMs + (wIdx / Math.max(1, wordsList.length)) * Math.max(200, segEndMs - segStartMs);
-                              const isWordActive = activeProjectedWord && activeProjectedWord.text.toLowerCase() === wordText.toLowerCase() && currentTimeMs >= segStartMs && currentTimeMs <= segEndMs;
-                              return (
-                                <button
-                                  key={`corr-w-${seg.segment_id}-${wIdx}`}
-                                  ref={isWordActive ? activeWordRef : undefined}
-                                  type="button"
-                                  onClick={() => onSeek(Math.round(wordTime))}
-                                  className={`rounded-[3px] px-0.5 text-left transition-colors cursor-pointer mr-1 ${
-                                    isWordActive
-                                      ? "bg-primary font-bold text-white shadow-xs"
-                                      : "hover:bg-surface-3 text-emerald-300"
-                                  }`}
-                                  title={`Seek to ${formatTimecode(Math.round(wordTime))}`}
-                                >
-                                  {wordText}
-                                </button>
-                              );
-                            })}
+                            {seg.corrected_text
+                              .trim()
+                              .split(/\s+/)
+                              .map((wordText, wIdx) => {
+                                const wordsList = seg.corrected_text.trim().split(/\s+/);
+                                const wordTime =
+                                  segStartMs +
+                                  (wIdx / Math.max(1, wordsList.length)) *
+                                    Math.max(200, segEndMs - segStartMs);
+                                const isWordActive =
+                                  activeProjectedWord &&
+                                  activeProjectedWord.text.toLowerCase() ===
+                                    wordText.toLowerCase() &&
+                                  currentTimeMs >= segStartMs &&
+                                  currentTimeMs <= segEndMs;
+                                return (
+                                  <button
+                                    key={`corr-w-${seg.segment_id}-${wIdx}`}
+                                    ref={isWordActive ? activeWordRef : undefined}
+                                    type="button"
+                                    onClick={() => onSeek(Math.round(wordTime))}
+                                    className={`rounded-[3px] px-0.5 text-left transition-colors cursor-pointer mr-1 ${
+                                      isWordActive
+                                        ? "bg-primary font-bold text-white shadow-xs"
+                                        : "hover:bg-surface-3 text-emerald-300"
+                                    }`}
+                                    title={`Seek to ${formatTimecode(Math.round(wordTime))}`}
+                                  >
+                                    {wordText}
+                                  </button>
+                                );
+                              })}
                           </span>
                         </div>
                         {seg.reason && (
@@ -416,27 +427,37 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                       </div>
                     ) : (
                       <p className="text-[13px] leading-relaxed text-text-primary/90">
-                        {seg.corrected_text.trim().split(/\s+/).map((wordText, wIdx) => {
-                          const wordsList = seg.corrected_text.trim().split(/\s+/);
-                          const wordTime = segStartMs + (wIdx / Math.max(1, wordsList.length)) * Math.max(200, segEndMs - segStartMs);
-                          const isWordActive = activeProjectedWord && activeProjectedWord.text.toLowerCase() === wordText.toLowerCase() && currentTimeMs >= segStartMs && currentTimeMs <= segEndMs;
-                          return (
-                            <button
-                              key={`corr-w-${seg.segment_id}-${wIdx}`}
-                              ref={isWordActive ? activeWordRef : undefined}
-                              type="button"
-                              onClick={() => onSeek(Math.round(wordTime))}
-                              className={`rounded-[3px] px-0.5 text-left transition-colors cursor-pointer mr-1 ${
-                                isWordActive
-                                  ? "bg-primary font-bold text-white shadow-xs"
-                                  : "hover:bg-surface-3 text-text-primary"
-                              }`}
-                              title={`Seek to ${formatTimecode(Math.round(wordTime))}`}
-                            >
-                              {wordText}
-                            </button>
-                          );
-                        })}
+                        {seg.corrected_text
+                          .trim()
+                          .split(/\s+/)
+                          .map((wordText, wIdx) => {
+                            const wordsList = seg.corrected_text.trim().split(/\s+/);
+                            const wordTime =
+                              segStartMs +
+                              (wIdx / Math.max(1, wordsList.length)) *
+                                Math.max(200, segEndMs - segStartMs);
+                            const isWordActive =
+                              activeProjectedWord &&
+                              activeProjectedWord.text.toLowerCase() === wordText.toLowerCase() &&
+                              currentTimeMs >= segStartMs &&
+                              currentTimeMs <= segEndMs;
+                            return (
+                              <button
+                                key={`corr-w-${seg.segment_id}-${wIdx}`}
+                                ref={isWordActive ? activeWordRef : undefined}
+                                type="button"
+                                onClick={() => onSeek(Math.round(wordTime))}
+                                className={`rounded-[3px] px-0.5 text-left transition-colors cursor-pointer mr-1 ${
+                                  isWordActive
+                                    ? "bg-primary font-bold text-white shadow-xs"
+                                    : "hover:bg-surface-3 text-text-primary"
+                                }`}
+                                title={`Seek to ${formatTimecode(Math.round(wordTime))}`}
+                              >
+                                {wordText}
+                              </button>
+                            );
+                          })}
                       </p>
                     )}
                   </article>

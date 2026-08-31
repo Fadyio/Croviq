@@ -239,10 +239,15 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
 
                   {/* Compact action / result row (Priority 7) */}
                   {message.tool_executions && message.tool_executions.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5" aria-label="Action status">
+                    <div
+                      className="flex flex-wrap items-center gap-1.5 pt-0.5"
+                      aria-label="Action status"
+                    >
                       {message.tool_executions.map((tool, index) => {
                         const reasonText =
-                          tool.output && typeof tool.output === "object" && (tool.output as Record<string, unknown>).reason
+                          tool.output &&
+                          typeof tool.output === "object" &&
+                          (tool.output as Record<string, unknown>).reason
                             ? String((tool.output as Record<string, unknown>).reason)
                             : tool.goal || toolDisplayName(tool);
 
@@ -252,7 +257,9 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
                             className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-2 border border-border-subtle text-[10px] text-text-secondary"
                           >
                             <Check className="size-3 text-emerald-400 shrink-0" />
-                            <span className="font-medium text-text-primary truncate max-w-xs">{reasonText}</span>
+                            <span className="font-medium text-text-primary truncate max-w-xs">
+                              {reasonText}
+                            </span>
                           </div>
                         );
                       })}

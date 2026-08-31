@@ -1,6 +1,9 @@
 name: Deploy
 
 on:
+  push:
+    branches:
+      - main
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -12,7 +15,6 @@ on:
         description: "Git commit SHA to deploy (defaults to HEAD)"
         required: false
         type: string
-
 permissions:
   id-token: write
   contents: read
@@ -25,17 +27,17 @@ jobs:
   resolve-commit:
     name: Resolve Target Commit
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
     steps:
       - name: Resolve Commit SHA
         id: resolve
         run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
-          elif [ -n "${{ github.event.inputs.git_sha }}" ]; then
+          if [ -n "${{ github.event.inputs.git_sha }}" ]; then
             echo "sha=${{ github.event.inputs.git_sha }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
           else
             echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
           fi

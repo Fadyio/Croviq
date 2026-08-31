@@ -1,11 +1,4 @@
-import {
-  AlertCircle,
-  Check,
-  Loader2,
-  Mic,
-  Square,
-  Volume2,
-} from "lucide-react";
+import { AlertCircle, Check, Loader2, Mic, Square, Volume2 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/generated";
 import type { MediaOutputStatus } from "../../lib/edl-adapter";
@@ -165,7 +158,11 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
         let token = "";
         if (getAuthToken) {
           token = await getAuthToken();
-        } else if (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+        } else if (
+          import.meta.env.DEV ||
+          window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1"
+        ) {
           token =
             "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
         }
@@ -289,8 +286,7 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
       <div className="space-y-1.5" role="radiogroup" aria-label="Available Studio Voices">
         {effectiveVoices.map((voice) => {
           const isSelected = activeVoiceId.toLowerCase() === voice.voice_id.toLowerCase();
-          const isCurrentGenerating =
-            isGeneratingVoiceover && generatingVoiceId === voice.voice_id;
+          const isCurrentGenerating = isGeneratingVoiceover && generatingVoiceId === voice.voice_id;
           const isAuditioning = playingVoiceId === voice.voice_id;
           const isAuditionLoading = loadingAuditionVoiceId === voice.voice_id;
 

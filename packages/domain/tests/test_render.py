@@ -13,6 +13,7 @@ from croviq_domain.render import (
 
 
 def test_artifact_type_values():
+    assert ArtifactType.SOURCE == "SOURCE"
     assert ArtifactType.PREVIEW == "PREVIEW"
     assert ArtifactType.MASTER == "MASTER"
     assert ArtifactType.SHORT == "SHORT"
@@ -21,6 +22,7 @@ def test_artifact_type_values():
     assert ArtifactType.STUDIO_VOICE_MASTER == "STUDIO_VOICE_MASTER"
     assert ArtifactType.FINAL_MIX == "FINAL_MIX"
     assert set(ArtifactType) == {
+        ArtifactType.SOURCE,
         ArtifactType.PREVIEW,
         ArtifactType.MASTER,
         ArtifactType.SHORT,

@@ -23,7 +23,11 @@ async function sleep(ms: number): Promise<void> {
   return promise;
 }
 
-const setupPageAuthAndNavigate = async (page: Page, mode?: string, targetPage: "editor" | "release" = "editor") => {
+const setupPageAuthAndNavigate = async (
+  page: Page,
+  mode?: string,
+  targetPage: "editor" | "release" = "editor",
+) => {
   await page.addInitScript((user) => {
     localStorage.setItem("croviq_dev_auth_user", JSON.stringify(user));
   }, APPROVED_USER);
@@ -84,9 +88,14 @@ const setupPageAuthAndNavigate = async (page: Page, mode?: string, targetPage: "
     });
   });
 
-  const targetUrl = targetPage === "release"
-    ? (mode ? `${BASE_URL}/productions/${PRODUCTION_ID}/release?mode=${mode}` : `${BASE_URL}/productions/${PRODUCTION_ID}/release`)
-    : (mode ? `${BASE_URL}/productions/${PRODUCTION_ID}/editor?mode=${mode}` : `${BASE_URL}/productions/${PRODUCTION_ID}/editor`);
+  const targetUrl =
+    targetPage === "release"
+      ? mode
+        ? `${BASE_URL}/productions/${PRODUCTION_ID}/release?mode=${mode}`
+        : `${BASE_URL}/productions/${PRODUCTION_ID}/release`
+      : mode
+        ? `${BASE_URL}/productions/${PRODUCTION_ID}/editor?mode=${mode}`
+        : `${BASE_URL}/productions/${PRODUCTION_ID}/editor`;
 
   await page.goto(targetUrl);
   if (targetPage === "editor") {
@@ -101,7 +110,9 @@ test.describe("BUG 27 — Final Editor Demo Polish Golden Acceptance Suite", () 
     test.setTimeout(90000);
   });
 
-  test("CASE A — Navbar: all 4 preview modes visible across 1600x900, 1440x900, 1280x800", async ({ page }) => {
+  test("CASE A — Navbar: all 4 preview modes visible across 1600x900, 1440x900, 1280x800", async ({
+    page,
+  }) => {
     await setupPageAuthAndNavigate(page);
 
     const resolutions = [
@@ -131,14 +142,19 @@ test.describe("BUG 27 — Final Editor Demo Polish Golden Acceptance Suite", () 
     }
   });
 
-  test("CASE B — Iris / Original: reviews source artifact and states Original", async ({ page }) => {
+  test("CASE B — Iris / Original: reviews source artifact and states Original", async ({
+    page,
+  }) => {
     await setupPageAuthAndNavigate(page, "original", "release");
 
     const origBtn = page.locator("[data-testid='btn-review-mode-original']");
     await origBtn.click();
 
     await page.waitForFunction(
-      () => document.querySelector("[data-testid='iris-review-mode-label']")?.textContent?.includes("Original"),
+      () =>
+        document
+          .querySelector("[data-testid='iris-review-mode-label']")
+          ?.textContent?.includes("Original"),
       { timeout: 60000 },
     );
     const label = await page.locator("[data-testid='iris-review-mode-label']").textContent();
@@ -155,21 +171,29 @@ test.describe("BUG 27 — Final Editor Demo Polish Golden Acceptance Suite", () 
     await editBtn.click();
 
     await page.waitForFunction(
-      () => document.querySelector("[data-testid='iris-review-mode-label']")?.textContent?.includes("Edited Preview"),
+      () =>
+        document
+          .querySelector("[data-testid='iris-review-mode-label']")
+          ?.textContent?.includes("Edited Preview"),
       { timeout: 60000 },
     );
     const label = await page.locator("[data-testid='iris-review-mode-label']").textContent();
     expect(label).toContain("Reviewing: Edited Preview");
   });
 
-  test("CASE D — Iris / Voiceover: reviews Voiceover Preview with exact rendered voice", async ({ page }) => {
+  test("CASE D — Iris / Voiceover: reviews Voiceover Preview with exact rendered voice", async ({
+    page,
+  }) => {
     await setupPageAuthAndNavigate(page, "voiceover", "release");
 
     const voBtn = page.locator("[data-testid='btn-review-mode-voiceover']");
     await voBtn.click();
 
     await page.waitForFunction(
-      () => document.querySelector("[data-testid='iris-review-mode-label']")?.textContent?.includes("Voiceover Preview"),
+      () =>
+        document
+          .querySelector("[data-testid='iris-review-mode-label']")
+          ?.textContent?.includes("Voiceover Preview"),
       { timeout: 60000 },
     );
     const label = await page.locator("[data-testid='iris-review-mode-label']").textContent();
@@ -183,13 +207,18 @@ test.describe("BUG 27 — Final Editor Demo Polish Golden Acceptance Suite", () 
     await fmBtn.click();
 
     await page.waitForFunction(
-      () => document.querySelector("[data-testid='iris-review-mode-label']")?.textContent?.includes("Final Mix"),
+      () =>
+        document
+          .querySelector("[data-testid='iris-review-mode-label']")
+          ?.textContent?.includes("Final Mix"),
       { timeout: 60000 },
     );
     const label = await page.locator("[data-testid='iris-review-mode-label']").textContent();
     expect(label).toContain("Reviewing: Final Mix");
   });
-  test("CASE F & G — Voice selection & Audition: 8 voices available, select triggers auto-regen, audition does not change video", async ({ page }) => {
+  test("CASE F & G — Voice selection & Audition: 8 voices available, select triggers auto-regen, audition does not change video", async ({
+    page,
+  }) => {
     await setupPageAuthAndNavigate(page, "studio_voice");
 
     // Open Studio Voice tab
@@ -234,7 +263,9 @@ test.describe("BUG 27 — Final Editor Demo Polish Golden Acceptance Suite", () 
     await expect(page.locator("text=Edited time")).toBeVisible();
   });
 
-  test("CASE J & K — Transcript / Voiceover & Final Mix with Player Caption Overlay", async ({ page }) => {
+  test("CASE J & K — Transcript / Voiceover & Final Mix with Player Caption Overlay", async ({
+    page,
+  }) => {
     await setupPageAuthAndNavigate(page, "studio_voice");
 
     const playerOverlay = page.locator("[data-testid='player-caption-overlay']");
@@ -243,7 +274,9 @@ test.describe("BUG 27 — Final Editor Demo Polish Golden Acceptance Suite", () 
     await expect(stage).toBeVisible();
   });
 
-  test("CASE L — Music: default prompt is understated YouTube background music", async ({ page }) => {
+  test("CASE L — Music: default prompt is understated YouTube background music", async ({
+    page,
+  }) => {
     await setupPageAuthAndNavigate(page);
 
     const musicTab = page.locator("[data-testid='tab-music']");
@@ -254,7 +287,9 @@ test.describe("BUG 27 — Final Editor Demo Polish Golden Acceptance Suite", () 
     expect(DEFAULT_MUSIC_PROMPT).toContain("unobtrusive under narration");
   });
 
-  test("CASE M — Chat UX: clean composer, context attachment chip, no bulky tool boxes", async ({ page }) => {
+  test("CASE M — Chat UX: clean composer, context attachment chip, no bulky tool boxes", async ({
+    page,
+  }) => {
     await setupPageAuthAndNavigate(page);
 
     const chatTab = page.locator("[data-testid='tab-chat-leo']");

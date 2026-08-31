@@ -607,6 +607,7 @@ export interface components {
     };
     ArtifactStatus: "pending" | "rendering" | "completed" | "failed";
     ArtifactType:
+      | "SOURCE"
       | "PREVIEW"
       | "MASTER"
       | "SHORT"

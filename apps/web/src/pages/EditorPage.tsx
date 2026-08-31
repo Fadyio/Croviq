@@ -199,7 +199,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     let token = "";
     if (firebaseUser) {
       token = await firebaseUser.getIdToken();
-    } else if (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    } else if (
+      import.meta.env.DEV ||
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1"
+    ) {
       token =
         "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
     } else {
@@ -716,7 +720,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     if (firebaseUser) {
       return firebaseUser.getIdToken();
     }
-    if (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    if (
+      import.meta.env.DEV ||
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1"
+    ) {
       return "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
     }
     throw new Error("Authentication required");
@@ -886,7 +894,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         setIsGeneratingVoiceover(false);
       }
     },
-    [getAuthToken, loadPersistedData, mediaOutputs.voiceover, currentVoiceoverVoiceId, productionId, setPreviewMode],
+    [
+      getAuthToken,
+      loadPersistedData,
+      mediaOutputs.voiceover,
+      currentVoiceoverVoiceId,
+      productionId,
+      setPreviewMode,
+    ],
   );
 
   const handleGenerateVoiceover = useCallback(async () => {

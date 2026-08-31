@@ -3502,6 +3502,7 @@
       "ArtifactType": {
         "type": "string",
         "enum": [
+          "SOURCE",
           "PREVIEW",
           "MASTER",
           "SHORT",
@@ -6475,6 +6476,18 @@
             "title": "Force Regenerate",
             "description": "Whether to bypass cached review and execute a fresh Iris QA pass",
             "default": false
+          },
+          "preview_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Mode",
+            "description": "Explicit preview mode to review: original | edited | voiceover | final_mix"
           }
         },
         "additionalProperties": false,
@@ -8640,6 +8653,48 @@
             "format": "date-time",
             "title": "Created At",
             "description": "UTC timestamp of evaluation generation"
+          },
+          "preview_mode": {
+            "type": "string",
+            "title": "Preview Mode",
+            "description": "Reviewed preview mode: original | edited | voiceover | final_mix",
+            "default": "final_mix"
+          },
+          "reviewed_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed Artifact Id",
+            "description": "Exact RenderArtifact ID or source artifact ID reviewed"
+          },
+          "reviewed_artifact_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed Artifact Uri",
+            "description": "Exact GCS URI or object reviewed"
+          },
+          "reviewed_voice_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed Voice Id",
+            "description": "Rendered voice ID if voiceover or final_mix"
           },
           "edl_id": {
             "anyOf": [
