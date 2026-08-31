@@ -456,14 +456,14 @@ class FFmpegRenderService(RenderService):
         music_volume_db: float = -24.0,
         music_ducking_db: float = -14.0,
         is_voiceover_replacement: bool = False,
+        is_final_mix: bool = False,
     ) -> tuple[str | None, list[str]]:
         """Build the cut, narration, and speech-ducked music graph."""
         num_segs = len(keep_segments)
         if num_segs == 0:
             raise RenderError("Cannot render EDL with zero keep segments")
-
         total_target_dur_s = sum(max(0.001, (e - s) / 1000.0) for s, e in keep_segments)
-
+        has_music = music_path is not None
         # 1. Voiceover Preview pure replacement mode (ZERO source audio stream in graph)
         if is_voiceover_replacement:
             if not has_narration:
@@ -491,6 +491,58 @@ class FFmpegRenderService(RenderService):
             full_filter = ";".join(video_filters + [vconcat] + [audio_chain])
             return full_filter, ["-map", "[vout]", "-map", "[aout]"]
 
+        # 2. Final Mix mode (ZERO creator source audio stream in graph: Video cuts + Voiceover Narration + Ducked Background Music)
+        if is_final_mix:
+            if not has_narration:
+                raise RenderError("Final mix requires a valid narration audio input")
+            video_filters = []
+            video_inputs = []
+            for i, (start_ms, end_ms) in enumerate(keep_segments):
+                start_s = start_ms / 1000.0
+                end_s = end_ms / 1000.0
+                video_filters.append(
+                    f"[0:v]trim=start={start_s:.4f}:end={end_s:.4f},setpts=PTS-STARTPTS[v{i}]"
+                )
+                video_inputs.append(f"[v{i}]")
+
+            audio_parts: list[str] = [
+                f"[1:a]atrim=start=0:end={total_target_dur_s:.4f},asetpts=PTS-STARTPTS,"
+                f"apad=whole_dur={total_target_dur_s:.4f}[a_narr]"
+            ]
+
+            if has_music:
+                conds = [f"between(t,{s/1000.0:.3f},{e/1000.0:.3f})" for s, e in (speech_intervals_ms or [])]
+                if conds:
+                    music_gain = 10 ** (music_ducking_db / 20.0)
+                    music_ducking_cond = f"if({'+'.join(conds)},{music_gain:.6f},1.0)"
+                else:
+                    music_ducking_cond = "1.0"
+
+                fade_out_s = min(2.5, total_target_dur_s / 2.0)
+                fade_out_start = max(0.0, total_target_dur_s - fade_out_s)
+
+                audio_parts.append(
+                    f"[{music_input_idx}:a]atrim=start=0:end={total_target_dur_s:.4f},asetpts=PTS-STARTPTS,"
+                    f"afade=t=in:st=0:d=1.5,afade=t=out:st={fade_out_start:.3f}:d={fade_out_s:.3f},"
+                    f"volume={music_volume_db:.2f}dB,"
+                    f"volume='{music_ducking_cond}':eval=frame[a_music]"
+                )
+                audio_parts.append(
+                    "[a_narr][a_music]amix=inputs=2:duration=first:dropout_transition=0.5,"
+                    "loudnorm=I=-16:TP=-1.5:LRA=10,alimiter=limit=0.85:level=false[aout]"
+                )
+            else:
+                audio_parts.append(
+                    "[a_narr]loudnorm=I=-16:TP=-1.5:LRA=10,alimiter=limit=0.85:level=false[aout]"
+                )
+
+            audio_chain = ";".join(audio_parts)
+            if num_segs == 1 and keep_segments[0][0] == 0 and keep_segments[0][1] >= source_duration_ms:
+                return audio_chain, ["-map", "0:v", "-map", "[aout]"]
+
+            vconcat = f"{''.join(video_inputs)}concat=n={num_segs}:v=1:a=0[vout]"
+            full_filter = ";".join(video_filters + [vconcat] + [audio_chain])
+            return full_filter, ["-map", "[vout]", "-map", "[aout]"]
         ducking_cond = "1.0"
         if speech_intervals_ms:
             conds = [f"between(t,{s/1000.0:.3f},{e/1000.0:.3f})" for s, e in speech_intervals_ms]
@@ -631,6 +683,7 @@ class FFmpegRenderService(RenderService):
         has_music = music_path is not None and Path(music_path).exists()
         music_input_idx = 1 + int(has_narration)
         is_voiceover_replacement = (artifact_type == ArtifactType.VOICEOVER_PREVIEW)
+        is_final_mix = (artifact_type == ArtifactType.FINAL_MIX)
 
         filter_graph, map_args = self._build_filtergraph(
             keep_segments,
@@ -642,6 +695,7 @@ class FFmpegRenderService(RenderService):
             music_volume_db=music_volume_db,
             music_ducking_db=music_ducking_db,
             is_voiceover_replacement=is_voiceover_replacement,
+            is_final_mix=is_final_mix,
         )
         cmd = [
             ffmpeg_bin,

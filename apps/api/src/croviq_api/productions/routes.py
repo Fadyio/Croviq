@@ -1338,22 +1338,39 @@ async def _execute_render_for_production(
         edl_id=edl.edl_id,
         artifact_type=artifact_type,
     )
+    is_cache_valid = True
     if existing_artifact and existing_artifact.status == ArtifactStatus.completed:
-        meta = await media_storage.get_object_metadata(
-            existing_artifact.gcs_bucket,
-            existing_artifact.gcs_object,
-        )
-        if meta.exists:
-            signed_target = await media_storage.generate_signed_read_target(
-                bucket=existing_artifact.gcs_bucket,
-                object_name=existing_artifact.gcs_object,
-                expiry_seconds=settings.signed_url_expiry_seconds,
+        if existing_artifact.edl_version is not None and existing_artifact.edl_version != edl.version:
+            is_cache_valid = False
+        elif artifact_type == ArtifactType.FINAL_MIX:
+            expected_music_obj = edl.background_music.music_gcs_object if edl.background_music else None
+            expected_vol = edl.background_music.volume_db if edl.background_music else None
+            expected_duck = edl.background_music.ducking_db if edl.background_music else None
+            expected_mute = edl.background_music.is_muted if edl.background_music else None
+            if existing_artifact.music_gcs_object != expected_music_obj:
+                is_cache_valid = False
+            elif existing_artifact.music_volume_db is not None and existing_artifact.music_volume_db != expected_vol:
+                is_cache_valid = False
+            elif existing_artifact.music_ducking_db is not None and existing_artifact.music_ducking_db != expected_duck:
+                is_cache_valid = False
+            elif existing_artifact.music_is_muted is not None and existing_artifact.music_is_muted != expected_mute:
+                is_cache_valid = False
+        if is_cache_valid:
+            meta = await media_storage.get_object_metadata(
+                existing_artifact.gcs_bucket,
+                existing_artifact.gcs_object,
             )
-            return RenderArtifactResponse.from_domain(
-                artifact=existing_artifact,
-                playback_url=signed_target.read_url,
-                playback_expires_at=signed_target.expires_at,
-            )
+            if meta.exists:
+                signed_target = await media_storage.generate_signed_read_target(
+                    bucket=existing_artifact.gcs_bucket,
+                    object_name=existing_artifact.gcs_object,
+                    expiry_seconds=settings.signed_url_expiry_seconds,
+                )
+                return RenderArtifactResponse.from_domain(
+                    artifact=existing_artifact,
+                    playback_url=signed_target.read_url,
+                    playback_expires_at=signed_target.expires_at,
+                )
 
     # 2. Execute deterministic render
     artifact_id = f"art_{uuid.uuid4().hex[:12]}"
@@ -1382,7 +1399,7 @@ async def _execute_render_for_production(
         tmp_path = Path(tmpdir)
         local_src = tmp_path / "source.mp4"
         local_out = tmp_path / f"{artifact_type.value.lower()}.mp4"
-
+        sv_res = None
         try:
             await media_storage.download_object_to_path(
                 bucket=gcs_bucket,
@@ -1467,39 +1484,85 @@ async def _execute_render_for_production(
                     output_path=local_out,
                 )
             elif artifact_type == ArtifactType.FINAL_MIX:
-                local_music = tmp_path / "music.wav"
+                local_music = None
+                if edl.background_music and edl.background_music.music_gcs_object:
+                    local_music = tmp_path / "music.wav"
+                    try:
+                        await media_storage.download_object_to_path(
+                            bucket=gcs_bucket,
+                            object_name=edl.background_music.music_gcs_object,
+                            target_path=local_music,
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to download background music %s: %s; generating on-demand", edl.background_music.music_gcs_object, exc)
+                        music_bytes, _, dur_ms = await genai_client.generate_background_music(
+                            prompt=edl.background_music.prompt or "Minimal modern technology documentary underscore.",
+                            duration_s=max(5, int(edl.estimated_target_duration_ms / 1000) + 1),
+                            model_id=edl.background_music.model_id or "lyria-3-pro-preview",
+                            production_id=prod.production_id,
+                        )
+                        local_music.write_bytes(music_bytes)
+
                 target_dur_ms = edl.estimated_target_duration_ms
-                music_bytes, _, _ = await genai_client.generate_background_music(
-                    prompt="Minimal modern technology documentary underscore. Warm subtle synthesizer pads, restrained soft electronic pulse, very sparse percussion, calm focused mood, clean professional mix, instrumental only, consistent low intensity throughout. Designed to sit quietly underneath spoken tutorial narration.",
-                    duration_s=int(target_dur_ms / 1000) + 1,
-                    model_id=edl.background_music.model_id if edl.background_music else "lyria-3-pro-preview",
-                    production_id=prod.production_id,
-                )
-                local_music.write_bytes(music_bytes)
-                local_narr = None
+                local_narr = tmp_path / "voiceover.wav"
                 speech_intervals = []
-                if edl.voiceover_segments:
-                    local_narr = tmp_path / "voiceover.wav"
-                    total_samples = int(24_000 * target_dur_ms / 1000)
-                    track = bytearray(total_samples * 2)
-                    for seg in edl.voiceover_segments:
+                sv_res = await studio_voice_repo.get_by_production_id(prod.production_id) if studio_voice_repo else None
+
+                if sv_res and sv_res.status == "completed" and sv_res.gcs_object and (sv_res.edl_id is None or sv_res.edl_id == edl.edl_id):
+                    await media_storage.download_object_to_path(
+                        bucket=gcs_bucket,
+                        object_name=sv_res.gcs_object,
+                        target_path=local_narr,
+                    )
+                    segs = sv_res.segments if sv_res.segments else (edl.voiceover_segments or [])
+                    for seg in segs:
                         ed_start = map_source_time_to_edited(seg.source_start_ms, edl)
                         ed_end = map_source_time_to_edited(seg.source_end_ms, edl)
                         speech_intervals.append((ed_start, ed_end))
-                        dur_ms, pcm = await genai_client.synthesize_studio_voice(
-                            text=seg.text,
-                            voice_id=seg.voice_id or "Puck",
-                            production_id=prod.production_id,
-                        )
-                        start_byte = int(24_000 * ed_start / 1000) * 2
-                        copy_len = min(len(pcm), len(track) - start_byte)
-                        if copy_len > 0 and start_byte < len(track):
-                            track[start_byte:start_byte + copy_len] = pcm[:copy_len]
-                    with wave.open(str(local_narr), "wb") as wf:
-                        wf.setnchannels(1)
-                        wf.setsampwidth(2)
-                        wf.setframerate(24_000)
-                        wf.writeframes(track)
+                else:
+                    voiceover_segs = edl.voiceover_segments or []
+                    if not voiceover_segs and sv_res and sv_res.segments:
+                        voiceover_segs = [
+                            VoiceoverSegment(
+                                segment_id=s.segment_id,
+                                source_start_ms=s.source_start_ms,
+                                source_end_ms=s.source_end_ms,
+                                text=s.text,
+                                original_text=s.original_text,
+                                voice_id=s.voice_id or (sv_res.voice_id if sv_res else "Puck"),
+                                generated_duration_ms=s.target_duration_ms,
+                            )
+                            for s in sv_res.segments
+                        ]
+
+                    if voiceover_segs and genai_client:
+                        total_samples = int(24_000 * target_dur_ms / 1000)
+                        track = bytearray(total_samples * 2)
+                        for seg in voiceover_segs:
+                            ed_start = map_source_time_to_edited(seg.source_start_ms, edl)
+                            ed_end = map_source_time_to_edited(seg.source_end_ms, edl)
+                            speech_intervals.append((ed_start, ed_end))
+                            dur_ms, pcm = await genai_client.synthesize_studio_voice(
+                                text=seg.text,
+                                voice_id=seg.voice_id or (sv_res.voice_id if sv_res else "Puck"),
+                                production_id=prod.production_id,
+                            )
+                            start_byte = int(24_000 * ed_start / 1000) * 2
+                            copy_len = min(len(pcm), len(track) - start_byte)
+                            if copy_len > 0 and start_byte < len(track):
+                                track[start_byte:start_byte + copy_len] = pcm[:copy_len]
+                        with wave.open(str(local_narr), "wb") as wf:
+                            wf.setnchannels(1)
+                            wf.setsampwidth(2)
+                            wf.setframerate(24_000)
+                            wf.writeframes(track)
+
+                if not local_narr.exists() or local_narr.stat().st_size == 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Voiceover narration audio has not been generated for the active EDL",
+                    )
+
                 render_res = await asyncio.to_thread(
                     render_service.render_final_mix,
                     source_path=local_src,
@@ -1508,7 +1571,7 @@ async def _execute_render_for_production(
                     narration_audio_path=local_narr,
                     speech_intervals_ms=speech_intervals if speech_intervals else None,
                     output_path=local_out,
-                    music_volume_db=edl.background_music.volume_db if edl.background_music else -24.0,
+                    music_volume_db=edl.background_music.volume_db if (edl.background_music and not edl.background_music.is_muted) else -24.0,
                     music_ducking_db=edl.background_music.ducking_db if edl.background_music else -14.0,
                 )
             else:
@@ -1530,6 +1593,13 @@ async def _execute_render_for_production(
                 artifact_id=artifact_id,
                 production_id=prod.production_id,
                 edl_id=edl.edl_id,
+                edl_version=edl.version,
+                voice_id=sv_res.voice_id if sv_res else None,
+                voiceover_artifact_id=sv_res.preview_artifact_id if sv_res else None,
+                music_gcs_object=edl.background_music.music_gcs_object if edl.background_music else None,
+                music_volume_db=edl.background_music.volume_db if edl.background_music else None,
+                music_ducking_db=edl.background_music.ducking_db if edl.background_music else None,
+                music_is_muted=edl.background_music.is_muted if edl.background_music else None,
                 artifact_type=artifact_type,
                 status=ArtifactStatus.completed,
                 gcs_bucket=gcs_bucket,
@@ -1547,7 +1617,6 @@ async def _execute_render_for_production(
                 failure_code=None,
             )
             await render_repo.save_render_artifact(artifact)
-
             log_render_event(
                 event_type=EventType.RENDER_COMPLETED,
                 production_id=prod.production_id,
@@ -1706,6 +1775,7 @@ async def render_final_mix_video(
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     render_service: Annotated[RenderService, Depends(get_render_service)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
+    studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
     genai_client: Annotated[Any, Depends(get_genai_client)],
 ) -> RenderArtifactResponse:
     return await _execute_render_for_production(
@@ -1718,9 +1788,9 @@ async def render_final_mix_video(
         render_repo=render_repo,
         render_service=render_service,
         media_storage=media_storage,
+        studio_voice_repo=studio_voice_repo,
         genai_client=genai_client,
     )
-
 @router.post(
     "/productions/{production_id}/music/generate",
     response_model=EDLDetailResponse,
@@ -1757,7 +1827,8 @@ async def generate_production_music(
         model_id=body.model_id,
         production_id=production_id,
     )
-    object_name = f"workspaces/{prod.workspace_id}/productions/{production_id}/music/lyria_underscore.wav"
+    artifact_id = f"art_mus_{uuid.uuid4().hex[:8]}"
+    object_name = f"workspaces/{prod.workspace_id}/productions/{production_id}/music/{artifact_id}.wav"
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_f:
         tmp_f.write(wav_bytes)
         tmp_wav_path = Path(tmp_f.name)
@@ -1779,6 +1850,7 @@ async def generate_production_music(
         ducking_db=body.ducking_db,
         target_lufs=-32.0,
         music_gcs_object=object_name,
+        preview_artifact_id=artifact_id,
         is_muted=False,
     )
     updated_edl = edl.model_copy(update={
@@ -2084,10 +2156,69 @@ async def get_production_playback_urls(
         status=voiceover_status,
         voice_id=sv_res.voice_id if sv_res else None,
     )
-    final_mix_state = _build_state(fm_art, final_mix_url, has_prior=has_prior_fm)
+    # Final Mix strict lineage and freshness verification
+    fm_status = "unavailable"
+    fm_available = False
+    fm_url: str | None = None
+    fm_artifact_id: str | None = None
+
+    if fm_art:
+        s_val = (fm_art.status.value if hasattr(fm_art.status, "value") else str(fm_art.status)).lower()
+        if s_val in ("rendering", "pending"):
+            fm_status = "generating"
+        elif s_val == "failed":
+            fm_status = "failed"
+        elif s_val == "completed":
+            is_stale = False
+            if not latest_edl or fm_art.edl_id != latest_edl.edl_id:
+                is_stale = True
+            elif fm_art.edl_version is not None and fm_art.edl_version != latest_edl.version:
+                is_stale = True
+            elif voiceover_status in ("needs_regeneration", "failed", "incomplete"):
+                is_stale = True
+            elif voiceover_status == "unavailable" and not (latest_edl and latest_edl.voiceover_segments):
+                is_stale = True
+            elif sv_res and sv_res.preview_artifact_id and fm_art.voiceover_artifact_id and fm_art.voiceover_artifact_id != sv_res.preview_artifact_id:
+                is_stale = True
+            elif voice_cfg and fm_art.voice_id and fm_art.voice_id != voice_cfg.selected_voice:
+                is_stale = True
+            elif latest_edl and latest_edl.background_music:
+                if fm_art.music_gcs_object != latest_edl.background_music.music_gcs_object:
+                    is_stale = True
+                elif fm_art.music_volume_db is not None and fm_art.music_volume_db != latest_edl.background_music.volume_db:
+                    is_stale = True
+                elif fm_art.music_ducking_db is not None and fm_art.music_ducking_db != latest_edl.background_music.ducking_db:
+                    is_stale = True
+                elif fm_art.music_is_muted is not None and fm_art.music_is_muted != latest_edl.background_music.is_muted:
+                    is_stale = True
+            elif (latest_edl is None or latest_edl.background_music is None) and fm_art.music_gcs_object is not None:
+                is_stale = True
+
+            if is_stale:
+                fm_status = "needs_regeneration"
+            elif final_mix_url:
+                fm_status = "ready"
+                fm_available = True
+                fm_url = final_mix_url
+                fm_artifact_id = fm_art.artifact_id
+            else:
+                fm_status = "unavailable"
+        else:
+            fm_status = "unavailable"
+    elif has_prior_fm:
+        fm_status = "needs_regeneration"
+
+    final_mix_state = MediaOutputState(
+        available=fm_available,
+        artifact_id=fm_artifact_id,
+        edl_id=active_edl_id,
+        url=fm_url,
+        duration_ms=fm_art.duration_ms if (fm_art and fm_available) else (latest_edl.estimated_target_duration_ms if latest_edl else 0),
+        status=fm_status,
+    )
     expires_at = (
         datetime.now(timezone.utc) + timedelta(seconds=settings.signed_url_expiry_seconds)
-        if any([source_url, preview_url, master_url, sv_url, final_mix_url])
+        if any([source_url, preview_url, master_url, sv_url, fm_url])
         else None
     )
 
@@ -2098,7 +2229,7 @@ async def get_production_playback_urls(
         rendered_preview_url=preview_url,
         master_url=master_url,
         studio_voice_preview_url=sv_url,
-        final_mix_url=final_mix_url,
+        final_mix_url=fm_url,
         music_url=music_url,
         original=original_state,
         edited=edited_state,

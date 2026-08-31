@@ -155,6 +155,34 @@ class RenderArtifact(BaseModel):
         max_length=256,
         description="Error code or message if rendering failed",
     )
+    edl_version: int | None = Field(
+        default=None,
+        description="EDL version from which this artifact was rendered",
+    )
+    voice_id: str | None = Field(
+        default=None,
+        description="Studio voice ID used in the render",
+    )
+    voiceover_artifact_id: str | None = Field(
+        default=None,
+        description="Source voiceover artifact ID included in this render",
+    )
+    music_gcs_object: str | None = Field(
+        default=None,
+        description="Background music GCS object included in this render",
+    )
+    music_volume_db: float | None = Field(
+        default=None,
+        description="Background music volume in dB configured at render time",
+    )
+    music_ducking_db: float | None = Field(
+        default=None,
+        description="Speech ducking attenuation in dB configured at render time",
+    )
+    music_is_muted: bool | None = Field(
+        default=None,
+        description="Whether background music was muted at render time",
+    )
 
     @field_validator("created_at")
     @classmethod

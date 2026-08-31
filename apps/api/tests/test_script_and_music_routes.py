@@ -312,3 +312,108 @@ async def test_render_final_mix_and_voiceover_preview_uses_active_edl_cuts_and_t
     fm_data = fm_resp.json()
     assert fm_data["artifact_type"] == "FINAL_MIX"
     assert fm_data["duration_ms"] == 6000
+@pytest.mark.asyncio
+async def test_music_regeneration_uniqueness_and_stale_final_mix(
+    app_and_deps, test_user: User
+):
+    client, prod_repo, trans_repo, edl_repo, render_repo, _, _ = app_and_deps
+    now = datetime.now(timezone.utc)
+    prod = Production(
+        production_id="prod_music_stale_test",
+        workspace_id="ws_test",
+        channel_id="croviq_syn_ai_eng_01",
+        owner_user_id=test_user.user_id,
+        status=ProductionStatus.UPLOADED,
+        source_media=SourceMedia(
+            upload_id="up_01",
+            original_filename="tutorial.mp4",
+            content_type="video/mp4",
+            size_bytes=1000000,
+            gcs_bucket="test-bucket",
+            gcs_object="workspaces/ws_test/productions/prod_music_stale_test/source.mp4",
+            status=SourceMediaStatus.UPLOADED,
+            created_at=now,
+            uploaded_at=now,
+        ),
+        created_at=now,
+        updated_at=now,
+    )
+    await prod_repo.create_production(prod)
+
+    vo = VoiceoverSegment(
+        segment_id="vo_01",
+        source_start_ms=1000,
+        source_end_ms=5000,
+        text="Corrected voiceover",
+        original_text="Original",
+    )
+    edl = EditDecisionList(
+        edl_id="edl_stale_01",
+        production_id="prod_music_stale_test",
+        source_duration_ms=10000,
+        cuts=[],
+        voiceover_segments=[vo],
+        version=1,
+        created_at=now,
+    )
+    await edl_repo.save_edl(edl)
+
+    # 1. Generate first music track
+    gen1 = client.post(
+        "/api/productions/prod_music_stale_test/music/generate",
+        json={"prompt": "Minimal modern technology documentary underscore", "model_id": "lyria-3-pro-preview"},
+    )
+    assert gen1.status_code == 200
+    art_id_1 = gen1.json()["edl"]["background_music"]["preview_artifact_id"]
+    gcs_obj_1 = gen1.json()["edl"]["background_music"]["music_gcs_object"]
+    assert art_id_1 is not None
+    assert "art_mus_" in art_id_1
+
+    # 2. Render Final Mix
+    fm_resp1 = client.post("/api/productions/prod_music_stale_test/renders/final-mix")
+    assert fm_resp1.status_code == 200
+    pb1 = client.get("/api/productions/prod_music_stale_test/playback").json()
+    assert pb1["final_mix"]["status"] == "ready"
+    assert pb1["final_mix"]["available"] is True
+
+    # 3. Regenerate music with materially different prompt
+    gen2 = client.post(
+        "/api/productions/prod_music_stale_test/music/generate",
+        json={"prompt": "Focused futuristic engineering documentary score with soft analog synth pulses", "model_id": "lyria-3-pro-preview"},
+    )
+    assert gen2.status_code == 200
+    art_id_2 = gen2.json()["edl"]["background_music"]["preview_artifact_id"]
+    gcs_obj_2 = gen2.json()["edl"]["background_music"]["music_gcs_object"]
+    assert art_id_2 != art_id_1
+    assert gcs_obj_2 != gcs_obj_1
+
+    # 4. Check Playback state -> Final Mix is now STALE (needs_regeneration)
+    pb2 = client.get("/api/productions/prod_music_stale_test/playback").json()
+    assert pb2["final_mix"]["status"] == "needs_regeneration"
+    assert pb2["final_mix"]["available"] is False
+    assert pb2["final_mix_url"] is None
+
+    # 5. Re-render Final Mix -> becomes ready
+    fm_resp2 = client.post("/api/productions/prod_music_stale_test/renders/final-mix")
+    assert fm_resp2.status_code == 200
+    pb3 = client.get("/api/productions/prod_music_stale_test/playback").json()
+    assert pb3["final_mix"]["status"] == "ready"
+    assert pb3["final_mix"]["available"] is True
+
+    # 6. Change music volume -> Final Mix becomes STALE
+    patch_resp = client.patch(
+        "/api/productions/prod_music_stale_test/music",
+        json={"volume_db": -20.0},
+    )
+    assert patch_resp.status_code == 200
+    pb4 = client.get("/api/productions/prod_music_stale_test/playback").json()
+    assert pb4["final_mix"]["status"] == "needs_regeneration"
+    assert pb4["final_mix"]["available"] is False
+
+    # 7. Remove music -> Final Mix remains STALE
+    del_resp = client.delete("/api/productions/prod_music_stale_test/music")
+    assert del_resp.status_code == 200
+    pb5 = client.get("/api/productions/prod_music_stale_test/playback").json()
+    assert pb5["final_mix"]["status"] == "needs_regeneration"
+    assert pb5["final_mix"]["available"] is False
+    assert pb5["music_url"] is None

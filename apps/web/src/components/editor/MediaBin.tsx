@@ -140,14 +140,17 @@ export const MediaBin: React.FC<MediaBinProps> = ({
           },
         ]
       : []),
-    ...(isFinalMixAvailable
+    ...(isFinalMixAvailable || mediaOutputs?.final_mix.status === "needs_regeneration"
       ? [
           {
             id: "final_mix" as const,
             name: "Final Mix",
             mode: "final_mix" as PreviewMode,
             durationMs: fmDur,
-            description: "Voiceover + music",
+            description:
+              mediaOutputs?.final_mix.status === "needs_regeneration"
+                ? "Rebuild required"
+                : "Voiceover + music",
             icon: Music,
           },
         ]

@@ -157,7 +157,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [isGeneratingVoiceover, setIsGeneratingVoiceover] = useState<boolean>(false);
   const [musicPlaybackUrl, setMusicPlaybackUrl] = useState<string | null>(null);
   const [isGeneratingMusic, setIsGeneratingMusic] = useState<boolean>(false);
-  // Agent settings drawer state
+  const [isRenderingFinalMix, setIsRenderingFinalMix] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsAgentId, setSettingsAgentId] = useState<"leo">("leo");
 
@@ -915,8 +915,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       if (edlData.edl) {
         setEdl(edlData.edl);
       }
+      await loadPersistedData();
     },
-    [getAuthToken, productionId],
+    [getAuthToken, loadPersistedData, productionId],
   );
 
   const handleRemoveMusic = useCallback(async () => {
@@ -936,7 +937,48 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       setEdl(edlData.edl);
     }
     setMusicPlaybackUrl(null);
-  }, [getAuthToken, productionId]);
+    await loadPersistedData();
+  }, [getAuthToken, loadPersistedData, productionId]);
+
+  const handleRenderFinalMix = useCallback(async () => {
+    setIsRenderingFinalMix(true);
+    setMediaOutputs((prev) => ({
+      ...prev,
+      final_mix: {
+        ...prev.final_mix,
+        status: "generating",
+        available: false,
+      },
+    }));
+    try {
+      const token = await getAuthToken();
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch(`/api/productions/${productionId}/renders/final-mix`, {
+        method: "POST",
+        headers,
+      });
+      if (!res.ok) {
+        throw new Error(`Final Mix rendering failed (${res.status})`);
+      }
+      await loadPersistedData();
+      setPreviewMode("final_mix");
+    } catch (err) {
+      setMediaOutputs((prev) => ({
+        ...prev,
+        final_mix: {
+          ...prev.final_mix,
+          status: "failed",
+          available: false,
+        },
+      }));
+      throw err;
+    } finally {
+      setIsRenderingFinalMix(false);
+    }
+  }, [getAuthToken, loadPersistedData, productionId]);
   const handleTimelinePoint = useCallback(
     (targetMs: number) => {
       handleSeek(targetMs);
@@ -1316,6 +1358,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             onRetryPlayback={async () => {
               await loadPersistedData();
             }}
+            onRenderFinalMix={handleRenderFinalMix}
+            isRenderingFinalMix={isRenderingFinalMix}
             className="flex-1 min-h-0"
           />
         </div>

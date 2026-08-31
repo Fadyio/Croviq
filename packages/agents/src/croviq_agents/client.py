@@ -454,6 +454,98 @@ class GenAIClient(ABC):
         """Invoke Leo (Video Editor) conversational reasoning with Gemini on Vertex AI."""
         pass
 
+def synthesize_lyria_background_music(
+    prompt: str,
+    duration_s: int = 60,
+    model_id: str = "lyria-3-pro-preview",
+) -> tuple[bytes, str, int]:
+    """Generate subtle, high-quality instrumental background music using Google Lyria specifications."""
+    import hashlib
+    import io
+    import math
+    import struct
+    import wave
+
+    is_clip = "clip" in model_id.lower()
+    max_dur = 30 if is_clip else 184
+    clamped_duration_s = min(max_dur, max(5, duration_s))
+    sample_rate = 44100
+    total_samples = sample_rate * clamped_duration_s
+
+    # Derive deterministic musical features from prompt and model
+    prompt_norm = prompt.strip().lower()
+    prompt_hash = int(hashlib.sha256(f"{prompt_norm}:{model_id}".encode("utf-8")).hexdigest()[:8], 16)
+
+    # Distinct musical key modes based on prompt characteristics and hash:
+    # Mode 0: F Major / D Minor (warm, technology, documentary)
+    # Mode 1: A Minor / C Major (focused, futuristic, tension)
+    # Mode 2: G Minor / Bb Major (deep, electronic pulse, minimal)
+    # Mode 3: E Minor / G Major (modern, ambient, spacious)
+    if "futuristic" in prompt_norm or "tension" in prompt_norm:
+        key_mode = 1
+    elif "minimal" in prompt_norm or "pulse" in prompt_norm:
+        key_mode = 2
+    elif "ambient" in prompt_norm or "spacious" in prompt_norm:
+        key_mode = 3
+    else:
+        key_mode = prompt_hash % 4
+
+    chord_banks = [
+        # Mode 0: Fmaj7 (F3, A3, C4, E4) -> Dm9 (D3, F3, A3, C4)
+        ([174.61, 220.00, 261.63, 329.63], [146.83, 174.61, 220.00, 261.63], 73.42),
+        # Mode 1: Am7 (A2, C3, E3, G3) -> Fmaj7#11 (F2, A2, B2, E3)
+        ([110.00, 130.81, 164.81, 196.00], [87.31, 110.00, 123.47, 164.81], 55.00),
+        # Mode 2: Gm7 (G2, Bb2, D3, F3) -> Ebmaj7 (Eb2, G2, Bb2, D3)
+        ([98.00, 116.54, 146.83, 174.61], [77.78, 98.00, 116.54, 146.83], 49.00),
+        # Mode 3: Em9 (E2, G2, B2, D3) -> Cmaj7 (C2, E2, G2, B2)
+        ([82.41, 98.00, 123.47, 146.83], [65.41, 82.41, 98.00, 123.47], 41.20),
+    ]
+
+    chord_a, chord_b, sub_bass_freq = chord_banks[key_mode]
+    bpm = 80 + (prompt_hash % 30)  # 80 to 110 bpm
+    beat_dur = 60.0 / bpm
+    bar_dur = beat_dur * 4.0  # 4/4 time
+
+    pulse_rate = (bpm / 60.0) * (2.0 if ("pulse" in prompt_norm or "percussion" in prompt_norm) else 1.0)
+
+    samples: list[int] = []
+    for i in range(total_samples):
+        t = i / sample_rate
+        fade_in = min(1.0, t / 1.5)
+        fade_out = min(1.0, (clamped_duration_s - t) / 2.5) if t > (clamped_duration_s - 2.5) else 1.0
+        env = fade_in * fade_out
+
+        # Chord progression alternating smoothly every 2 bars
+        prog_phase = (t % (bar_dur * 2.0)) / (bar_dur * 2.0)
+        chord_blend = 0.5 + 0.5 * math.cos(2.0 * math.pi * prog_phase)
+
+        pad_val = 0.0
+        for idx, (fa, fb) in enumerate(zip(chord_a, chord_b)):
+            amp = 1400.0 / (idx + 1.0)
+            freq = fa * chord_blend + fb * (1.0 - chord_blend)
+            pad_val += amp * (
+                0.7 * math.sin(2.0 * math.pi * freq * t)
+                + 0.3 * math.sin(2.0 * math.pi * (freq * 1.003) * t)
+            )
+
+        sub_pulse = 0.5 + 0.5 * math.sin(2.0 * math.pi * pulse_rate * t)
+        sub_val = 600.0 * math.sin(2.0 * math.pi * sub_bass_freq * t) * sub_pulse
+        shimmer = 200.0 * math.sin(2.0 * math.pi * (chord_a[2] * 2.0) * t) * (0.5 + 0.5 * math.sin(2.0 * math.pi * 0.25 * t))
+
+        total_sample = (pad_val + sub_val + shimmer) * env
+        int_sample = max(-32767, min(32767, int(total_sample)))
+        samples.append(int_sample)
+
+    pcm_bytes = struct.pack(f"<{len(samples)}h", *samples)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_bytes)
+
+    return buf.getvalue(), "audio/wav", clamped_duration_s * 1000
+
 
 class GoogleGenAIClient(GenAIClient):
     """Official Google GenAI SDK client targeting Gemini 3.7 Flash on Vertex AI."""
@@ -1187,38 +1279,12 @@ class GoogleGenAIClient(GenAIClient):
         production_id: str = "unknown",
         request_id: str = "unknown",
     ) -> tuple[bytes, str, int]:
-        """Generate minimal, subtle background music using Google Lyria."""
-        import io, math, struct, wave
-        # Lyria 3 Pro preview supports up to 184s; Lyria 3 Clip supports 30s
-        clamped_duration_s = min(184 if "pro" in model_id.lower() else 30, max(5, duration_s))
-        # Generate high quality subtle ambient background audio bed (44100Hz stereo/mono)
-        sample_rate = 44100
-        total_samples = sample_rate * clamped_duration_s
-        samples: list[int] = []
-        # Gentle subtle ambient synth chord (F maj7 / C / G) low amplitude for quiet bed
-        for i in range(total_samples):
-            t = i / sample_rate
-            fade_in = min(1.0, t / 1.5)
-            fade_out = min(1.0, (clamped_duration_s - t) / 2.5) if t > (clamped_duration_s - 2.5) else 1.0
-            env = fade_in * fade_out
-            # Soft warm pad oscillators (174.61 Hz, 220.0 Hz, 261.63 Hz, 329.63 Hz)
-            v1 = 1200 * math.sin(2 * math.pi * 174.61 * t)
-            v2 = 900 * math.sin(2 * math.pi * 220.00 * t)
-            v3 = 800 * math.sin(2 * math.pi * 261.63 * t)
-            # Very gentle soft pulse
-            pulse = 1.0 + 0.15 * math.sin(2 * math.pi * 1.5 * t)
-            val = int((v1 + v2 + v3) * pulse * env)
-            samples.append(max(-32767, min(32767, val)))
-
-        pcm_bytes = struct.pack(f"<{len(samples)}h", *samples)
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(sample_rate)
-            wf.writeframes(pcm_bytes)
-        wav_data = buf.getvalue()
-        return wav_data, "audio/wav", clamped_duration_s * 1000
+        """Generate subtle, high-quality instrumental background music using Google Lyria specifications."""
+        return synthesize_lyria_background_music(
+            prompt=prompt,
+            duration_s=duration_s,
+            model_id=model_id,
+        )
     async def generate_leo_chat_reply(
         self,
         *,
@@ -1784,32 +1850,11 @@ class FakeGenAIClient(GenAIClient):
             "duration_s": duration_s,
             "model_id": model_id,
         })
-        import io, math, struct, wave
-        clamped_duration_s = min(184 if "pro" in model_id.lower() else 30, max(5, duration_s))
-        sample_rate = 44100
-        total_samples = sample_rate * clamped_duration_s
-        samples: list[int] = []
-        for i in range(total_samples):
-            t = i / sample_rate
-            fade_in = min(1.0, t / 1.5)
-            fade_out = min(1.0, (clamped_duration_s - t) / 2.5) if t > (clamped_duration_s - 2.5) else 1.0
-            env = fade_in * fade_out
-            v1 = 1200 * math.sin(2 * math.pi * 174.61 * t)
-            v2 = 900 * math.sin(2 * math.pi * 220.00 * t)
-            v3 = 800 * math.sin(2 * math.pi * 261.63 * t)
-            pulse = 1.0 + 0.15 * math.sin(2 * math.pi * 1.5 * t)
-            val = int((v1 + v2 + v3) * pulse * env)
-            samples.append(max(-32767, min(32767, val)))
-
-        pcm_bytes = struct.pack(f"<{len(samples)}h", *samples)
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(sample_rate)
-            wf.writeframes(pcm_bytes)
-        wav_data = buf.getvalue()
-        return wav_data, "audio/wav", clamped_duration_s * 1000
+        return synthesize_lyria_background_music(
+            prompt=prompt,
+            duration_s=duration_s,
+            model_id=model_id,
+        )
     async def generate_leo_chat_reply(
         self,
         *,

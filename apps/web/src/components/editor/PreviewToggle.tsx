@@ -32,8 +32,8 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
 
   const isFinalMixAvailable = mediaOutputs ? mediaOutputs.final_mix.available : hasFinalMix;
   const isFinalMixGenerating = mediaOutputs?.final_mix.status === "generating";
-  const isFinalMixVisible = isFinalMixAvailable || isFinalMixGenerating;
-
+  const isFinalMixNeedsRebuild = mediaOutputs?.final_mix.status === "needs_regeneration";
+  const isFinalMixVisible = isFinalMixAvailable || isFinalMixGenerating || isFinalMixNeedsRebuild || Boolean(mediaOutputs?.voiceover.available || hasStudioVoice);
   return (
     <div
       className={`inline-flex items-center p-0.5 rounded-lg bg-surface-2 border border-border-subtle ${className}`}

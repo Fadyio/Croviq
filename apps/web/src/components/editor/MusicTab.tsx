@@ -76,6 +76,15 @@ export const MusicTab: React.FC<MusicTabProps> = ({
     };
   }, []);
 
+  // Reset audio element when musicPlaybackUrl changes
+  useEffect(() => {
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current = null;
+      setIsPlayingPreview(false);
+    }
+  }, [musicPlaybackUrl]);
+
   const handleTogglePlayPreview = useCallback(() => {
     setErrorMessage(null);
 
@@ -90,7 +99,10 @@ export const MusicTab: React.FC<MusicTabProps> = ({
       return;
     }
 
-    if (!audioElementRef.current) {
+    if (!audioElementRef.current || audioElementRef.current.src !== musicPlaybackUrl) {
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+      }
       const audio = new Audio(musicPlaybackUrl);
       audioElementRef.current = audio;
       audio.onended = () => {
@@ -301,7 +313,7 @@ export const MusicTab: React.FC<MusicTabProps> = ({
           data-testid="active-music-card"
         >
           <div className="flex items-center justify-between border-b border-border-subtle/50 pb-2.5">
-            <div className="min-w-0">
+            <div className="min-w-0 space-y-0.5">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold text-text-primary truncate">
                   {backgroundMusic.style || "AI Underscore"}
@@ -314,9 +326,14 @@ export const MusicTab: React.FC<MusicTabProps> = ({
               </div>
               <p className="text-[10px] text-text-muted truncate">
                 Model: {backgroundMusic.model_id || "lyria-3-pro-preview"}
+                {backgroundMusic.duration_ms ? ` · ${(backgroundMusic.duration_ms / 1000).toFixed(1)}s` : ""}
               </p>
+              {backgroundMusic.preview_artifact_id && (
+                <p className="text-[9px] font-mono text-purple-400/80 truncate">
+                  {backgroundMusic.preview_artifact_id}
+                </p>
+              )}
             </div>
-
             {/* Play Preview Audition Control */}
             {musicPlaybackUrl && (
               <button

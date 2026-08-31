@@ -14,12 +14,12 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/generated";
+import type { MediaOutputStatus } from "../../lib/edl-adapter";
 
 export type VoiceCatalogItem = components["schemas"]["VoiceCatalogItem"];
 
 export const FIXED_VOICE_SAMPLE_TEXT =
   "Let's turn this recording into a clear, polished explanation.";
-
 // Pre-seeded fallback voice catalog matching official Google Gemini TTS voices
 export const FALLBACK_GEMINI_VOICES: VoiceCatalogItem[] = [
   {
@@ -84,7 +84,7 @@ export interface VoiceSettingsTabProps {
   productionId: string;
   selectedVoice: string;
   currentVoiceoverVoiceId?: string | null;
-  voiceoverStatus?: "ready" | "generating" | "incomplete" | "stale" | "failed" | "unavailable";
+  voiceoverStatus?: MediaOutputStatus;
   voices?: VoiceCatalogItem[];
   getAuthToken?: () => Promise<string>;
   onSelectVoice: (voiceId: string) => Promise<void>;

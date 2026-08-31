@@ -40,6 +40,8 @@ interface VideoStageProps {
   onSeek: (targetMs: number) => void;
   onDurationChange?: (durationMs: number) => void;
   onRetryPlayback?: () => Promise<void> | void;
+  onRenderFinalMix?: () => Promise<void> | void;
+  isRenderingFinalMix?: boolean;
   className?: string;
 }
 export const VideoStage: React.FC<VideoStageProps> = ({
@@ -61,6 +63,8 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   onSeek,
   onDurationChange,
   onRetryPlayback,
+  onRenderFinalMix,
+  isRenderingFinalMix = false,
   className = "",
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -351,6 +355,37 @@ export const VideoStage: React.FC<VideoStageProps> = ({
                   </p>
                 </div>
               </>
+            ) : outputStatus === "needs_regeneration" ? (
+              <>
+                <RotateCcw className="size-8 text-purple-400" />
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-text-primary">{modeLabel} needs rebuild</p>
+                  <p className="text-[11px] text-text-secondary">
+                    Timeline cuts, voiceover narration, or music settings changed since last render.
+                  </p>
+                </div>
+                {previewMode === "final_mix" && onRenderFinalMix && (
+                  <button
+                    type="button"
+                    onClick={() => onRenderFinalMix()}
+                    disabled={isRenderingFinalMix}
+                    className="mt-1 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    data-testid="btn-rebuild-final-mix"
+                  >
+                    {isRenderingFinalMix ? (
+                      <>
+                        <Loader2 className="size-3 animate-spin" />
+                        <span>Rendering Final Mix…</span>
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="size-3" />
+                        <span>Rebuild Final Mix</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 <Film className="size-8 text-text-muted/60" />
@@ -360,6 +395,27 @@ export const VideoStage: React.FC<VideoStageProps> = ({
                     No rendered artifact exists for this mode on the active timeline.
                   </p>
                 </div>
+                {previewMode === "final_mix" && onRenderFinalMix && (
+                  <button
+                    type="button"
+                    onClick={() => onRenderFinalMix()}
+                    disabled={isRenderingFinalMix}
+                    className="mt-1 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    data-testid="btn-render-final-mix"
+                  >
+                    {isRenderingFinalMix ? (
+                      <>
+                        <Loader2 className="size-3 animate-spin" />
+                        <span>Rendering Final Mix…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Film className="size-3" />
+                        <span>Render Final Mix</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </>
             )}
           </div>
