@@ -78,7 +78,7 @@ export const MusicTab: React.FC<MusicTabProps> = ({
 
   // Reset audio element when musicPlaybackUrl changes
   useEffect(() => {
-    if (audioElementRef.current) {
+    if (musicPlaybackUrl && audioElementRef.current) {
       audioElementRef.current.pause();
       audioElementRef.current = null;
       setIsPlayingPreview(false);
@@ -326,7 +326,9 @@ export const MusicTab: React.FC<MusicTabProps> = ({
               </div>
               <p className="text-[10px] text-text-muted truncate">
                 Model: {backgroundMusic.model_id || "lyria-3-pro-preview"}
-                {backgroundMusic.duration_ms ? ` · ${(backgroundMusic.duration_ms / 1000).toFixed(1)}s` : ""}
+                {backgroundMusic.duration_ms
+                  ? ` · ${(backgroundMusic.duration_ms / 1000).toFixed(1)}s`
+                  : ""}
               </p>
               {backgroundMusic.preview_artifact_id && (
                 <p className="text-[9px] font-mono text-purple-400/80 truncate">

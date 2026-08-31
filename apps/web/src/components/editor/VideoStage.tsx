@@ -359,7 +359,9 @@ export const VideoStage: React.FC<VideoStageProps> = ({
               <>
                 <RotateCcw className="size-8 text-purple-400" />
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold text-text-primary">{modeLabel} needs rebuild</p>
+                  <p className="text-xs font-semibold text-text-primary">
+                    {modeLabel} needs rebuild
+                  </p>
                   <p className="text-[11px] text-text-secondary">
                     Timeline cuts, voiceover narration, or music settings changed since last render.
                   </p>

@@ -456,7 +456,8 @@ const GITHUB_ACTIVITIES = [
     activity_type: "dialogue_analysis",
     agent: "Leo",
     role: "Video Editor",
-    message: "Analyzing dialogue: Evaluated spoken cadence, clarity, and phrasing across 101.4s source footage.",
+    message:
+      "Analyzing dialogue: Evaluated spoken cadence, clarity, and phrasing across 101.4s source footage.",
     created_at: "2026-08-31T06:28:07Z",
   },
   {
@@ -464,7 +465,8 @@ const GITHUB_ACTIVITIES = [
     activity_type: "repetition_detection",
     agent: "Leo",
     role: "Video Editor",
-    message: "Detecting repetitions: Identified 4 verbal restarts, repeated words, and redundant phrasing candidates.",
+    message:
+      "Detecting repetitions: Identified 4 verbal restarts, repeated words, and redundant phrasing candidates.",
     created_at: "2026-08-31T06:28:08Z",
   },
   {
@@ -472,7 +474,8 @@ const GITHUB_ACTIVITIES = [
     activity_type: "pacing_evaluation",
     agent: "Leo",
     role: "Video Editor",
-    message: "Evaluating pacing: Assessed explanation density, navigation pauses, and demonstration rhythm.",
+    message:
+      "Evaluating pacing: Assessed explanation density, navigation pauses, and demonstration rhythm.",
     created_at: "2026-08-31T06:28:09Z",
   },
   {
@@ -480,7 +483,8 @@ const GITHUB_ACTIVITIES = [
     activity_type: "continuity_check",
     agent: "Leo",
     role: "Video Editor",
-    message: "Checking technical continuity: Verified preservation of core commands, filenames, code walkthroughs, and prerequisites.",
+    message:
+      "Checking technical continuity: Verified preservation of core commands, filenames, code walkthroughs, and prerequisites.",
     created_at: "2026-08-31T06:28:10Z",
   },
   {
@@ -488,7 +492,8 @@ const GITHUB_ACTIVITIES = [
     activity_type: "safe_cuts",
     agent: "Leo",
     role: "Video Editor",
-    message: "Applying safe cuts: Snapped 14 candidate removals to inter-word silence boundaries with natural breath padding.",
+    message:
+      "Applying safe cuts: Snapped 14 candidate removals to inter-word silence boundaries with natural breath padding.",
     created_at: "2026-08-31T06:28:11Z",
   },
   {
@@ -496,7 +501,8 @@ const GITHUB_ACTIVITIES = [
     activity_type: "sequence_review",
     agent: "Leo",
     role: "Video Editor",
-    message: "Reviewing edited sequence: Verified narrative coherence, transitions, and timeline compression (42.7s removed).",
+    message:
+      "Reviewing edited sequence: Verified narrative coherence, transitions, and timeline compression (42.7s removed).",
     created_at: "2026-08-31T06:28:12Z",
   },
   {
@@ -504,7 +510,8 @@ const GITHUB_ACTIVITIES = [
     activity_type: "render_preview",
     agent: "Leo",
     role: "Video Editor",
-    message: "Rendering Edited Preview: Generated master preview stream with deterministic cuts and 20ms audio crossfades.",
+    message:
+      "Rendering Edited Preview: Generated master preview stream with deterministic cuts and 20ms audio crossfades.",
     created_at: "2026-08-31T06:28:13Z",
   },
   {
@@ -512,7 +519,8 @@ const GITHUB_ACTIVITIES = [
     activity_type: "result_review",
     agent: "Leo",
     role: "Video Editor",
-    message: "Reviewing rendered result: Confirmed continuous audio/video flow and natural speech transitions.",
+    message:
+      "Reviewing rendered result: Confirmed continuous audio/video flow and natural speech transitions.",
     created_at: "2026-08-31T06:28:14Z",
   },
 ];
@@ -633,15 +641,78 @@ const setupEditorMocks = async (page: Page) => {
         duration_ms: 101440,
         words: GITHUB_WORDS,
         segments: [
-          { segment_id: "seg_01", text: "This is a GitHub action tutorial.", start_ms: 2100, end_ms: 5700, word_start_index: 0, word_end_index: 5 },
-          { segment_id: "seg_02", text: "Okay. You can find the GitHub action in here.", start_ms: 8000, end_ms: 15400, word_start_index: 6, word_end_index: 14 },
-          { segment_id: "seg_03", text: "To edit to edit your workflow like this workflow is for Cloudflare DNS.", start_ms: 16200, end_ms: 29000, word_start_index: 15, word_end_index: 27 },
-          { segment_id: "seg_04", text: "You can find here the name of the workflow that runs on permission write and read content.", start_ms: 30700, end_ms: 48100, word_start_index: 28, word_end_index: 44 },
-          { segment_id: "seg_05", text: "Okay. And you can find the whole script in here.", start_ms: 51300, end_ms: 56600, word_start_index: 45, word_end_index: 54 },
-          { segment_id: "seg_06", text: "Also there is a lot of other devices one to verify that the GitHub the Cloudflare action is working.", start_ms: 57600, end_ms: 67800, word_start_index: 55, word_end_index: 73 },
-          { segment_id: "seg_07", text: "Deploy which is and how to deploy our application to Google Cloud", start_ms: 68900, end_ms: 79500, word_start_index: 74, word_end_index: 85 },
-          { segment_id: "seg_08", text: "and here is with test verified workflow and everything is working.", start_ms: 81100, end_ms: 92100, word_start_index: 86, word_end_index: 96 },
-          { segment_id: "seg_09", text: "You here you can find here the issues. You can write the workflow for issues.", start_ms: 93900, end_ms: 101000, word_start_index: 97, word_end_index: 111 },
+          {
+            segment_id: "seg_01",
+            text: "This is a GitHub action tutorial.",
+            start_ms: 2100,
+            end_ms: 5700,
+            word_start_index: 0,
+            word_end_index: 5,
+          },
+          {
+            segment_id: "seg_02",
+            text: "Okay. You can find the GitHub action in here.",
+            start_ms: 8000,
+            end_ms: 15400,
+            word_start_index: 6,
+            word_end_index: 14,
+          },
+          {
+            segment_id: "seg_03",
+            text: "To edit to edit your workflow like this workflow is for Cloudflare DNS.",
+            start_ms: 16200,
+            end_ms: 29000,
+            word_start_index: 15,
+            word_end_index: 27,
+          },
+          {
+            segment_id: "seg_04",
+            text: "You can find here the name of the workflow that runs on permission write and read content.",
+            start_ms: 30700,
+            end_ms: 48100,
+            word_start_index: 28,
+            word_end_index: 44,
+          },
+          {
+            segment_id: "seg_05",
+            text: "Okay. And you can find the whole script in here.",
+            start_ms: 51300,
+            end_ms: 56600,
+            word_start_index: 45,
+            word_end_index: 54,
+          },
+          {
+            segment_id: "seg_06",
+            text: "Also there is a lot of other devices one to verify that the GitHub the Cloudflare action is working.",
+            start_ms: 57600,
+            end_ms: 67800,
+            word_start_index: 55,
+            word_end_index: 73,
+          },
+          {
+            segment_id: "seg_07",
+            text: "Deploy which is and how to deploy our application to Google Cloud",
+            start_ms: 68900,
+            end_ms: 79500,
+            word_start_index: 74,
+            word_end_index: 85,
+          },
+          {
+            segment_id: "seg_08",
+            text: "and here is with test verified workflow and everything is working.",
+            start_ms: 81100,
+            end_ms: 92100,
+            word_start_index: 86,
+            word_end_index: 96,
+          },
+          {
+            segment_id: "seg_09",
+            text: "You here you can find here the issues. You can write the workflow for issues.",
+            start_ms: 93900,
+            end_ms: 101000,
+            word_start_index: 97,
+            word_end_index: 111,
+          },
         ],
       }),
     });
@@ -703,7 +774,8 @@ const setupEditorMocks = async (page: Page) => {
       production_id: PRODUCTION_ID,
       agent: "leo",
       model: "gemini-3.7-flash",
-      summary: "Completed full dialogue and timeline editorial pass removing false starts, repetitions, and dead air.",
+      summary:
+        "Completed full dialogue and timeline editorial pass removing false starts, repetitions, and dead air.",
       decisions: GITHUB_CUTS.map((c) => ({
         decision_id: c.decision_id,
         decision_type: c.decision_type,
@@ -721,10 +793,38 @@ const setupEditorMocks = async (page: Page) => {
       })),
       section_plan: [],
       chapters: [
-        { chapter_id: "chap_01", title: "Overview & GitHub Action", source_start_ms: 0, source_end_ms: 15400, summary: "Introduction to GitHub Action", confidence: 1.0 },
-        { chapter_id: "chap_02", title: "Editing Cloudflare DNS Workflow", source_start_ms: 16100, source_end_ms: 56600, summary: "Walking through DNS workflow and permissions", confidence: 1.0 },
-        { chapter_id: "chap_03", title: "Verification & Deployment", source_start_ms: 57600, source_end_ms: 92100, summary: "Deploying to Google Cloud and testing", confidence: 1.0 },
-        { chapter_id: "chap_04", title: "GitHub Issues Integration", source_start_ms: 93900, source_end_ms: 101440, summary: "Creating workflow for issues", confidence: 1.0 },
+        {
+          chapter_id: "chap_01",
+          title: "Overview & GitHub Action",
+          source_start_ms: 0,
+          source_end_ms: 15400,
+          summary: "Introduction to GitHub Action",
+          confidence: 1.0,
+        },
+        {
+          chapter_id: "chap_02",
+          title: "Editing Cloudflare DNS Workflow",
+          source_start_ms: 16100,
+          source_end_ms: 56600,
+          summary: "Walking through DNS workflow and permissions",
+          confidence: 1.0,
+        },
+        {
+          chapter_id: "chap_03",
+          title: "Verification & Deployment",
+          source_start_ms: 57600,
+          source_end_ms: 92100,
+          summary: "Deploying to Google Cloud and testing",
+          confidence: 1.0,
+        },
+        {
+          chapter_id: "chap_04",
+          title: "GitHub Issues Integration",
+          source_start_ms: 93900,
+          source_end_ms: 101440,
+          summary: "Creating workflow for issues",
+          confidence: 1.0,
+        },
       ],
       overall_confidence: 1.0,
     },
@@ -754,10 +854,33 @@ const setupEditorMocks = async (page: Page) => {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        original: { available: true, url: "https://storage.googleapis.com/test/source.mp4", duration_ms: 101440, status: "ready" },
-        edited: { available: true, url: "https://storage.googleapis.com/test/preview.mp4", duration_ms: 58765, status: "ready", edl_id: "edl_bug22_active" },
-        voiceover: { available: true, url: "https://storage.googleapis.com/test/voiceover.mp4", duration_ms: 58765, status: "ready", edl_id: "edl_bug22_active" },
-        final_mix: { available: true, url: "https://storage.googleapis.com/test/final_mix.mp4", duration_ms: 58765, status: "ready", edl_id: "edl_bug22_active" },
+        original: {
+          available: true,
+          url: "https://storage.googleapis.com/test/source.mp4",
+          duration_ms: 101440,
+          status: "ready",
+        },
+        edited: {
+          available: true,
+          url: "https://storage.googleapis.com/test/preview.mp4",
+          duration_ms: 58765,
+          status: "ready",
+          edl_id: "edl_bug22_active",
+        },
+        voiceover: {
+          available: true,
+          url: "https://storage.googleapis.com/test/voiceover.mp4",
+          duration_ms: 58765,
+          status: "ready",
+          edl_id: "edl_bug22_active",
+        },
+        final_mix: {
+          available: true,
+          url: "https://storage.googleapis.com/test/final_mix.mp4",
+          duration_ms: 58765,
+          status: "ready",
+          edl_id: "edl_bug22_active",
+        },
         music_url: "https://storage.googleapis.com/test/music.mp3",
       }),
     });
@@ -780,7 +903,7 @@ const setupEditorMocks = async (page: Page) => {
             message_id: "msg_02",
             role: "assistant",
             content:
-              "I removed **42.67s** total across **14 cuts**, bringing the video down to **58.77s**:\n\n* **Silence & Dead Air:** 36.2s trimmed across 13 pause points (retaining a natural ~250ms padding at each transition).\n* **Phrase Repetitions & False Starts:** 6.5s removed, specifically:\n  * Cut the stuttered restart at 16.10s–22.57s (*\"to edit edit to\"* before navigating to workflows).\n  * Trimmed repeated filler words (*\"Okay. Okay. Okay.\"* between sentences at 48.23s).\n  * Removed the slip of the tongue (*\"the GitHub\"*) at 62.92s when referring to Cloudflare action verification.\n  * Cut the abandoned lead-in clause (*\"which is\"*) before restarting the Google Cloud deployment explanation at 69.62s.\n  * Cleaned up the restart (*\"You here you can\"*) at 92.22s before leading into the issues section.",
+              'I removed **42.67s** total across **14 cuts**, bringing the video down to **58.77s**:\n\n* **Silence & Dead Air:** 36.2s trimmed across 13 pause points (retaining a natural ~250ms padding at each transition).\n* **Phrase Repetitions & False Starts:** 6.5s removed, specifically:\n  * Cut the stuttered restart at 16.10s–22.57s (*"to edit edit to"* before navigating to workflows).\n  * Trimmed repeated filler words (*"Okay. Okay. Okay."* between sentences at 48.23s).\n  * Removed the slip of the tongue (*"the GitHub"*) at 62.92s when referring to Cloudflare action verification.\n  * Cut the abandoned lead-in clause (*"which is"*) before restarting the Google Cloud deployment explanation at 69.62s.\n  * Cleaned up the restart (*"You here you can"*) at 92.22s before leading into the issues section.',
             created_at: "2026-08-31T06:29:22Z",
           },
           {
@@ -793,7 +916,7 @@ const setupEditorMocks = async (page: Page) => {
             message_id: "msg_04",
             role: "assistant",
             content:
-              "You had a false start and a long dead air gap here:\n\n* At **16.2s**, you began saying *\"To edit...\"*, followed by roughly **5.6s of silence** while navigating into the `.github/workflows` folder.\n* After opening the folder at **22.7s**, you restarted the thought cleanly with *\"to edit your workflow...\"*\n\nI cut the initial restart and silent gap so the video transitions smoothly from *\"in here.\"* directly into your complete sentence *\"to edit your workflow...\"*",
+              'You had a false start and a long dead air gap here:\n\n* At **16.2s**, you began saying *"To edit..."*, followed by roughly **5.6s of silence** while navigating into the `.github/workflows` folder.\n* After opening the folder at **22.7s**, you restarted the thought cleanly with *"to edit your workflow..."*\n\nI cut the initial restart and silent gap so the video transitions smoothly from *"in here."* directly into your complete sentence *"to edit your workflow..."*',
             created_at: "2026-08-31T06:29:36Z",
           },
         ],
@@ -820,7 +943,9 @@ test.describe("BUG 22 — Leo Real Human-Grade Editorial Acceptance", () => {
     fs.mkdirSync(dir, { recursive: true });
   });
 
-  test("1. Verifies 1600x900 viewport: Timeline, Transcript, and Agent Log phases", async ({ page }) => {
+  test("1. Verifies 1600x900 viewport: Timeline, Transcript, and Agent Log phases", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await setupEditorMocks(page);
     await loginUser(page);
@@ -852,7 +977,9 @@ test.describe("BUG 22 — Leo Real Human-Grade Editorial Acceptance", () => {
     });
   });
 
-  test("2. Verifies 1440x900 viewport: Semantic Cuts, Decision Inspector, Chat Rationale", async ({ page }) => {
+  test("2. Verifies 1440x900 viewport: Semantic Cuts, Decision Inspector, Chat Rationale", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await setupEditorMocks(page);
     await loginUser(page);

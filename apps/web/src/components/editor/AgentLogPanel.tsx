@@ -68,7 +68,10 @@ const describeActivity = (
       tool: "Narrative pacing analyzer",
     };
   }
-  if (activity.activity_type === "continuity_check" || key.includes("checking technical continuity")) {
+  if (
+    activity.activity_type === "continuity_check" ||
+    key.includes("checking technical continuity")
+  ) {
     return {
       action: "Checking technical continuity",
       reason: reasonText,
