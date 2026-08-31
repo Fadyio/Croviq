@@ -1,4 +1,4 @@
-import { Clock, Film, Play, Trash2, Video } from "lucide-react";
+import { Clock, Film, Trash2, Video } from "lucide-react";
 import React from "react";
 import type { components } from "../../api/generated";
 
@@ -104,8 +104,8 @@ export const RecentProjectsList: React.FC<RecentProjectsListProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="rounded-full bg-surface-3 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
                   {prod.status}
                 </span>
                 <button
@@ -114,10 +114,9 @@ export const RecentProjectsList: React.FC<RecentProjectsListProps> = ({
                     e.stopPropagation();
                     onOpenProject(prod.production_id);
                   }}
-                  className="flex items-center gap-1 rounded-md bg-surface-3 px-2.5 py-1 text-xs font-semibold text-text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                  className="flex items-center gap-1 rounded-md bg-surface-3 px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer"
                 >
-                  <Play className="h-3 w-3 fill-current" />
-                  <span>Open &gt;</span>
+                  <span>Open ›</span>
                 </button>
                 {onDeleteProject && (
                   <button
@@ -135,7 +134,7 @@ export const RecentProjectsList: React.FC<RecentProjectsListProps> = ({
                     aria-label={`Delete ${prod.source_media?.original_filename || prod.production_id}`}
                     data-testid={`btn-delete-${prod.production_id}`}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 )}
               </div>
