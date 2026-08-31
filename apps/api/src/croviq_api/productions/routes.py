@@ -2270,6 +2270,7 @@ async def get_production_playback_urls(
         url=fm_url,
         duration_ms=fm_art.duration_ms if (fm_art and fm_available) else (latest_edl.estimated_target_duration_ms if latest_edl else 0),
         status=fm_status,
+        voice_id=fm_art.voice_id if (fm_art and fm_available) else None,
     )
     expires_at = (
         datetime.now(timezone.utc) + timedelta(seconds=settings.signed_url_expiry_seconds)
