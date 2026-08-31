@@ -642,14 +642,18 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
           i.message.toLowerCase().includes("silence") ||
           i.message.toLowerCase().includes("pacing"),
       );
-      const hasBlockingOrHigh = narrIssues.some(
+      const topHigh = narrIssues.find(
         (i) => i.severity === "BLOCKING" || i.severity === "HIGH",
       );
       const hasMedium = narrIssues.some((i) => i.severity === "MEDIUM");
-      if (hasBlockingOrHigh) {
+      if (topHigh) {
+        const durSec =
+          topHigh.source_end_ms != null && topHigh.source_start_ms != null
+            ? `${((topHigh.source_end_ms - topHigh.source_start_ms) / 1000).toFixed(1)}s pause`
+            : null;
         return {
           state: "Failed",
-          detail: reviewMode === "original" ? "Context Loss / Dead Air" : "Failed",
+          detail: durSec || (reviewMode === "original" ? "Context Loss / Dead Air" : "Failed"),
         };
       }
       if (hasMedium) return { state: "Warning", detail: "Pacing Warning" };
@@ -741,15 +745,20 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
           i.message.toLowerCase().includes("dead air") ||
           i.message.toLowerCase().includes("silence"),
       );
-      const hasBlockingOrHigh = paceIssues.some(
+      const topHigh = paceIssues.find(
         (i) => i.severity === "BLOCKING" || i.severity === "HIGH",
       );
       const hasMedium = paceIssues.some((i) => i.severity === "MEDIUM");
-      if (hasBlockingOrHigh)
+      if (topHigh) {
+        const durSec =
+          topHigh.source_end_ms != null && topHigh.source_start_ms != null
+            ? `${((topHigh.source_end_ms - topHigh.source_start_ms) / 1000).toFixed(1)}s pause detected`
+            : "Dead air detected";
         return {
           state: "Failed",
-          detail: reviewMode === "original" ? "7.7s dead air pause" : "Failed",
+          detail: durSec,
         };
+      }
       if (hasMedium) return { state: "Warning", detail: "Slow Pacing" };
       return { state: "Passed", detail: "Passed" };
     }
@@ -769,7 +778,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       if (hasBlockingOrHigh)
         return { state: "Failed", detail: "Creator audio leak" };
       if (hasMedium) return { state: "Warning", detail: "Pronunciation" };
-      const voiceName = review.reviewed_voice_id || "Puck";
+      const voiceName = review.reviewed_voice_id || "Studio";
       return { state: "Passed", detail: `${voiceName} Voice Verified` };
     }
 
@@ -787,7 +796,11 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       const hasMedium = musIssues.some((i) => i.severity === "MEDIUM");
       if (hasBlockingOrHigh) return { state: "Failed", detail: "Ducking Issue" };
       if (hasMedium) return { state: "Warning", detail: "Balance Warning" };
-      return { state: "Passed", detail: "-14 dB Ducking" };
+      const duckingLabel =
+        edl?.background_music?.ducking_db != null
+          ? `${edl.background_music.ducking_db} dB Ducking`
+          : "-14 dB Ducking";
+      return { state: "Passed", detail: duckingLabel };
     }
 
     return { state: "Passed", detail: "Passed" };
