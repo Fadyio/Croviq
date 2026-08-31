@@ -139,8 +139,39 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
+  const [previewMode, setPreviewModeState] = useState<PreviewMode>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const modeParam = params.get("mode");
+      if (
+        modeParam === "original" ||
+        modeParam === "edited" ||
+        modeParam === "studio_voice" ||
+        modeParam === "final_mix"
+      ) {
+        return modeParam as PreviewMode;
+      }
+      if (modeParam === "voiceover") {
+        return "studio_voice";
+      }
+    }
+    return "final_mix";
+  });
+
+  const setPreviewMode = useCallback((newModeOrFn: React.SetStateAction<PreviewMode>) => {
+    setPreviewModeState((prev) => {
+      const next = typeof newModeOrFn === "function" ? newModeOrFn(prev) : newModeOrFn;
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("mode") !== next) {
+          url.searchParams.set("mode", next);
+          window.history.replaceState(null, "", url.toString());
+        }
+      }
+      return next;
+    });
+  }, []);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [previewMode, setPreviewMode] = useState<PreviewMode>("final_mix");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<TimelineBlock | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<
@@ -463,8 +494,20 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     };
     setMediaOutputs(canonicalOutputs);
 
-    // Explicit fallback to highest valid artifact
+    // Explicit fallback to highest valid artifact or URL param
     setPreviewMode((prevMode) => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const modeParam = params.get("mode");
+        if (modeParam === "original" && canonicalOutputs.original.available) return "original";
+        if (modeParam === "edited" && canonicalOutputs.edited.available) return "edited";
+        if (
+          (modeParam === "studio_voice" || modeParam === "voiceover") &&
+          canonicalOutputs.voiceover.available
+        )
+          return "studio_voice";
+        if (modeParam === "final_mix" && canonicalOutputs.final_mix.available) return "final_mix";
+      }
       if (prevMode === "final_mix" && canonicalOutputs.final_mix.available) return "final_mix";
       if (prevMode === "studio_voice" && canonicalOutputs.voiceover.available)
         return "studio_voice";
@@ -476,7 +519,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       if (canonicalOutputs.edited.available) return "edited";
       return "original";
     });
-
     setProduction(productionPayload);
     setPlaybackUrl(originalOutput.url);
     setRenderedPreviewUrl(editedOutput.url);
@@ -642,7 +684,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setSelectedBlock(null);
     setCurrentTimeMs(0);
     setIsPlaying(false);
-    setPreviewMode("final_mix");
+    const params =
+      typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const modeParam = params?.get("mode");
+    if (!modeParam) {
+      setPreviewMode("final_mix");
+    }
     setErrorMessage(null);
     setIsLoading(true);
 

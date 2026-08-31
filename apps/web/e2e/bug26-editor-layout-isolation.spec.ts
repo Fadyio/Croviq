@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { APPROVED_USER, DEMO_EMAIL, FIREBASE_ID_TOKEN } from "./test-auth-fixtures";
-
+import {
+  APPROVED_USER,
+  DEMO_EMAIL,
+  FIREBASE_ID_TOKEN,
+  SYNTHETIC_MP4_BUFFER,
+} from "./test-auth-fixtures";
 const FAIRPHONE_PRODUCTION_ID = "prod_f0b41bfd429e";
 const FAIRPHONE_TRANSCRIPT_ID = "tr_b9ab6b65d13e";
 const FAIRPHONE_RUN_ID = "run_1787720797_fd429e";
@@ -46,11 +50,54 @@ const mockFirebasePasswordSignIn = async (page: Page) => {
 
 const createMockWords = (count = 50) => {
   const sampleWords = [
-    "The", "Fairphone", "6", "Plus", "is", "an", "upgraded", "version", "of", "the",
-    "original", "Fairphone", "with", "more", "memory.", "However,", "you", "will",
-    "have", "to", "undo", "a", "couple", "of", "screws", "so", "make", "sure",
-    "you", "do", "it", "carefully.", "That", "slides", "off,", "bung", "the",
-    "new", "one", "on,", "and", "there", "you", "go.", "Clean", "and", "easy", "fix."
+    "The",
+    "Fairphone",
+    "6",
+    "Plus",
+    "is",
+    "an",
+    "upgraded",
+    "version",
+    "of",
+    "the",
+    "original",
+    "Fairphone",
+    "with",
+    "more",
+    "memory.",
+    "However,",
+    "you",
+    "will",
+    "have",
+    "to",
+    "undo",
+    "a",
+    "couple",
+    "of",
+    "screws",
+    "so",
+    "make",
+    "sure",
+    "you",
+    "do",
+    "it",
+    "carefully.",
+    "That",
+    "slides",
+    "off,",
+    "bung",
+    "the",
+    "new",
+    "one",
+    "on,",
+    "and",
+    "there",
+    "you",
+    "go.",
+    "Clean",
+    "and",
+    "easy",
+    "fix.",
   ];
   return Array.from({ length: count }, (_, idx) => ({
     index: idx,
@@ -75,10 +122,36 @@ const setupEditorMocks = async (page: Page) => {
   });
 
   await page.route("https://storage.googleapis.com/**", async (route) => {
+    const range = route.request().headers()["range"];
+    const rangeMatch = range?.match(/^bytes=(\d+)-(\d*)$/);
+    if (rangeMatch) {
+      const start = Number(rangeMatch[1]);
+      const requestedEnd = rangeMatch[2] ? Number(rangeMatch[2]) : SYNTHETIC_MP4_BUFFER.length - 1;
+      const end = Math.min(requestedEnd, SYNTHETIC_MP4_BUFFER.length - 1);
+      if (start > end) {
+        await route.fulfill({
+          status: 416,
+          headers: { "Content-Range": `bytes */${SYNTHETIC_MP4_BUFFER.length}` },
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 206,
+        contentType: "video/mp4",
+        headers: {
+          "Accept-Ranges": "bytes",
+          "Content-Length": String(end - start + 1),
+          "Content-Range": `bytes ${start}-${end}/${SYNTHETIC_MP4_BUFFER.length}`,
+        },
+        body: SYNTHETIC_MP4_BUFFER.subarray(start, end + 1),
+      });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "video/mp4",
-      body: Buffer.from(""),
+      headers: { "Accept-Ranges": "bytes" },
+      body: SYNTHETIC_MP4_BUFFER,
     });
   });
   await page.route("**/api/workspace", async (route) => {
@@ -304,6 +377,7 @@ const setupEditorMocks = async (page: Page) => {
             removed_duration_ms: 1500,
             left_anchor: "original",
             right_anchor: "original",
+            safety_status: "SAFE",
           },
         ],
         coverage_markers: [
@@ -404,31 +478,36 @@ const setupEditorMocks = async (page: Page) => {
     });
   });
 
-  await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/corrected-script`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        production_id: FAIRPHONE_PRODUCTION_ID,
-        corrected_transcript: {
-          segments: [
-            {
-              segment_id: "corr_01",
-              change_type: "CORRECTED",
-              entailment_verdict: "SUPPORTED",
-              source_start_ms: 0,
-              source_end_ms: 6000,
-              edited_start_ms: 0,
-              edited_end_ms: 4500,
-              original_text: "The Fairphone 6 Plus is an upgraded version of the original Fairphone with more memory.",
-              corrected_text: "The Fairphone 6 Plus features upgraded memory and improved performance.",
-              correction_reason: "Clarity and concise spoken phrasing.",
-            },
-          ],
-        },
-      }),
-    });
-  });
+  await page.route(
+    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/corrected-script`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          corrected_transcript: {
+            segments: [
+              {
+                segment_id: "corr_01",
+                change_type: "CORRECTED",
+                entailment_verdict: "SUPPORTED",
+                source_start_ms: 0,
+                source_end_ms: 6000,
+                edited_start_ms: 0,
+                edited_end_ms: 4500,
+                original_text:
+                  "The Fairphone 6 Plus is an upgraded version of the original Fairphone with more memory.",
+                corrected_text:
+                  "The Fairphone 6 Plus features upgraded memory and improved performance.",
+                correction_reason: "Clarity and concise spoken phrasing.",
+              },
+            ],
+          },
+        }),
+      });
+    },
+  );
 
   await page.route("**/api/workspace/agent-settings", async (route) => {
     await route.fulfill({
@@ -608,7 +687,9 @@ test.describe("BUG 26 — Editor UI Cleanup / Layout Isolation", () => {
     await previewToggle.getByRole("button", { name: /Edited Preview/i }).click();
     // In Edited mode, defaults to Corrected Script and shows toggle
     await expect(transcriptPanel.getByRole("button", { name: "Corrected Script" })).toBeVisible();
-    await expect(transcriptPanel.getByRole("button", { name: "Original Transcript" })).toBeVisible();
+    await expect(
+      transcriptPanel.getByRole("button", { name: "Original Transcript" }),
+    ).toBeVisible();
     await expect(transcriptPanel.getByText("Original:").first()).toBeVisible();
 
     // 3. User switches to Original Transcript tab inside Edited preview
@@ -659,9 +740,7 @@ test.describe("BUG 26 — Editor UI Cleanup / Layout Isolation", () => {
     }
   });
 
-  test("9. Captures mode screenshots: Original, Edited, Voiceover, Final Mix", async ({
-    page,
-  }) => {
+  test("9. Captures mode screenshots: Original, Edited, Voiceover, Final Mix", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await loginAndNavigate(page);
 

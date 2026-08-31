@@ -54,6 +54,7 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
         }`}
         aria-pressed={mode === "original"}
         title="Play raw source video continuously without applying cuts"
+        data-testid="preview-toggle-original"
       >
         <Film className="w-3.5 h-3.5 text-text-muted" />
         <span>Original</span>

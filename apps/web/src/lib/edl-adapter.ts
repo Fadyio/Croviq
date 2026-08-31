@@ -545,7 +545,7 @@ export interface TwickTimelineRepresentation {
  */
 export function getExecutableCuts(edl?: EditDecisionList | null): CutInstruction[] {
   if (!edl?.cuts) return [];
-  return edl.cuts.filter((c) => c.safety_status === "SAFE" || c.safety_status === "NEEDS_COVERAGE");
+  return edl.cuts.filter((c) => c.safety_status !== "REJECTED_UNSAFE");
 }
 
 /**

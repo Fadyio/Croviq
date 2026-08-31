@@ -73,7 +73,10 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState<boolean>(false);
+  const [playbackVersion, setPlaybackVersion] = useState<number>(0);
   const isSeekingInternallyRef = useRef<boolean>(false);
+  const isAutoRenewingRef = useRef<boolean>(false);
+  const autoRetryAttemptedForUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -117,6 +120,9 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   useEffect(() => {
     if (activeVideoUrl || previewMode) {
       setVideoError(null);
+      if (prevActiveUrlRef.current !== activeVideoUrl) {
+        autoRetryAttemptedForUrlRef.current = null;
+      }
     }
   }, [activeVideoUrl, previewMode]);
   const outputStatus = currentOutput
@@ -199,6 +205,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
     const video = videoRef.current;
     if (!video) return;
     setVideoError(null);
+    autoRetryAttemptedForUrlRef.current = null;
     if (
       previewMode === "original" &&
       video.duration &&
@@ -208,6 +215,37 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       onDurationChange(Math.round(video.duration * 1000));
     }
   };
+
+  const handleVideoError = useCallback(async () => {
+    const currentUrl = activeVideoUrl;
+    if (!currentUrl || isAutoRenewingRef.current) return;
+
+    // Attempt one silent renewal for the failed URL before surfacing an error.
+    if (
+      onRetryPlayback &&
+      autoRetryAttemptedForUrlRef.current !== currentUrl &&
+      !isAutoRenewingRef.current
+    ) {
+      autoRetryAttemptedForUrlRef.current = currentUrl;
+      isAutoRenewingRef.current = true;
+      setIsRetrying(true);
+      try {
+        await onRetryPlayback();
+        setPlaybackVersion((v) => v + 1);
+        if (videoRef.current) {
+          videoRef.current.load();
+        }
+      } catch {
+        setVideoError("Playback stream could not be loaded");
+      } finally {
+        isAutoRenewingRef.current = false;
+        setIsRetrying(false);
+      }
+      return;
+    }
+
+    setVideoError("Playback stream could not be loaded");
+  }, [activeVideoUrl, onRetryPlayback]);
 
   // Keyboard shortcut listener for spacebar play/pause
   useEffect(() => {
@@ -317,14 +355,14 @@ export const VideoStage: React.FC<VideoStageProps> = ({
       <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden p-2">
         {activeVideoUrl ? (
           <video
-            key={activeVideoUrl || "preview"}
+            key={`${activeVideoUrl || "preview"}-${playbackVersion}`}
             ref={videoRef}
             src={activeVideoUrl}
             playsInline
             preload="auto"
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
-            onError={() => setVideoError("Playback stream could not be loaded")}
+            onError={handleVideoError}
             className="w-full h-full object-contain max-h-full rounded-lg"
             data-testid="video-element"
           />
@@ -439,11 +477,15 @@ export const VideoStage: React.FC<VideoStageProps> = ({
                 onClick={async () => {
                   setIsRetrying(true);
                   setVideoError(null);
+                  autoRetryAttemptedForUrlRef.current = null;
                   try {
                     await onRetryPlayback();
+                    setPlaybackVersion((v) => v + 1);
                     if (videoRef.current) {
                       videoRef.current.load();
                     }
+                  } catch {
+                    setVideoError("Playback stream could not be loaded");
                   } finally {
                     setIsRetrying(false);
                   }
