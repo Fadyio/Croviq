@@ -5353,6 +5353,86 @@
             "title": "Requires Room Tone",
             "description": "Whether a room-tone bridge is recommended across the join",
             "default": false
+          },
+          "removed_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed Text",
+            "description": "Exact spoken transcript text removed by this cut"
+          },
+          "context_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Before",
+            "description": "Retained spoken context immediately preceding the cut"
+          },
+          "context_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context After",
+            "description": "Retained spoken context immediately following the cut"
+          },
+          "concise_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concise Reason",
+            "description": "Editorial rationale explaining why this cut was made"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category",
+            "description": "Canonical category name (e.g. FALSE_START, WORD_REPETITION)"
+          },
+          "semantic_events": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticEvent"
+            },
+            "type": "array",
+            "title": "Semantic Events",
+            "description": "All individual semantic decisions / events represented inside this physical cut"
+          },
+          "contains_silence": {
+            "type": "boolean",
+            "title": "Contains Silence",
+            "description": "Whether this physical cut removes dead air / silence",
+            "default": false
+          },
+          "contains_semantic_removal": {
+            "type": "boolean",
+            "title": "Contains Semantic Removal",
+            "description": "Whether this physical cut removes semantic speech",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -5846,6 +5926,42 @@
             ],
             "title": "Risk",
             "description": "Potential editorial or audio risk associated with the cut"
+          },
+          "removed_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed Text",
+            "description": "Exact spoken transcript text removed by this decision"
+          },
+          "context_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Before",
+            "description": "Retained spoken context immediately preceding the cut"
+          },
+          "context_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context After",
+            "description": "Retained spoken context immediately following the cut"
           }
         },
         "type": "object",
@@ -5867,7 +5983,18 @@
       "EditorDecisionType": {
         "type": "string",
         "enum": [
+          "FALSE_START",
+          "WORD_REPETITION",
+          "PHRASE_REPETITION",
+          "REDUNDANT_EXPLANATION",
+          "FILLER",
+          "RAMBLING",
+          "DEAD_AIR",
+          "PAUSE_TRIM",
+          "PACING",
+          "OTHER",
           "KEEP",
+          "KEEP_FOR_CLARITY",
           "REMOVE_SILENCE",
           "REMOVE_FILLER",
           "REMOVE_FALSE_START",
@@ -5876,7 +6003,6 @@
           "TIGHTEN_PAUSE",
           "TIGHTEN_EXPLANATION",
           "REMOVE_LOW_VALUE_SECTION",
-          "KEEP_FOR_CLARITY",
           "SOURCE_COVER",
           "CHAPTER_MARKER",
           "NARRATION_REWRITE",
@@ -9247,6 +9373,78 @@
         "enum": ["KEEP", "TIGHTEN", "REMOVE", "COVERAGE"],
         "title": "SectionAction",
         "description": "Editorial action applied to a full-timeline production section."
+      },
+      "SemanticEvent": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id",
+            "description": "Unique event identifier"
+          },
+          "decision_id": {
+            "type": "string",
+            "title": "Decision Id",
+            "description": "Originating Editor decision identifier"
+          },
+          "decision_type": {
+            "type": "string",
+            "title": "Decision Type",
+            "description": "Decision type (e.g. FALSE_START, FILLER, TRIM_PAUSE)"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "description": "Canonical category (e.g. FALSE_START, FILLER, DEAD_AIR)"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Editorial rationale for the event"
+          },
+          "removed_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed Text",
+            "description": "Removed text for this event if applicable"
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Start time in milliseconds",
+            "default": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Ms",
+            "description": "End time in milliseconds",
+            "default": 0
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Duration Ms",
+            "description": "Event duration in milliseconds",
+            "default": 0
+          },
+          "is_silence": {
+            "type": "boolean",
+            "title": "Is Silence",
+            "description": "Whether this event is a silence/pause trim",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": ["event_id", "decision_id", "decision_type", "category", "reason"],
+        "title": "SemanticEvent",
+        "description": "An individual editorial decision / semantic event contained within a physical cut."
       },
       "SilenceInterval": {
         "properties": {

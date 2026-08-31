@@ -997,6 +997,22 @@ export interface components {
       coverage_marker_id?: string | null;
       /** Whether a room-tone bridge is recommended across the join */
       requires_room_tone?: boolean;
+      /** Exact spoken transcript text removed by this cut */
+      removed_text?: string | null;
+      /** Retained spoken context immediately preceding the cut */
+      context_before?: string | null;
+      /** Retained spoken context immediately following the cut */
+      context_after?: string | null;
+      /** Editorial rationale explaining why this cut was made */
+      concise_reason?: string | null;
+      /** Canonical category name (e.g. FALSE_START, WORD_REPETITION) */
+      category?: string | null;
+      /** All individual semantic decisions / events represented inside this physical cut */
+      semantic_events?: components["schemas"]["SemanticEvent"][];
+      /** Whether this physical cut removes dead air / silence */
+      contains_silence?: boolean;
+      /** Whether this physical cut removes semantic speech */
+      contains_semantic_removal?: boolean;
     };
     CutSafetyStatus: "SAFE" | "NEEDS_COVERAGE" | "REJECTED_UNSAFE";
     DashboardChannel: {
@@ -1100,9 +1116,26 @@ export interface components {
       preserve_context?: string | null;
       /** Potential editorial or audio risk associated with the cut */
       risk?: string | null;
+      /** Exact spoken transcript text removed by this decision */
+      removed_text?: string | null;
+      /** Retained spoken context immediately preceding the cut */
+      context_before?: string | null;
+      /** Retained spoken context immediately following the cut */
+      context_after?: string | null;
     };
     EditorDecisionType:
+      | "FALSE_START"
+      | "WORD_REPETITION"
+      | "PHRASE_REPETITION"
+      | "REDUNDANT_EXPLANATION"
+      | "FILLER"
+      | "RAMBLING"
+      | "DEAD_AIR"
+      | "PAUSE_TRIM"
+      | "PACING"
+      | "OTHER"
       | "KEEP"
+      | "KEEP_FOR_CLARITY"
       | "REMOVE_SILENCE"
       | "REMOVE_FILLER"
       | "REMOVE_FALSE_START"
@@ -1111,7 +1144,6 @@ export interface components {
       | "TIGHTEN_PAUSE"
       | "TIGHTEN_EXPLANATION"
       | "REMOVE_LOW_VALUE_SECTION"
-      | "KEEP_FOR_CLARITY"
       | "SOURCE_COVER"
       | "CHAPTER_MARKER"
       | "NARRATION_REWRITE"
@@ -1840,6 +1872,28 @@ export interface components {
       | "PUNCTUATION"
       | "KEEP";
     SectionAction: "KEEP" | "TIGHTEN" | "REMOVE" | "COVERAGE";
+    SemanticEvent: {
+      /** Unique event identifier */
+      event_id: string;
+      /** Originating Editor decision identifier */
+      decision_id: string;
+      /** Decision type (e.g. FALSE_START, FILLER, TRIM_PAUSE) */
+      decision_type: string;
+      /** Canonical category (e.g. FALSE_START, FILLER, DEAD_AIR) */
+      category: string;
+      /** Editorial rationale for the event */
+      reason: string;
+      /** Removed text for this event if applicable */
+      removed_text?: string | null;
+      /** Start time in milliseconds */
+      start_ms?: number;
+      /** End time in milliseconds */
+      end_ms?: number;
+      /** Event duration in milliseconds */
+      duration_ms?: number;
+      /** Whether this event is a silence/pause trim */
+      is_silence?: boolean;
+    };
     SilenceInterval: {
       /** Silence interval start offset in milliseconds */
       start_ms: number;
