@@ -147,7 +147,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
+          enable-cache: false
           python-version: "3.12"
 
       - name: Install dependencies
@@ -218,6 +218,12 @@ jobs:
 
       - name: Run Sharded E2E tests
         run: pnpm --filter @croviq/web exec playwright test --shard=${{ matrix.shard }}
+
+      - name: Stop Background Services
+        if: always()
+        run: |
+          pkill -f "uvicorn" || true
+          pkill -f "vite" || true
 
       - name: Upload Playwright artifacts on failure
         if: failure()
