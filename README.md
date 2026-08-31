@@ -1,358 +1,466 @@
 # Croviq
 
-> **Autonomous Multi-Agent Production Studio & Channel Intelligence for YouTube Creators**
+![Croviq Infrastructure Diagram](brandkit/infra_Digram.png)
 
-[![Live Production](https://img.shields.io/badge/Production-app.croviq.app-2563eb?style=flat-square)](https://app.croviq.app)
-[![Google Cloud](https://img.shields.io/badge/Google%20Cloud-Cloud%20Run%20%7C%20Vertex%20AI%20%7C%20Firestore-4285f4?style=flat-square&logo=googlecloud&logoColor=white)](https://cloud.google.com)
-[![Gemini Models](https://img.shields.io/badge/Gemini-3.7%20Flash%20%7C%203.5%20Transcribe%20%7C%203.1%20TTS-8e75ff?style=flat-square&logo=googlegemini&logoColor=white)](https://deepmind.google/technologies/gemini/)
-[![Terraform](https://img.shields.io/badge/IaC-100%25%20Terraform-844fba?style=flat-square&logo=terraform&logoColor=white)](infra/)
-[![TypeScript](https://img.shields.io/badge/Frontend-React%2019%20%7C%20Vite%20%7C%20Tailwind%20v4-3178c6?style=flat-square&logo=typescript&logoColor=white)](apps/web/)
-[![Python](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.12%20%7C%20uv-3776ab?style=flat-square&logo=python&logoColor=white)](apps/api/)
+Autonomous multi-agent production studio and channel intelligence platform for YouTube creators. Coordinates specialized AI agents (Alex, Leo, Iris) for dialogue editing, audio mix/voiceover, quality control, and channel performance analysis.
 
----
-
-Croviq is an autonomous, visible multi-agent production team and channel intelligence platform built for YouTube creators. Croviq learns a creator's channel, transforms raw video footage into polished releases with natural dialogue editing, synthesizes Studio Voice voiceover audio, mixes background music, executes continuous grounded web research with verifiable citations, and distills performance lessons into a persistent Channel Memory Bank.
-
-- **Live Production Application**: [https://app.croviq.app](https://app.croviq.app)
-- **Backend API Docs (Swagger)**: `http://localhost:8080/docs` (or production `/api/docs`)
-- **GCP Production Project**: `croviq-506602` (Primary Region: `us-central1`)
+- Production URL: https://app.croviq.app
+- Local Web Studio: http://localhost:5173
+- Local Backend API: http://localhost:8080
+- API Health Check: http://localhost:8080/api/health
+- Backend API Docs (Swagger): http://localhost:8080/docs
 
 ---
 
-## ⚡ Quickstart: Zero-to-Running in 60 Seconds
+## Prerequisites
 
-Croviq is designed for **100% reproducible local execution**. By default, it runs in **Deterministic Local Mode**—all AI agents, speech transcription, voice synthesis, GCS media storage, and Firestore persistence run against deterministic local implementations with zero cloud credentials or billing required.
+| Tool | Version Requirement | Purpose | Verification Command |
+| :--- | :--- | :--- | :--- |
+| Node.js | `>= 20.0.0` | Frontend runtime | `node -v` |
+| pnpm | `>= 9.0.0` | Node package manager | `pnpm -v` |
+| Python | `>= 3.12` | Backend runtime | `python3 --version` |
+| uv | `>= 0.1.0` | Python package and workspace manager | `uv --version` |
+| FFmpeg & FFprobe | In system `$PATH` | Video and audio rendering engine | `ffmpeg -version` |
+| Terraform | `>= 1.5.0, < 2.0.0` | Infrastructure as Code | `terraform version` |
+| Docker | Latest | Container runtime (optional for local, required for deploy) | `docker --version` |
+| Google Cloud SDK | Latest | GCP authentication & management (optional for local) | `gcloud version` |
 
-### Step 1: Check Local Prerequisites
+---
 
-Ensure your workstation has the required tools installed:
-- **Node.js**: `>= 20.0.0` (LTS recommended)
-- **pnpm**: `>= 9.0.0` (`corepack enable && corepack prepare pnpm@11.23.0 --activate`)
-- **Python**: `>= 3.12`
-- **uv**: `>= 0.1.0` (Fast Python package installer: `curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- **FFmpeg & FFprobe**: in your system `$PATH` (e.g. `brew install ffmpeg` on macOS)
-- **Terraform**: `>= 1.5.0, < 2.0.0` (for infrastructure validation)
+## Local Setup and Spin-Up
 
-Run the environment doctor to verify your setup:
+Croviq defaults to **Deterministic Local Mode**—agent reasoning, transcription, voiceover synthesis, GCS storage, and Firestore run on deterministic local mocks. No Google Cloud credentials or billing are required.
+
+### 1. Verify Toolchain
+
+Run the environment doctor to ensure all required CLI binaries are installed:
+
 ```bash
 make doctor
 ```
 
-```text
-==================================================
- Croviq Local Development Environment Doctor
-==================================================
-TOOL           | REQUIRED           | FOUND              | STATUS
------------------------------------------------------------------
-python         | >= 3.12            | 3.12+              | ✓ OK
-uv             | >= 0.1.0           | 0.12+              | ✓ OK
-node           | >= 20.0.0          | 20+ / 22+          | ✓ OK
-pnpm           | >= 9.0.0           | 11.23+             | ✓ OK
-ffmpeg         | available          | 7+ / 8+ / 9+       | ✓ OK
-ffprobe        | available          | 7+ / 8+ / 9+       | ✓ OK
-terraform      | >= 1.5.0, < 2.0.0  | v1.5 - v1.16       | ✓ OK
-==================================================
-✓ All required local development tools are installed and operational.
-```
+### 2. Bootstrap Dependencies and Environment
 
----
+Bootstrap the repository, copy environment templates, install frontend dependencies, and synchronize Python workspace packages:
 
-### Step 2: One-Command Bootstrap
-
-Bootstrap all frontend and backend dependencies and initialize local environment files:
 ```bash
 make setup
 ```
 
-This automatically:
-1. Copies `.env.example` → `.env`
-2. Copies `apps/web/.env.example` → `apps/web/.env.local`
-3. Installs frontend dependencies with `pnpm install --frozen-lockfile`
-4. Resolves and synchronizes Python dependencies across all workspace packages (`packages/domain`, `packages/observability`, `packages/media`, `packages/agents`, and `apps/api`) via `uv sync`.
+This command automatically:
+- Copies `.env.example` -> `.env`
+- Copies `apps/web/.env.example` -> `apps/web/.env.local`
+- Runs `pnpm install --frozen-lockfile`
+- Runs `uv sync` across `packages/domain`, `packages/observability`, `packages/media`, `packages/agents`, and `apps/api`
 
----
+### 3. Start Development Servers
 
-### Step 3: Start Full-Stack Development
+Start the FastAPI backend and Vite frontend concurrently:
 
-Start both the FastAPI backend and the Vite frontend concurrently with hot reloading:
 ```bash
 make dev
 ```
 
-The terminal will display the active services:
-```text
-==> Starting Croviq full-stack development environment...
-    Backend API:  http://localhost:8080 (Health: http://localhost:8080/api/health)
-    Frontend Web: http://localhost:5173
-    Press Ctrl+C to terminate both servers.
+Servers will be accessible at:
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8080`
+- API Health: `http://localhost:8080/api/health`
+- Swagger Docs: `http://localhost:8080/docs`
+
+To run servers individually:
+- Backend only: `make dev-api`
+- Frontend only: `make dev-web`
+
+### 4. Sign In (Local Dev)
+
+1. Open `http://localhost:5173`.
+2. Sign in with the local development credentials:
+   - Email: `demo@croviq.app`
+   - Password: any password (or blank)
+
+---
+
+## Local Execution Modes
+
+### Mode 1: Deterministic Local Mode (Default)
+
+Configured in `.env`:
+```env
+ENVIRONMENT=development
+GENAI_BACKEND_PROVIDER=fake
+MEDIA_STORAGE_PROVIDER=fake
+MEMORY_STORE_PROVIDER=fake
+SPEECH_SERVICE_PROVIDER=fake
+CROVIQ_ALLOWED_EMAILS=demo@croviq.app
+```
+Runs entirely offline with zero cloud dependencies.
+
+### Mode 2: Live Google Cloud / Vertex AI Connected Mode
+
+To connect the local application to live Vertex AI (Gemini 3.7 Flash, Gemini 3.5 Transcribe, Gemini 3.1 TTS), Google Cloud Storage, and Google Agent Platform Memory Bank:
+
+1. Authenticate Application Default Credentials (ADC):
+```bash
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project YOUR_GCP_PROJECT_ID
+gcloud auth application-default set-quota-project YOUR_GCP_PROJECT_ID
+```
+
+2. Update `.env`:
+```env
+GCP_PROJECT_ID=YOUR_GCP_PROJECT_ID
+GCP_REGION=us-central1
+GENAI_BACKEND_PROVIDER=google
+SPEECH_SERVICE_PROVIDER=google
+MEDIA_STORAGE_PROVIDER=google
+MEMORY_STORE_PROVIDER=google
+```
+
+3. Restart the dev servers:
+```bash
+make dev
 ```
 
 ---
 
-### Step 4: Open and Explore the Studio
+## Docker Compose Spin-Up
 
-1. Navigate to **`http://localhost:5173`** in your browser.
-2. Sign in using the pre-configured demo creator account:
-   - **Email**: `demo@croviq.app`
-   - **Password**: any password (or leave blank in local dev mode)
-3. **Explore Key Capabilities**:
-   - **Channel Intelligence Overview** (`/`): Inspect channel retention trends, subscriber growth velocity, Alex's Google Search-grounded competitive research findings with citations, and Channel Memory Bank lessons.
-   - **Video Timeline & Dialogue Editor** (`/productions` → select any production → **Editor**): Inspect the interactive Twick multi-track timeline, synchronized transcript with word-level strike-through cuts, Leo's semantic dialogue edit decisions, Studio Voice synthesis preview, and Iris's quality control report.
-   - **Release Gate & Packaging** (`/productions/.../release`): Inspect publishing assets (title, description, tags, QA certificate), human approval gate, and private YouTube release dispatch.
-4. **Backend OpenAPI Documentation**: Explore interactive FastAPI Swagger endpoints at **`http://localhost:8080/docs`**.
-
----
-
-## 🐳 Alternative Spin-Up: Docker Compose
-
-If you prefer running inside containers without installing Python or Node locally:
+To run the full stack inside Docker containers without local Python or Node installations:
 
 ```bash
 # Build and start web and api containers
 docker compose up --build
 ```
 
-- **Frontend Web**: `http://localhost:5173`
-- **Backend API**: `http://localhost:8080`
-- **API Health**: `http://localhost:8080/api/health`
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8080`
+- Health check: `http://localhost:8080/api/health`
 
-To stop containers:
+Stop containers:
 ```bash
 docker compose down
 ```
 
 ---
 
-## ☁️ Live Google Cloud / Vertex AI Connected Mode
+## Verification and Testing
 
-To connect your local instance to live Google Cloud services (Vertex AI Gemini 3.7 Flash, Gemini Transcribe, Gemini TTS, Google Cloud Storage, and Google Agent Platform Memory Bank):
+| Command | Scope | Description |
+| :--- | :--- | :--- |
+| `make verify` | Full Suite | Runs doctor, format check, lint, typecheck, tests, OpenAPI drift check, infra validation, and security scan |
+| `make test` | Backend | Runs pytest across all domain packages and API |
+| `make e2e` | Frontend | Runs Playwright browser end-to-end tests |
+| `make typecheck` | Typing | Runs TypeScript workspace typecheck (`tsc --noEmit`) |
+| `make lint` | Quality | Runs Biome linter across frontend codebase |
+| `make format` | Formatting | Applies Prettier code formatting |
+| `make format-check` | Formatting | Checks Prettier code formatting |
+| `make openapi` | Contract | Exports OpenAPI 3.1 schema and regenerates TypeScript client |
+| `make infra-validate` | Terraform | Formats and validates all Terraform configurations |
+| `make security` | Security | Runs AST security audit, secret scanning, and Gitleaks |
+
+---
+
+## Cloud Deployment (Google Cloud + Cloudflare)
+
+Step-by-step instructions to provision infrastructure, build container images, and deploy Croviq to Google Cloud Run behind a Global Application Load Balancer with Cloudflare DNS.
+
+### Prerequisites
+
+1. Google Cloud Project with billing enabled.
+2. `gcloud` CLI authenticated with Project Owner permissions.
+3. Terraform CLI (`>= 1.5.0, < 2.0.0`).
+4. Cloudflare Account managing the root domain with `CLOUDFLARE_API_TOKEN` (`Zone.DNS` edit permissions).
+5. Docker CLI with Buildx.
+
+---
+
+### Step 1: Set GCP Project and Authenticate
 
 ```bash
-# 1. Authenticate with Google Cloud Application Default Credentials (ADC)
+export GCP_PROJECT_ID="your-gcp-project-id"
+export GCP_REGION="us-central1"
+
+gcloud auth login
 gcloud auth application-default login
-
-# 2. Update .env to enable Google providers:
-#    GCP_PROJECT_ID=croviq-506602
-#    GENAI_BACKEND_PROVIDER=google
-#    SPEECH_SERVICE_PROVIDER=google
-#    MEDIA_STORAGE_PROVIDER=google
-#    MEMORY_STORE_PROVIDER=google
-
-# 3. Start local development
-make dev
+gcloud config set project "${GCP_PROJECT_ID}"
+gcloud auth application-default set-quota-project "${GCP_PROJECT_ID}"
 ```
 
-*(Note: Real YouTube channel OAuth connection requires your Google OAuth Client ID and Secret in `.env`; developer ADC handles all Vertex AI reasoning, speech, storage, and memory APIs.)*
-
 ---
 
-## 🤖 Implemented Autonomous Production Team
+### Step 2: Provision Remote State Bucket
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                             CROVIQ PRODUCTION STUDIO                             │
-├───────────────────────┬──────────────────────────┬───────────────────────────────┤
-│   ALEX (Data Science) │     LEO (Video Editor)   │    IRIS (Quality Control)     │
-├───────────────────────┼──────────────────────────┼───────────────────────────────┤
-│ • Channel intelligence│ • Dialogue boundary cuts │ • Rendered artifact inspection│
-│ • Google Search ground│ • Filler/pause removal   │ • Jump cut & dead air checks  │
-│ • Python code analysis│ • Studio Voice synthesis │ • Loudness audit (~ -16 LUFS) │
-│ • Falsifiable lessons │ • Audio-safe cut plan    │ • Caption sync & fact check   │
-│ • Channel Memory Bank │ • Twick timeline sync    │ • Failsafe release gatekeeper │
-└───────────────────────┴──────────────────────────┴───────────────────────────────┘
-```
+Provision the GCS bucket for Terraform remote state:
 
-1. **Alex (Data Scientist)**:
-   - Analyzes channel performance baselines, subscriber velocity, and retention drop-offs.
-   - Executes live Google Search-grounded competitive research with verifiable URL citations.
-   - Runs deterministic Python code execution in sandboxed environments for statistical correlation.
-   - Distills evidence-backed, falsifiable insights into the persistent **Channel Memory Bank**.
-
-2. **Leo (Video Editor)**:
-   - Performs full-timeline semantic dialogue editing, identifying filler words, false starts, and redundant explanations.
-   - Generates Edit Decision Lists (EDLs) with natural cut-safety micro-crossfades and audio envelope padding.
-   - Rewrites and synthesizes voiceover scripts via **Gemini 3.1 Flash TTS Preview** with prebuilt voice personas.
-   - Generates background music and audio-safe speech ducking.
-
-3. **Iris (Quality Control & Gatekeeper)**:
-   - Evaluates the rendered master video against strict broadcast and YouTube standards.
-   - Verifies dialogue continuity, missing audio frames, audio loudness target (~ -16 LUFS), caption sync, and factual claims.
-   - Produces immutable structured QA reports (`PASS`, `REVISE`, `CREATOR_REQUIRED`, `FAIL`).
-   - Enforces deterministic human approval gates before triggering YouTube release publishers.
-
----
-
-## 🧠 AI Models & Media Engineering Stack
-
-| Capability | Model / Engine | Provider / Implementation |
-| :--- | :--- | :--- |
-| **Multimodal Agent Reasoning** | `gemini-3.7-flash` | Google GenAI SDK / Vertex AI |
-| **Speech Transcription** | `gemini-3.5-transcribe-preview` | Vertex AI (Word-level timestamps & natural casing) |
-| **Studio Voice Synthesis** | `gemini-3.1-flash-tts-preview` | Vertex AI (Puck, Charon, Aoede, Kore, Fenrir, Leda, Orus, Zephyr) |
-| **Grounded Web Research** | Google Search Grounding | Gemini 3.7 Flash Tool Integration + URL Citations |
-| **Statistical Analysis** | Python Code Execution | Vertex AI Built-in Code Execution Tool |
-| **Channel Memory Bank** | Google Agent Platform | `ChannelProfile`, `ChannelLesson`, `ChannelExperiment` |
-| **Deterministic Video Render** | FFmpeg 7+ | Cloud Run Worker / Micro-crossfades & EDL Rendering |
-| **Multi-Track Timeline** | Twick (`@twick/timeline`) | React 19 + TypeScript Interactive Canvas |
-| **Analytics Visualization** | Apache ECharts (`echarts`) | Responsive retention curves & metric trend charts |
-
----
-
-## 🔒 Security, Authentication & Data Architecture
-
-```text
-                                  ┌────────────────────────┐
-                                  │ Creator Browser Client │
-                                  └───────────┬────────────┘
-                                              │ 1. Email/Password Login
-                                              ▼
-                               ┌───────────────────────────────┐
-                               │ Google Cloud Identity Platform│
-                               │        (Firebase Auth)        │
-                               └──────────────┬────────────────┘
-                                              │ 2. Verified JWT Bearer
-                                              ▼
-                               ┌───────────────────────────────┐
-                               │    FastAPI API Server         │
-                               └──────┬─────────────────┬──────┘
-             3. Signed URL V4 Uploads │                 │ 4. Encrypted OAuth Tokens
-                                      ▼                 ▼
-                       ┌────────────────────┐   ┌───────────────────────────┐
-                       │ Google Cloud       │   │ Google Cloud Firestore    │
-                       │ Storage (GCS)      │   │ (Encrypted with Cloud KMS │
-                       │ croviq-media-raw   │   │  + Tink Symmetric AEAD)   │
-                       └────────────────────┘   └───────────────────────────┘
-```
-
-- **Creator Authentication**: Built with Google Cloud Identity Platform (Firebase JS SDK on frontend, FastAPI token verification on backend). Requests fail closed unless authenticated.
-- **YouTube Channel Integration**: Incremental Google OAuth 2.0 authorization for read-only YouTube Analytics/Data API access and optional private video publishing.
-- **Secret Manager Protection**: Google OAuth client secret is securely stored in **Google Secret Manager** (`youtube-oauth-client-secret`) and mounted directly into the Cloud Run container. Zero secrets exist in code or Terraform state.
-- **Token Envelope Encryption (KMS + Tink)**: User YouTube OAuth tokens are encrypted at rest using **Google Cloud KMS** (`youtube-oauth-kek`) + **Tink** symmetric key AEAD with Additional Authenticated Data (AAD binding `workspace_id`, `channel_id`, `user_id`) before storage in Firestore. **Zero plaintext tokens are ever stored or logged.**
-- **Zero-Proxy Direct Media Uploads**: Raw 4K footage and media assets are uploaded directly from the browser to private Google Cloud Storage buckets via short-lived V4 signed URLs (1GB max file upload limit).
-
----
-
-## 🌐 Production Cloud Topology (ADR-0013)
-
-Croviq uses a single-origin routing architecture to eliminate CORS overhead, optimize cookie/token transmission, and ensure low-latency global delivery:
-
-```text
-                       https://app.croviq.app
-                                 │
-                                 ▼
-                     Cloudflare Authoritative DNS
-                                 │
-                                 ▼
-           Google Global External Application Load Balancer
-                 (Managed SSL Certificate / Anycast IP)
-                                 │
-                 ┌───────────────┴───────────────┐
-                 │                               │
-                 ▼ /*                            ▼ /api/*
-      Serverless Network Endpoint     Serverless Network Endpoint
-            Group (NEG)                     Group (NEG)
-                 │                               │
-                 ▼                               ▼
-        croviq-web (Cloud Run)          croviq-api (Cloud Run)
-        React 19 + Vite SPA             Python 3.12 + FastAPI
-        Static Asset Container          Deterministic Agent Engine
-```
-
-- **Production URL**: `https://app.croviq.app`
-- **Root Domain**: `https://croviq.app` → HTTP 308 permanent redirect to `https://app.croviq.app`
-- **Infrastructure as Code**: 100% Terraform definitions in `infra/` (GCP resources) and `infra/cloudflare-dns/` (DNS routing).
-
----
-
-## 🧪 Verification & Quality Gate Reference
-
-Croviq maintains a strict zero-regression quality gate. All checks can be executed locally:
-
-| Command | Target | Description |
-| :--- | :--- | :--- |
-| `make doctor` | System | Verify all required local developer tools and versions |
-| `make setup` | Setup | Bootstrap dependencies and generate missing `.env` configurations |
-| `make dev` | Runtime | Launch full-stack environment (FastAPI on `:8080` + Vite on `:5173`) |
-| `make dev-api` | Runtime | Start FastAPI backend server only (`http://localhost:8080`) |
-| `make dev-web` | Runtime | Start Vite frontend dev server only (`http://localhost:5173`) |
-| `make test` | Testing | Run all Python test suites across all 4 domain packages and API |
-| `make e2e` | Testing | Run Playwright end-to-end browser test suite |
-| `make typecheck` | Typing | Run TypeScript typechecking across workspace (`tsc --noEmit`) |
-| `make lint` | Quality | Run Biome linter across the frontend codebase |
-| `make format` | Quality | Apply Prettier code formatting across the repository |
-| `make format-check` | Quality | Check code formatting without modifying files |
-| `make openapi` | Contract | Export FastAPI OpenAPI 3.1 schema and generate TypeScript client types |
-| `make infra-validate` | DevOps | Validate Terraform configurations across all infrastructure roots |
-| `make security` | Security | Run secret scanning, AST security audit, and sandbox checks |
-| `make verify` | **Gate** | **Canonical clean-room verification pipeline (runs all checks)** |
-
-Run the full verification pipeline:
 ```bash
-make verify
+cd infra/bootstrap
+
+cp terraform.tfvars.example terraform.tfvars
+cat <<EOF > terraform.tfvars
+project_id = "${GCP_PROJECT_ID}"
+region     = "${GCP_REGION}"
+EOF
+
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
+
+cp backend.hcl.example backend.hcl
+cat <<EOF > backend.hcl
+bucket = "${GCP_PROJECT_ID}-croviq-tfstate"
+prefix = "croviq/bootstrap"
+EOF
+
+terraform init -migrate-state -backend-config=backend.hcl -force-copy
+cd ../..
 ```
 
 ---
 
-## 📂 Repository Structure
+### Step 3: Configure Secret Manager Secrets
+
+Store required secrets before deploying the Cloud Run container:
+
+```bash
+gcloud services enable secretmanager.googleapis.com --project="${GCP_PROJECT_ID}"
+
+# Create YouTube OAuth Client ID secret
+gcloud secrets create youtube-oauth-client-id \
+  --project="${GCP_PROJECT_ID}" \
+  --replication-policy="automatic" \
+  --data-file=- <<< "YOUR_YOUTUBE_OAUTH_CLIENT_ID"
+
+# Create YouTube OAuth Client Secret secret
+gcloud secrets create youtube-oauth-client-secret \
+  --project="${GCP_PROJECT_ID}" \
+  --replication-policy="automatic" \
+  --data-file=- <<< "YOUR_YOUTUBE_OAUTH_CLIENT_SECRET"
+```
+
+---
+
+### Step 4: Build and Push Container Images
+
+Build production images and push them to Google Artifact Registry to obtain immutable SHA256 digests:
+
+```bash
+gcloud services enable artifactregistry.googleapis.com --project="${GCP_PROJECT_ID}"
+
+# Create Artifact Registry repositories
+gcloud artifacts repositories create croviq-api \
+  --repository-format=docker \
+  --location="${GCP_REGION}" \
+  --description="Croviq API Docker repository" || true
+
+gcloud artifacts repositories create croviq-web \
+  --repository-format=docker \
+  --location="${GCP_REGION}" \
+  --description="Croviq Web Docker repository" || true
+
+# Authenticate Docker to Artifact Registry
+gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev"
+
+GIT_SHA=$(git rev-parse HEAD)
+
+# Build and push API image
+docker build \
+  --platform linux/amd64 \
+  -f apps/api/Dockerfile \
+  -t "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-api/croviq-api:${GIT_SHA}" \
+  -t "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-api/croviq-api:latest" \
+  .
+
+docker push "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-api/croviq-api:${GIT_SHA}"
+docker push "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-api/croviq-api:latest"
+
+API_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-api/croviq-api:${GIT_SHA}")
+
+# Build and push Web image
+docker build \
+  --platform linux/amd64 \
+  -f apps/web/Dockerfile \
+  --build-arg VITE_FIREBASE_API_KEY="YOUR_FIREBASE_API_KEY" \
+  --build-arg VITE_FIREBASE_AUTH_DOMAIN="${GCP_PROJECT_ID}.firebaseapp.com" \
+  --build-arg VITE_FIREBASE_PROJECT_ID="${GCP_PROJECT_ID}" \
+  -t "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-web/croviq-web:${GIT_SHA}" \
+  -t "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-web/croviq-web:latest" \
+  .
+
+docker push "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-web/croviq-web:${GIT_SHA}"
+docker push "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-web/croviq-web:latest"
+
+WEB_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/croviq-web/croviq-web:${GIT_SHA}")
+```
+
+---
+
+### Step 5: Deploy Main GCP Infrastructure
+
+Deploy Cloud Run services, Serverless NEGs, Firestore, KMS keys, and the Global Application Load Balancer:
+
+```bash
+cd infra
+
+cat <<EOF > backend.hcl
+bucket = "${GCP_PROJECT_ID}-croviq-tfstate"
+prefix = "croviq/main"
+EOF
+
+cat <<EOF > terraform.tfvars
+project_id     = "${GCP_PROJECT_ID}"
+region         = "${GCP_REGION}"
+environment    = "prod"
+app_domain     = "app.croviq.app"
+root_domain    = "croviq.app"
+api_image      = "${API_DIGEST}"
+web_image      = "${WEB_DIGEST}"
+git_sha        = "${GIT_SHA}"
+allowed_emails = "demo@croviq.app,your-email@domain.com"
+EOF
+
+terraform init -backend-config=backend.hcl
+terraform plan -out=tfplan
+terraform apply tfplan
+
+# Extract outputs needed for DNS configuration
+LB_IP=$(terraform output -raw load_balancer_ip)
+DNS_AUTH_NAME=$(terraform output -raw dns_authorization_record_name)
+DNS_AUTH_TYPE=$(terraform output -raw dns_authorization_record_type)
+DNS_AUTH_VALUE=$(terraform output -raw dns_authorization_record_value)
+ROOT_DNS_AUTH_NAME=$(terraform output -raw root_dns_authorization_record_name)
+ROOT_DNS_AUTH_TYPE=$(terraform output -raw root_dns_authorization_record_type)
+ROOT_DNS_AUTH_VALUE=$(terraform output -raw root_dns_authorization_record_value)
+cd ..
+```
+
+---
+
+### Step 6: Deploy Cloudflare DNS
+
+Point application and root domains to the GCP Load Balancer IP and configure Certificate Manager DNS authorization records:
+
+```bash
+cd infra/cloudflare-dns
+
+cat <<EOF > backend.hcl
+bucket = "${GCP_PROJECT_ID}-croviq-tfstate"
+prefix = "croviq/cloudflare-dns"
+EOF
+
+cat <<EOF > terraform.tfvars
+cloudflare_zone_name                      = "croviq.app"
+app_ipv4_address                          = "${LB_IP}"
+root_ipv4_address                         = "${LB_IP}"
+certificate_dns_authorization_name        = "${DNS_AUTH_NAME}"
+certificate_dns_authorization_type        = "${DNS_AUTH_TYPE}"
+certificate_dns_authorization_value       = "${DNS_AUTH_VALUE}"
+certificate_root_dns_authorization_name   = "${ROOT_DNS_AUTH_NAME}"
+certificate_root_dns_authorization_type   = "${ROOT_DNS_AUTH_TYPE}"
+certificate_root_dns_authorization_value  = "${ROOT_DNS_AUTH_VALUE}"
+EOF
+
+export CLOUDFLARE_API_TOKEN="your-cloudflare-api-token"
+
+terraform init -backend-config=backend.hcl
+terraform plan -out=tfplan
+terraform apply tfplan
+cd ../..
+```
+
+---
+
+### Step 7: Verify Production Health
+
+```bash
+# Verify API health via Load Balancer
+curl -fsS -i "https://app.croviq.app/api/health"
+
+# Initialize Vertex AI observability logging dataset
+python3 scripts/configure_vertex_publisher_logging.py \
+  --project-id="${GCP_PROJECT_ID}" \
+  --location="global" \
+  --dataset-id="croviq_ai_observability" \
+  --table-id="gemini_requests"
+```
+
+---
+
+## CI/CD Automation (GitHub Actions)
+
+Continuous Integration and Deployment are configured in `.github/workflows/ci.yml` and `.github/workflows/deploy.yml` via Workload Identity Federation (WIF).
+
+### Required GitHub Settings
+
+**Repository Variables** (Settings -> Secrets and variables -> Actions -> Variables):
+- `VITE_FIREBASE_API_KEY`: Firebase Web API key
+- `VITE_FIREBASE_AUTH_DOMAIN`: `${GCP_PROJECT_ID}.firebaseapp.com`
+- `VITE_FIREBASE_PROJECT_ID`: `${GCP_PROJECT_ID}`
+
+**Repository Secrets** (Settings -> Secrets and variables -> Actions -> Secrets):
+- `CLOUDFLARE_API_TOKEN`: Cloudflare API token with `Zone.DNS` edit permissions
+
+---
+
+## Configuration Reference
+
+### Backend (`.env`)
+
+| Variable | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `ENVIRONMENT` | String | `development` | Runtime environment (`development`, `staging`, `production`) |
+| `PORT` | Integer | `8080` | Port for FastAPI Uvicorn server |
+| `CROVIQ_ALLOWED_EMAILS` | String | `demo@croviq.app` | Comma-separated list of permitted creator login emails |
+| `GCP_PROJECT_ID` | String | `your-gcp-project-id` | Target Google Cloud project ID |
+| `GCP_REGION` | String | `us-central1` | Primary Google Cloud region |
+| `GENAI_BACKEND_PROVIDER` | String | `fake` | `fake` (deterministic mock) or `google` (Vertex AI) |
+| `SPEECH_SERVICE_PROVIDER` | String | `fake` | `fake` (deterministic mock) or `google` (Gemini Transcribe) |
+| `MEDIA_STORAGE_PROVIDER` | String | `fake` | `fake` (in-memory mock) or `google` (GCS) |
+| `MEMORY_STORE_PROVIDER` | String | `fake` | `fake` (in-memory mock) or `google` (Agent Platform Memory Bank) |
+| `GEMINI_MODEL_ID` | String | `gemini-3.7-flash` | Reasoning model identifier |
+| `GEMINI_TRANSCRIPTION_MODEL` | String | `gemini-3.5-transcribe-preview` | Speech transcription model identifier |
+| `MEDIA_BUCKET_NAME` | String | `croviq-media-raw` | GCS media bucket name |
+| `SIGNED_URL_EXPIRY_SECONDS` | Integer | `1800` | Expiry duration for V4 signed URLs in seconds |
+| `MAX_UPLOAD_SIZE_BYTES` | Integer | `1073741824` | Maximum allowable media upload size in bytes (1 GB) |
+
+### Frontend (`apps/web/.env.local`)
+
+| Variable | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `VITE_FIREBASE_API_KEY` | String | `your-firebase-web-api-key` | Firebase Web API key for client-side authentication |
+| `VITE_FIREBASE_AUTH_DOMAIN` | String | `your-project.firebaseapp.com` | Firebase Auth domain for OAuth / Identity Platform redirects |
+| `VITE_FIREBASE_PROJECT_ID` | String | `your-project-id` | Firebase project ID |
+| `API_PROXY_TARGET` | String | `http://localhost:8080` | Backend API server URL proxied by Vite dev server |
+
+---
+
+## Repository Structure
 
 ```text
 croviq/
 ├── apps/
-│   ├── web/                        # React 19 + Vite + Tailwind v4 + Twick SPA
-│   │   ├── src/
-│   │   │   ├── api/                # Auto-generated TypeScript API client contracts
-│   │   │   ├── auth/               # Identity Platform & Firebase Auth context
-│   │   │   ├── components/         # Timeline, VideoStage, ECharts, DecisionInspector
-│   │   │   ├── pages/              # Overview (Alex), Editor (Leo), Release (Iris), Login
-│   │   │   └── lib/                # Provenance tracking, EDL adapters, Firebase setup
-│   │   └── e2e/                    # Playwright end-to-end browser test specifications
-│   └── api/                        # Python 3.12 + FastAPI backend application
-│       ├── src/croviq_api/
-│       │   ├── auth/               # JWT token verification & access control
-│       │   ├── channels/           # YouTube OAuth, Data API & grounded research routes
-│       │   ├── productions/        # Editorial engine, EDL service, Studio Voice, render
-│       │   ├── workspaces/         # Multi-tenant workspace management & agent chat
-│       │   └── memory/             # Google Agent Platform Memory Bank integration
-│       └── tests/                  # API integration and contract test suites
+│   ├── web/                        # React 19 + Vite + Tailwind v4 SPA
+│   └── api/                        # Python 3.12 + FastAPI backend
 ├── packages/
-│   ├── domain/                     # Pure Python domain models (Workspaces, EDLs, Channels)
-│   ├── agents/                     # Alex (Data Science), Leo (Editor), Iris (QC) agents
-│   ├── media/                      # FFmpeg deterministic render pipelines & audio tools
-│   └── observability/              # Structured JSON logging, telemetry & audit trails
-├── infra/                          # 100% Terraform Google Cloud infrastructure definitions
-│   ├── bootstrap/                  # Terraform state storage bucket & initial IAM
-│   └── cloudflare-dns/             # Cloudflare DNS records & HTTPS redirect rules
+│   ├── domain/                     # Domain models (Workspaces, EDLs, Channels)
+│   ├── agents/                     # Multi-agent orchestrators (Alex, Leo, Iris)
+│   ├── media/                      # FFmpeg render pipelines and audio tools
+│   └── observability/              # Structured logging and telemetry
+├── infra/                          # Terraform root for GCP application resources
+│   ├── bootstrap/                  # Remote state GCS bucket bootstrap stack
+│   └── cloudflare-dns/             # Authoritative Cloudflare DNS stack
 ├── docs/
-│   ├── adr/                        # 17 Architectural Decision Records (ADRs)
-│   ├── design/                     # Design system & dark workspace styling guidelines
-│   └── specs/                      # Feature specifications & hero slice documentation
-├── scripts/                        # Verification, doctor, OpenAPI exporter & security tools
+│   ├── adr/                        # Architectural Decision Records
+│   ├── design/                     # Design tokens and workspace guidelines
+│   └── specs/                      # Feature specifications
+├── scripts/                        # Doctor, verification, and tooling scripts
 ├── docker-compose.yml              # Local multi-container development environment
-├── Makefile                        # Canonical developer interface
-├── openapi.json                    # Exported OpenAPI 3.1 schema specification
-└── CONTEXT.md                      # Ubiquitous domain language and architectural glossary
+├── Makefile                        # Canonical development interface
+└── openapi.json                    # Exported OpenAPI 3.1 schema specification
 ```
 
 ---
 
-## 📚 Architectural Decision Records (ADRs)
+## License
 
-Key architectural and engineering decisions are documented in [`docs/adr/`](docs/adr/):
-
-- [ADR-0001: Deterministic Engine with Coordinator / Director](docs/adr/0001-deterministic-engine-with-coordinator-director.md)
-- [ADR-0002: Human Approval Gate for External Publishing](docs/adr/0002-human-approval-gate-for-external-publishing.md)
-- [ADR-0003: Decoupled Editor UI and FFmpeg Rendering](docs/adr/0003-decoupled-editor-ui-and-ffmpeg-rendering.md)
-- [ADR-0004: AI Dialogue and Narrative Editing Architecture](docs/adr/0004-ai-dialogue-and-narrative-editing-architecture.md)
-- [ADR-0005: QA Evaluation and Revision Routing](docs/adr/0005-qa-evaluation-and-revision-routing.md)
-- [ADR-0006: Creator Memory Evidence and Lessons](docs/adr/0006-creator-memory-evidence-and-lessons.md)
-- [ADR-0007: Google Cloud Serverless Architecture](docs/adr/0007-google-cloud-serverless-architecture.md)
-- [ADR-0008: Modular Monorepo Architecture](docs/adr/0008-modular-monorepo-architecture.md)
-- [ADR-0009: Frontend UI Stack and Design Direction](docs/adr/0009-frontend-ui-stack-and-design-direction.md)
-- [ADR-0010: Authentication and Incremental YouTube OAuth](docs/adr/0010-authentication-and-incremental-youtube-oauth.md)
-- [ADR-0011: Reproducible Infrastructure and CI/CD Promotion](docs/adr/0011-reproducible-infrastructure-and-cicd-promotion.md)
-- [ADR-0012: Python FastAPI Backend and Generated API Contracts](docs/adr/0012-python-fastapi-backend-and-generated-api-contracts.md)
-- [ADR-0013: Google Cloud Load Balancer Single Origin Routing](docs/adr/0013-google-cloud-load-balancer-single-origin-routing.md)
-- [ADR-0014: Google GenAI SDK and Agent Architecture](docs/adr/0014-google-genai-sdk-and-agent-architecture.md)
-- [ADR-0015: Google Agent Platform Memory Bank](docs/adr/0015-google-agent-platform-memory-bank.md)
-- [ADR-0016: Channel Data Provider Abstraction](docs/adr/0016-channel-data-provider-abstraction.md)
-- [ADR-0017: Natural Cut Safety and Deterministic Media Rendering](docs/adr/0017-natural-cut-safety-and-deterministic-media-rendering.md)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

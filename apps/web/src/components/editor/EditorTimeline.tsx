@@ -203,7 +203,6 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   const isOriginalMode = previewMode === "original";
   const isEditedMode = previewMode === "edited";
   const isVoiceoverMode = previewMode === "studio_voice";
-  const isFinalMixMode = !previewMode || previewMode === "final_mix";
 
   // Mode-specific Video Keep Segments:
   const visibleKeepSegments = isOriginalMode ? [[0, durationMs]] : twickData.keepSegments;
@@ -408,8 +407,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           const leftPx = msToPixels(cov.startMs);
           const widthPx = Math.max(16, msToPixels(cov.endMs) - leftPx);
           const isSelected = selectedBlockId === cov.id;
-          const isCurrentActive =
-            currentTimeMs >= cov.startMs && currentTimeMs <= cov.endMs;
+          const isCurrentActive = currentTimeMs >= cov.startMs && currentTimeMs <= cov.endMs;
 
           return (
             <button

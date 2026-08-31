@@ -193,6 +193,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const runPromiseRef = useRef<Promise<void> | null>(null);
   const processingProductionIdRef = useRef<string | null>(null);
   const activeProcessingStageRef = useRef<ProcessingStage | null>(null);
+  const selectedVoiceInitializedRef = useRef<boolean>(false);
 
   const loadPersistedData = useCallback(async (): Promise<LoadedEditorData> => {
     let token = "";
@@ -240,8 +241,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     void fetch("/api/workspace/agent-settings", { headers })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.voice_settings?.selected_voice) {
+        if (data?.voice_settings?.selected_voice && !selectedVoiceInitializedRef.current) {
           setSelectedVoice(data.voice_settings.selected_voice);
+          selectedVoiceInitializedRef.current = true;
         }
         if (data?.voices && Array.isArray(data.voices) && data.voices.length > 0) {
           setVoices(data.voices);
@@ -573,7 +575,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       },
       runDetail: runPayload,
     };
-  }, [firebaseUser, productionId]);
+  }, [firebaseUser, productionId, setPreviewMode]);
 
   const beginProductionRun = useCallback(
     async (initialRun?: PersistedProductionRun, forceRetry = false) => {
@@ -714,7 +716,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [loadPersistedData, productionId, beginProductionRun]);
+  }, [loadPersistedData, productionId, beginProductionRun, setPreviewMode]);
 
   const getAuthToken = useCallback(async (): Promise<string> => {
     if (firebaseUser) {
@@ -821,6 +823,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   );
   const handleSelectVoice = useCallback(
     async (voiceId: string) => {
+      selectedVoiceInitializedRef.current = true;
       setSelectedVoice(voiceId);
       setMediaOutputs((prev) => ({
         ...prev,
@@ -847,7 +850,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         }),
       });
     },
-    [getAuthToken],
+    [getAuthToken, setPreviewMode],
   );
 
   const handleGenerateVoiceover = useCallback(async () => {
@@ -900,7 +903,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     } finally {
       setIsGeneratingVoiceover(false);
     }
-  }, [getAuthToken, loadPersistedData, productionId, selectedVoice]);
+  }, [getAuthToken, loadPersistedData, productionId, selectedVoice, setPreviewMode]);
 
   const handleGenerateMusic = useCallback(
     async (prompt: string, modelId = "lyria-3-pro-preview") => {
@@ -1023,7 +1026,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     } finally {
       setIsRenderingFinalMix(false);
     }
-  }, [getAuthToken, loadPersistedData, productionId]);
+  }, [getAuthToken, loadPersistedData, productionId, setPreviewMode]);
   const handleTimelinePoint = useCallback(
     (targetMs: number) => {
       handleSeek(targetMs);
@@ -1115,7 +1118,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         await loadPersistedData();
       }
     },
-    [loadPersistedData],
+    [loadPersistedData, setPreviewMode],
   );
   const handleOpenSettings = useCallback((agent: "leo") => {
     setSettingsAgentId(agent);

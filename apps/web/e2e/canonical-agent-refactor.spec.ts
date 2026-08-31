@@ -583,7 +583,9 @@ test.describe("Canonical Agent Architecture, Settings, and Ideas Worth Making", 
     await page.getByTestId("btn-send-chat").click();
 
     // Assert Markdown bolding, list rendering, and latest video title
-    await expect(page.getByText("Google GenAI SDK Tutorial for Beginners (Part 5)")).toBeVisible();
+    await expect(
+      chatDrawer.getByText("Google GenAI SDK Tutorial for Beginners (Part 5)"),
+    ).toBeVisible();
     await expect(page.getByText("Data Scientist Assessment")).toBeVisible();
     await page.screenshot({ path: "e2e/screenshots/alex-chat-short-answer.png" });
     await page.screenshot({ path: "e2e/screenshots/alex-chat-1440x900.png" });

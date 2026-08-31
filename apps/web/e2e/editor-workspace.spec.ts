@@ -1568,7 +1568,9 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(drawer).not.toBeVisible();
   });
 
-  test("Top navigation displays preview modes and allows selecting modes with left sidebar removed", async ({ page }) => {
+  test("Top navigation displays preview modes and allows selecting modes with left sidebar removed", async ({
+    page,
+  }) => {
     await loginAndNavigateToEditor(page);
 
     // Verify left sidebar is removed
@@ -1674,7 +1676,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     // Verify Send to Iris button with tooltip
     const irisBtn = page.getByTestId("btn-run-check");
-    if (await irisBtn.count() > 0) {
+    if ((await irisBtn.count()) > 0) {
       await expect(irisBtn).toContainText("Send to Iris");
       await expect(irisBtn).toHaveAttribute("title", "Send this cut to Iris for quality review");
     }
