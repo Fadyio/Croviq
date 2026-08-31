@@ -1438,6 +1438,10 @@ export interface components {
       attempts?: number;
       /** Applied tempo multiplier (max 3-5%) */
       tempo_adjustment?: number;
+      /** Stable machine-readable synthesis failure code */
+      error_code?: string | null;
+      /** Human-readable synthesis failure detail */
+      error_message?: string | null;
     };
     NarrationSegmentStatus: "pending" | "accepted" | "rejected" | "failed";
     PackagingChapter: {

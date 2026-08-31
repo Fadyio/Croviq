@@ -7368,13 +7368,11 @@
           },
           "original_text": {
             "type": "string",
-            "minLength": 1,
             "title": "Original Text",
             "description": "Original spoken transcript text"
           },
           "rewritten_text": {
             "type": "string",
-            "minLength": 1,
             "title": "Rewritten Text",
             "description": "Leo's editorial rewritten text"
           },
@@ -7410,7 +7408,7 @@
           "attempts": {
             "type": "integer",
             "maximum": 5.0,
-            "minimum": 1.0,
+            "minimum": 0.0,
             "title": "Attempts",
             "description": "Number of TTS synthesis/rewrite attempts",
             "default": 1
@@ -7422,6 +7420,30 @@
             "title": "Tempo Adjustment",
             "description": "Applied tempo multiplier (max 3-5%)",
             "default": 1.0
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code",
+            "description": "Stable machine-readable synthesis failure code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message",
+            "description": "Human-readable synthesis failure detail"
           }
         },
         "additionalProperties": false,
