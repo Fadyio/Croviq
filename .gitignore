@@ -5,10 +5,15 @@
 !.env.example
 !**/.env.example
 node_modules/
+**/node_modules/
 .venv/
+**/.venv/
 __pycache__/
+**/__pycache__/
 dist/
+**/dist/
 build/
+**/build/
 .DS_Store
 .terraform/
 *.tfstate
@@ -16,6 +21,7 @@ build/
 .vscode/
 .idea/
 .pytest_cache/
+**/.pytest_cache/
 *.egg-info/
 test-results/
 playwright-report/
@@ -40,9 +46,11 @@ apps/web/production-*.png
 
 # Coverage & Python Bytecode
 .coverage
+**/.coverage
 coverage/
+**/coverage/
 *.pyc
-
+**/*.pyc
 # Screenshots and local acceptance test artifacts
 docs/screenshots/
 apps/web/e2e/screenshots/

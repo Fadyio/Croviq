@@ -33,6 +33,7 @@ export interface LeoChatResponse extends ChatMessage {
 interface LeoChatPanelProps {
   productionId: string;
   currentPlayheadMs: number;
+  activeEdlId?: string;
   context: LeoChatContext | null;
   getAuthToken: () => Promise<string>;
   onClearContext: () => void;
@@ -179,6 +180,7 @@ const toolDisplayName = (tool: ToolExecution): string => {
 export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
   productionId,
   currentPlayheadMs,
+  activeEdlId,
   context,
   getAuthToken,
   onClearContext,
@@ -259,9 +261,13 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
         body: JSON.stringify({
           message: content,
           current_playhead_ms: Math.round(currentPlayheadMs),
+          active_edl_id: activeEdlId || context?.active_edl_id,
           ...(context
             ? {
-                editor_context: context,
+                editor_context: {
+                  ...context,
+                  active_edl_id: activeEdlId || context.active_edl_id,
+                },
                 selected_range_ms: [
                   Math.round(context.source_start_ms),
                   Math.round(context.source_end_ms),
@@ -369,7 +375,16 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
                             {tool.goal && <span className="block truncate">{tool.goal}</span>}
                             {(tool.status || tool.result) && (
                               <span className="block truncate">
-                                {String(tool.status || tool.result)}
+                                {tool.status === "no_change" || tool.status === "NO CHANGE"
+                                  ? "NO CHANGE"
+                                  : tool.status === "success" || tool.status === "SUCCESS"
+                                    ? "SUCCESS"
+                                    : String(tool.status || tool.result)}
+                                {tool.output &&
+                                typeof tool.output === "object" &&
+                                (tool.output as Record<string, unknown>).reason
+                                  ? ` · ${(tool.output as Record<string, unknown>).reason}`
+                                  : ""}
                               </span>
                             )}
                           </div>

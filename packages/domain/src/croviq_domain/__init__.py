@@ -17,6 +17,12 @@ from croviq_domain.edl import (
     CutInstruction,
     CutSafetyStatus,
     EditDecisionList,
+    EdlMutationResult,
+    EdlRevisionHistoryEntry,
+    audit_proposed_cuts,
+    classify_cut_overlap,
+    compute_interval_union,
+    compute_intervals_duration,
     derive_keep_segments,
     map_source_time_to_edited,
 )

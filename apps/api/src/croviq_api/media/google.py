@@ -67,15 +67,18 @@ class GoogleMediaStorage(MediaStorage):
             credentials, _ = google.auth.default(
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
-            if hasattr(credentials, "refresh") and hasattr(credentials, "valid") and not credentials.valid:
-                request = auth_requests.Request()
-                credentials.refresh(request)
+            if hasattr(credentials, "refresh"):
+                if not getattr(credentials, "token", None) or (hasattr(credentials, "valid") and not credentials.valid):
+                    request = auth_requests.Request()
+                    credentials.refresh(request)
         except Exception:
             credentials = getattr(client, "_credentials", None)
 
         sa_email = self.service_account_email
         if not sa_email and credentials and hasattr(credentials, "service_account_email") and credentials.service_account_email != "default":
             sa_email = credentials.service_account_email
+        if not sa_email and self.project_id:
+            sa_email = f"croviq-api-runtime@{self.project_id}.iam.gserviceaccount.com"
         kwargs: dict = {
             "version": "v4",
             "expiration": timedelta(seconds=expiry_seconds),
@@ -132,22 +135,24 @@ class GoogleMediaStorage(MediaStorage):
             credentials, _ = google.auth.default(
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
-            if hasattr(credentials, "refresh") and hasattr(credentials, "valid") and not credentials.valid:
-                request = auth_requests.Request()
-                credentials.refresh(request)
+            if hasattr(credentials, "refresh"):
+                if not getattr(credentials, "token", None) or (hasattr(credentials, "valid") and not credentials.valid):
+                    request = auth_requests.Request()
+                    credentials.refresh(request)
         except Exception:
             credentials = getattr(client, "_credentials", None)
 
         sa_email = self.service_account_email
         if not sa_email and credentials and hasattr(credentials, "service_account_email") and credentials.service_account_email != "default":
             sa_email = credentials.service_account_email
+        if not sa_email and self.project_id:
+            sa_email = f"croviq-api-runtime@{self.project_id}.iam.gserviceaccount.com"
 
-        kwargs: dict = {
+        kwargs: dict[str, Any] = {
             "version": "v4",
             "expiration": timedelta(seconds=expiry_seconds),
             "method": "GET",
         }
-
         if sa_email:
             kwargs["service_account_email"] = sa_email
         if credentials:

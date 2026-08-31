@@ -165,7 +165,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       edlResponse,
       rendersResponse,
       brollResponse,
-      correctedScriptResponse,
     ] = await Promise.all([
       fetch(`/api/productions/${productionId}`, { headers }),
       fetch(`/api/productions/${productionId}/playback`, { headers }).catch(() => null),
@@ -174,11 +173,23 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       fetch(`/api/productions/${productionId}/edl`, { headers }),
       fetch(`/api/productions/${productionId}/renders`, { headers }).catch(() => null),
       fetch(`/api/productions/${productionId}/broll`, { headers }).catch(() => null),
-      fetch(`/api/productions/${productionId}/corrected-script`, { headers }).catch(() => null),
     ]);
     if (!productionResponse.ok) {
       throw new Error(`Production '${productionId}' could not be loaded`);
     }
+
+    // Load corrected script asynchronously in background so LLM generation never blocks editor mounting
+    void fetch(`/api/productions/${productionId}/corrected-script`, { headers })
+      .then((res) =>
+        res.ok ? (res.json() as Promise<components["schemas"]["CorrectedScriptResponse"]>) : null,
+      )
+      .then((payload) => {
+        if (payload?.corrected_transcript) {
+          setCorrectedTranscript(payload.corrected_transcript as unknown as CorrectedTranscript);
+        }
+      })
+      .catch(() => {});
+
     const [
       productionPayload,
       playbackPayload,
@@ -187,7 +198,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       edlPayload,
       rendersPayload,
       brollPayload,
-      correctedScriptPayload,
     ] = await Promise.all([
       productionResponse.json() as Promise<Production>,
       playbackResponse
@@ -209,12 +219,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         : Promise.resolve(null),
       brollResponse
         ? readOptionalJson<components["schemas"]["BRollListResponse"]>(brollResponse, "BRoll")
-        : Promise.resolve(null),
-      correctedScriptResponse
-        ? readOptionalJson<components["schemas"]["CorrectedScriptResponse"]>(
-            correctedScriptResponse,
-            "Corrected Script",
-          )
         : Promise.resolve(null),
     ]);
     let actualEdl: EditDecisionList | null = null;
@@ -398,11 +402,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setMasterArtifact(master);
     setStudioVoiceArtifact(svPreview);
     setFinalMixArtifact(finalMix);
-    if (correctedScriptPayload?.corrected_transcript) {
-      setCorrectedTranscript(
-        correctedScriptPayload.corrected_transcript as unknown as CorrectedTranscript,
-      );
-    }
     if (brollPayload?.artifacts) {
       setBrollArtifacts(brollPayload.artifacts);
     }
@@ -770,6 +769,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     async (response: LeoChatResponse) => {
       if (response.edl) setEdl(response.edl);
       if (response.timeline_updated || response.voiceover_updated || response.preview_updated) {
+        setPreviewMode((prev) =>
+          prev === "final_mix" || prev === "studio_voice" ? "edited" : prev,
+        );
         await loadPersistedData();
       }
     },
@@ -1070,7 +1072,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             activeCoverage={activeCoverage}
             onPlayPause={handlePlayPause}
             onSeek={handleSeek}
-            onDurationChange={setDurationMs}
+            onRetryPlayback={async () => {
+              await loadPersistedData();
+            }}
             className="flex-1 min-h-0"
           />
         </div>
@@ -1191,6 +1195,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               <LeoChatPanel
                 productionId={productionId}
                 currentPlayheadMs={currentTimeMs}
+                activeEdlId={edl?.edl_id}
                 context={chatContext}
                 getAuthToken={getAuthToken}
                 onClearContext={() => setChatContext(null)}

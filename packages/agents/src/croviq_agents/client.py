@@ -72,6 +72,19 @@ class AgentUsageMetadata:
     latency_ms: int = 0
 
 
+@dataclass
+class LeoChatModelResult:
+    """Captured response from Leo chat model including optional tool invocation."""
+
+    reply: str
+    usage: AgentUsageMetadata
+    function_name: str | None = None
+    function_args: dict[str, Any] | None = None
+
+    def __iter__(self):
+        # Supports backward-compatible tuple unpacking: reply, usage = result
+        return iter((self.reply, self.usage))
+
 
 
 def generate_fallback_narration_rewrite(
@@ -443,10 +456,10 @@ class GenAIClient(ABC):
         mime_type: str = "video/mp4",
         production_id: str = "unknown",
         request_id: str = "unknown",
-    ) -> tuple[str, AgentUsageMetadata]:
+        tool_declarations: list[dict[str, Any]] | None = None,
+    ) -> LeoChatModelResult:
         """Invoke Leo (Video Editor) conversational reasoning with Gemini on Vertex AI."""
         pass
-
 
 
 class GoogleGenAIClient(GenAIClient):
@@ -1374,7 +1387,8 @@ class GoogleGenAIClient(GenAIClient):
         mime_type: str = "video/mp4",
         production_id: str = "unknown",
         request_id: str = "unknown",
-    ) -> tuple[str, AgentUsageMetadata]:
+        tool_declarations: list[dict[str, Any]] | None = None,
+    ) -> LeoChatModelResult:
         from google.genai import types
 
         client = self._get_client()
@@ -1399,11 +1413,16 @@ class GoogleGenAIClient(GenAIClient):
         user_parts.append(types.Part.from_text(text=message))
         contents.append(types.Content(role="user", parts=user_parts))
 
+        genai_tools = []
+        if tool_declarations:
+            genai_tools = [types.Tool(function_declarations=tool_declarations)]
+
         config = types.GenerateContentConfig(
             system_instruction=sys_content,
             temperature=0.2,
             max_output_tokens=2048,
             thinking_config=types.ThinkingConfig(thinking_budget=0),
+            tools=genai_tools if genai_tools else None,
         )
 
         start_time = time.perf_counter()
@@ -1414,13 +1433,26 @@ class GoogleGenAIClient(GenAIClient):
         )
         latency_ms = (time.perf_counter() - start_time) * 1000
 
-        text = response.text.strip() if response.text else "I inspected the timeline and current edit decisions."
+        function_name = None
+        function_args = None
+        if hasattr(response, "function_calls") and response.function_calls:
+            fc = response.function_calls[0]
+            function_name = getattr(fc, "name", None)
+            if hasattr(fc, "args") and fc.args is not None:
+                function_args = dict(fc.args) if isinstance(fc.args, dict) else {k: v for k, v in fc.args.items()}
+
+        text = response.text.strip() if response.text else ("I inspected the timeline and current edit decisions." if not function_name else "")
         usage = AgentUsageMetadata(
             input_tokens=getattr(response.usage_metadata, "prompt_token_count", 0) or 0,
             output_tokens=getattr(response.usage_metadata, "candidates_token_count", 0) or 0,
             latency_ms=int(latency_ms),
         )
-
+        return LeoChatModelResult(
+            reply=text,
+            usage=usage,
+            function_name=function_name,
+            function_args=function_args,
+        )
 
 class FakeGenAIClient(GenAIClient):
     """Deterministic fake GenAI client for unit tests and local non-cloud execution."""
@@ -1969,7 +2001,10 @@ class FakeGenAIClient(GenAIClient):
         mime_type: str = "video/mp4",
         production_id: str = "unknown",
         request_id: str = "unknown",
-    ) -> tuple[str, AgentUsageMetadata]:
+        tool_declarations: list[dict[str, Any]] | None = None,
+    ) -> LeoChatModelResult:
+        import re
+
         self.call_history.append({
             "agent": "leo_chat",
             "production_id": production_id,
@@ -1978,11 +2013,30 @@ class FakeGenAIClient(GenAIClient):
         })
         msg_lower = message.lower()
 
-        is_cleared = "no point or range is currently selected" in context_prompt.lower() or "selection is empty/cleared" in context_prompt.lower()
+        is_cleared = (
+            "no point or range is currently selected" in context_prompt.lower()
+            or "selection is empty/cleared" in context_prompt.lower()
+        )
 
         selected_text = ""
         if 'Selected Transcript: "' in context_prompt:
             selected_text = context_prompt.split('Selected Transcript: "', 1)[1].split('"', 1)[0]
+
+        active_edl_id = None
+        if "Client Active EDL: " in context_prompt:
+            active_edl_id = context_prompt.split("Client Active EDL: ", 1)[1].split("\n", 1)[0].strip()
+        elif "Active EDL: " in context_prompt:
+            active_edl_id = context_prompt.split("Active EDL: ", 1)[1].split(" ", 1)[0].strip()
+        start_ms = None
+        end_ms = None
+        if "Source Range: " in context_prompt:
+            try:
+                raw_range = context_prompt.split("Source Range: ", 1)[1].split("\n", 1)[0]
+                nums = re.findall(r"(\d+)ms", raw_range)
+                if len(nums) >= 2:
+                    start_ms, end_ms = int(nums[0]), int(nums[1])
+            except Exception:
+                pass
 
         cut_info = ""
         if "Cut ID: " in context_prompt:
@@ -1992,7 +2046,70 @@ class FakeGenAIClient(GenAIClient):
                 reason = context_prompt.split("Cut Reason / Decision: ", 1)[1].split("\n", 1)[0].strip()
             cut_info = f"Cut {cut_id} ({reason})" if reason else f"Cut {cut_id}"
 
-        if is_cleared and any(w in msg_lower for w in ["what section", "what did i select", "what is selected", "which section"]):
+        function_name = None
+        function_args = None
+        reply = ""
+
+        is_explicit_question = (
+            "?" in message
+            or any(
+                msg_lower.startswith(p)
+                for p in (
+                    "why", "what", "how", "should", "would", "could", "is ", "can ",
+                    "tell me", "explain", "where", "does "
+                )
+            )
+            or any(
+                phrase in msg_lower
+                for phrase in (
+                    "why was this cut", "why did you cut", "why did you remove", "why remove",
+                    "why was it cut", "why did you leave", "why keep this", "why preserve",
+                    "what's happening", "what is happening", "what happened",
+                    "should this be tighter", "can you make this tighter", "make this tighter?",
+                    "would b-roll help", "would visual coverage help", "where would b-roll help",
+                    "what section did i select", "what did i select", "what is selected",
+                    "is this too slow", "how is the pacing", "what does this cut do"
+                )
+            )
+        )
+
+        if any(w in msg_lower for w in ["undo that", "undo last edit", "undo", "revert that", "revert"]):
+            function_name = "undo_last_edit"
+            function_args = {"active_edl_id": active_edl_id}
+        elif not is_explicit_question and any(
+            w in msg_lower for w in [
+                "cut this", "remove this", "delete this", "cut out", "cut the",
+                "remove the", "make a cut", "cut section", "remove section",
+                "remove this part", "cut this section", "remove selected"
+            ]
+        ):
+            if is_cleared or start_ms is None or end_ms is None:
+                reply = "No section is currently selected. Please select a region on the timeline or transcript to cut."
+            else:
+                function_name = "remove_selection"
+                function_args = {
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "reason": message,
+                    "active_edl_id": active_edl_id,
+                }
+        elif not is_explicit_question and any(
+            w in msg_lower for w in [
+                "make this tighter", "make it tighter", "tighten this", "tighten section",
+                "trim the pause before this", "trim the pause", "trim pause", "tighten"
+            ]
+        ):
+            if is_cleared or start_ms is None or end_ms is None:
+                reply = "No section is currently selected. Please select a region on the timeline or transcript to tighten."
+            else:
+                function_name = "tighten_selection"
+                function_args = {
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "intensity": "standard",
+                    "active_edl_id": active_edl_id,
+                }
+        elif is_cleared and any(w in msg_lower for w in ["what section", "what did i select", "what is selected", "which section"]):
             reply = "No section is currently selected on the timeline. Click or drag any region on the timeline or transcript to select it."
         elif any(w in msg_lower for w in ["why was this cut", "why did you cut", "why cut", "why remove", "why did you remove", "why was it cut"]):
             if cut_info:
@@ -2021,5 +2138,11 @@ class FakeGenAIClient(GenAIClient):
                 reply = f"Looking at this selected section (\"{selected_text}\"), the pacing is steady and aligned with the screen demonstration."
             else:
                 reply = "I inspected the timeline at your selected position. Everything is cleanly aligned with the current editorial plan."
+
         usage = AgentUsageMetadata(input_tokens=100, output_tokens=50, latency_ms=5)
-        return reply, usage
+        return LeoChatModelResult(
+            reply=reply,
+            usage=usage,
+            function_name=function_name,
+            function_args=function_args,
+        )

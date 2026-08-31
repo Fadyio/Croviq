@@ -22,7 +22,7 @@ from croviq_api.productions.render_repository import RenderRepository
 from croviq_api.productions.repository import ProductionRepository
 from croviq_api.productions.transcript_repository import TranscriptRepository
 from croviq_domain.channel_provider import SampleChannelDataProvider
-from croviq_domain.edl import EditDecisionList, map_source_time_to_edited
+from croviq_domain.edl import EditDecisionList, EdlRevisionHistoryEntry, map_source_time_to_edited
 from croviq_domain.editorial import (
     AgentActivity,
     EditorDecision,
@@ -241,6 +241,7 @@ class EditorialService:
         current_playhead_ms: int | None = None,
         selected_range: list[int] | None = None,
         selected_element: dict[str, object] | None = None,
+        active_edl_id: str | None = None,
         request_id: str = "unknown",
         broll_repo: object | None = None,
         voice_settings: object | None = None,
@@ -275,6 +276,12 @@ class EditorialService:
         metadata = self._build_analysis_input(production, transcript).media_metadata
         profile, lessons = await self._load_memory_context(production.channel_id)
         artifacts = await self._render_repo.list_render_artifacts(production_id)
+
+        async def save_revision_history(*, entry: EdlRevisionHistoryEntry) -> None:
+            await self._edl_service._edl_repo.save_revision_history(entry)
+
+        async def pop_revision_history() -> EdlRevisionHistoryEntry | None:
+            return await self._edl_service._edl_repo.pop_latest_revision_history(production_id)
 
         async def rerender_preview(*, edl: EditDecisionList) -> RenderArtifact:
             return await self._render_media(
@@ -577,6 +584,8 @@ class EditorialService:
             proposal_id=run.editor_proposal_id,
             callbacks={
                 "rerender_preview": rerender_preview,
+                "save_revision_history": save_revision_history,
+                "pop_revision_history": pop_revision_history,
                 "add_broll": add_broll,
                 "generate_voiceover": generate_voiceover,
                 "add_background_music": add_background_music,

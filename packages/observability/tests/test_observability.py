@@ -11,8 +11,10 @@ from croviq_observability import (
     EventType,
     StructuredLogger,
     StructuredLoggingMiddleware,
+    clear_request_context,
     extract_request_id,
     extract_trace_id,
+    get_logger,
     get_request_id,
     get_trace_id,
     log_ai_event,
@@ -35,7 +37,8 @@ def log_stream() -> io.StringIO:
 
 
 @pytest.fixture
-def custom_logger(log_stream: io.StringIO) -> StructuredLogger:
+def custom_logger(log_stream: io.StringIO):
+    old_logger = get_logger()
     logger = StructuredLogger(
         service="croviq-test-api",
         environment="test",
@@ -44,9 +47,11 @@ def custom_logger(log_stream: io.StringIO) -> StructuredLogger:
         output_stream=log_stream,
     )
     set_logger(logger)
-    return logger
-
-
+    try:
+        yield logger
+    finally:
+        set_logger(old_logger)
+        clear_request_context()
 def parse_single_log(stream: io.StringIO) -> dict:
     stream.seek(0)
     lines = [line.strip() for line in stream.getvalue().splitlines() if line.strip()]

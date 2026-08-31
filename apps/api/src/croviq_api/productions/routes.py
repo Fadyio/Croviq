@@ -2,7 +2,7 @@
 
 import logging
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Literal
 import tempfile
@@ -215,7 +215,7 @@ from croviq_observability import (
 router = APIRouter(tags=["Productions & Uploads"])
 
 class ProductionChatSelectedElement(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     type: str = Field(..., min_length=1)
     id: str = Field(..., min_length=1)
@@ -225,14 +225,14 @@ class ProductionChatSelectedElement(BaseModel):
 
 
 class ProductionChatRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     message: str = Field(..., min_length=1, max_length=10_000)
     editor_context: EditorSelectionContext | None = None
-    selected_range_ms: tuple[int, int] | None = None
+    selected_range_ms: tuple[int, int] | list[int] | None = None
     selected_element: ProductionChatSelectedElement | None = None
     current_playhead_ms: int | None = Field(default=None, ge=0)
-
+    active_edl_id: str | None = None
 class ProductionChatResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1213,6 +1213,7 @@ async def chat_with_leo(
             payload.selected_element.model_dump(mode="json")
             if payload.selected_element else None
         ),
+        active_edl_id=payload.active_edl_id or (payload.editor_context.active_edl_id if payload.editor_context else None),
         request_id=getattr(request.state, "request_id", "unknown"),
         broll_repo=broll_repo,
         voice_settings=voice_settings,
@@ -1826,11 +1827,17 @@ async def list_production_renders(
     settings = get_settings()
     prod = await _get_owned_production(production_id, current_user, production_repo)
     artifacts = await render_repo.list_render_artifacts(production_id)
+    edl_id_param = request.query_params.get("edl_id")
+    sorted_artifacts = sorted(artifacts, key=lambda a: a.created_at, reverse=True)
+    target_artifacts_for_signing = set()
+    for art in sorted_artifacts:
+        if (edl_id_param and art.edl_id == edl_id_param) or (not edl_id_param and len(target_artifacts_for_signing) < 4):
+            target_artifacts_for_signing.add(art.artifact_id)
 
     async def _sign_artifact(art) -> RenderArtifactResponse:
         playback_url = None
         playback_expires_at = None
-        if art.status == ArtifactStatus.completed:
+        if art.status == ArtifactStatus.completed and art.artifact_id in target_artifacts_for_signing:
             try:
                 target = await media_storage.generate_signed_read_target(
                     bucket=art.gcs_bucket,
@@ -1883,8 +1890,13 @@ async def get_production_playback_urls(
     sv_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) in (ArtifactType.STUDIO_VOICE_PREVIEW.value, ArtifactType.VOICEOVER_PREVIEW.value)), None)
     fm_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.FINAL_MIX.value), None)
 
-    async def _sign_target(bucket: str, obj: str) -> str | None:
+    async def _sign_target(bucket: str, obj: str, check_exists: bool = False) -> str | None:
         try:
+            if check_exists:
+                meta = await media_storage.get_object_metadata(bucket=bucket, object_name=obj)
+                if not meta.exists:
+                    logger.warning("Artifact gs://%s/%s does not exist in storage; skipping playback signing", bucket, obj)
+                    return None
             target = await media_storage.generate_signed_read_target(
                 bucket=bucket,
                 object_name=obj,
@@ -1898,19 +1910,19 @@ async def get_production_playback_urls(
     # Parallel signing of active artifacts
     tasks = []
     source_eligible = prod.source_media and (prod.source_media.status.value if hasattr(prod.source_media.status, "value") else str(prod.source_media.status)).lower() == "uploaded"
-    tasks.append(_sign_target(prod.source_media.gcs_bucket, prod.source_media.gcs_object) if source_eligible else asyncio.sleep(0, result=None))
+    tasks.append(_sign_target(prod.source_media.gcs_bucket, prod.source_media.gcs_object, check_exists=False) if source_eligible else asyncio.sleep(0, result=None))
 
     preview_eligible = preview_art and (preview_art.status.value if hasattr(preview_art.status, "value") else str(preview_art.status)).lower() == "completed"
-    tasks.append(_sign_target(preview_art.gcs_bucket, preview_art.gcs_object) if preview_eligible else asyncio.sleep(0, result=None))
+    tasks.append(_sign_target(preview_art.gcs_bucket, preview_art.gcs_object, check_exists=True) if preview_eligible else asyncio.sleep(0, result=None))
 
     master_eligible = master_art and (master_art.status.value if hasattr(master_art.status, "value") else str(master_art.status)).lower() == "completed"
-    tasks.append(_sign_target(master_art.gcs_bucket, master_art.gcs_object) if master_eligible else asyncio.sleep(0, result=None))
+    tasks.append(_sign_target(master_art.gcs_bucket, master_art.gcs_object, check_exists=True) if master_eligible else asyncio.sleep(0, result=None))
 
     sv_eligible = sv_art and (sv_art.status.value if hasattr(sv_art.status, "value") else str(sv_art.status)).lower() == "completed"
-    tasks.append(_sign_target(sv_art.gcs_bucket, sv_art.gcs_object) if sv_eligible else asyncio.sleep(0, result=None))
+    tasks.append(_sign_target(sv_art.gcs_bucket, sv_art.gcs_object, check_exists=True) if sv_eligible else asyncio.sleep(0, result=None))
 
     fm_eligible = fm_art and (fm_art.status.value if hasattr(fm_art.status, "value") else str(fm_art.status)).lower() == "completed"
-    tasks.append(_sign_target(fm_art.gcs_bucket, fm_art.gcs_object) if fm_eligible else asyncio.sleep(0, result=None))
+    tasks.append(_sign_target(fm_art.gcs_bucket, fm_art.gcs_object, check_exists=True) if fm_eligible else asyncio.sleep(0, result=None))
 
     signed_results = await asyncio.gather(*tasks)
     source_url = signed_results[0]
@@ -1928,9 +1940,10 @@ async def get_production_playback_urls(
         status="ready" if source_url else "unavailable",
     )
 
-    def _build_state(art, url: str | None) -> MediaOutputState:
+    def _build_state(art, url: str | None, has_prior: bool = False) -> MediaOutputState:
         if not art:
-            return MediaOutputState(available=False, edl_id=active_edl_id, status="unavailable")
+            status_val = "needs_regeneration" if has_prior else "unavailable"
+            return MediaOutputState(available=False, edl_id=active_edl_id, status=status_val)
         s_val = (art.status.value if hasattr(art.status, "value") else str(art.status)).lower()
         if s_val == "completed" and url:
             return MediaOutputState(
@@ -1957,13 +1970,22 @@ async def get_production_playback_urls(
             )
         return MediaOutputState(available=False, artifact_id=art.artifact_id, edl_id=art.edl_id, status="unavailable")
 
+    has_prior_sv = any((r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) in (ArtifactType.STUDIO_VOICE_PREVIEW.value, ArtifactType.VOICEOVER_PREVIEW.value) for r in renders)
+    has_prior_fm = any((r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.FINAL_MIX.value for r in renders)
+
     edited_state = _build_state(preview_art, preview_url)
-    voiceover_state = _build_state(sv_art, sv_url)
-    final_mix_state = _build_state(fm_art, final_mix_url)
+    voiceover_state = _build_state(sv_art, sv_url, has_prior=has_prior_sv)
+    final_mix_state = _build_state(fm_art, final_mix_url, has_prior=has_prior_fm)
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(seconds=settings.signed_url_expiry_seconds)
+        if any([source_url, preview_url, master_url, sv_url, final_mix_url])
+        else None
+    )
 
     return ProductionPlaybackResponse(
         production_id=prod.production_id,
         playback_url=source_url,
+        expires_at=expires_at,
         rendered_preview_url=preview_url,
         master_url=master_url,
         studio_voice_preview_url=sv_url,

@@ -10,6 +10,10 @@ from croviq_domain.edl import (
     CutInstruction,
     CutSafetyStatus,
     EditDecisionList,
+    audit_proposed_cuts,
+    classify_cut_overlap,
+    compute_interval_union,
+    compute_intervals_duration,
     derive_keep_segments,
     map_source_time_to_edited,
 )
@@ -443,3 +447,59 @@ def test_map_source_time_to_edited_two_cuts():
 
     # Source end: 113824ms - 4520ms = 109304ms
     assert map_source_time_to_edited(113824, edl) == 109304
+
+
+def test_case_a_fully_subsumed_proposed_cut():
+    """Case A: fully subsumed proposed cut => effective_removed_ms = 0."""
+    existing_cuts = [(17000, 22500)]
+    proposed = (18000, 21000)
+    classification, newly_eff, overlap = classify_cut_overlap(proposed, existing_cuts)
+    assert classification == "FULLY_SUBSUMED"
+    assert newly_eff == 0
+    assert overlap == 3000
+
+    audit = audit_proposed_cuts([proposed], existing_cuts)
+    assert audit["effective_removed_ms"] == 0
+    assert audit["has_effective_change"] is False
+    assert audit["already_removed_ms"] == 3000
+
+
+def test_case_b_partially_overlapping_proposed_cut():
+    """Case B: partially overlapping proposed cut => only newly uncovered interval counted."""
+    existing_cuts = [(17000, 20000)]
+    proposed = (19000, 22000)
+    classification, newly_eff, overlap = classify_cut_overlap(proposed, existing_cuts)
+    assert classification == "PARTIALLY_OVERLAPPING"
+    assert newly_eff == 2000
+    assert overlap == 1000
+
+    audit = audit_proposed_cuts([proposed], existing_cuts)
+    assert audit["effective_removed_ms"] == 2000
+    assert audit["has_effective_change"] is True
+    assert audit["already_removed_ms"] == 1000
+
+
+def test_case_c_disjoint_proposed_cut():
+    """Case C: disjoint proposed cut => entire duration counted."""
+    existing_cuts = [(17000, 20000)]
+    proposed = (25000, 28000)
+    classification, newly_eff, overlap = classify_cut_overlap(proposed, existing_cuts)
+    assert classification == "NEW"
+    assert newly_eff == 3000
+    assert overlap == 0
+
+    audit = audit_proposed_cuts([proposed], existing_cuts)
+    assert audit["effective_removed_ms"] == 3000
+    assert audit["has_effective_change"] is True
+
+
+def test_case_d_multiple_overlapping_proposed_cuts():
+    """Case D: multiple overlapping proposed cuts => interval union counted once."""
+    existing_cuts = [(10000, 15000)]
+    # Proposed 1: 14000-18000 (4000 raw, overlaps existing by 1000 -> 3000 new)
+    # Proposed 2: 17000-21000 (4000 raw, overlaps proposed 1 by 1000 -> 3000 new beyond p1)
+    # Combined union with existing is 10000-21000 (11000 total - 5000 existing = 6000 new)
+    proposed = [(14000, 18000), (17000, 21000)]
+    audit = audit_proposed_cuts(proposed, existing_cuts)
+    assert audit["effective_removed_ms"] == 6000
+    assert audit["has_effective_change"] is True

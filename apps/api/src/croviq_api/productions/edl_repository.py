@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 from croviq_api.config import get_settings
-from croviq_domain.edl import EditDecisionList
+from croviq_domain.edl import EditDecisionList, EdlRevisionHistoryEntry
 from croviq_observability import log_firestore_event
 
 
@@ -56,6 +56,26 @@ class EDLRepository(ABC):
         """Retrieve the most recent active EditDecisionList for a production."""
         pass
 
+    @abstractmethod
+    async def save_revision_history(self, entry: EdlRevisionHistoryEntry) -> None:
+        """Persist an EDL revision history entry for undo."""
+        pass
+
+    @abstractmethod
+    async def get_latest_revision_history(self, production_id: str) -> EdlRevisionHistoryEntry | None:
+        """Retrieve the most recent revision history entry for a production."""
+        pass
+
+    @abstractmethod
+    async def pop_latest_revision_history(self, production_id: str) -> EdlRevisionHistoryEntry | None:
+        """Remove and return the most recent revision history entry for a production."""
+        pass
+
+    @abstractmethod
+    async def list_revision_history(self, production_id: str) -> list[EdlRevisionHistoryEntry]:
+        """List all revision history entries for a production."""
+        pass
+
     def _deserialize_edl(self, doc_data: dict[str, Any]) -> EditDecisionList:
         """Deserialize raw Firestore dictionary into canonical EditDecisionList domain model."""
         payload = deepcopy(doc_data)
@@ -72,7 +92,8 @@ class InMemoryEDLRepository(EDLRepository):
         self._by_id: dict[tuple[str, str], EditDecisionList] = {}
         # Key: production_id -> list of edl_id
         self._by_production: dict[str, list[str]] = {}
-
+        # Key: production_id -> list of EdlRevisionHistoryEntry
+        self._history: dict[str, list[EdlRevisionHistoryEntry]] = {}
     async def save_edl(self, edl: EditDecisionList) -> None:
         key = (edl.production_id, edl.edl_id)
         self._by_id[key] = edl
@@ -100,10 +121,31 @@ class InMemoryEDLRepository(EDLRepository):
             return True
         return False
 
+
+    async def save_revision_history(self, entry: EdlRevisionHistoryEntry) -> None:
+        if entry.production_id not in self._history:
+            self._history[entry.production_id] = []
+        self._history[entry.production_id].append(deepcopy(entry))
+
+    async def get_latest_revision_history(self, production_id: str) -> EdlRevisionHistoryEntry | None:
+        entries = self._history.get(production_id, [])
+        if not entries:
+            return None
+        return deepcopy(entries[-1])
+
+    async def pop_latest_revision_history(self, production_id: str) -> EdlRevisionHistoryEntry | None:
+        entries = self._history.get(production_id, [])
+        if not entries:
+            return None
+        return deepcopy(entries.pop())
+
+    async def list_revision_history(self, production_id: str) -> list[EdlRevisionHistoryEntry]:
+        entries = self._history.get(production_id, [])
+        return [deepcopy(e) for e in entries]
     def clear(self) -> None:
         self._by_id.clear()
         self._by_production.clear()
-
+        self._history.clear()
 
 class FirestoreEDLRepository(EDLRepository):
     """Production EDL repository persisting to Google Cloud Firestore Native mode."""
@@ -258,6 +300,56 @@ class FirestoreEDLRepository(EDLRepository):
         for doc in docs:
             await doc.reference.delete()
         return len(docs) > 0
+
+    def _history_subcollection(self, production_id: str) -> Any:
+        return (
+            self.client
+            .collection("productions")
+            .document(production_id)
+            .collection("edl_history")
+        )
+
+    async def save_revision_history(self, entry: EdlRevisionHistoryEntry) -> None:
+        coll = self._history_subcollection(entry.production_id)
+        doc_ref = coll.document(entry.history_id)
+        data = entry.model_dump(mode="json")
+        data["created_at"] = entry.created_at.isoformat()
+        await doc_ref.set(data)
+
+    async def get_latest_revision_history(self, production_id: str) -> EdlRevisionHistoryEntry | None:
+        coll = self._history_subcollection(production_id)
+        query = coll.order_by("created_at", direction="DESCENDING").limit(1)
+        docs = [d async for d in query.stream()]
+        if not docs:
+            return None
+        data = docs[0].to_dict()
+        if "created_at" in data:
+            data["created_at"] = parse_datetime(data["created_at"])
+        return EdlRevisionHistoryEntry.model_validate(data)
+
+    async def pop_latest_revision_history(self, production_id: str) -> EdlRevisionHistoryEntry | None:
+        coll = self._history_subcollection(production_id)
+        query = coll.order_by("created_at", direction="DESCENDING").limit(1)
+        docs = [d async for d in query.stream()]
+        if not docs:
+            return None
+        doc = docs[0]
+        data = doc.to_dict()
+        await doc.reference.delete()
+        if "created_at" in data:
+            data["created_at"] = parse_datetime(data["created_at"])
+        return EdlRevisionHistoryEntry.model_validate(data)
+
+    async def list_revision_history(self, production_id: str) -> list[EdlRevisionHistoryEntry]:
+        coll = self._history_subcollection(production_id)
+        query = coll.order_by("created_at")
+        entries = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            if "created_at" in data:
+                data["created_at"] = parse_datetime(data["created_at"])
+            entries.append(EdlRevisionHistoryEntry.model_validate(data))
+        return entries
 
 
 def get_default_edl_repository() -> EDLRepository:

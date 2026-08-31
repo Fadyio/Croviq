@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from enum import StrEnum
+from typing import Any, Sequence
 import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -310,14 +311,265 @@ class EditDecisionList(BaseModel):
 
     @property
     def total_removed_duration_ms(self) -> int:
-        """Total duration in milliseconds removed by active cuts."""
-        return sum(c.removed_duration_ms for c in self.active_cuts)
+        """Total duration in milliseconds removed by active cuts (merging overlaps)."""
+        return max(0, self.source_duration_ms - self.estimated_target_duration_ms)
 
     @property
     def estimated_target_duration_ms(self) -> int:
-        """Estimated final video duration after active cuts."""
-        return max(0, self.source_duration_ms - self.total_removed_duration_ms)
+        """Estimated final video duration after active cuts derived from merged keep segments."""
+        keep_segments = derive_keep_segments(self)
+        return sum(end - start for start, end in keep_segments)
 
+
+class EdlRevisionHistoryEntry(BaseModel):
+    """Persisted snapshot and provenance entry for an EDL mutation enabling durable undo."""
+
+    model_config = ConfigDict(
+        extra="ignore",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    history_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Unique identifier for the revision history entry",
+    )
+    production_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Associated Production entity identifier",
+    )
+    previous_edl_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="EDL ID before mutation",
+    )
+    previous_version: int = Field(
+        ...,
+        ge=1,
+        description="EDL version before mutation",
+    )
+    new_edl_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="EDL ID after mutation",
+    )
+    new_version: int = Field(
+        ...,
+        ge=1,
+        description="EDL version after mutation",
+    )
+    tool_name: str = Field(
+        ...,
+        description="Name of tool that triggered mutation: remove_selection, tighten_selection, etc.",
+    )
+    user_request: str | None = Field(
+        default=None,
+        description="User request or prompt that triggered this mutation",
+    )
+    requested_range_ms: list[int] | None = Field(
+        default=None,
+        description="Requested start and end offsets in milliseconds",
+    )
+    applied_range_ms: list[int] | None = Field(
+        default=None,
+        description="Actual applied start and end offsets in milliseconds",
+    )
+    previous_edl: EditDecisionList = Field(
+        ...,
+        description="Complete snapshot of the previous EDL state for deterministic undo",
+    )
+    previous_proposal: dict[str, Any] | None = Field(
+        default=None,
+        description="Snapshot of previous proposal decisions for deterministic undo",
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Timestamp when mutation was recorded in UTC",
+    )
+
+    @field_validator("created_at")
+    @classmethod
+    def validate_created_at(cls, v: datetime) -> datetime:
+        return validate_timezone_aware(v)
+
+
+class EdlMutationResult(BaseModel):
+    """Canonical representation of an EDL mutation attempt with overlap and duration truth."""
+
+    model_config = ConfigDict(
+        extra="ignore",
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+
+    tool_name: str = Field(
+        ...,
+        description="Name of tool that triggered mutation: tighten_selection, remove_selection, etc.",
+    )
+    requested_range_ms: list[int] = Field(
+        default_factory=list,
+        description="Source range requested by user [start_ms, end_ms]",
+    )
+    proposed_cuts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Candidate cut intervals proposed during mutation inspection",
+    )
+    applied_cuts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Cuts successfully applied to the EDL",
+    )
+    skipped_existing_cuts: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Proposed cuts skipped due to existing overlap or subsumption",
+    )
+    effective_removed_ms: int = Field(
+        default=0,
+        ge=0,
+        description="Net effective video duration removed by this mutation in ms",
+    )
+    before_duration_ms: int = Field(
+        default=0,
+        ge=0,
+        description="Target edited duration before mutation in ms",
+    )
+    after_duration_ms: int = Field(
+        default=0,
+        ge=0,
+        description="Target edited duration after mutation in ms",
+    )
+    changed: bool = Field(
+        default=False,
+        description="Whether the EDL actually changed in effective duration or canonical structure",
+    )
+    message: str = Field(
+        default="",
+        description="Truthful user-facing explanation of the mutation result",
+    )
+    reason: str | None = Field(
+        default=None,
+        description="Concise reason for no-change or applied edits",
+    )
+
+
+def compute_interval_union(intervals: Sequence[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Compute the deterministic sorted union of non-empty intervals (merging overlaps and adjacent spans)."""
+    valid = [
+        (int(start), int(end))
+        for start, end in intervals
+        if end > start and start >= 0
+    ]
+    if not valid:
+        return []
+    valid.sort(key=lambda item: (item[0], item[1]))
+    merged: list[tuple[int, int]] = [valid[0]]
+    for start, end in valid[1:]:
+        prev_start, prev_end = merged[-1]
+        if start <= prev_end:
+            merged[-1] = (prev_start, max(prev_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def compute_intervals_duration(intervals: Sequence[tuple[int, int]]) -> int:
+    """Compute the total effective non-overlapping duration represented by a set of intervals."""
+    merged = compute_interval_union(intervals)
+    return sum(end - start for start, end in merged)
+
+
+def classify_cut_overlap(
+    proposed: tuple[int, int],
+    existing_intervals: Sequence[tuple[int, int]],
+) -> tuple[str, int, int]:
+    """Classify a proposed cut interval against existing cut intervals using interval-union math.
+
+    Returns (classification, newly_effective_ms, overlapping_ms) where classification is one of:
+    - 'NEW': completely disjoint from existing cuts (newly_effective_ms == proposed_duration)
+    - 'PARTIALLY_OVERLAPPING': partially covered by existing cuts (0 < newly_effective_ms < proposed_duration)
+    - 'FULLY_SUBSUMED': completely contained within existing cuts (newly_effective_ms == 0)
+    - 'DUPLICATE': exactly matches an existing cut interval (newly_effective_ms == 0)
+    """
+    p_start, p_end = int(proposed[0]), int(proposed[1])
+    if p_end <= p_start:
+        return ("FULLY_SUBSUMED", 0, 0)
+
+    proposed_dur = p_end - p_start
+    existing_union = compute_interval_union(existing_intervals)
+
+    overlapping_ms = 0
+    for ex_start, ex_end in existing_union:
+        overlap_s = max(p_start, ex_start)
+        overlap_e = min(p_end, ex_end)
+        if overlap_e > overlap_s:
+            overlapping_ms += (overlap_e - overlap_s)
+
+    newly_effective_ms = max(0, proposed_dur - overlapping_ms)
+
+    if newly_effective_ms == 0:
+        is_exact = any(
+            ex_s == p_start and ex_e == p_end
+            for ex_s, ex_e in existing_union
+        ) or any(
+            int(ex_s) == p_start and int(ex_e) == p_end
+            for ex_s, ex_e in existing_intervals
+        )
+        classification = "DUPLICATE" if is_exact else "FULLY_SUBSUMED"
+    elif overlapping_ms == 0:
+        classification = "NEW"
+    else:
+        classification = "PARTIALLY_OVERLAPPING"
+
+    return (classification, newly_effective_ms, overlapping_ms)
+
+
+def audit_proposed_cuts(
+    proposed_cuts: Sequence[tuple[int, int]],
+    existing_cuts: Sequence[CutInstruction | tuple[int, int]],
+) -> dict[str, Any]:
+    """Audit a set of proposed cuts against existing active cuts using interval-union math."""
+    existing_intervals: list[tuple[int, int]] = []
+    for c in existing_cuts:
+        if isinstance(c, tuple):
+            existing_intervals.append(c)
+        elif hasattr(c, "safe_start_ms") and hasattr(c, "safe_end_ms"):
+            existing_intervals.append((c.safe_start_ms, c.safe_end_ms))
+        elif hasattr(c, "requested_start_ms") and hasattr(c, "requested_end_ms"):
+            existing_intervals.append((c.requested_start_ms, c.requested_end_ms))
+
+    existing_union = compute_interval_union(existing_intervals)
+    combined_union = compute_interval_union([*existing_intervals, *proposed_cuts])
+
+    before_removed_ms = compute_intervals_duration(existing_union)
+    after_removed_ms = compute_intervals_duration(combined_union)
+    effective_removed_ms = max(0, after_removed_ms - before_removed_ms)
+
+    proposed_raw_ms = sum(max(0, int(e) - int(s)) for s, e in proposed_cuts if int(e) > int(s))
+
+    cut_audits: list[dict[str, Any]] = []
+    for p in proposed_cuts:
+        p_tuple = (int(p[0]), int(p[1]))
+        classification, newly_eff, overlap = classify_cut_overlap(p_tuple, existing_union)
+        cut_audits.append({
+            "cut_range": [p_tuple[0], p_tuple[1]],
+            "raw_duration_ms": max(0, p_tuple[1] - p_tuple[0]),
+            "classification": classification,
+            "newly_effective_ms": newly_eff,
+            "overlapping_ms": overlap,
+        })
+
+    return {
+        "proposed_total_raw_ms": proposed_raw_ms,
+        "effective_removed_ms": effective_removed_ms,
+        "already_removed_ms": max(0, proposed_raw_ms - effective_removed_ms),
+        "cut_audits": cut_audits,
+        "has_effective_change": effective_removed_ms > 0,
+    }
 
 def derive_keep_segments(edl: EditDecisionList) -> list[tuple[int, int]]:
     """Deterministically derive the contiguous source media segments to KEEP for master rendering.

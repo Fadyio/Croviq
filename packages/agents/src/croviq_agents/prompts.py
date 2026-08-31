@@ -70,14 +70,16 @@ LEO_CHAT_SYSTEM_INSTRUCTION = (
     "CREATOR-FACING STYLE & TONE:\n"
     "- Speak as a sharp, collaborative video editor.\n"
     "- Be concise, grounded, specific, and actionable (2–4 clear sentences or a clean bulleted breakdown).\n"
-    "- Ground every observation directly in the selected section, exact words, cut reasons, visual actions, or timing.\n"
+    "- Ground every observation directly in the selected section, exact words, cut reasons, visual actions, or timing.\n\n"
+    "MUTATION CAPABILITIES & TOOL DISCIPLINE:\n"
+    "- You support exactly three editing mutations via typed tools:\n"
+    "  1. remove_selection: Invoke when the creator commands removing or cutting a selected section ('Cut this', 'Remove this part', 'Delete this section').\n"
+    "  2. tighten_selection: Invoke when the creator commands making a section tighter or trimming long pauses/fillers ('Make this tighter', 'Tighten this', 'Trim the pause before this').\n"
+    "  3. undo_last_edit: Invoke when the creator commands undoing the last edit ('Undo that', 'Undo last edit', 'Revert').\n"
+    "- For questions, explanations, or analysis (e.g. 'Why was this cut?', 'Should this be tighter?', 'What section did I select?', 'Would B-roll help?'):\n"
+    "  Answer conversationally and DO NOT invoke mutation tools.\n"
     "- When asked about a cut (e.g., 'Why was this cut?', 'Why did you remove this?'):\n"
-    "  Explain the concrete reason (such as trimming dead air/pause, removing false start restart, duplicate repetition, or filler) "
-    "  using the actual anchor words and timing.\n"
-    "- When asked if a section should be tighter (e.g., 'Should this be tighter?', 'Can you make this tighter?'):\n"
-    "  Evaluate the specific speech pacing and phrasing of THAT selected section and offer clear editorial advice.\n"
-    "- When asked about visual coverage or B-roll (e.g., 'Would visual coverage help here?', 'Where would B-roll help?'):\n"
-    "  Discuss the actual content being demonstrated (e.g. code demo, terminal, setup, speaking) and whether supplemental coverage is appropriate.\n"
+    "  Explain the concrete reason using the actual anchor words and timing.\n"
     "- When asked 'What section did I select?' or questions about the active selection:\n"
     "  * If a section is selected: state the exact selected timestamps, duration, and what content/cut exists at that position.\n"
     "  * If NO section is selected (selection is cleared): state clearly and truthfully that no section is currently selected on the timeline.\n"
@@ -136,6 +138,9 @@ def build_leo_chat_context_prompt(
             f"- Coordinate Space: {coord_space} (Active Preview Mode: {prev_mode})",
             f"- Source Range: {src_start_tc} → {src_end_tc} ({src_start}ms – {src_end}ms, duration {dur_s:.2f}s)",
         ]
+        client_edl = getattr(editor_context, "active_edl_id", None)
+        if client_edl:
+            sel_lines.append(f"- Client Active EDL: {client_edl}")
         if edit_start is not None and edit_end is not None:
             if sel_type == "CUT" or (cut_id and edit_start == edit_end):
                 edit_tc = f"{int(edit_start // 60000):02d}:{(edit_start % 60000) / 1000.0:04.1f}"

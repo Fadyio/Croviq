@@ -9,7 +9,7 @@ from pathlib import Path
 import time
 from typing import Any, Callable, Literal, Sequence
 import uuid
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from croviq_agents.terminal import SandboxedTerminalRunner, TerminalCommandResult
 from croviq_domain.editorial import (
@@ -34,7 +34,13 @@ from croviq_domain.edl import (
     CoverageType,
     CutSafetyStatus,
     EditDecisionList,
+    EdlMutationResult,
+    EdlRevisionHistoryEntry,
     VoiceoverSegment,
+    audit_proposed_cuts,
+    classify_cut_overlap,
+    compute_interval_union,
+    compute_intervals_duration,
 )
 from croviq_domain.packaging import format_ms_as_timestamp
 from croviq_domain.render import RenderArtifact
@@ -178,6 +184,48 @@ class ExplainEditArgs(BaseModel):
     decision_id_or_time_ms: str | int
 
 
+
+class RemoveSelectionArgs(BaseModel):
+    start_ms: int = Field(..., ge=0, description="Start timestamp of selected region in milliseconds")
+    end_ms: int = Field(..., ge=0, description="End timestamp of selected region in milliseconds")
+    reason: str = Field(default="User requested removal", max_length=500, description="Reason or context for removing this section")
+    decision_type: EditorDecisionType = Field(default=EditorDecisionType.REMOVE_LOW_VALUE_SECTION, description="Type of cut decision")
+    active_edl_id: str | None = Field(default=None, description="Active EDL identifier for concurrency validation")
+
+    @field_validator("decision_type", mode="before")
+    @classmethod
+    def _coerce_decision_type(cls, val: Any) -> EditorDecisionType:
+        if isinstance(val, EditorDecisionType):
+            return val
+        if isinstance(val, str):
+            val_clean = val.strip().upper()
+            try:
+                return EditorDecisionType(val_clean)
+            except ValueError:
+                pass
+            mapping = {
+                "REMOVE_SECTION": EditorDecisionType.REMOVE_LOW_VALUE_SECTION,
+                "REMOVE_LOW_PACING": EditorDecisionType.REMOVE_LOW_VALUE_SECTION,
+                "REMOVE_OUTTAKE": EditorDecisionType.REMOVE_FALSE_START,
+                "REMOVE_TAKE": EditorDecisionType.REMOVE_FALSE_START,
+                "REMOVE_TOPIC_DETOUR": EditorDecisionType.REMOVE_LOW_VALUE_SECTION,
+                "REMOVE": EditorDecisionType.REMOVE_LOW_VALUE_SECTION,
+                "CUT": EditorDecisionType.REMOVE_LOW_VALUE_SECTION,
+                "TRIM": EditorDecisionType.TRIM_PAUSE,
+                "TIGHTEN": EditorDecisionType.TIGHTEN_PAUSE,
+            }
+            if val_clean in mapping:
+                return mapping[val_clean]
+        return EditorDecisionType.REMOVE_LOW_VALUE_SECTION
+class TightenSelectionArgs(BaseModel):
+    start_ms: int = Field(..., ge=0, description="Start timestamp of section to tighten in milliseconds")
+    end_ms: int = Field(..., ge=0, description="End timestamp of section to tighten in milliseconds")
+    intensity: Literal["subtle", "standard", "aggressive"] = Field(default="standard", description="Tightening intensity")
+    active_edl_id: str | None = Field(default=None, description="Active EDL identifier for concurrency validation")
+
+
+class UndoLastEditArgs(BaseModel):
+    active_edl_id: str | None = Field(default=None, description="Active EDL identifier for concurrency validation")
 class AddCutArgs(TimelineRangeArgs):
     decision_type: EditorDecisionType = EditorDecisionType.REMOVE_LOW_VALUE_SECTION
     reason: str = Field(..., min_length=1, max_length=500)
@@ -1079,6 +1127,14 @@ def build_default_editor_tool_registry(
     return registry
 
 
+def format_timecode_ms(ms: int) -> str:
+    """Format milliseconds into MM:SS.s."""
+    total_seconds = max(0, ms) / 1000.0
+    minutes = int(total_seconds // 60)
+    seconds = total_seconds % 60
+    return f"{minutes:02d}:{seconds:05.2f}"
+
+
 
 def build_editor_chat_tool_registry(
     *,
@@ -1102,6 +1158,7 @@ def build_editor_chat_tool_registry(
         "voiceover_updated": False,
         "preview_updated": False,
         "seek_range": None,
+        "undo_history": [],
     }
     callbacks = callbacks or {}
     analyzer = CutSafetyAnalyzer()
@@ -1278,6 +1335,554 @@ def build_editor_chat_tool_registry(
             f"**RESULT**: {out['RESULT'].get('safety_reason') or out['RESULT'].get('action') or 'Cut applied'}"
         ),
     ))
+
+    async def remove_selection(
+        start_ms: int,
+        end_ms: int,
+        reason: str = "User requested removal",
+        decision_type: EditorDecisionType = EditorDecisionType.REMOVE_LOW_VALUE_SECTION,
+        active_edl_id: str | None = None,
+    ) -> dict[str, Any]:
+        current_edl: EditDecisionList = registry.state["edl"]
+        current_proposal: EditorProposal = registry.state["proposal"]
+
+        # Concurrency check
+        if active_edl_id and active_edl_id != current_edl.edl_id:
+            raise ValueError(
+                f"EDL version conflict: client active EDL '{active_edl_id}' does not match current active EDL '{current_edl.edl_id}'."
+            )
+
+        if end_ms <= start_ms:
+            raise ValueError("end_ms must be greater than start_ms")
+        if start_ms >= current_edl.source_duration_ms:
+            raise ValueError(
+                f"Selection start {start_ms}ms is beyond source duration {current_edl.source_duration_ms}ms"
+            )
+        end_ms = min(end_ms, current_edl.source_duration_ms)
+
+        # Check if already completely removed
+        for existing_cut in current_edl.active_cuts:
+            if existing_cut.safe_start_ms <= start_ms and existing_cut.safe_end_ms >= end_ms:
+                raise ValueError("This section is already completely removed in the active edit.")
+
+        start_word_idx, end_word_idx, orig_text = _word_bounds(start_ms, end_ms)
+
+        decision = EditorDecision(
+            decision_id=f"chat_cut_{uuid.uuid4().hex[:10]}",
+            decision_type=decision_type,
+            transcript_start_word=start_word_idx,
+            transcript_end_word=end_word_idx,
+            source_start_ms=start_ms,
+            source_end_ms=end_ms,
+            original_text=orig_text,
+            action="remove",
+            concise_reason=reason,
+            confidence=1.0,
+        )
+
+        # Snapshot for in-memory undo
+        history_entry = {
+            "proposal": current_proposal,
+            "edl": current_edl,
+            "tool": "remove_selection",
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+        }
+        registry.state.setdefault("undo_history", []).append(history_entry)
+
+        retained_decisions = [
+            d
+            for d in current_proposal.decisions
+            if not (
+                d.source_start_ms >= start_ms
+                and d.source_end_ms <= end_ms
+                and str(d.action).lower() in ("remove", "tighten", "cut")
+            )
+        ]
+        next_proposal = current_proposal.model_copy(
+            update={"decisions": [*retained_decisions, decision]}
+        )
+        next_edl = _rebuild(next_proposal)
+        matching_cut = next((c for c in next_edl.cuts if c.decision_id == decision.decision_id), None)
+        if matching_cut and matching_cut.safety_status == CutSafetyStatus.REJECTED_UNSAFE:
+            registry.state["proposal"] = current_proposal
+            registry.state["edl"] = current_edl
+            registry.state["timeline_updated"] = False
+            registry.state["undo_history"].pop()
+            raise ValueError(f"Cannot cut this section safely: {matching_cut.safety_reason}")
+
+        safe_start = matching_cut.safe_start_ms if matching_cut else start_ms
+        safe_end = matching_cut.safe_end_ms if matching_cut else end_ms
+        removed_dur_s = (safe_end - safe_start) / 1000.0
+
+        adjustment_desc = ""
+        if safe_start != start_ms or safe_end != end_ms:
+            adjustment_desc = (
+                f"from {format_timecode_ms(safe_start)}–{format_timecode_ms(safe_end)} "
+                f"using safe word boundaries (requested {format_timecode_ms(start_ms)}–{format_timecode_ms(end_ms)})"
+            )
+        else:
+            adjustment_desc = f"from {format_timecode_ms(safe_start)}–{format_timecode_ms(safe_end)}"
+
+        summary_msg = f"Removed {removed_dur_s:.2f}s {adjustment_desc} and regenerated the edited preview."
+
+        if "save_revision_history" in callbacks:
+            rev_entry = EdlRevisionHistoryEntry(
+                history_id=f"hist_{uuid.uuid4().hex[:12]}",
+                production_id=production_id,
+                previous_edl_id=current_edl.edl_id,
+                previous_version=current_edl.version,
+                new_edl_id=next_edl.edl_id,
+                new_version=next_edl.version,
+                tool_name="remove_selection",
+                user_request=reason,
+                requested_range_ms=[start_ms, end_ms],
+                applied_range_ms=[safe_start, safe_end],
+                previous_edl=current_edl,
+                previous_proposal=current_proposal.model_dump(mode="json"),
+            )
+            cb = callbacks["save_revision_history"]
+            if asyncio.iscoroutinefunction(cb):
+                await cb(entry=rev_entry)
+            else:
+                cb(entry=rev_entry)
+        return {
+            "tool": "remove_selection",
+            "decision": decision.model_dump(mode="json"),
+            "cut": matching_cut.model_dump(mode="json") if matching_cut else None,
+            "requested_range_ms": [start_ms, end_ms],
+            "applied_range_ms": [safe_start, safe_end],
+            "removed_duration_s": removed_dur_s,
+            "new_edl_id": next_edl.edl_id,
+            "new_version": next_edl.version,
+            "active_cut_count": next_edl.active_cuts_count,
+            "edited_duration_ms": next_edl.estimated_target_duration_ms,
+            "message": summary_msg,
+        }
+
+    registry.register(ToolDefinition(
+        name="remove_selection",
+        description="Cut and remove the selected timeline or transcript region with safe word boundary snapping",
+        parameters_schema=RemoveSelectionArgs,
+        handler=remove_selection,
+        human_summary_formatter=lambda args, out: out.get("message", "Removed selected section."),
+    ))
+
+    async def tighten_selection(
+        start_ms: int,
+        end_ms: int,
+        intensity: str = "standard",
+        active_edl_id: str | None = None,
+    ) -> dict[str, Any]:
+        current_edl: EditDecisionList = registry.state["edl"]
+        current_proposal: EditorProposal = registry.state["proposal"]
+
+        # Concurrency check
+        if active_edl_id and active_edl_id != current_edl.edl_id:
+            raise ValueError(
+                f"EDL version conflict: client active EDL '{active_edl_id}' does not match current active EDL '{current_edl.edl_id}'."
+            )
+
+        if end_ms <= start_ms:
+            raise ValueError("end_ms must be greater than start_ms")
+        if start_ms >= current_edl.source_duration_ms:
+            raise ValueError(
+                f"Selection start {start_ms}ms is beyond source duration {current_edl.source_duration_ms}ms"
+            )
+        end_ms = min(end_ms, current_edl.source_duration_ms)
+
+        existing_cut_intervals = [
+            (c.safe_start_ms, c.safe_end_ms)
+            for c in current_edl.active_cuts
+        ]
+        existing_union = compute_interval_union(existing_cut_intervals)
+
+        words_in_range = [
+            (idx, w)
+            for idx, w in enumerate(transcript.words)
+            if w.end_ms > start_ms and w.start_ms < end_ms
+        ]
+
+        pause_threshold_ms = 400 if intensity == "subtle" else 250 if intensity == "aggressive" else 300
+        breath_pad_ms = 150
+
+        candidate_decisions: list[EditorDecision] = []
+        removals_summary: list[str] = []
+        skipped_cuts: list[dict[str, Any]] = []
+
+        # 1. Look for inter-word pauses in the selected range
+        for i in range(len(words_in_range) - 1):
+            w1_idx, w1 = words_in_range[i]
+            w2_idx, w2 = words_in_range[i + 1]
+            gap = w2.start_ms - w1.end_ms
+            if gap > pause_threshold_ms:
+                p_start = w1.end_ms + breath_pad_ms
+                p_end = w2.start_ms - breath_pad_ms
+                if p_end - p_start >= 100:
+                    classification, newly_eff, overlap = classify_cut_overlap(
+                        (p_start, p_end), existing_union
+                    )
+                    if newly_eff > 0:
+                        candidate_decisions.append(EditorDecision(
+                            decision_id=f"chat_tighten_pause_{uuid.uuid4().hex[:8]}",
+                            decision_type=EditorDecisionType.TRIM_PAUSE,
+                            transcript_start_word=w1_idx,
+                            transcript_end_word=w2_idx,
+                            source_start_ms=p_start,
+                            source_end_ms=p_end,
+                            original_text=f"[Silence: {w1.text} ... {w2.text}]",
+                            action="remove",
+                            concise_reason=f"Tightened {gap}ms inter-word pause to comfortable breath padding",
+                            confidence=0.98,
+                        ))
+                        removals_summary.append(f"{gap}ms pause")
+                    else:
+                        skipped_cuts.append({
+                            "type": "pause",
+                            "range": [p_start, p_end],
+                            "classification": classification,
+                            "gap_ms": gap,
+                        })
+
+        # 2. Look for repeated words / phrases / false starts
+        for i in range(len(words_in_range) - 1):
+            w1_idx, w1 = words_in_range[i]
+            w2_idx, w2 = words_in_range[i + 1]
+            if w1.text.lower() == w2.text.lower() and len(w1.text) > 1:
+                p_start = w1.start_ms
+                p_end = w1.end_ms
+                classification, newly_eff, overlap = classify_cut_overlap(
+                    (p_start, p_end), existing_union
+                )
+                if newly_eff > 0:
+                    candidate_decisions.append(EditorDecision(
+                        decision_id=f"chat_tighten_rep_{uuid.uuid4().hex[:8]}",
+                        decision_type=EditorDecisionType.REMOVE_REPETITION,
+                        transcript_start_word=w1_idx,
+                        transcript_end_word=w1_idx,
+                        source_start_ms=p_start,
+                        source_end_ms=p_end,
+                        original_text=w1.text,
+                        action="remove",
+                        concise_reason=f"Removed repeated word '{w1.text}'",
+                        confidence=0.95,
+                    ))
+                    removals_summary.append(f"repeated word '{w1.text}'")
+                else:
+                    skipped_cuts.append({
+                        "type": "repeated_word",
+                        "range": [p_start, p_end],
+                        "classification": classification,
+                        "word": w1.text,
+                    })
+
+        if len(words_in_range) >= 4:
+            for i in range(len(words_in_range) - 3):
+                phrase1 = f"{words_in_range[i][1].text} {words_in_range[i+1][1].text}".lower()
+                phrase2 = f"{words_in_range[i+2][1].text} {words_in_range[i+3][1].text}".lower()
+                if phrase1 == phrase2:
+                    w1_idx = words_in_range[i][0]
+                    w2_idx = words_in_range[i+1][0]
+                    p_start = words_in_range[i][1].start_ms
+                    p_end = words_in_range[i+1][1].end_ms
+                    classification, newly_eff, overlap = classify_cut_overlap(
+                        (p_start, p_end), existing_union
+                    )
+                    if newly_eff > 0:
+                        candidate_decisions.append(EditorDecision(
+                            decision_id=f"chat_tighten_phrase_{uuid.uuid4().hex[:8]}",
+                            decision_type=EditorDecisionType.REMOVE_REPETITION,
+                            transcript_start_word=w1_idx,
+                            transcript_end_word=w2_idx,
+                            source_start_ms=p_start,
+                            source_end_ms=p_end,
+                            original_text=phrase1,
+                            action="remove",
+                            concise_reason=f"Removed repeated phrase '{phrase1}'",
+                            confidence=0.96,
+                        ))
+                        removals_summary.append(f"repeated phrase '{phrase1}'")
+                    else:
+                        skipped_cuts.append({
+                            "type": "repeated_phrase",
+                            "range": [p_start, p_end],
+                            "classification": classification,
+                            "phrase": phrase1,
+                        })
+
+        # 3. Look for filler words
+        for i in range(len(words_in_range)):
+            w_idx, w = words_in_range[i]
+            if w.text.lower().strip(",.") in ("um", "uh", "you know"):
+                p_start = w.start_ms
+                p_end = w.end_ms
+                classification, newly_eff, overlap = classify_cut_overlap(
+                    (p_start, p_end), existing_union
+                )
+                if newly_eff > 0:
+                    candidate_decisions.append(EditorDecision(
+                        decision_id=f"chat_tighten_filler_{uuid.uuid4().hex[:8]}",
+                        decision_type=EditorDecisionType.REMOVE_FILLER,
+                        transcript_start_word=w_idx,
+                        transcript_end_word=w_idx,
+                        source_start_ms=p_start,
+                        source_end_ms=p_end,
+                        original_text=w.text,
+                        action="remove",
+                        concise_reason=f"Removed filler word '{w.text}'",
+                        confidence=0.92,
+                    ))
+                    removals_summary.append(f"filler word '{w.text}'")
+                else:
+                    skipped_cuts.append({
+                        "type": "filler_word",
+                        "range": [p_start, p_end],
+                        "classification": classification,
+                        "word": w.text,
+                    })
+
+        # 4. Fallback: top inter-word gap if no other candidates
+        if not candidate_decisions:
+            gaps = []
+            for i in range(len(words_in_range) - 1):
+                w1_idx, w1 = words_in_range[i]
+                w2_idx, w2 = words_in_range[i+1]
+                gap = w2.start_ms - w1.end_ms
+                if gap > 200:
+                    gaps.append((gap, w1_idx, w2_idx, w1, w2))
+            if gaps:
+                gaps.sort(key=lambda x: x[0], reverse=True)
+                for top_gap, w1_idx, w2_idx, w1, w2 in gaps:
+                    p_start = w1.end_ms + breath_pad_ms
+                    p_end = w2.start_ms - breath_pad_ms
+                    if p_end > p_start:
+                        classification, newly_eff, overlap = classify_cut_overlap(
+                            (p_start, p_end), existing_union
+                        )
+                        if newly_eff > 0:
+                            candidate_decisions.append(EditorDecision(
+                                decision_id=f"chat_tighten_pause_{uuid.uuid4().hex[:8]}",
+                                decision_type=EditorDecisionType.TRIM_PAUSE,
+                                transcript_start_word=w1_idx,
+                                transcript_end_word=w2_idx,
+                                source_start_ms=p_start,
+                                source_end_ms=p_end,
+                                original_text=f"[Silence: {w1.text} ... {w2.text}]",
+                                action="remove",
+                                concise_reason=f"Trimmed {top_gap}ms pause to breath padding",
+                                confidence=0.95,
+                            ))
+                            removals_summary.append(f"{top_gap}ms pause")
+                            break
+                        else:
+                            skipped_cuts.append({
+                                "type": "fallback_gap",
+                                "range": [p_start, p_end],
+                                "classification": classification,
+                                "gap_ms": top_gap,
+                            })
+
+        # Handle complete no-op before rebuilding
+        if not candidate_decisions:
+            if skipped_cuts:
+                no_change_msg = "This section is already tightly edited. The pauses I found are already covered by existing cuts, so I didn't apply another edit."
+                reason_desc = "Candidate pauses already covered by active cuts."
+            else:
+                no_change_msg = "This section is already well-paced with no long pauses or filler words."
+                reason_desc = "Section has no removable pauses or filler words."
+            return {
+                "tool": "tighten_selection",
+                "status": "no_change",
+                "changed": False,
+                "message": no_change_msg,
+                "reason": reason_desc,
+                "candidate_decisions": [],
+                "applied_cuts": [],
+                "skipped_existing_cuts": skipped_cuts,
+                "effective_removed_ms": 0,
+                "removed_duration_s": 0.0,
+                "before_duration_ms": current_edl.estimated_target_duration_ms,
+                "after_duration_ms": current_edl.estimated_target_duration_ms,
+                "active_cut_count": current_edl.active_cuts_count,
+                "new_edl_id": current_edl.edl_id,
+                "new_version": current_edl.version,
+                "edited_duration_ms": current_edl.estimated_target_duration_ms,
+            }
+
+        # Stage candidate proposal and candidate EDL
+        candidate_proposal = current_proposal.model_copy(
+            update={"decisions": [*current_proposal.decisions, *candidate_decisions]}
+        )
+        candidate_edl = assemble_edl_from_proposal(
+            proposal=candidate_proposal,
+            transcript=transcript,
+            version=current_edl.version + 1,
+            analyzer=analyzer,
+            editor_proposal_id=current_edl.editor_proposal_id,
+        )
+
+        effective_delta_ms = current_edl.estimated_target_duration_ms - candidate_edl.estimated_target_duration_ms
+
+        if effective_delta_ms <= 0:
+            # Invariant: no net duration change occurred
+            return {
+                "tool": "tighten_selection",
+                "status": "no_change",
+                "changed": False,
+                "message": "This section is already tightly edited. The pauses I found are already covered by existing cuts, so I didn't apply another edit.",
+                "reason": "Candidate pauses already covered by active cuts.",
+                "candidate_decisions": [d.model_dump(mode="json") for d in candidate_decisions],
+                "applied_cuts": [],
+                "skipped_existing_cuts": [d.model_dump(mode="json") for d in candidate_decisions],
+                "effective_removed_ms": 0,
+                "removed_duration_s": 0.0,
+                "before_duration_ms": current_edl.estimated_target_duration_ms,
+                "after_duration_ms": current_edl.estimated_target_duration_ms,
+                "active_cut_count": current_edl.active_cuts_count,
+                "new_edl_id": current_edl.edl_id,
+                "new_version": current_edl.version,
+                "edited_duration_ms": current_edl.estimated_target_duration_ms,
+            }
+
+        # Effective change exists: commit rebuild and persist
+        next_edl = candidate_edl.model_copy(update={
+            "voiceover_segments": current_edl.voiceover_segments,
+            "background_music": current_edl.background_music,
+        })
+        registry.state["proposal"] = candidate_proposal
+        registry.state["edl"] = next_edl
+        registry.state["timeline_updated"] = True
+
+        # Snapshot for in-memory undo
+        history_entry = {
+            "proposal": current_proposal,
+            "edl": current_edl,
+            "tool": "tighten_selection",
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+        }
+        registry.state.setdefault("undo_history", []).append(history_entry)
+
+        removed_s = effective_delta_ms / 1000.0
+        reasons_text = " and ".join(removals_summary[:3]) if removals_summary else "unnecessary pauses"
+        summary_msg = f"Tightened this section by {removed_s:.2f}s: removed {reasons_text}. Edited Preview updated."
+
+        if "save_revision_history" in callbacks:
+            rev_entry = EdlRevisionHistoryEntry(
+                history_id=f"hist_{uuid.uuid4().hex[:12]}",
+                production_id=production_id,
+                previous_edl_id=current_edl.edl_id,
+                previous_version=current_edl.version,
+                new_edl_id=next_edl.edl_id,
+                new_version=next_edl.version,
+                tool_name="tighten_selection",
+                user_request="Tighten section",
+                requested_range_ms=[start_ms, end_ms],
+                applied_range_ms=[start_ms, end_ms],
+                previous_edl=current_edl,
+                previous_proposal=current_proposal.model_dump(mode="json"),
+            )
+            cb = callbacks["save_revision_history"]
+            if asyncio.iscoroutinefunction(cb):
+                await cb(entry=rev_entry)
+            else:
+                cb(entry=rev_entry)
+
+        return {
+            "tool": "tighten_selection",
+            "status": "success",
+            "changed": True,
+            "candidate_decisions": [d.model_dump(mode="json") for d in candidate_decisions],
+            "applied_cuts": [d.model_dump(mode="json") for d in candidate_decisions],
+            "skipped_existing_cuts": skipped_cuts,
+            "effective_removed_ms": effective_delta_ms,
+            "removed_duration_s": removed_s,
+            "reasons": removals_summary,
+            "before_duration_ms": current_edl.estimated_target_duration_ms,
+            "after_duration_ms": next_edl.estimated_target_duration_ms,
+            "new_edl_id": next_edl.edl_id,
+            "new_version": next_edl.version,
+            "active_cut_count": next_edl.active_cuts_count,
+            "edited_duration_ms": next_edl.estimated_target_duration_ms,
+            "message": summary_msg,
+        }
+    registry.register(ToolDefinition(
+        name="tighten_selection",
+        description="Inspect selected region and remove long pauses, filler words, or repeated phrases while preserving semantic content",
+        parameters_schema=TightenSelectionArgs,
+        handler=tighten_selection,
+        human_summary_formatter=lambda args, out: out.get("message", "Tightened selected section."),
+    ))
+
+    async def undo_last_edit(active_edl_id: str | None = None) -> dict[str, Any]:
+        current_edl: EditDecisionList = registry.state["edl"]
+        current_proposal: EditorProposal = registry.state["proposal"]
+
+        # Concurrency check
+        if active_edl_id and active_edl_id != current_edl.edl_id:
+            raise ValueError(
+                f"EDL version conflict: client active EDL '{active_edl_id}' does not match current active EDL '{current_edl.edl_id}'."
+            )
+
+        undo_history = registry.state.get("undo_history", [])
+        prev_history_entry = None
+        if undo_history:
+            prev_history_entry = undo_history.pop()
+
+        if prev_history_entry is None and "pop_revision_history" in callbacks:
+            cb = callbacks["pop_revision_history"]
+            durable_entry = await cb() if asyncio.iscoroutinefunction(cb) else cb()
+            if durable_entry:
+                prev_history_entry = {
+                    "proposal": (
+                        EditorProposal.model_validate(durable_entry.previous_proposal)
+                        if durable_entry.previous_proposal
+                        else current_proposal
+                    ),
+                    "edl": durable_entry.previous_edl,
+                    "tool": durable_entry.tool_name,
+                }
+
+        if prev_history_entry is None:
+            raise ValueError("There are no previous edits to undo.")
+        restored_proposal = prev_history_entry.get("proposal") or current_proposal
+        restored_edl = prev_history_entry["edl"]
+
+        new_version = current_edl.version + 1
+        new_edl = restored_edl.model_copy(update={
+            "edl_id": f"edl_{uuid.uuid4().hex[:12]}",
+            "version": new_version,
+            "created_at": datetime.now(timezone.utc),
+        })
+
+        registry.state["proposal"] = restored_proposal
+        registry.state["edl"] = new_edl
+        registry.state["timeline_updated"] = True
+        registry.state["preview_updated"] = False
+
+        dur_tc = format_timecode_ms(new_edl.estimated_target_duration_ms)
+        summary_msg = (
+            f"Undid last edit. Restored EDL to version {new_version} "
+            f"({new_edl.active_cuts_count} cuts, {dur_tc} duration). Edited Preview restored."
+        )
+
+        return {
+            "tool": "undo_last_edit",
+            "restored_version": new_version,
+            "active_cut_count": new_edl.active_cuts_count,
+            "edited_duration_ms": new_edl.estimated_target_duration_ms,
+            "new_edl_id": new_edl.edl_id,
+            "message": summary_msg,
+        }
+
+    registry.register(ToolDefinition(
+        name="undo_last_edit",
+        description="Undo the last Leo edit and restore the previous EDL state and preview",
+        parameters_schema=UndoLastEditArgs,
+        handler=undo_last_edit,
+        human_summary_formatter=lambda args, out: out.get("message", "Undid last edit."),
+    ))
+
 
     def add_cut(start_ms: int, end_ms: int, decision_type: EditorDecisionType, reason: str) -> dict[str, Any]:
         if decision_type not in destructive_types:

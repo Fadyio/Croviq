@@ -39,6 +39,7 @@ interface VideoStageProps {
   onPlayPause: () => void;
   onSeek: (targetMs: number) => void;
   onDurationChange?: (durationMs: number) => void;
+  onRetryPlayback?: () => Promise<void> | void;
   className?: string;
 }
 export const VideoStage: React.FC<VideoStageProps> = ({
@@ -59,6 +60,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   onPlayPause,
   onSeek,
   onDurationChange,
+  onRetryPlayback,
   className = "",
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -66,9 +68,9 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
   const isSeekingInternallyRef = useRef<boolean>(false);
 
-  // Sync isPlaying state with video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -107,6 +109,12 @@ export const VideoStage: React.FC<VideoStageProps> = ({
         : previewMode === "edited"
           ? renderedPreviewUrl || playbackUrl || null
           : playbackUrl || null;
+  // Clear error state on media source or preview mode change
+  useEffect(() => {
+    if (activeVideoUrl || previewMode) {
+      setVideoError(null);
+    }
+  }, [activeVideoUrl, previewMode]);
   const outputStatus = currentOutput
     ? currentOutput.status
     : activeVideoUrl
@@ -360,7 +368,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
         {/* Video Error Message Overlay if signed URL fails */}
         {videoError && (
           <div
-            className="absolute inset-0 m-auto max-w-sm h-fit bg-surface-1/95 border border-danger/40 rounded-xl p-4 flex flex-col items-center text-center gap-2 shadow-2xl backdrop-blur-sm z-20"
+            className="absolute inset-0 m-auto max-w-sm h-fit bg-surface-1/95 border border-danger/40 rounded-xl p-4 flex flex-col items-center text-center gap-2.5 shadow-2xl backdrop-blur-sm z-20"
             data-testid="video-error-overlay"
           >
             <AlertCircle className="size-6 text-danger" />
@@ -368,6 +376,36 @@ export const VideoStage: React.FC<VideoStageProps> = ({
             <p className="text-[11px] text-text-secondary">
               The signed media URL could not be played or has expired.
             </p>
+            {onRetryPlayback && (
+              <button
+                onClick={async () => {
+                  setIsRetrying(true);
+                  setVideoError(null);
+                  try {
+                    await onRetryPlayback();
+                    if (videoRef.current) {
+                      videoRef.current.load();
+                    }
+                  } finally {
+                    setIsRetrying(false);
+                  }
+                }}
+                className="mt-1 px-3 py-1.5 rounded-lg bg-surface-3 hover:bg-surface-2 border border-border-subtle text-xs font-medium text-text-primary transition-colors flex items-center gap-1.5 disabled:opacity-60"
+                data-testid="retry-playback-button"
+              >
+                {isRetrying ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin text-primary" />
+                    <span>Renewing URL…</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="size-3" />
+                    <span>Retry Playback</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         )}
 
