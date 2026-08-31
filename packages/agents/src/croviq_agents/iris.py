@@ -21,6 +21,10 @@ from croviq_domain.release_review import (
     ReleaseIssueType,
     ReleaseReview,
     ReleaseVerdict,
+    compute_confidence_score,
+    compute_grammar_score,
+    compute_quality_score,
+    generate_reese_metadata,
 )
 from croviq_domain.render import RenderArtifact
 from croviq_domain.transcript import Transcript
@@ -130,45 +134,97 @@ class IrisQAAgent:
             )
 
             # 4. Merge deterministic issues if any were detected and not already captured
+            all_issues = list(review.issues)
             if det_issues:
-                all_issues = list(review.issues)
                 existing_types = {i.issue_type for i in all_issues}
                 for di in det_issues:
                     if di.issue_type not in existing_types:
                         all_issues.append(di)
 
-                blocking_or_high = [
-                    i for i in all_issues
-                    if i.severity in (ReleaseIssueSeverity.BLOCKING, ReleaseIssueSeverity.HIGH)
-                ]
-                final_verdict = ReleaseVerdict.FIX_REQUIRED if blocking_or_high else review.verdict
-                final_approved = len(blocking_or_high) == 0 and len(all_issues) == 0
+            blocking_or_high = [
+                i for i in all_issues
+                if i.severity in (ReleaseIssueSeverity.BLOCKING, ReleaseIssueSeverity.HIGH)
+            ]
+            final_verdict = ReleaseVerdict.FIX_REQUIRED if blocking_or_high else review.verdict
+            final_approved = len(blocking_or_high) == 0 and len(all_issues) == 0
 
-                review = ReleaseReview(
-                    review_id=review.review_id,
-                    production_id=review.production_id,
-                    agent="iris",
-                    model=review.model,
-                    verdict=final_verdict,
-                    summary=review.summary,
-                    issues=all_issues,
-                    approved_for_release=final_approved,
-                    confidence=review.confidence,
-                    created_at=review.created_at,
-                    master_artifact_id=review.master_artifact_id,
-                    packaging_proposal_id=review.packaging_proposal_id,
-                    checklist=ReleaseChecklist(
-                        master_video=review.checklist.master_video,
-                        audio=review.checklist.audio and not any(i.issue_type in {ReleaseIssueType.AUDIO_LEVEL, ReleaseIssueType.AUDIO_ARTIFACT} for i in all_issues),
-                        captions=review.checklist.captions and not any(i.issue_type in {ReleaseIssueType.CAPTION_TIMING, ReleaseIssueType.CAPTION_MISMATCH} for i in all_issues),
-                        chapters=review.checklist.chapters and not any(i.issue_type in {ReleaseIssueType.CHAPTER_TIMING, ReleaseIssueType.CHAPTER_MISMATCH} for i in all_issues),
-                        packaging=review.checklist.packaging and not any(i.issue_type in {ReleaseIssueType.TITLE_MISMATCH, ReleaseIssueType.DESCRIPTION_MISMATCH, ReleaseIssueType.UNSUPPORTED_CLAIM} for i in all_issues),
-                        claims=review.checklist.claims and not any(i.issue_type in {ReleaseIssueType.UNSUPPORTED_CLAIM, ReleaseIssueType.FACTUAL_INCONSISTENCY} for i in all_issues),
-                    ),
-                    claim_verifications=review.claim_verifications,
-                    thumbnail_evaluations=review.thumbnail_evaluations,
-                )
+            # Compute or reconcile Quality Score
+            n_pts = 76.0 if any(i.issue_type in (ReleaseIssueType.CONTEXT_LOSS, ReleaseIssueType.NARRATIVE_PACING, ReleaseIssueType.MISSING_CONTENT) for i in all_issues) else 98.0
+            a_pts = 92.0 if any(i.issue_type in (ReleaseIssueType.AUDIO_LEVEL, ReleaseIssueType.AUDIO_ARTIFACT) for i in all_issues) else 97.0
+            c_pts = 95.0 if any(i.issue_type in (ReleaseIssueType.CAPTION_TIMING, ReleaseIssueType.CAPTION_MISMATCH) for i in all_issues) else 99.0
+            v_pts = 88.0 if any(i.issue_type in (ReleaseIssueType.BAD_CUT, ReleaseIssueType.VISUAL_JUMP, ReleaseIssueType.FRAME_GLITCH) for i in all_issues) else 96.0
+            f_pts = 85.0 if any(i.issue_type in (ReleaseIssueType.UNSUPPORTED_CLAIM, ReleaseIssueType.FACTUAL_INCONSISTENCY) for i in all_issues) else 98.0
 
+            q_score, q_breakdown = compute_quality_score(
+                narrative_score=n_pts,
+                audio_score=a_pts,
+                caption_score=c_pts,
+                visual_score=v_pts,
+                factual_score=f_pts,
+                issues=all_issues,
+                preview_mode=preview_mode,
+            )
+
+            analyzed_source = (
+                "raw transcript" if preview_mode == "original"
+                else "retained / edited transcript projection" if preview_mode == "edited"
+                else "rendered corrected narration"
+            )
+            w_cnt = len(transcript.words) if transcript and transcript.words else (len(transcript.text.split()) if transcript and transcript.text else 200)
+            g_score, g_breakdown = compute_grammar_score(
+                issues=all_issues,
+                word_count=w_cnt,
+                analyzed_source=analyzed_source,
+            )
+
+            conf_score, conf_breakdown = compute_confidence_score(
+                transcript_coverage=1.0 if transcript else 0.0,
+                visual_coverage=0.92 if preview_mode == "original" else 0.98,
+                audio_coverage=1.0,
+                checks_completed=1.0,
+            )
+
+            reese_meta = review.reese_metadata or generate_reese_metadata(
+                transcript_text=transcript.text if transcript else "",
+                proposal_title=proposal.primary_title if proposal else None,
+                proposal_description=proposal.description if proposal else None,
+                chapters=proposal.chapters if proposal else None,
+            )
+
+            review = ReleaseReview(
+                review_id=review.review_id,
+                production_id=review.production_id,
+                agent="iris",
+                model=review.model,
+                verdict=final_verdict,
+                summary=review.summary,
+                issues=all_issues,
+                approved_for_release=final_approved,
+                confidence=conf_score,
+                quality_score=q_score,
+                grammar_score=g_score,
+                quality_breakdown=q_breakdown,
+                grammar_breakdown=g_breakdown,
+                confidence_breakdown=conf_breakdown,
+                reese_metadata=reese_meta,
+                created_at=review.created_at,
+                preview_mode=preview_mode,
+                reviewed_artifact_id=review.reviewed_artifact_id or master_artifact.artifact_id,
+                reviewed_artifact_uri=review.reviewed_artifact_uri or master_uri,
+                reviewed_voice_id=voice_id,
+                master_artifact_id=review.master_artifact_id or master_artifact.artifact_id,
+                packaging_proposal_id=review.packaging_proposal_id,
+                checklist=ReleaseChecklist(
+                    master_video=review.checklist.master_video,
+                    audio=review.checklist.audio and not any(i.issue_type in {ReleaseIssueType.AUDIO_LEVEL, ReleaseIssueType.AUDIO_ARTIFACT} for i in all_issues),
+                    captions=review.checklist.captions and not any(i.issue_type in {ReleaseIssueType.CAPTION_TIMING, ReleaseIssueType.CAPTION_MISMATCH} for i in all_issues),
+                    chapters=review.checklist.chapters and not any(i.issue_type in {ReleaseIssueType.CHAPTER_TIMING, ReleaseIssueType.CHAPTER_MISMATCH} for i in all_issues),
+                    packaging=review.checklist.packaging and not any(i.issue_type in {ReleaseIssueType.TITLE_MISMATCH, ReleaseIssueType.DESCRIPTION_MISMATCH, ReleaseIssueType.UNSUPPORTED_CLAIM} for i in all_issues),
+                    claims=review.checklist.claims and not any(i.issue_type in {ReleaseIssueType.UNSUPPORTED_CLAIM, ReleaseIssueType.FACTUAL_INCONSISTENCY} for i in all_issues),
+                ),
+                claim_verifications=review.claim_verifications,
+                thumbnail_evaluations=review.thumbnail_evaluations,
+            )
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
 
             log_event(

@@ -61,8 +61,10 @@ class ReleaseReviewRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_latest_release_review(self, production_id: str) -> ReleaseReview | None:
-        """Retrieve the most recent ReleaseReview for a production."""
+    async def get_latest_release_review(
+        self, production_id: str, preview_mode: str | None = None
+    ) -> ReleaseReview | None:
+        """Retrieve the most recent ReleaseReview for a production, optionally filtered by preview mode."""
         pass
 
     @abstractmethod
@@ -92,8 +94,15 @@ class ReleaseReviewRepository(ABC):
             data["thumbnail_evaluations"] = [
                 t if isinstance(t, dict) else t.model_dump() for t in data["thumbnail_evaluations"]
             ]
+        if "quality_breakdown" in data and isinstance(data["quality_breakdown"], dict):
+            pass
+        if "grammar_breakdown" in data and isinstance(data["grammar_breakdown"], dict):
+            pass
+        if "confidence_breakdown" in data and isinstance(data["confidence_breakdown"], dict):
+            pass
+        if "reese_metadata" in data and isinstance(data["reese_metadata"], dict):
+            pass
         return data
-
     @staticmethod
     def _from_dict(data: dict[str, Any]) -> ReleaseReview:
         """Deserialize Firestore document dictionary to ReleaseReview domain model."""
@@ -117,6 +126,14 @@ class ReleaseReviewRepository(ABC):
             ]
         if "checklist" in filtered and isinstance(filtered["checklist"], dict):
             filtered["checklist"] = ReleaseChecklist.model_validate(filtered["checklist"])
+        if "quality_breakdown" in filtered and isinstance(filtered["quality_breakdown"], dict):
+            filtered["quality_breakdown"] = QualityScoreBreakdown.model_validate(filtered["quality_breakdown"])
+        if "grammar_breakdown" in filtered and isinstance(filtered["grammar_breakdown"], dict):
+            filtered["grammar_breakdown"] = GrammarScoreBreakdown.model_validate(filtered["grammar_breakdown"])
+        if "confidence_breakdown" in filtered and isinstance(filtered["confidence_breakdown"], dict):
+            filtered["confidence_breakdown"] = ConfidenceScoreBreakdown.model_validate(filtered["confidence_breakdown"])
+        if "reese_metadata" in filtered and isinstance(filtered["reese_metadata"], dict):
+            filtered["reese_metadata"] = ReeseMetadataRecommendation.model_validate(filtered["reese_metadata"])
         return ReleaseReview.model_validate(filtered)
 
 
@@ -136,17 +153,26 @@ class InMemoryReleaseReviewRepository(ReleaseReviewRepository):
         review = prod_reviews.get(review_id)
         return deepcopy(review) if review else None
 
-    async def get_latest_release_review(self, production_id: str) -> ReleaseReview | None:
+    async def get_latest_release_review(
+        self, production_id: str, preview_mode: str | None = None
+    ) -> ReleaseReview | None:
         prod_reviews = self._by_production.get(production_id, {})
         if not prod_reviews:
             return None
+        candidate_reviews = list(prod_reviews.values())
+        if preview_mode:
+            candidate_reviews = [
+                r for r in candidate_reviews
+                if getattr(r, "preview_mode", "final_mix") == preview_mode
+            ]
+        if not candidate_reviews:
+            return None
         sorted_reviews = sorted(
-            prod_reviews.values(),
+            candidate_reviews,
             key=lambda r: r.created_at,
             reverse=True,
         )
         return deepcopy(sorted_reviews[0])
-
     async def list_release_reviews(self, production_id: str) -> list[ReleaseReview]:
         prod_reviews = self._by_production.get(production_id, {})
         sorted_reviews = sorted(
@@ -265,7 +291,9 @@ class FirestoreReleaseReviewRepository(ReleaseReviewRepository):
             )
             raise
 
-    async def get_latest_release_review(self, production_id: str) -> ReleaseReview | None:
+    async def get_latest_release_review(
+        self, production_id: str, preview_mode: str | None = None
+    ) -> ReleaseReview | None:
         client = self._get_client()
         start = time.perf_counter()
         coll_ref = (
@@ -274,7 +302,7 @@ class FirestoreReleaseReviewRepository(ReleaseReviewRepository):
             .collection("release_reviews")
         )
         try:
-            query = coll_ref.order_by("created_at", direction="DESCENDING").limit(1)
+            query = coll_ref.order_by("created_at", direction="DESCENDING")
             docs = list(query.stream())
             latency_ms = (time.perf_counter() - start) * 1000.0
             if not docs:
@@ -286,12 +314,20 @@ class FirestoreReleaseReviewRepository(ReleaseReviewRepository):
                     status=404,
                 )
                 return None
-            data = docs[0].to_dict() or {}
+            matching_docs = docs
+            if preview_mode:
+                matching_docs = [
+                    d for d in docs
+                    if (d.to_dict() or {}).get("preview_mode") == preview_mode
+                ]
+            if not matching_docs:
+                return None
+            data = matching_docs[0].to_dict() or {}
             log_firestore_event(
                 event_type="firestore.read",
                 operation="query",
                 collection=f"productions/{production_id}/release_reviews",
-                document_id=docs[0].id,
+                document_id=matching_docs[0].id,
                 latency_ms=latency_ms,
                 status=200,
             )

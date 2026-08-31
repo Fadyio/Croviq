@@ -491,6 +491,19 @@ def test_release_review_mode_aware_endpoints(
     data_orig = resp_orig.json()
     assert data_orig["review"]["preview_mode"] == "original"
     assert "art_source_" in data_orig["review"]["reviewed_artifact_id"]
+    assert "quality_score" in data_orig["review"]
+    assert "grammar_score" in data_orig["review"]
+    assert data_orig["review"]["quality_breakdown"] is not None
+    assert data_orig["review"]["grammar_breakdown"] is not None
+    assert data_orig["review"]["confidence_breakdown"] is not None
+    assert data_orig["review"]["reese_metadata"] is not None
+
+    # Test GET with preview_mode query param
+    get_orig = client.get(
+        f"/api/productions/{test_production.production_id}/release-review?preview_mode=original"
+    )
+    assert get_orig.status_code == 200
+    assert get_orig.json()["review"]["preview_mode"] == "original"
 
     # 2. Edited review
     resp_edit = client.post(
@@ -501,6 +514,7 @@ def test_release_review_mode_aware_endpoints(
     data_edit = resp_edit.json()
     assert data_edit["review"]["preview_mode"] == "edited"
     assert data_edit["review"]["reviewed_artifact_id"] == "art_preview_01"
+    assert data_edit["review"]["quality_score"] > 90
 
     # 3. Voiceover review
     resp_vo = client.post(
@@ -521,3 +535,12 @@ def test_release_review_mode_aware_endpoints(
     data_fm = resp_fm.json()
     assert data_fm["review"]["preview_mode"] == "final_mix"
     assert data_fm["review"]["reviewed_artifact_id"] == "art_fm_01"
+
+    # 5. Regenerate with Reese
+    resp_regen = client.post(
+        f"/api/productions/{test_production.production_id}/packaging/regenerate-reese"
+    )
+    assert resp_regen.status_code == 200
+    regen_data = resp_regen.json()
+    assert len(regen_data["effective_title"]) > 5
+    assert len(regen_data["effective_description"]) > 20

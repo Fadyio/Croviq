@@ -1,7 +1,7 @@
 import { Film, type LucideIcon, Mic2, Music, Video } from "lucide-react";
 import React from "react";
 import { type CanonicalMediaOutputs, formatDuration } from "../../lib/edl-adapter";
-export type PreviewMode = "original" | "edited" | "studio_voice" | "final_mix";
+export type PreviewMode = "original" | "edited" | "voiceover" | "studio_voice" | "final_mix";
 
 interface MediaBinProps {
   currentMode: PreviewMode;

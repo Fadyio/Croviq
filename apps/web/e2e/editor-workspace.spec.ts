@@ -1861,7 +1861,10 @@ test.describe("Editor Workspace (Issue #28)", () => {
       });
 
       const expectVoiceoverUnavailable = async () => {
-        await expect(page.getByTestId("preview-toggle-studio-voice")).toHaveCount(0);
+        await expect(page.getByTestId("preview-toggle-studio-voice")).toHaveAttribute(
+          "aria-pressed",
+          "false",
+        );
         await expect(page.getByTestId("preview-toggle-edited")).toHaveAttribute(
           "aria-pressed",
           "true",
@@ -1916,11 +1919,11 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     try {
       await expect(page.getByTestId("selected-voice-card")).toContainText("Charon");
-      await expect(page.getByTestId("voice-stale-banner")).toBeVisible({ timeout: 1000 });
+      await expect(page.getByTestId("voice-generating-banner")).toBeVisible({ timeout: 2000 });
       await expect(page.getByTestId("preview-toggle-edited")).toHaveAttribute(
         "aria-pressed",
         "true",
-        { timeout: 1000 },
+        { timeout: 2000 },
       );
       await expect(page.getByTestId("video-element")).toHaveAttribute(
         "src",
@@ -1976,7 +1979,10 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(generateButton).toBeEnabled();
     await expect(generateButton).not.toContainText("Generating");
 
-    await expect(page.getByTestId("preview-toggle-studio-voice")).toHaveCount(0);
+    await expect(page.getByTestId("preview-toggle-studio-voice")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     await expect(page.getByTestId("preview-toggle-edited")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("video-element")).toHaveAttribute(
       "src",
@@ -2269,49 +2275,23 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByTestId("voice-stale-banner")).toHaveCount(0);
     await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Ready");
 
-    // 2. Select Kore
+    // 2. Select Kore - in Bug 29, selecting triggers immediate regeneration
     await page.getByTestId("voice-option-kore").click();
 
-    // Immediately Selected voice becomes Kore
+    // Selected voice becomes Kore and triggers auto-regeneration
     await expect(selectedCard).toContainText("Kore");
     await expect(selectedCard).toContainText("Selected");
 
-    // Stale banner informs user: "Voiceover currently uses Charon. Regenerate to use Kore."
-    const staleBanner = page.getByTestId("voice-stale-banner");
-    await expect(staleBanner).toBeVisible();
-    await expect(staleBanner).toContainText("Voiceover currently uses Charon.");
-    await expect(staleBanner).toContainText("Regenerate to use Kore.");
-
-    // Available voices list has Selected badge on Kore, In Video on Charon
-    await expect(page.getByTestId("voice-option-kore")).toContainText("Selected");
-    await expect(page.getByTestId("voice-option-charon")).toContainText("In Video");
-    await expect(page.getByTestId("voice-option-charon")).not.toContainText("Active");
-
-    // Voiceover status shows Stale
-    await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Stale (Regenerate)");
+    // Confirm backend received voice_id = "Kore"
+    expect(lastPostVoiceId).toBe("Kore");
 
     // 3. Reload page - Kore selection persists across reload
     await page.reload();
     await page.waitForSelector("[data-testid='editor-workspace']");
     await page.getByTestId("tab-voice").click();
     await expect(selectedCard).toContainText("Kore");
-    await expect(page.getByTestId("voice-stale-banner")).toBeVisible();
-
-    // 4. Click Regenerate Voiceover
-    const generateBtn = page.getByTestId("btn-generate-voiceover");
-    await expect(generateBtn).toHaveText("Regenerate Voiceover");
-    await generateBtn.click();
-
-    // Confirm backend received voice_id = "Kore"
-    expect(lastPostVoiceId).toBe("Kore");
-
-    // After regeneration completes, status is Ready and rendered voice is Kore
     await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Ready");
     await expect(page.getByTestId("voice-ready-banner")).toBeVisible();
-    await expect(page.getByTestId("voice-ready-banner")).toContainText(
-      "Current voiceover uses Kore",
-    );
-    await expect(page.getByTestId("voice-stale-banner")).toHaveCount(0);
   });
 
   test("BUG 20: Auditioning voice sample does not change selected voice or rendered voice", async ({

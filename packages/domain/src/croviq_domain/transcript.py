@@ -206,6 +206,15 @@ class Transcript(BaseModel):
     )
 
     @property
+    def text(self) -> str:
+        """Full spoken transcript text joined from words or segments."""
+        if self.words:
+            return " ".join(w.text for w in self.words)
+        if self.segments:
+            return " ".join(s.text for s in self.segments)
+        return ""
+
+    @property
     def word_count(self) -> int:
         """Total number of spoken words in the transcript."""
         return len(self.words)

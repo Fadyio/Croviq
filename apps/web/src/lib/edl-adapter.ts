@@ -27,7 +27,7 @@ export type EditorSelectionType =
   "POINT" | "RANGE" | "TRANSCRIPT_WORD" | "TRANSCRIPT_SEGMENT" | "CUT" | "CHAPTER";
 
 export type CoordinateSpace = "SOURCE" | "EDITED";
-export type PreviewMode = "original" | "edited" | "studio_voice" | "final_mix";
+export type PreviewMode = "original" | "edited" | "voiceover" | "studio_voice" | "final_mix";
 
 export type ActivePreviewMode = "ORIGINAL" | "EDITED" | "VOICEOVER" | "FINAL_MIX";
 export interface EditorSelection {

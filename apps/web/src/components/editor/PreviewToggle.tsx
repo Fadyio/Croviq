@@ -2,7 +2,7 @@ import { Film, Loader2, Mic2, Music, Scissors } from "lucide-react";
 import React from "react";
 import type { CanonicalMediaOutputs } from "../../lib/edl-adapter";
 
-export type PreviewMode = "original" | "edited" | "studio_voice" | "final_mix";
+export type PreviewMode = "original" | "edited" | "voiceover" | "studio_voice" | "final_mix";
 
 interface PreviewToggleProps {
   mode: PreviewMode;

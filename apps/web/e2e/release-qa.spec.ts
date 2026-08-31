@@ -396,7 +396,7 @@ const mockReleaseApis = async (
   });
 
   await page.route(
-    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/release-review`,
+    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/release-review*`,
     async (route) => {
       if (route.request().method() === "POST") {
         state.review = PASSED_QA_REVIEW;
@@ -462,9 +462,8 @@ test.describe("Iris QA Agent & Release Gate Workflow", () => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await loginAndNavigateToRelease(page, state);
 
-    // Verify Release Status badge shows "Fix required"
-    await expect(page.getByTestId("release-status-badge")).toContainText(/Fix required/i);
-
+    // Verify Release Status badge shows "Quality Check Required"
+    await expect(page.getByTestId("release-status-badge")).toContainText(/Quality Check Required/i);
     // Verify Iris Quality Control section
     await expect(page.getByTestId("section-iris-qa")).toBeVisible();
     await expect(page.getByText("Iris — Quality Control")).toBeVisible();

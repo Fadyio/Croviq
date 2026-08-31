@@ -155,9 +155,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         return "studio_voice";
       }
     }
-    return "final_mix";
+    return "original";
   });
-
   const setPreviewMode = useCallback((newModeOrFn: React.SetStateAction<PreviewMode>) => {
     setPreviewModeState((prev) => {
       const next = typeof newModeOrFn === "function" ? newModeOrFn(prev) : newModeOrFn;
@@ -517,7 +516,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           return "studio_voice";
         }
       }
-      return prevMode || "final_mix";
+      if (finalMixOutput.available) return "final_mix";
+      if (voiceoverOutput.available) return "studio_voice";
+      if (editedOutput.available) return "edited";
+      return prevMode || "original";
     });
     setProduction(productionPayload);
     setPlaybackUrl(originalOutput.url);
@@ -684,12 +686,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setSelectedBlock(null);
     setCurrentTimeMs(0);
     setIsPlaying(false);
-    const params =
-      typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-    const modeParam = params?.get("mode");
-    if (!modeParam) {
-      setPreviewMode("final_mix");
-    }
     setErrorMessage(null);
     setIsLoading(true);
 
@@ -835,8 +831,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         voiceover: {
           ...prev.voiceover,
           status: "generating",
+          available: false,
         },
       }));
+      setPreviewMode("edited");
       try {
         const token = await getAuthToken();
         const headers = {
@@ -861,7 +859,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           body: JSON.stringify({ voice_id: voiceId }),
         });
         if (!res.ok) {
-          throw new Error(`Could not generate ${voiceId} voiceover. Previous voiceover was kept.`);
+          let errorDetail = `Voice generation failed (${res.status})`;
+          try {
+            const errData = await res.json();
+            if (errData?.detail) errorDetail = `Voice generation failed: ${errData.detail}`;
+          } catch {
+            // ignore JSON parse error
+          }
+          throw new Error(errorDetail);
         }
         const svData = await res.json();
         if (svData.result?.voice_id) {
@@ -877,8 +882,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             available: false,
           },
         }));
-        // 4. Switch player to newly rendered voiceover preview
-        setPreviewMode("studio_voice");
+        // 4. Switch player to newly rendered voiceover preview if completed
+        if (svData.result?.status === "completed" && svData.studio_voice_preview_url) {
+          setPreviewMode("studio_voice");
+        }
       } catch (err: unknown) {
         console.error("Failed to generate voiceover for voice:", voiceId, err);
         // Restore previous valid voiceover
@@ -1055,16 +1062,46 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
+
+      // Preferred dependency resolution: automatically generate Voiceover if missing or stale
+      if (!mediaOutputs.voiceover.available || mediaOutputs.voiceover.status !== "ready") {
+        const svVoice = selectedVoice || currentVoiceoverVoiceId || "Puck";
+        const svRes = await fetch(`/api/productions/${productionId}/studio-voice`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ voice_id: svVoice }),
+        });
+        if (!svRes.ok) {
+          let svErrDetail = "Voiceover must be generated before Final Mix.";
+          try {
+            const errData = await svRes.json();
+            if (errData?.detail) svErrDetail = `Voiceover generation failed: ${errData.detail}`;
+          } catch {
+            // ignore
+          }
+          throw new Error(svErrDetail);
+        }
+        await loadPersistedData();
+      }
+
       const res = await fetch(`/api/productions/${productionId}/renders/final-mix`, {
         method: "POST",
         headers,
       });
       if (!res.ok) {
-        throw new Error(`Final Mix rendering failed (${res.status})`);
+        let fmErrDetail = `Final Mix rendering failed (${res.status})`;
+        try {
+          const errData = await res.json();
+          if (errData?.detail) fmErrDetail = errData.detail;
+        } catch {
+          // ignore
+        }
+        throw new Error(fmErrDetail);
       }
       await loadPersistedData();
       setPreviewMode("final_mix");
-    } catch (err) {
+    } catch (err: unknown) {
+      console.error("Failed to render Final Mix:", err);
       setMediaOutputs((prev) => ({
         ...prev,
         final_mix: {
@@ -1077,7 +1114,16 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     } finally {
       setIsRenderingFinalMix(false);
     }
-  }, [getAuthToken, loadPersistedData, productionId, setPreviewMode]);
+  }, [
+    getAuthToken,
+    loadPersistedData,
+    mediaOutputs.voiceover.available,
+    mediaOutputs.voiceover.status,
+    productionId,
+    selectedVoice,
+    currentVoiceoverVoiceId,
+    setPreviewMode,
+  ]);
   const handleTimelinePoint = useCallback(
     (targetMs: number) => {
       handleSeek(targetMs);
@@ -1638,8 +1684,16 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               <VoiceSettingsTab
                 productionId={productionId}
                 selectedVoice={selectedVoice}
+                renderedVoice={currentVoiceoverVoiceId || mediaOutputs.voiceover.voiceId || null}
                 currentVoiceoverVoiceId={currentVoiceoverVoiceId}
                 voiceoverStatus={mediaOutputs.voiceover.status}
+                voiceoverArtifactId={mediaOutputs.voiceover.artifactId}
+                voiceoverEdlVersion={mediaOutputs.voiceover.edlId ? edl?.version : null}
+                currentEdlVersion={edl?.version}
+                voiceoverScriptVersion={correctedTranscript?.transcript_id || null}
+                currentScriptVersion={correctedTranscript?.transcript_id || null}
+                voiceoverTrackCount={edl?.voiceover_segments?.length || 0}
+                hasPlaybackUrl={Boolean(studioVoicePreviewUrl || mediaOutputs.voiceover.url)}
                 voices={voices}
                 getAuthToken={getAuthToken}
                 onSelectVoice={handleSelectVoice}

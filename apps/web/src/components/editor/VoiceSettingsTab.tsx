@@ -70,8 +70,16 @@ export const FALLBACK_GEMINI_VOICES: VoiceCatalogItem[] = [
 export interface VoiceSettingsTabProps {
   productionId: string;
   selectedVoice: string;
+  renderedVoice?: string | null;
   currentVoiceoverVoiceId?: string | null;
   voiceoverStatus?: MediaOutputStatus;
+  voiceoverArtifactId?: string | null;
+  voiceoverEdlVersion?: number | null;
+  currentEdlVersion?: number | null;
+  voiceoverScriptVersion?: string | null;
+  currentScriptVersion?: string | null;
+  voiceoverTrackCount?: number;
+  hasPlaybackUrl?: boolean;
   voices?: VoiceCatalogItem[];
   getAuthToken?: () => Promise<string>;
   onSelectVoice: (voiceId: string) => Promise<void>;
@@ -82,11 +90,20 @@ export interface VoiceSettingsTabProps {
 
 export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
   selectedVoice,
+  renderedVoice,
   currentVoiceoverVoiceId,
-  voiceoverStatus: _voiceoverStatus = "unavailable",
+  voiceoverStatus = "unavailable",
+  voiceoverArtifactId,
+  voiceoverEdlVersion,
+  currentEdlVersion,
+  voiceoverScriptVersion,
+  currentScriptVersion,
+  voiceoverTrackCount = 0,
+  hasPlaybackUrl = false,
   voices = FALLBACK_GEMINI_VOICES,
   getAuthToken,
   onSelectVoice,
+  onGenerateVoiceover,
   isGeneratingVoiceover = false,
   className = "",
 }) => {
@@ -101,9 +118,37 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
 
   const effectiveVoices = voices && voices.length > 0 ? voices : FALLBACK_GEMINI_VOICES;
 
-  // Active voice in video (persisted / rendered)
-  const activeVoiceId = currentVoiceoverVoiceId || selectedVoice || "Puck";
+  const effectiveRenderedVoice = renderedVoice ?? currentVoiceoverVoiceId ?? null;
 
+  // Strict Active in video contract: ALL 8 conditions must hold
+  const isVoiceActiveInVideo = (voiceId: string) => {
+    const voiceMatches =
+      selectedVoice.toLowerCase() === voiceId.toLowerCase() &&
+      effectiveRenderedVoice !== null &&
+      effectiveRenderedVoice.toLowerCase() === voiceId.toLowerCase();
+    const isReady = voiceoverStatus === "ready";
+    const hasArtifact = Boolean(voiceoverArtifactId);
+    const matchesEdl =
+      currentEdlVersion == null ||
+      voiceoverEdlVersion == null ||
+      voiceoverEdlVersion === currentEdlVersion;
+    const matchesScript =
+      currentScriptVersion == null ||
+      voiceoverScriptVersion == null ||
+      voiceoverScriptVersion === currentScriptVersion;
+    const hasTracks = voiceoverTrackCount > 0;
+    const playbackResolves = Boolean(hasPlaybackUrl);
+
+    return (
+      voiceMatches &&
+      isReady &&
+      hasArtifact &&
+      matchesEdl &&
+      matchesScript &&
+      hasTracks &&
+      playbackResolves
+    );
+  };
   // Stop audio on unmount
   useEffect(() => {
     return () => {
@@ -220,23 +265,30 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
     if (isGeneratingVoiceover) return;
     setErrorMessage(null);
     setGeneratingVoiceId(voiceId);
-    setGenerationStep("Generating voiceover…");
+    const voiceObj = effectiveVoices.find(
+      (v) => v.voice_id.toLowerCase() === voiceId.toLowerCase(),
+    );
+    const name = voiceObj ? voiceObj.display_name : voiceId;
+    setGenerationStep(`Generating ${name} voiceover…`);
 
-    const t1 = setTimeout(() => setGenerationStep("Rendering preview…"), 800);
+    const t1 = setTimeout(() => setGenerationStep("Rendering Voiceover Preview…"), 800);
     try {
       await onSelectVoice(voiceId);
-      setGenerationStep("Ready");
+      clearTimeout(t1);
+      setGenerationStep(`${name} — Active in video`);
       setTimeout(() => {
         setGenerationStep(null);
         setGeneratingVoiceId(null);
       }, 1500);
-    } catch (_err: unknown) {
+    } catch (err: unknown) {
       clearTimeout(t1);
       setGenerationStep(null);
       setGeneratingVoiceId(null);
-      const voiceObj = effectiveVoices.find((v) => v.voice_id === voiceId);
-      const name = voiceObj ? voiceObj.display_name : voiceId;
-      setErrorMessage(`Could not generate ${name} voiceover. Previous voiceover was kept.`);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : `Voice generation failed: could not generate ${name} voiceover.`;
+      setErrorMessage(msg);
     }
   };
 
@@ -281,11 +333,100 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
           <span>{errorMessage}</span>
         </div>
       )}
+      {effectiveVoices.find((v) => v.voice_id.toLowerCase() === selectedVoice.toLowerCase()) && (() => {
+        const selectedVoiceObj = effectiveVoices.find((v) => v.voice_id.toLowerCase() === selectedVoice.toLowerCase())!;
+        return (
+          <div
+            className="p-3 rounded-xl bg-surface-2 border border-border-subtle space-y-2.5"
+            data-testid="selected-voice-card"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-text-primary">
+                  {selectedVoiceObj.display_name}
+                </span>
+                <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-surface-3 text-text-muted font-mono">
+                  {selectedVoiceObj.gender}
+                </span>
+                <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-primary/10 text-primary font-mono font-semibold">
+                  Selected
+                </span>
+                <span data-testid="voiceover-status-badge" className="text-[10px] font-medium text-emerald-400">
+                  {voiceoverStatus === "ready" ? "Ready" : voiceoverStatus}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => handleAudition(e, selectedVoiceObj.voice_id)}
+                disabled={loadingAuditionVoiceId === selectedVoiceObj.voice_id}
+                className="flex items-center gap-1 px-2 py-1 rounded bg-surface-3 hover:bg-surface-1 text-text-secondary hover:text-text-primary text-[11px] font-medium border border-border-subtle transition-colors cursor-pointer"
+                data-testid="btn-play-selected-preview"
+                title="Audition sample phrase"
+              >
+                {playingVoiceId === selectedVoiceObj.voice_id ? (
+                  <Square className="w-3 h-3 fill-current" />
+                ) : (
+                  <Volume2 className="w-3 h-3" />
+                )}
+                <span>{playingVoiceId === selectedVoiceObj.voice_id ? "Playing…" : "Audition"}</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-text-secondary leading-relaxed italic bg-surface-1/60 p-2 rounded border border-border-subtle/50">
+              "{FIXED_VOICE_SAMPLE_TEXT}"
+            </p>
+
+            {onGenerateVoiceover && (
+              <button
+                type="button"
+                onClick={() => handleSelectAndRegenerate(selectedVoice)}
+                disabled={isGeneratingVoiceover}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                data-testid="btn-generate-voiceover"
+              >
+                {isGeneratingVoiceover ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Mic className="w-3.5 h-3.5" />
+                )}
+                <span>{isGeneratingVoiceover ? "Generating…" : "Regenerate Voiceover"}</span>
+              </button>
+            )}
+          </div>
+        );
+      })()}
+
+      {effectiveRenderedVoice &&
+        selectedVoice &&
+        effectiveRenderedVoice.toLowerCase() !== selectedVoice.toLowerCase() && (
+          <div
+            className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium"
+            data-testid="voice-stale-banner"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>
+              Voiceover currently uses {effectiveRenderedVoice}. Regenerate to use {selectedVoice}.
+            </span>
+          </div>
+        )}
+
+      {voiceoverStatus === "ready" &&
+        (!effectiveRenderedVoice ||
+          effectiveRenderedVoice.toLowerCase() === selectedVoice.toLowerCase()) && (
+          <div
+            className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium"
+            data-testid="voice-ready-banner"
+          >
+            <Check className="w-4 h-4 text-emerald-400" />
+            <span>Voiceover ready for preview</span>
+          </div>
+        )}
 
       {/* 8 Voice List */}
       <div className="space-y-1.5" role="radiogroup" aria-label="Available Studio Voices">
         {effectiveVoices.map((voice) => {
-          const isSelected = activeVoiceId.toLowerCase() === voice.voice_id.toLowerCase();
+          const isSelected = selectedVoice.toLowerCase() === voice.voice_id.toLowerCase();
+          const isActive = isVoiceActiveInVideo(voice.voice_id);
           const isCurrentGenerating = isGeneratingVoiceover && generatingVoiceId === voice.voice_id;
           const isAuditioning = playingVoiceId === voice.voice_id;
           const isAuditionLoading = loadingAuditionVoiceId === voice.voice_id;
@@ -328,8 +469,11 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
                     <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-surface-3 text-text-muted font-mono">
                       {voice.gender}
                     </span>
-                    {isSelected && (
-                      <span className="text-[10px] font-medium text-primary">
+                    {isActive && (
+                      <span
+                        className="text-[10px] font-medium text-primary"
+                        data-testid={`active-voice-badge-${voice.voice_id.toLowerCase()}`}
+                      >
                         (Active in video)
                       </span>
                     )}
@@ -361,13 +505,18 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
                     aria-label={`Audition ${voice.display_name} sample`}
                     data-testid={`btn-audition-${voice.voice_id.toLowerCase()}`}
                   >
-                    {isAuditionLoading ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : isAuditioning ? (
-                      <Square className="w-3.5 h-3.5 fill-current" />
-                    ) : (
-                      <Volume2 className="w-3.5 h-3.5" />
-                    )}
+                    <span
+                      data-testid={`btn-preview-${voice.voice_id.toLowerCase()}`}
+                      className="inline-flex items-center justify-center pointer-events-none"
+                    >
+                      {isAuditionLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : isAuditioning ? (
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                      ) : (
+                        <Volume2 className="w-3.5 h-3.5" />
+                      )}
+                    </span>
                   </button>
                 )}
               </div>

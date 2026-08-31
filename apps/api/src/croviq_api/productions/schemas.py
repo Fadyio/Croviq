@@ -544,7 +544,10 @@ class ReleaseReviewDetailResponse(BaseModel):
     has_packaging: bool = Field(default=False, description="Whether packaging proposal exists")
     generated_at: datetime | None = Field(default=None, description="UTC timestamp of review generation")
     release_fingerprint: str | None = Field(default=None, description="SHA-256 cryptographic release fingerprint locking immutable pipeline inputs")
-
+    is_stale: bool = Field(default=False, description="Whether the underlying media artifact or edits changed since this review was generated")
+    quality_score: float | None = Field(default=None, description="Composite Quality score (0-100%)")
+    grammar_score: float | None = Field(default=None, description="Composite Grammar score (0-100%)")
+    confidence_score: float | None = Field(default=None, description="Composite Confidence score (0-100%)")
 
 
 class PublishPreparationResponse(BaseModel):

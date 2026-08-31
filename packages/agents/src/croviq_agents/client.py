@@ -25,6 +25,10 @@ from croviq_domain.render_review import EditorSelfReview, EditorSelfReviewVerdic
 from croviq_domain.release_review import (
     ClaimSupportStatus,
     ClaimVerification,
+    ConfidenceScoreBreakdown,
+    GrammarScoreBreakdown,
+    QualityScoreBreakdown,
+    ReeseMetadataRecommendation,
     ReleaseChecklist,
     ReleaseIssue,
     ReleaseIssueSeverity,
@@ -32,6 +36,10 @@ from croviq_domain.release_review import (
     ReleaseReview,
     ReleaseVerdict,
     ThumbnailEvaluation,
+    compute_confidence_score,
+    compute_grammar_score,
+    compute_quality_score,
+    generate_reese_metadata,
 )
 from croviq_domain.editorial import (
     ChapterMarker,
@@ -1690,61 +1698,106 @@ class FakeGenAIClient(GenAIClient):
 
         claim_verifs = [
             ClaimVerification(
-                claim_text="12 user-replaceable parts",
-                location="description",
-                status=ClaimSupportStatus.SUPPORTED_BY_VIDEO,
-                evidence="At 00:51, host demonstrates phone disassembly and repair parts.",
-            ),
-            ClaimVerification(
-                claim_text="Snapdragon internals",
-                location="description",
+                claim_text="Workload Identity Federation allows GitHub Actions to authenticate to Google Cloud without storing long-lived service account keys",
+                location="transcript",
                 status=ClaimSupportStatus.SUPPORTED_EXTERNALLY,
-                evidence="Verified hardware specs for Fairphone 6 Plus platform.",
+                evidence="Verified with Google Cloud IAM documentation: WIF exchanges OIDC tokens for short-lived Google Cloud credentials (https://cloud.google.com/iam/docs/workload-identity-federation).",
+                source_url="https://cloud.google.com/iam/docs/workload-identity-federation",
             ),
             ClaimVerification(
-                claim_text="microSD",
-                location="description",
-                status=ClaimSupportStatus.SUPPORTED_BY_VIDEO,
-                evidence="Spoken in video and visible on chassis expansion slot.",
+                claim_text="GitHub Actions workflows require permissions id-token: write to exchange OIDC JSON Web Tokens with Google Cloud STS",
+                location="transcript",
+                status=ClaimSupportStatus.SUPPORTED_EXTERNALLY,
+                evidence="Verified with GitHub Actions security documentation: id-token: write is mandatory for OIDC token generation (https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect).",
+                source_url="https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect",
+            ),
+            ClaimVerification(
+                claim_text="Cloudflare DNS API tokens require Zone.DNS permissions for managing DNS records programmatically",
+                location="transcript",
+                status=ClaimSupportStatus.SUPPORTED_EXTERNALLY,
+                evidence="Verified with Cloudflare API documentation: Zone.DNS permission is required for record management (https://developers.cloudflare.com/fundamentals/api/get-started/create-token/).",
+                source_url="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/",
             ),
         ]
 
         if has_unsupported_upcoming_review:
             claim_verifs.append(
                 ClaimVerification(
-                    claim_text="Stay tuned for the upcoming full Fairphone 6+ review!",
+                    claim_text="Stay tuned for the upcoming full technical review!",
                     location="description",
                     status=ClaimSupportStatus.UNSUPPORTED,
                     evidence="No planned future review or scheduling found in Croviq channel memory or production context.",
                 )
             )
-
         issues: list[ReleaseIssue] = []
-        if has_unsupported_upcoming_review:
+        n_score, a_score, c_score, v_score, f_score = 100.0, 100.0, 100.0, 100.0, 100.0
+        analyzed_src = "rendered corrected narration"
+
+        if preview_mode == "original":
+            analyzed_src = "raw transcript"
+            n_score, a_score, c_score, v_score, f_score = 76.0, 92.0, 97.0, 88.0, 95.0
             issues.append(
                 ReleaseIssue(
-                    issue_id="iss_claim_upcoming_review",
-                    issue_type=ReleaseIssueType.UNSUPPORTED_CLAIM,
+                    issue_id="iss_orig_pacing",
+                    issue_type=ReleaseIssueType.CONTEXT_LOSS,
                     severity=ReleaseIssueSeverity.HIGH,
-                    source_start_ms=None,
-                    source_end_ms=None,
-                    artifact_type="packaging",
-                    message="Description claims an upcoming full review that isn't supported.",
-                    suggested_action="Remove the upcoming review promise from YouTube description.",
-                    evidence="Claim: 'Stay tuned for the upcoming full Fairphone 6+ review!' has no corroboration.",
+                    source_start_ms=37500,
+                    source_end_ms=45200,
+                    artifact_type="master",
+                    message="Extended silence and dead air (nearly 8 seconds) while highlighting YAML permission lines.",
+                    suggested_action="Trim approximately 6–7 seconds while retaining a short visual pause.",
+                    evidence="Transcript gap between 37500ms ('runs on') and 45200ms ('permission') with static cursor selection.",
                 )
             )
+            issues.append(
+                ReleaseIssue(
+                    issue_id="iss_orig_audio",
+                    issue_type=ReleaseIssueType.AUDIO_ARTIFACT,
+                    severity=ReleaseIssueSeverity.MEDIUM,
+                    source_start_ms=16200,
+                    source_end_ms=23500,
+                    artifact_type="master",
+                    message="Repeated false starts and hesitations ('to edit... to to... to edit your workflow').",
+                    suggested_action="Remove false starts and apply clean join.",
+                    evidence="Creator stumbles across 16200ms-23500ms while navigating back to the .github/workflows directory.",
+                )
+            )
+        elif preview_mode == "edited":
+            analyzed_src = "retained / edited transcript projection"
+            n_score, a_score, c_score, v_score, f_score = 96.0, 94.0, 98.0, 95.0, 98.0
+        elif preview_mode == "voiceover":
+            analyzed_src = "rendered corrected narration"
+            n_score, a_score, c_score, v_score, f_score = 98.0, 96.0, 99.0, 96.0, 99.0
+        else:
+            # final_mix
+            analyzed_src = "rendered corrected narration"
+            n_score, a_score, c_score, v_score, f_score = 98.0, 97.0, 99.0, 96.0, 98.0
+            if has_unsupported_upcoming_review:
+                f_score = 82.0
+                issues.append(
+                    ReleaseIssue(
+                        issue_id="iss_claim_upcoming_review",
+                        issue_type=ReleaseIssueType.UNSUPPORTED_CLAIM,
+                        severity=ReleaseIssueSeverity.HIGH,
+                        source_start_ms=None,
+                        source_end_ms=None,
+                        artifact_type="packaging",
+                        message="Description claims an upcoming full review that isn't supported.",
+                        suggested_action="Remove the upcoming review promise from YouTube description.",
+                        evidence="Claim: 'Stay tuned for the upcoming full Fairphone 6+ review!' has no corroboration.",
+                    )
+                )
 
-        verdict = ReleaseVerdict.FIX_REQUIRED if issues else ReleaseVerdict.PASS
-        approved = len(issues) == 0
+        verdict = ReleaseVerdict.FIX_REQUIRED if any(i.severity in (ReleaseIssueSeverity.BLOCKING, ReleaseIssueSeverity.HIGH) for i in issues) else ReleaseVerdict.PASS
+        approved = len(issues) == 0 and verdict == ReleaseVerdict.PASS
 
         checklist = ReleaseChecklist(
             master_video=True,
-            audio=True,
-            captions=True,
+            audio=not any(i.issue_type in {ReleaseIssueType.AUDIO_LEVEL, ReleaseIssueType.AUDIO_ARTIFACT} for i in issues),
+            captions=not any(i.issue_type in {ReleaseIssueType.CAPTION_TIMING, ReleaseIssueType.CAPTION_MISMATCH} for i in issues),
             chapters=True,
             packaging=len(issues) == 0,
-            claims=len(issues) == 0,
+            claims=not any(i.issue_type in {ReleaseIssueType.UNSUPPORTED_CLAIM, ReleaseIssueType.FACTUAL_INCONSISTENCY} for i in issues),
         )
 
         thumb_evals = []
@@ -1759,15 +1812,63 @@ class FakeGenAIClient(GenAIClient):
                     )
                 )
 
+        q_score, q_breakdown = compute_quality_score(
+            narrative_score=n_score,
+            audio_score=a_score,
+            caption_score=c_score,
+            visual_score=v_score,
+            factual_score=f_score,
+            issues=issues,
+            preview_mode=preview_mode,
+        )
+
+        word_cnt = len(transcript.words) if transcript and transcript.words else (len(transcript.text.split()) if transcript and transcript.text else 200)
+        g_score, g_breakdown = compute_grammar_score(
+            issues=issues,
+            word_count=word_cnt,
+            analyzed_source=analyzed_src,
+        )
+
+        v_cov = 0.92 if preview_mode == "original" else 0.96
+        conf_score, conf_breakdown = compute_confidence_score(
+            transcript_coverage=1.0 if transcript else 0.0,
+            visual_coverage=v_cov,
+            audio_coverage=1.0,
+            checks_completed=1.0,
+        )
+
+        reese_meta = generate_reese_metadata(
+            transcript_text=transcript.text if transcript else "",
+            proposal_title=proposal.primary_title if proposal else None,
+            proposal_description=proposal.description if proposal else None,
+            chapters=proposal.chapters if proposal else None,
+        )
+
+        if preview_mode == "original":
+            summary = "The screen recording contains substantial dead air, repeated hesitations, and disjointed pacing throughout the walkthrough of the GitHub workflows directory. Narrative tightness and audio pacing require remediation before release."
+        elif preview_mode == "edited":
+            summary = "Edited Preview inspected. Dead air and false starts have been trimmed by Leo's cuts. Narrative continuity and pacing are tight."
+        elif preview_mode == "voiceover":
+            summary = "Voiceover Preview inspected. Studio Voice narration aligns with on-screen actions. Pronunciation is crisp and subtitles match spoken narration."
+        else:
+            summary = f"Reese evaluated Final Mix ({master_artifact_id or 'media'}). Continuous playback, audio loudness (-16 LUFS), and narrative continuity verified." if approved else f"Found {len(issues)} packaging/claim defects requiring fix."
+
         review = ReleaseReview(
             review_id=f"rev_{production_id[:12]}",
             production_id=production_id,
             agent="iris",
             model="fake-gemini-3.7-flash",
             verdict=verdict,
-            summary=f"Iris evaluated {preview_mode.replace('_', ' ').title()} ({master_artifact_id or 'media'}). All checks passed." if approved else f"Found {len(issues)} packaging/claim defects requiring fix.",
+            summary=summary,
             issues=issues,
             approved_for_release=approved,
+            confidence=conf_score,
+            quality_score=q_score,
+            grammar_score=g_score,
+            quality_breakdown=q_breakdown,
+            grammar_breakdown=g_breakdown,
+            confidence_breakdown=conf_breakdown,
+            reese_metadata=reese_meta,
             created_at=datetime.now(timezone.utc),
             preview_mode=preview_mode,
             reviewed_artifact_id=master_artifact_id,

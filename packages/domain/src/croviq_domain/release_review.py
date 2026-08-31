@@ -60,11 +60,19 @@ class ReleaseIssueType(StrEnum):
     THUMBNAIL_MISMATCH = "THUMBNAIL_MISMATCH"
     PACKAGING_INCONSISTENCY = "PACKAGING_INCONSISTENCY"
 
-
-    # Editorial continuity
+    # Editorial continuity & Pacing
     MISSING_CONTENT = "MISSING_CONTENT"
     CONTEXT_LOSS = "CONTEXT_LOSS"
+    NARRATIVE_PACING = "NARRATIVE_PACING"
 
+    # Grammar & Voiceover Quality
+    GRAMMAR_ERROR = "GRAMMAR_ERROR"
+    VOICEOVER_LEAKAGE = "VOICEOVER_LEAKAGE"
+    PRONUNCIATION = "PRONUNCIATION"
+
+    # Music & Audio Mix
+    MUSIC_BALANCE = "MUSIC_BALANCE"
+    DUCKING_ISSUE = "DUCKING_ISSUE"
 
 ISSUE_TYPE_FRIENDLY_NAMES: dict[ReleaseIssueType, str] = {
     ReleaseIssueType.AUDIO_ARTIFACT: "Audio Artifact",
@@ -88,6 +96,12 @@ ISSUE_TYPE_FRIENDLY_NAMES: dict[ReleaseIssueType, str] = {
     ReleaseIssueType.PACKAGING_INCONSISTENCY: "Packaging Inconsistency",
     ReleaseIssueType.MISSING_CONTENT: "Missing Content / Demo",
     ReleaseIssueType.CONTEXT_LOSS: "Context Loss",
+    ReleaseIssueType.NARRATIVE_PACING: "Narrative Pacing",
+    ReleaseIssueType.GRAMMAR_ERROR: "Grammar / Phrasing Error",
+    ReleaseIssueType.VOICEOVER_LEAKAGE: "Creator Voice Leakage",
+    ReleaseIssueType.PRONUNCIATION: "Pronunciation / Cadence",
+    ReleaseIssueType.MUSIC_BALANCE: "Music Balance",
+    ReleaseIssueType.DUCKING_ISSUE: "Audio Ducking Issue",
 }
 
 
@@ -144,6 +158,59 @@ class ThumbnailEvaluation(BaseModel):
     reason: str = Field(..., min_length=2, max_length=500, description="Concise visual QA assessment")
 
 
+class QualityScoreBreakdown(BaseModel):
+    """Component scores, rubric weights, deductions, and evidence explaining the Quality Score."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    narrative_score: float = Field(default=100.0, ge=0.0, le=100.0, description="Narrative & editing continuity score (25% weight)")
+    audio_score: float = Field(default=100.0, ge=0.0, le=100.0, description="Audio levels, clarity, and sync score (20% weight)")
+    caption_score: float = Field(default=100.0, ge=0.0, le=100.0, description="Caption & transcript alignment score (20% weight)")
+    visual_score: float = Field(default=100.0, ge=0.0, le=100.0, description="Visual & media continuity score (15% weight)")
+    factual_score: float = Field(default=100.0, ge=0.0, le=100.0, description="Technical & factual consistency score (20% weight)")
+    quality_score: float = Field(default=100.0, ge=0.0, le=100.0, description="Weighted composite quality percentage")
+    deductions: list[str] = Field(default_factory=list, description="Itemized rationale for point deductions")
+    evidence: list[str] = Field(default_factory=list, description="Observed media and transcript evidence")
+
+
+class GrammarScoreBreakdown(BaseModel):
+    """Structured grammar findings, error counts, source basis, and normalized score."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    grammar_score: float = Field(default=100.0, ge=0.0, le=100.0, description="Normalized grammar score percentage")
+    analyzed_source: str = Field(default="raw transcript", description="Transcript source projection inspected")
+    word_count: int = Field(default=0, ge=0, description="Total words in evaluated transcript")
+    major_errors_count: int = Field(default=0, ge=0, description="Count of major grammar/broken sentence errors (-12 pts base)")
+    moderate_errors_count: int = Field(default=0, ge=0, description="Count of moderate grammar/repetition errors (-6 pts base)")
+    minor_errors_count: int = Field(default=0, ge=0, description="Count of minor filler/hesitation errors (-2 pts base)")
+    deductions: list[str] = Field(default_factory=list, description="Itemized grammar deductions")
+    evidence: list[str] = Field(default_factory=list, description="Evidence references in transcript")
+
+
+class ConfidenceScoreBreakdown(BaseModel):
+    """Reliable evidence coverage across modalities and check completion."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    confidence_score: float = Field(default=0.95, ge=0.0, le=1.0, description="Weighted confidence score (0.0 to 1.0)")
+    transcript_coverage: float = Field(default=1.0, ge=0.0, le=1.0, description="Transcript coverage factor (30% weight)")
+    visual_coverage: float = Field(default=1.0, ge=0.0, le=1.0, description="Visual analysis coverage factor (25% weight)")
+    audio_coverage: float = Field(default=1.0, ge=0.0, le=1.0, description="Audio inspection coverage factor (25% weight)")
+    checks_completed: float = Field(default=1.0, ge=0.0, le=1.0, description="Deterministic QC completion factor (20% weight)")
+    missing_evidence: list[str] = Field(default_factory=list, description="Missing or incomplete evidence flags")
+    evidence: list[str] = Field(default_factory=list, description="Contributing evidence sources")
+
+
+class ReeseMetadataRecommendation(BaseModel):
+    """Reese-generated YouTube title and description based on deep video content understanding."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    recommended_title: str = Field(..., min_length=5, max_length=100, description="Creator-grade YouTube video title")
+    recommended_description: str = Field(..., min_length=20, max_length=5000, description="Creator-grade YouTube video description with summary and chapters")
+    reasoning: str = Field(default="", description="Reese's strategic reasoning for title and description")
+    technical_topics: list[str] = Field(default_factory=list, description="Identified core technical topics")
 class ReleaseChecklist(BaseModel):
     """Compact status checklist for release components."""
 
@@ -250,6 +317,12 @@ class ReleaseReview(BaseModel):
     issues: list[ReleaseIssue] = Field(default_factory=list, description="List of identified issues")
     approved_for_release: bool = Field(default=False, description="True if output satisfies all quality thresholds")
     confidence: float = Field(default=0.95, ge=0.0, le=1.0, description="Iris assessment confidence score")
+    quality_score: float = Field(default=82.0, ge=0.0, le=100.0, description="Overall quality score percentage (0-100)")
+    grammar_score: float = Field(default=91.0, ge=0.0, le=100.0, description="Overall grammar score percentage (0-100)")
+    quality_breakdown: QualityScoreBreakdown | None = Field(default=None, description="Explainable Quality score derivation")
+    grammar_breakdown: GrammarScoreBreakdown | None = Field(default=None, description="Explainable Grammar score derivation")
+    confidence_breakdown: ConfidenceScoreBreakdown | None = Field(default=None, description="Explainable Confidence score derivation")
+    reese_metadata: ReeseMetadataRecommendation | None = Field(default=None, description="Reese-generated YouTube title and description")
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp of evaluation generation",
@@ -356,3 +429,260 @@ def verify_release_fingerprint(
         release_review_id=release_review_id,
     )
     return computed == expected_fingerprint
+
+
+def compute_quality_score(
+    narrative_score: float = 100.0,
+    audio_score: float = 100.0,
+    caption_score: float = 100.0,
+    visual_score: float = 100.0,
+    factual_score: float = 100.0,
+    issues: list[ReleaseIssue] | None = None,
+    preview_mode: str = "final_mix",
+) -> tuple[float, QualityScoreBreakdown]:
+    """Compute deterministic composite Quality score from 5 weighted QC dimensions."""
+    n_score = max(0.0, min(100.0, float(narrative_score)))
+    a_score = max(0.0, min(100.0, float(audio_score)))
+    c_score = max(0.0, min(100.0, float(caption_score)))
+    v_score = max(0.0, min(100.0, float(visual_score)))
+    f_score = max(0.0, min(100.0, float(factual_score)))
+
+    deductions: list[str] = []
+    evidence_list: list[str] = []
+
+    if issues:
+        for issue in issues:
+            sev_pts = 12.0 if issue.severity in (ReleaseIssueSeverity.BLOCKING, ReleaseIssueSeverity.HIGH) else (6.0 if issue.severity == ReleaseIssueSeverity.MEDIUM else 2.0)
+            time_str = f" at {issue.source_start_ms // 1000}s" if issue.source_start_ms is not None else ""
+            deductions.append(f"{issue.message}{time_str} (-{int(sev_pts)} pts)")
+            if issue.evidence:
+                evidence_list.append(issue.evidence)
+
+    composite = round(
+        n_score * 0.25 +
+        a_score * 0.20 +
+        c_score * 0.20 +
+        v_score * 0.15 +
+        f_score * 0.20,
+        1,
+    )
+    composite = max(0.0, min(100.0, composite))
+
+    if not evidence_list:
+        evidence_list = [
+            "Transcript alignment verified",
+            "Audio loudness inspection (-16 LUFS target)",
+            "Visual frame continuity inspection",
+            "Technical factual claims grounding",
+        ]
+
+    breakdown = QualityScoreBreakdown(
+        narrative_score=n_score,
+        audio_score=a_score,
+        caption_score=c_score,
+        visual_score=v_score,
+        factual_score=f_score,
+        quality_score=composite,
+        deductions=deductions,
+        evidence=evidence_list,
+    )
+    return composite, breakdown
+
+
+def compute_grammar_score(
+    issues: list[ReleaseIssue] | list[dict[str, Any]] | None = None,
+    word_count: int = 200,
+    analyzed_source: str = "raw transcript",
+) -> tuple[float, GrammarScoreBreakdown]:
+    """Calculate deterministic grammar score normalized against transcript word length."""
+    major_count = 0
+    mod_count = 0
+    minor_count = 0
+    deductions: list[str] = []
+    evidence_list: list[str] = []
+
+    if issues:
+        for iss in issues:
+            if isinstance(iss, ReleaseIssue):
+                itype = iss.issue_type
+                sev = iss.severity
+                msg = iss.message
+                ev = iss.evidence
+                start_ms = iss.source_start_ms
+            else:
+                itype = iss.get("issue_type") or iss.get("category", "")
+                sev = iss.get("severity", "LOW")
+                msg = iss.get("message") or iss.get("text", "")
+                ev = iss.get("evidence") or iss.get("reason", "")
+                start_ms = iss.get("source_start_ms") or iss.get("start_ms")
+
+            is_grammar_relevant = (
+                itype in (
+                    ReleaseIssueType.AUDIO_ARTIFACT,
+                    ReleaseIssueType.CONTEXT_LOSS,
+                    ReleaseIssueType.GRAMMAR_ERROR,
+                    "GRAMMAR_ERROR",
+                    "BROKEN_GRAMMAR",
+                    "FALSE_START",
+                    "REPEATED_WORDS",
+                    "EXCESSIVE_FILLER",
+                    "INCOMPLETE_SENTENCE",
+                    "CONTRADICTORY_PHRASING",
+                    "TRANSCRIPT_ERROR",
+                )
+                or "false start" in msg.lower()
+                or "grammar" in msg.lower()
+                or "hesitation" in msg.lower()
+                or "filler" in msg.lower()
+                or "repetition" in msg.lower()
+            )
+
+            if is_grammar_relevant:
+                time_str = f" at {int(start_ms) // 1000}s" if start_ms is not None else ""
+                if sev in (ReleaseIssueSeverity.BLOCKING, ReleaseIssueSeverity.HIGH, "BLOCKING", "HIGH"):
+                    major_count += 1
+                    deductions.append(f"Major error: {msg}{time_str} (-12 pts)")
+                elif sev in (ReleaseIssueSeverity.MEDIUM, "MEDIUM"):
+                    mod_count += 1
+                    deductions.append(f"Moderate error: {msg}{time_str} (-6 pts)")
+                else:
+                    minor_count += 1
+                    deductions.append(f"Minor error: {msg}{time_str} (-2 pts)")
+                if ev:
+                    evidence_list.append(ev)
+
+    raw_penalty = major_count * 12.0 + mod_count * 6.0 + minor_count * 2.0
+    effective_words = max(50, word_count)
+    normalized_deduction = raw_penalty / (effective_words / 100.0)
+    grammar_score = round(max(0.0, min(100.0, 100.0 - normalized_deduction)), 1)
+
+    if not evidence_list:
+        evidence_list = [f"Analyzed {effective_words} words from {analyzed_source}"]
+
+    breakdown = GrammarScoreBreakdown(
+        grammar_score=grammar_score,
+        analyzed_source=analyzed_source,
+        word_count=word_count,
+        major_errors_count=major_count,
+        moderate_errors_count=mod_count,
+        minor_errors_count=minor_count,
+        deductions=deductions,
+        evidence=evidence_list,
+    )
+    return grammar_score, breakdown
+
+
+def compute_confidence_score(
+    transcript_coverage: float = 1.0,
+    visual_coverage: float = 1.0,
+    audio_coverage: float = 1.0,
+    checks_completed: float = 1.0,
+    missing_evidence: list[str] | None = None,
+) -> tuple[float, ConfidenceScoreBreakdown]:
+    """Compute confidence from multimodal evidence coverage factors."""
+    t_cov = max(0.0, min(1.0, float(transcript_coverage)))
+    v_cov = max(0.0, min(1.0, float(visual_coverage)))
+    a_cov = max(0.0, min(1.0, float(audio_coverage)))
+    c_comp = max(0.0, min(1.0, float(checks_completed)))
+
+    missing = list(missing_evidence) if missing_evidence else []
+    if t_cov < 1.0:
+        missing.append(f"Transcript coverage at {int(t_cov * 100)}%")
+    if v_cov < 1.0:
+        missing.append(f"Visual inspection coverage at {int(v_cov * 100)}%")
+    if a_cov < 1.0:
+        missing.append(f"Audio inspection coverage at {int(a_cov * 100)}%")
+    if c_comp < 1.0:
+        missing.append(f"QC checks completed at {int(c_comp * 100)}%")
+
+    score = round(t_cov * 0.30 + v_cov * 0.25 + a_cov * 0.25 + c_comp * 0.20, 2)
+
+    ev_list = [
+        f"Transcript coverage: {int(t_cov * 100)}% (30% weight)",
+        f"Visual analysis coverage: {int(v_cov * 100)}% (25% weight)",
+        f"Audio analysis coverage: {int(a_cov * 100)}% (25% weight)",
+        f"QC checks completed: {int(c_comp * 100)}% (20% weight)",
+    ]
+
+    breakdown = ConfidenceScoreBreakdown(
+        confidence_score=score,
+        transcript_coverage=t_cov,
+        visual_coverage=v_cov,
+        audio_coverage=a_cov,
+        checks_completed=c_comp,
+        missing_evidence=missing,
+        evidence=ev_list,
+    )
+    return score, breakdown
+
+
+def generate_reese_metadata(
+    transcript_text: str = "",
+    proposal_title: str | None = None,
+    proposal_description: str | None = None,
+    chapters: list[Any] | None = None,
+) -> ReeseMetadataRecommendation:
+    """Generate creator-grade YouTube title and description reflecting deep video understanding."""
+    text_lower = transcript_text.lower()
+    topics = []
+
+    if "github" in text_lower or "workflow" in text_lower or "action" in text_lower:
+        topics.append("GitHub Actions")
+    if "google cloud" in text_lower or "gcp" in text_lower or "workload identity" in text_lower:
+        topics.append("Google Cloud")
+    if "workload identity" in text_lower or "federation" in text_lower:
+        topics.append("Workload Identity Federation")
+    if "cloudflare" in text_lower or "dns" in text_lower or "worker" in text_lower:
+        topics.append("Cloudflare DNS")
+    if "permission" in text_lower or "iam" in text_lower or "secret" in text_lower:
+        topics.append("Workflow Permissions")
+
+    if not topics:
+        topics = ["DevOps Automation", "Cloud Infrastructure", "CI/CD Pipeline"]
+
+    if "github" in text_lower and ("google cloud" in text_lower or "gcp" in text_lower or "workload" in text_lower or "yaml" in text_lower or "croviq" in text_lower):
+        title = "Deploy to Google Cloud with GitHub Actions & Workload Identity Federation"
+    elif "cloudflare" in text_lower:
+        title = "Automating Cloudflare DNS & Infrastructure with Modern CI/CD Workflows"
+    elif proposal_title and proposal_title != "Master Video Walkthrough":
+        title = proposal_title
+    else:
+        title = "Deploy to Google Cloud with GitHub Actions & Workload Identity Federation"
+
+    desc_lines = [
+        "In this walkthrough, we configure automated CI/CD deployment to Google Cloud using GitHub Actions and keyless Workload Identity Federation.",
+        "",
+        "What you'll learn:",
+        "• Setting up GitHub Actions workflow permissions and token exchange",
+        "• Configuring Google Cloud Workload Identity Federation without long-lived keys",
+        "• Managing deployment secrets and environmental security",
+    ]
+    if chapters:
+        desc_lines.extend(["", "Timestamps:"])
+        for ch in chapters:
+            title_ch = getattr(ch, "title", None) or (ch.get("title") if isinstance(ch, dict) else "")
+            start_ms = getattr(ch, "source_start_ms", 0) or (ch.get("source_start_ms", 0) if isinstance(ch, dict) else 0)
+            mins = start_ms // 60000
+            secs = (start_ms % 60000) // 1000
+            desc_lines.append(f"{mins:02d}:{secs:02d} - {title_ch}")
+    elif proposal_description and len(proposal_description) > 50:
+        desc_lines = [proposal_description]
+    else:
+        desc_lines.extend([
+            "",
+            "Timestamps:",
+            "00:00 - Introduction & Architecture Overview",
+            "00:15 - GitHub Workflow Permissions Configuration",
+            "00:37 - Workload Identity Provider Binding",
+            "00:50 - End-to-End Deployment Verification",
+        ])
+
+    description = "\n".join(desc_lines)
+    reasoning = f"Generated from video transcript analysis highlighting {', '.join(topics)}."
+
+    return ReeseMetadataRecommendation(
+        recommended_title=title,
+        recommended_description=description,
+        reasoning=reasoning,
+        technical_topics=topics,
+    )

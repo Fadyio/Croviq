@@ -8,6 +8,10 @@ from croviq_domain.agent_config import AgentId
 from croviq_domain.release_review import (
     ClaimSupportStatus,
     ClaimVerification,
+    ConfidenceScoreBreakdown,
+    GrammarScoreBreakdown,
+    QualityScoreBreakdown,
+    ReeseMetadataRecommendation,
     ReleaseChecklist,
     ReleaseIssue,
     ReleaseIssueSeverity,
@@ -17,6 +21,10 @@ from croviq_domain.release_review import (
     ReleaseVerdict,
     ThumbnailEvaluation,
     build_release_fingerprint,
+    compute_confidence_score,
+    compute_grammar_score,
+    compute_quality_score,
+    generate_reese_metadata,
     get_creator_facing_release_status,
     get_issue_type_friendly_label,
     verify_release_fingerprint,
@@ -287,3 +295,94 @@ def test_release_review_stores_lineage_and_fingerprint():
     )
     assert review.release_fingerprint == fp
     assert review.compute_fingerprint() == fp
+def test_compute_quality_score_rubric_weights():
+    # Narrative 76 (25%), Audio 92 (20%), Captions 97 (20%), Visual 88 (15%), Factual 95 (20%)
+    # Expected: 76*0.25 + 92*0.20 + 97*0.20 + 88*0.15 + 95*0.20
+    # = 19.0 + 18.4 + 19.4 + 13.2 + 19.0 = 89.0
+    score, breakdown = compute_quality_score(
+        narrative_score=76.0,
+        audio_score=92.0,
+        caption_score=97.0,
+        visual_score=88.0,
+        factual_score=95.0,
+    )
+    assert score == 89.0
+    assert breakdown.quality_score == 89.0
+    assert breakdown.narrative_score == 76.0
+    assert breakdown.audio_score == 92.0
+    assert breakdown.caption_score == 97.0
+    assert breakdown.visual_score == 88.0
+    assert breakdown.factual_score == 95.0
+
+
+def test_compute_grammar_score_normalized():
+    # 1 Major error (-12) and 1 Moderate error (-6) on 200 words
+    # Raw penalty = 18.0. Normalization per 100 words (200 words = 2.0x 100 words):
+    # Normalized deduction = 18.0 / 2.0 = 9.0% -> Score = 91.0%
+    issues = [
+        ReleaseIssue(
+            issue_id="iss_01",
+            issue_type=ReleaseIssueType.GRAMMAR_ERROR,
+            severity=ReleaseIssueSeverity.HIGH,
+            source_start_ms=16000,
+            source_end_ms=23000,
+            message="Broken sentence structure and hesitation",
+            suggested_action="Clean narration join",
+            evidence="Spoken stumbles in transcript",
+        ),
+        ReleaseIssue(
+            issue_id="iss_02",
+            issue_type=ReleaseIssueType.AUDIO_ARTIFACT,
+            severity=ReleaseIssueSeverity.MEDIUM,
+            source_start_ms=48000,
+            source_end_ms=50000,
+            message="Repeated word hesitation",
+            suggested_action="Trim repetition",
+            evidence="Repeated words in transcript",
+        ),
+    ]
+    score, breakdown = compute_grammar_score(
+        issues=issues,
+        word_count=200,
+        analyzed_source="raw transcript",
+    )
+    assert score == 91.0
+    assert breakdown.major_errors_count == 1
+    assert breakdown.moderate_errors_count == 1
+    assert breakdown.minor_errors_count == 0
+    assert len(breakdown.deductions) == 2
+
+
+def test_compute_confidence_score_evidence_coverage():
+    # Full coverage: 1.0*0.30 + 1.0*0.25 + 1.0*0.25 + 1.0*0.20 = 1.0 (100%)
+    score_full, b_full = compute_confidence_score(
+        transcript_coverage=1.0,
+        visual_coverage=1.0,
+        audio_coverage=1.0,
+        checks_completed=1.0,
+    )
+    assert score_full == 1.0
+
+    # Missing audio inspection (e.g. 0.0 audio coverage)
+    # 1.0*0.30 + 0.92*0.25 + 0.0*0.25 + 1.0*0.20 = 0.30 + 0.23 + 0.0 + 0.20 = 0.73
+    score_dropped, b_dropped = compute_confidence_score(
+        transcript_coverage=1.0,
+        visual_coverage=0.92,
+        audio_coverage=0.0,
+        checks_completed=1.0,
+    )
+    assert score_dropped == 0.73
+    assert any("Audio inspection coverage at 0%" in m for m in b_dropped.missing_evidence)
+
+
+def test_generate_reese_metadata_video_understanding():
+    transcript = "In this video we walk through GitHub Actions workflows for deploying to Google Cloud using Workload Identity Federation."
+    meta = generate_reese_metadata(
+        transcript_text=transcript,
+        proposal_title=None,
+        proposal_description=None,
+    )
+    assert "GitHub Actions" in meta.recommended_title
+    assert "Google Cloud" in meta.recommended_title or "Workload Identity" in meta.recommended_title
+    assert "GitHub Actions" in meta.technical_topics
+    assert len(meta.recommended_description) > 30
