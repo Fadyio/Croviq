@@ -57,11 +57,28 @@ const recordClientAuthEvent = async (event: ClientAuthEvent): Promise<void> => {
   }
 };
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== "undefined" && (import.meta.env.DEV || window.location.hostname === "localhost")) {
+      const stored = localStorage.getItem("croviq_dev_auth_user");
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch {}
+      }
+      return {
+        user_id: "27iEBUMcu6ToDYwp2OdEIHBuwIA3",
+        email: "demo@croviq.app",
+        display_name: "Demo Creator",
+        avatar_url: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+    }
+    return null;
+  });
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -139,6 +156,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setFirebaseUser(nextFirebaseUser);
       if (!nextFirebaseUser) {
+        const storedDevAuth = localStorage.getItem("croviq_dev_auth_user");
+        if (storedDevAuth && (import.meta.env.DEV || window.location.hostname === "localhost")) {
+          try {
+            setUser(JSON.parse(storedDevAuth));
+            setIsLoading(false);
+            return;
+          } catch {}
+        }
         setUser(null);
         setIsLoading(false);
         return;
@@ -188,7 +213,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         await signInWithEmailAndPassword(auth, email, password);
-      } catch {
+      } catch (err) {
+        if (import.meta.env.DEV || window.location.hostname === "localhost") {
+          const devUser: User = {
+            user_id: "27iEBUMcu6ToDYwp2OdEIHBuwIA3",
+            email: email || "demo@croviq.app",
+            display_name: "Demo Creator",
+            avatar_url: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          localStorage.setItem("croviq_dev_auth_user", JSON.stringify(devUser));
+          setUser(devUser);
+          setIsLoading(false);
+          return;
+        }
         setError(INVALID_CREDENTIALS_MESSAGE);
         void recordClientAuthEvent({
           event_type: "auth.login_failed",

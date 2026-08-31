@@ -355,13 +355,36 @@ class EditorialService:
                 ):
                     raise RuntimeError("Replicated My Voice key is unavailable or expired")
                 selected_voice = replication.voice_key
+            ed_start_ms = map_source_time_to_edited(start_ms, edl)
+            ed_end_ms = map_source_time_to_edited(end_ms, edl)
+            avail_ms = ed_end_ms - ed_start_ms
+            if avail_ms <= 0:
+                raise ValueError("Selected range has been removed by cuts in the active EDL")
+
             measured_duration, pcm_bytes = await self._genai_client.synthesize_studio_voice(
                 text=text,
                 voice_id=selected_voice,
                 production_id=production.production_id,
             )
-            if measured_duration > end_ms - start_ms:
-                raise ValueError("Generated voiceover exceeds the selected range")
+            current_text = text
+            if measured_duration > avail_ms:
+                for attempt in (2, 3):
+                    current_text = await self._genai_client.generate_narration_rewrite(
+                        original_text=text,
+                        available_duration_s=avail_ms / 1000.0,
+                        attempt=attempt,
+                        production_id=production.production_id,
+                    )
+                    measured_duration, pcm_bytes = await self._genai_client.synthesize_studio_voice(
+                        text=current_text,
+                        voice_id=selected_voice,
+                        production_id=production.production_id,
+                    )
+                    if measured_duration <= avail_ms:
+                        break
+            if measured_duration > avail_ms:
+                raise ValueError("Generated voiceover exceeds the active edited duration budget")
+
             with tempfile.TemporaryDirectory() as temp_dir:
                 root = Path(temp_dir)
                 source_path = root / "source.mp4"
@@ -372,28 +395,32 @@ class EditorialService:
                     object_name=production.source_media.gcs_object,
                     target_path=source_path,
                 )
-                ed_start_ms = map_source_time_to_edited(start_ms, edl)
-                ed_end_ms = map_source_time_to_edited(end_ms, edl)
                 total_samples = int(24_000 * edl.estimated_target_duration_ms / 1000)
                 track = bytearray(total_samples * 2)
                 start_byte = int(24_000 * ed_start_ms / 1000) * 2
-                copy_length = min(len(pcm_bytes), len(track) - start_byte)
+                copy_length = min(len(pcm_bytes), avail_ms * 48, len(track) - start_byte)
                 if copy_length > 0 and start_byte < len(track):
-                    track[start_byte:start_byte + copy_length] = pcm_bytes[:copy_length]
+                    track[start_byte : start_byte + copy_length] = pcm_bytes[:copy_length]
                 with wave.open(str(narration_path), "wb") as wav_file:
                     wav_file.setnchannels(1)
                     wav_file.setsampwidth(2)
                     wav_file.setframerate(24_000)
                     wav_file.writeframes(track)
                 result = await asyncio.to_thread(
-                    self._render_service.render_studio_voice_preview,
+                    self._render_service.render_voiceover_preview,
                     source_path=source_path,
                     edl=edl,
                     narration_audio_path=narration_path,
-                    speech_intervals_ms=[(ed_start_ms, ed_end_ms)],
+                    speech_intervals_ms=[(ed_start_ms, min(edl.estimated_target_duration_ms, ed_start_ms + measured_duration))],
                     output_path=preview_path,
                 )
                 artifact = await _save_rendered_preview(
+                    local_output=preview_path,
+                    edl=edl,
+                    render_result=result,
+                    artifact_type=ArtifactType.VOICEOVER_PREVIEW,
+                )
+                await _save_rendered_preview(
                     local_output=preview_path,
                     edl=edl,
                     render_result=result,
@@ -403,6 +430,9 @@ class EditorialService:
                 "segment_id": segment_id,
                 "start_ms": start_ms,
                 "end_ms": end_ms,
+                "edited_start_ms": ed_start_ms,
+                "edited_end_ms": ed_end_ms,
+                "text": current_text,
                 "voice_mode": voice_mode,
                 "voice_id": selected_voice,
                 "preview_artifact_id": artifact.artifact_id,

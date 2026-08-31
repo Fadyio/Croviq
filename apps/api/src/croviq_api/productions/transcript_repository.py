@@ -9,6 +9,7 @@ from typing import Any
 
 from croviq_api.config import get_settings
 from croviq_domain.transcript import (
+    CorrectedTranscript,
     Transcript,
     TranscriptSegment,
     TranscriptWord,
@@ -57,6 +58,15 @@ class TranscriptRepository(ABC):
     async def delete_by_production_id(self, production_id: str) -> bool:
         """Delete transcript associated with a production_id."""
         pass
+    @abstractmethod
+    async def save_corrected_transcript(self, corrected: CorrectedTranscript, edl_id: str | None = None) -> CorrectedTranscript:
+        """Create or replace a corrected transcript document."""
+        pass
+
+    @abstractmethod
+    async def get_corrected_transcript_by_production_id(self, production_id: str, edl_id: str | None = None) -> CorrectedTranscript | None:
+        """Fetch corrected transcript by production_id and optional edl_id."""
+        pass
 
     def transcript_to_dict(self, transcript: Transcript) -> dict[str, Any]:
         """Serialize Transcript model to Firestore-compatible dictionary."""
@@ -76,7 +86,20 @@ class InMemoryTranscriptRepository(TranscriptRepository):
     def __init__(self) -> None:
         self._transcripts: dict[str, Transcript] = {}
         self._by_production: dict[str, str] = {}
+        self._corrected: dict[str, tuple[CorrectedTranscript, str | None]] = {}
 
+    async def save_corrected_transcript(self, corrected: CorrectedTranscript, edl_id: str | None = None) -> CorrectedTranscript:
+        self._corrected[corrected.production_id] = (corrected, edl_id)
+        return corrected
+
+    async def get_corrected_transcript_by_production_id(self, production_id: str, edl_id: str | None = None) -> CorrectedTranscript | None:
+        val = self._corrected.get(production_id)
+        if val is None:
+            return None
+        corr, saved_edl = val
+        if edl_id and saved_edl and edl_id != saved_edl:
+            return None
+        return corr
     async def save_transcript(self, transcript: Transcript) -> Transcript:
         self._transcripts[transcript.transcript_id] = transcript
         self._by_production[transcript.production_id] = transcript.transcript_id
@@ -101,7 +124,6 @@ class InMemoryTranscriptRepository(TranscriptRepository):
     def clear(self) -> None:
         self._transcripts.clear()
         self._by_production.clear()
-
 
 class FirestoreTranscriptRepository(TranscriptRepository):
     """Production Transcript repository persisting to Google Cloud Firestore Native mode."""
@@ -264,6 +286,42 @@ class FirestoreTranscriptRepository(TranscriptRepository):
                 message=f"Firestore delete transcript error for production {production_id}: {type(exc).__name__}",
             )
             raise
+    async def save_corrected_transcript(self, corrected: CorrectedTranscript, edl_id: str | None = None) -> CorrectedTranscript:
+        try:
+            doc_ref = (
+                self.client.collection("productions")
+                .document(corrected.production_id)
+                .collection("corrected_script")
+                .document("latest")
+            )
+            data = corrected.model_dump(mode="json")
+            if edl_id:
+                data["edl_id"] = edl_id
+            await doc_ref.set(data)
+            return corrected
+        except Exception:
+            return corrected
+
+    async def get_corrected_transcript_by_production_id(self, production_id: str, edl_id: str | None = None) -> CorrectedTranscript | None:
+        try:
+            doc_ref = (
+                self.client.collection("productions")
+                .document(production_id)
+                .collection("corrected_script")
+                .document("latest")
+            )
+            doc = await doc_ref.get()
+            if not doc.exists:
+                return None
+            data = doc.to_dict()
+            if edl_id and data.get("edl_id") and data.get("edl_id") != edl_id:
+                return None
+            if "created_at" in data:
+                data["created_at"] = parse_datetime(data["created_at"])
+            data.pop("edl_id", None)
+            return CorrectedTranscript.model_validate(data)
+        except Exception:
+            return None
 
 
 _global_transcript_repo: TranscriptRepository | None = None

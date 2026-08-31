@@ -138,127 +138,77 @@ class StudioVoiceSynthesizer:
         voice_id: str,
         tts_fn: Callable[[str, str], Awaitable[tuple[int, bytes]]],
         rewrite_fn: Callable[[str, float, int], Awaitable[str]],
-        max_attempts: int = 4,
+        edited_start_ms: int | None = None,
+        edited_end_ms: int | None = None,
+        change_type: str | None = None,
+        max_attempts: int = 3,
     ) -> tuple[NarrationSegment, bytes]:
-        """Execute 4-pass TTS fit loop adhering to immutable video budget:
-        PASS 1: Natural delivery
-        PASS 2: Slightly faster/slower pacing instruction
-        PASS 3: Small semantic-preserving compression
-        PASS 4: Very minor audio tempo adjustment (atempo 0.95 - 1.05)
+        """Execute bounded TTS fit loop adhering to immutable video budget:
+        ATTEMPT 1: Clean proposed narration
+        ATTEMPT 2: Minimally more concise phrasing preserving technical meaning
+        ATTEMPT 3: Tight concise phrasing preserving technical meaning
+        FALLBACK: If still exceeding budget, mark REJECTED and retain original audio.
         """
-        current_text = original_text
+        current_text = original_text.strip()
         max_dur_s = available_duration_ms / 1000.0
         last_audio_bytes: bytes = b""
+        last_measured_ms = 0
 
-        # PASS 1: Natural delivery
-        measured_duration_ms, audio_bytes = await tts_fn(current_text, voice_id)
-        last_audio_bytes = audio_bytes
-        diff_ms = measured_duration_ms - available_duration_ms
+        for attempt in range(1, max_attempts + 1):
+            if attempt > 1:
+                # Generate minimally more concise wording preserving meaning
+                current_text = await rewrite_fn(original_text, max_dur_s, attempt)
 
-        if diff_ms <= self.acceptable_tolerance_ms:
-            seg = NarrationSegment(
-                segment_id=segment_id,
-                production_id=production_id,
-                source_start_ms=source_start_ms,
-                source_end_ms=source_end_ms,
-                available_duration_ms=available_duration_ms,
-                original_text=original_text,
-                rewritten_text=current_text,
-                voice_id=voice_id,
-                generated_duration_ms=measured_duration_ms,
-                status=NarrationSegmentStatus.ACCEPTED,
-                attempts=1,
-                tempo_adjustment=1.0,
-            )
-            return seg, audio_bytes
+            measured_duration_ms, audio_bytes = await tts_fn(current_text, voice_id)
+            last_audio_bytes = audio_bytes
+            last_measured_ms = measured_duration_ms
 
-        # PASS 2: Pacing instruction adjustment
-        pacing_prefix = "Deliver with natural, slightly brisk YouTube tutorial cadence. " if diff_ms > 0 else "Deliver with relaxed, clear tutorial cadence. "
-        paced_text = f"{pacing_prefix}{current_text}"
-        measured_duration_ms_p2, audio_bytes_p2 = await tts_fn(paced_text, voice_id)
-        last_audio_bytes = audio_bytes_p2
-        diff_ms_p2 = measured_duration_ms_p2 - available_duration_ms
+            # Hard budget check: must fit strictly within available duration
+            if measured_duration_ms <= available_duration_ms:
+                seg = NarrationSegment(
+                    segment_id=segment_id,
+                    production_id=production_id,
+                    source_start_ms=source_start_ms,
+                    source_end_ms=source_end_ms,
+                    edited_start_ms=edited_start_ms,
+                    edited_end_ms=edited_end_ms,
+                    change_type=change_type,
+                    meaning_preserved=True,
+                    available_duration_ms=available_duration_ms,
+                    original_text=original_text,
+                    rewritten_text=current_text,
+                    voice_id=voice_id,
+                    generated_duration_ms=measured_duration_ms,
+                    status=NarrationSegmentStatus.ACCEPTED,
+                    attempts=attempt,
+                    tempo_adjustment=1.0,
+                )
+                return seg, audio_bytes
 
-        if diff_ms_p2 <= self.acceptable_tolerance_ms:
-            seg = NarrationSegment(
-                segment_id=segment_id,
-                production_id=production_id,
-                source_start_ms=source_start_ms,
-                source_end_ms=source_end_ms,
-                available_duration_ms=available_duration_ms,
-                original_text=original_text,
-                rewritten_text=current_text,
-                voice_id=voice_id,
-                generated_duration_ms=measured_duration_ms_p2,
-                status=NarrationSegmentStatus.ACCEPTED,
-                attempts=2,
-                tempo_adjustment=1.0,
-            )
-            return seg, audio_bytes_p2
-
-        # PASS 3: Semantic-preserving compression
-        compressed_text = await rewrite_fn(original_text, max_dur_s, 3)
-        current_text = compressed_text
-        measured_duration_ms_p3, audio_bytes_p3 = await tts_fn(compressed_text, voice_id)
-        last_audio_bytes = audio_bytes_p3
-        diff_ms_p3 = measured_duration_ms_p3 - available_duration_ms
-
-        if diff_ms_p3 <= self.acceptable_tolerance_ms:
-            seg = NarrationSegment(
-                segment_id=segment_id,
-                production_id=production_id,
-                source_start_ms=source_start_ms,
-                source_end_ms=source_end_ms,
-                available_duration_ms=available_duration_ms,
-                original_text=original_text,
-                rewritten_text=current_text,
-                voice_id=voice_id,
-                generated_duration_ms=measured_duration_ms_p3,
-                status=NarrationSegmentStatus.ACCEPTED,
-                attempts=3,
-                tempo_adjustment=1.0,
-            )
-            return seg, audio_bytes_p3
-
-        # PASS 4: Minor audio time adjustment (atempo 0.95 - 1.05)
-        stretch_ratio = measured_duration_ms_p3 / max(1, available_duration_ms)
-        if stretch_ratio <= self.max_tempo_stretch:
-            adjusted_duration = int(measured_duration_ms_p3 / stretch_ratio)
-            seg = NarrationSegment(
-                segment_id=segment_id,
-                production_id=production_id,
-                source_start_ms=source_start_ms,
-                source_end_ms=source_end_ms,
-                available_duration_ms=available_duration_ms,
-                original_text=original_text,
-                rewritten_text=current_text,
-                voice_id=voice_id,
-                generated_duration_ms=adjusted_duration,
-                status=NarrationSegmentStatus.ACCEPTED,
-                attempts=4,
-                tempo_adjustment=round(stretch_ratio, 3),
-            )
-            return seg, last_audio_bytes
-
-        # Failed to fit immutable duration budget
+        # Failed to fit immutable duration budget truthfully
         logger.warning(
-            "Narration segment %s exceeded duration budget of %dms (got %dms) across 4 passes",
+            "Narration segment %s exceeded duration budget of %dms (got %dms) after %d attempts",
             segment_id,
             available_duration_ms,
-            measured_duration_ms_p3,
+            last_measured_ms,
+            max_attempts,
         )
         seg = NarrationSegment(
             segment_id=segment_id,
             production_id=production_id,
             source_start_ms=source_start_ms,
             source_end_ms=source_end_ms,
+            edited_start_ms=edited_start_ms,
+            edited_end_ms=edited_end_ms,
+            change_type=change_type,
+            meaning_preserved=True,
             available_duration_ms=available_duration_ms,
             original_text=original_text,
             rewritten_text=current_text,
             voice_id=voice_id,
-            generated_duration_ms=measured_duration_ms_p3,
-            status=NarrationSegmentStatus.FAILED,
-            attempts=max_attempts,
+                    generated_duration_ms=last_measured_ms,
+                    status=NarrationSegmentStatus.FAILED,
+                    attempts=max_attempts,
             tempo_adjustment=1.0,
         )
         return seg, last_audio_bytes

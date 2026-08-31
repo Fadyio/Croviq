@@ -864,6 +864,10 @@ export interface components {
       source_start_ms: number;
       /** End offset on source video timeline in milliseconds */
       source_end_ms: number;
+      /** Mapped start offset on edited timeline in milliseconds */
+      edited_start_ms?: number | null;
+      /** Mapped end offset on edited timeline in milliseconds */
+      edited_end_ms?: number | null;
       /** Original recognized speech transcription text */
       original_text: string;
       /** Source-grounded corrected spoken performance text */
@@ -1806,7 +1810,7 @@ export interface components {
       status: string;
     };
     ScriptCorrectionChangeType:
-      "GRAMMAR" | "TRANSCRIPTION_ERROR" | "FILLER" | "FALSE_START" | "REPETITION" | "KEEP";
+      "GRAMMAR" | "TRANSCRIPTION_ERROR" | "FILLER" | "FALSE_START" | "REPETITION" | "PUNCTUATION" | "KEEP";
     SectionAction: "KEEP" | "TIGHTEN" | "REMOVE" | "COVERAGE";
     SilenceInterval: {
       /** Silence interval start offset in milliseconds */

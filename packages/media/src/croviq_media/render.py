@@ -462,7 +462,7 @@ class FFmpegRenderService(RenderService):
         ducking_cond = "1.0"
         if speech_intervals_ms:
             conds = [f"between(t,{s/1000.0:.3f},{e/1000.0:.3f})" for s, e in speech_intervals_ms]
-            ducking_cond = f"if({'+'.join(conds)}, 0.05, 1.0)"
+            ducking_cond = f"if({'+'.join(conds)}, 0.0, 1.0)"
         has_music = music_path is not None
         music_ducking_cond = "1.0"
         if speech_intervals_ms:

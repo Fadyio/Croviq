@@ -133,9 +133,11 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   }, [transcript]);
 
   const executableCuts = useMemo(() => getExecutableCuts(edl), [edl]);
-
-  const formatModeTimecode = (sourceMs: number): string =>
-    formatTimecode(mode === "original" ? sourceMs : sourceToEditedTimeMs(sourceMs, edl));
+  const formatModeTimecode = (sourceMs: number, editedMs?: number | null): string => {
+    if (mode === "original") return formatTimecode(sourceMs);
+    if (editedMs !== undefined && editedMs !== null) return formatTimecode(editedMs);
+    return formatTimecode(sourceToEditedTimeMs(sourceMs, edl));
+  };
 
   const selectRange = (selection: TranscriptRangeSelection) => {
     setSelectedRange(selection);
@@ -258,17 +260,24 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
             ) : (
               (correctedTranscript?.segments || []).map((seg) => {
                 const isModified = seg.change_type !== "KEEP";
+                const segStartMs =
+                  mode === "original"
+                    ? seg.source_start_ms
+                    : (seg.edited_start_ms ?? seg.source_start_ms);
+                const segEndMs =
+                  mode === "original"
+                    ? seg.source_end_ms
+                    : (seg.edited_end_ms ?? seg.source_end_ms);
                 const segSelection: TranscriptRangeSelection = {
                   id: `corr-seg-${seg.segment_id}`,
                   label: `Corrected: ${seg.corrected_text}`,
-                  startMs: seg.source_start_ms,
-                  endMs: seg.source_end_ms,
+                  startMs: segStartMs,
+                  endMs: segEndMs,
                 };
                 const isSelected =
                   selectedRange &&
-                  selectedRange.startMs >= seg.source_start_ms &&
-                  selectedRange.endMs <= seg.source_end_ms;
-
+                  selectedRange.startMs >= segStartMs &&
+                  selectedRange.endMs <= segEndMs;
                 return (
                   <article
                     key={seg.segment_id}
@@ -285,10 +294,10 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                         type="button"
                         className="font-mono text-[10px] tabular-nums text-text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                         onClick={() => selectRange(segSelection)}
-                        title={`Seek to ${formatModeTimecode(seg.source_start_ms)}`}
+                        title={`Seek to ${formatModeTimecode(seg.source_start_ms, seg.edited_start_ms)}`}
                       >
-                        {formatModeTimecode(seg.source_start_ms)} →{" "}
-                        {formatModeTimecode(seg.source_end_ms)}
+                        {formatModeTimecode(seg.source_start_ms, seg.edited_start_ms)} →{" "}
+                        {formatModeTimecode(seg.source_end_ms, seg.edited_end_ms)}
                       </button>
                       <div className="flex items-center gap-1.5">
                         <span

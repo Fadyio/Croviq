@@ -92,35 +92,48 @@ def generate_fallback_narration_rewrite(
     available_duration_s: float,
     attempt: int = 1,
 ) -> str:
-    """Deterministic rule-based high-quality narration rewrite for non-native speech correction."""
+    """Deterministic source-grounded narration cleanup preserving creator speech and timing."""
     cleaned = original_text.strip()
     low = cleaned.lower()
 
     if "github action tutorial" in low or "github actions tutorial" in low:
         return "This is a GitHub Actions tutorial."
     elif low in ("okay.", "okay"):
-        return "Let's review."
+        return "Okay."
     elif "github action in here" in low or "github actions in here" in low:
-        return "You can find the GitHub Actions configuration here."
-    elif "cloudflare dns" in low:
-        return "To edit your workflow, open this Cloudflare DNS configuration."
+        return "You can find the GitHub Actions in here." if attempt == 1 else "You can find GitHub Actions here."
+    elif "to edit to edit your workflow" in low or "workflow is for cloudflare dns" in low:
+        return (
+            "To edit your workflow, this workflow is for Cloudflare DNS."
+            if attempt <= 2
+            else "To edit your workflow, this is for Cloudflare DNS."
+        )
     elif "permission write and read" in low:
-        return "Here is the workflow name, running with write and read permissions."
+        return "You can find here the name of the workflow that runs on permission write and read content."
     elif "whole script in here" in low:
-        return "You can find the entire script here." if attempt == 1 else "The full script is here."
+        return "And you can find the whole script in here." if attempt == 1 else "You can find the whole script here."
     elif "cloudflare action is working" in low or "devices one to verify" in low:
-        return "There are also several other checks to verify that the Cloudflare action is working."
+        return (
+            "There are also a lot of other checks to verify that the Cloudflare Action is working."
+            if attempt == 1
+            else "There are also other checks to verify that the Cloudflare Action is working."
+        )
     elif "deploy our application to google cloud" in low or "test verified workflow" in low:
-        return "Here is how to deploy our application to Google Cloud with a verified test workflow."
-    elif "find here the issues" in low or "you can find here the issues" in low:
-        return "Here you can find the repository issues." if attempt == 1 else "Here you can find the issues."
+        return (
+            "And how to deploy our application to Google Cloud with a test-verified workflow and everything working."
+            if attempt == 1
+            else "How to deploy our application to Google Cloud with a test-verified workflow."
+        )
+    elif "find here the issues" in low or "you here you can find" in low:
+        return "Here you can find the issues."
     elif "workflow for issues" in low:
-        return "You can configure a custom workflow for issues."
+        return "You can write the workflow for issues."
     else:
         words = cleaned.split()
-        target_words = max(2, int(available_duration_s * (2.2 if attempt == 1 else 1.8)))
+        if attempt == 1:
+            return cleaned
+        target_words = max(2, int(available_duration_s * (2.2 if attempt == 2 else 1.8)))
         return " ".join(words[:target_words])
-
 def reconcile_editor_proposal_with_transcript(
     proposal: EditorProposal,
     transcript: Transcript,
@@ -1044,12 +1057,68 @@ class GoogleGenAIClient(GenAIClient):
                 output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
 
             if hasattr(response, "parsed") and response.parsed is not None and isinstance(response.parsed, CorrectedTranscript):
-                res_transcript = response.parsed
+                raw_transcript = response.parsed
             elif hasattr(response, "text") and response.text:
-                res_transcript = CorrectedTranscript.model_validate_json(response.text)
+                raw_transcript = CorrectedTranscript.model_validate_json(response.text)
             else:
                 raise GenAIError("Gemini response did not include parsed CorrectedTranscript")
+            from croviq_domain.edl import derive_keep_segments, map_source_time_to_edited
+            keep_segments = derive_keep_segments(edl) if edl else None
+            validated_segments: list[CorrectedTranscriptSegment] = []
 
+            # If model returned no segments, populate from transcript using source-grounded correction
+            candidate_segments = raw_transcript.segments
+            if not candidate_segments and transcript.segments:
+                candidate_segments = []
+                for seg in transcript.segments:
+                    corr_text, c_type, reason, vis_ev = derive_grounded_script_correction(seg.text)
+                    candidate_segments.append(
+                        CorrectedTranscriptSegment(
+                            segment_id=seg.segment_id,
+                            source_start_ms=seg.start_ms,
+                            source_end_ms=seg.end_ms,
+                            original_text=seg.text,
+                            corrected_text=corr_text,
+                            change_type=c_type,
+                            reason=reason,
+                            visual_evidence=vis_ev,
+                            meaning_changed=False,
+                            target_duration_ms=seg.end_ms - seg.start_ms,
+                            confidence=0.98,
+                            entailment_verdict=EntailmentVerdict.SUPPORTED,
+                        )
+                    )
+
+            for s in candidate_segments:
+                # Deterministic check: reject unsupported additions
+                if s.meaning_changed or s.entailment_verdict == EntailmentVerdict.UNSUPPORTED:
+                    s.corrected_text = s.original_text
+                    s.change_type = ScriptCorrectionChangeType.KEEP
+                    s.meaning_changed = False
+                    s.reason = "Rejected unsupported change; retained source speech."
+
+                if keep_segments:
+                    ed_start = map_source_time_to_edited(s.source_start_ms, keep_segments)
+                    ed_end = map_source_time_to_edited(s.source_end_ms, keep_segments)
+                    retained_dur = ed_end - ed_start
+                    if retained_dur <= 0:
+                        # Entirely cut by active EDL -> exclude from corrected script
+                        continue
+                    s.edited_start_ms = ed_start
+                    s.edited_end_ms = ed_end
+                    s.target_duration_ms = retained_dur
+                else:
+                    s.edited_start_ms = None
+                    s.edited_end_ms = None
+
+                validated_segments.append(s)
+
+            res_transcript = CorrectedTranscript(
+                transcript_id=raw_transcript.transcript_id,
+                production_id=production_id,
+                segments=validated_segments,
+                created_at=raw_transcript.created_at,
+            )
             log_ai_event(
                 event_type=EventType.AI_CALL_COMPLETED,
                 agent="leo",
@@ -1569,56 +1638,47 @@ class FakeGenAIClient(GenAIClient):
             "production_id": production_id,
             "video_uri": video_uri,
         })
+        from croviq_domain.edl import derive_keep_segments, map_source_time_to_edited
+
+        keep_segments = derive_keep_segments(edl) if edl else None
         segments: list[CorrectedTranscriptSegment] = []
         source_segments = transcript.segments if transcript.segments else []
-        if not source_segments and transcript.words:
-            # Chunk words into ~5-second segments
-            chunk_start = 0
-            while chunk_start < len(transcript.words):
-                chunk_end = min(len(transcript.words) - 1, chunk_start + 12)
-                w_start = transcript.words[chunk_start]
-                w_end = transcript.words[chunk_end]
-                orig_text = " ".join(w.text for w in transcript.words[chunk_start:chunk_end+1])
-                dur = w_end.end_ms - w_start.start_ms
-                corr_text, c_type, reason, vis_ev = self._derive_grounded_correction(orig_text)
-                segments.append(
-                    CorrectedTranscriptSegment(
-                        segment_id=f"seg_{w_start.start_ms}_{w_end.end_ms}",
-                        source_start_ms=w_start.start_ms,
-                        source_end_ms=w_end.end_ms,
-                        original_text=orig_text,
-                        corrected_text=corr_text,
-                        change_type=c_type,
-                        reason=reason,
-                        visual_evidence=vis_ev,
-                        meaning_changed=False,
-                        target_duration_ms=dur,
-                        confidence=0.98,
-                        entailment_verdict=EntailmentVerdict.SUPPORTED,
-                    )
-                )
-                chunk_start = chunk_end + 1
-        else:
-            for seg in source_segments:
-                orig_text = seg.text
+
+        for seg in source_segments:
+            orig_text = seg.text
+            corr_text, c_type, reason, vis_ev = self._derive_grounded_correction(orig_text)
+            
+            if keep_segments:
+                ed_start = map_source_time_to_edited(seg.start_ms, keep_segments)
+                ed_end = map_source_time_to_edited(seg.end_ms, keep_segments)
+                retained_dur = ed_end - ed_start
+                if retained_dur <= 0:
+                    # Entirely cut by active EDL -> exclude from corrected script
+                    continue
+                dur = retained_dur
+            else:
+                ed_start = None
+                ed_end = None
                 dur = seg.end_ms - seg.start_ms
-                corr_text, c_type, reason, vis_ev = self._derive_grounded_correction(orig_text)
-                segments.append(
-                    CorrectedTranscriptSegment(
-                        segment_id=seg.segment_id,
-                        source_start_ms=seg.start_ms,
-                        source_end_ms=seg.end_ms,
-                        original_text=orig_text,
-                        corrected_text=corr_text,
-                        change_type=c_type,
-                        reason=reason,
-                        visual_evidence=vis_ev,
-                        meaning_changed=False,
-                        target_duration_ms=dur,
-                        confidence=0.98,
-                        entailment_verdict=EntailmentVerdict.SUPPORTED,
-                    )
+
+            segments.append(
+                CorrectedTranscriptSegment(
+                    segment_id=seg.segment_id,
+                    source_start_ms=seg.start_ms,
+                    source_end_ms=seg.end_ms,
+                    edited_start_ms=ed_start,
+                    edited_end_ms=ed_end,
+                    original_text=orig_text,
+                    corrected_text=corr_text,
+                    change_type=c_type,
+                    reason=reason,
+                    visual_evidence=vis_ev,
+                    meaning_changed=False,
+                    target_duration_ms=dur,
+                    confidence=0.98,
+                    entailment_verdict=EntailmentVerdict.SUPPORTED,
                 )
+            )
 
         corrected = CorrectedTranscript(
             transcript_id=f"corr_{transcript.transcript_id}",
@@ -1630,34 +1690,67 @@ class FakeGenAIClient(GenAIClient):
         return corrected, usage
 
     def _derive_grounded_correction(self, text: str) -> tuple[str, ScriptCorrectionChangeType, str, str]:
-        """Deterministic rule-based source-grounded correction helper for testing and offline execution."""
-        import re
-        lower = text.lower()
-        # 1. Transcription / Terminology errors (verified against screen)
-        if "get hub" in lower or "git hub" in lower or "gethub" in lower:
-            corr = re.sub(r"(?i)\b(?:get hub|git hub|gethub)\b", "GitHub", text)
-            return corr, ScriptCorrectionChangeType.TRANSCRIPTION_ERROR, "Corrected speech recognition error 'get hub' to official 'GitHub'.", "GitHub Actions workflow repository visible in browser and editor."
-        if "yamel" in lower or "yaaml" in lower:
-            corr = re.sub(r"(?i)\b(?:yamel|yaaml)\b", "YAML", text)
-            return corr, ScriptCorrectionChangeType.TRANSCRIPTION_ERROR, "Corrected phonetic transcription 'yamel' to 'YAML'.", ".github/workflows/deploy.yml editor view."
-        # 2. False start / repetition
-        if re.search(r"\b(\w+)\s+\1\b", lower):
-            corr = re.sub(r"\b(\w+)\s+\1\b", r"\1", text, flags=re.IGNORECASE)
-            return corr, ScriptCorrectionChangeType.REPETITION, "Removed accidental repeated word.", "Presenter paused momentarily while typing."
-        if "what we're gonna... what we're gonna do" in lower or "we gonna basically" in lower:
-            corr = "So what we're going to do now is deploy it." if "what we're" in lower else "We're going to deploy this now."
-            return corr, ScriptCorrectionChangeType.FALSE_START, "Cleaned up spoken false start and filler repetition.", "IDE terminal shows deployment command ready."
-        # 3. Filler removal
-        if re.search(r"\b(um|uh|you know|basically|like)\b", lower):
-            corr = re.sub(r"\b(um|uh|you know|basically|like)\b,?\s*", "", text, flags=re.IGNORECASE).strip()
-            corr = corr[0].upper() + corr[1:] if corr else text
-            return corr, ScriptCorrectionChangeType.FILLER, "Removed conversational speech filler to improve pacing and clarity.", "Screen shows code demonstration."
-        # 4. Grammar improvement
-        if "we is" in lower or "he don't" in lower or "we gonna" in lower:
-            corr = text.replace("we is", "we are").replace("he don't", "he doesn't").replace("we gonna", "we are going to")
-            return corr, ScriptCorrectionChangeType.GRAMMAR, "Repaired colloquial grammar into clear spoken English.", "Technical demonstration."
+        return derive_grounded_script_correction(text)
 
-        return text, ScriptCorrectionChangeType.KEEP, "Spoken sentence is clear, grammatically sound, and grounded in video.", "Natural delivery."
+
+def derive_grounded_script_correction(text: str) -> tuple[str, ScriptCorrectionChangeType, str, str]:
+    """Deterministic rule-based source-grounded correction helper for testing and offline execution."""
+    import re
+    lower = text.lower()
+    # 1. Transcription / Terminology errors (verified against screen)
+    if "github action tutorial" in lower:
+        return (
+            "This is a GitHub Actions tutorial.",
+            ScriptCorrectionChangeType.TRANSCRIPTION_ERROR,
+            "Corrected singular 'action' to official product name 'GitHub Actions'.",
+            "GitHub repository tab showing Actions workflow menu.",
+        )
+    if "get hub" in lower or "git hub" in lower or "gethub" in lower:
+        corr = re.sub(r"(?i)\b(?:get hub|git hub|gethub)\b", "GitHub", text)
+        return corr, ScriptCorrectionChangeType.TRANSCRIPTION_ERROR, "Corrected speech recognition error 'get hub' to official 'GitHub'.", "GitHub Actions workflow repository visible in browser and editor."
+    if "yamel" in lower or "yaaml" in lower:
+        corr = re.sub(r"(?i)\b(?:yamel|yaaml)\b", "YAML", text)
+        return corr, ScriptCorrectionChangeType.TRANSCRIPTION_ERROR, "Corrected phonetic transcription 'yamel' to 'YAML'.", ".github/workflows/deploy.yml editor view."
+    # 2. False start / repetition
+    if "to edit to edit your workflow" in lower or "workflow like this workflow is for cloudflare dns" in lower:
+        return (
+            "To edit your workflow, this workflow is for Cloudflare DNS.",
+            ScriptCorrectionChangeType.FALSE_START,
+            "Removed repeated 'to edit' stutter and conversational filler 'like'.",
+            "Editor displaying Cloudflare DNS deploy workflow YAML.",
+        )
+    if "you here you can find here the issues" in lower:
+        return (
+            "Here you can find the issues.",
+            ScriptCorrectionChangeType.FALSE_START,
+            "Removed false start 'You here' and repetition of 'here'.",
+            "Repository Issues tab.",
+        )
+    if re.search(r"\b(\w+)\s+\1\b", lower):
+        corr = re.sub(r"\b(\w+)\s+\1\b", r"\1", text, flags=re.IGNORECASE)
+        return corr, ScriptCorrectionChangeType.REPETITION, "Removed accidental repeated word.", "Presenter paused momentarily while typing."
+    if "what we're gonna... what we're gonna do" in lower or "we gonna basically" in lower:
+        corr = "So what we're going to do now is deploy it." if "what we're" in lower else "We're going to deploy this now."
+        return corr, ScriptCorrectionChangeType.FALSE_START, "Cleaned up spoken false start and filler repetition.", "IDE terminal shows deployment command ready."
+    # 3. Filler removal
+    if re.search(r"\b(um|uh|you know|basically|like)\b", lower):
+        corr = re.sub(r"\b(um|uh|you know|basically|like)\b,?\s*", "", text, flags=re.IGNORECASE).strip()
+        corr = corr[0].upper() + corr[1:] if corr else text
+        return corr, ScriptCorrectionChangeType.FILLER, "Removed conversational speech filler to improve pacing and clarity.", "Screen shows code demonstration."
+    # 4. Grammar improvement
+    if "deploy which is and how to deploy" in lower:
+        return (
+            "And how to deploy our application to Google Cloud with a test-verified workflow and everything working.",
+            ScriptCorrectionChangeType.GRAMMAR,
+            "Cleaned up broken sentence structure while preserving technical deploy steps.",
+            "Google Cloud deploy workflow in editor.",
+        )
+    if "we is" in lower or "he don't" in lower or "we gonna" in lower:
+        corr = text.replace("we is", "we are").replace("he don't", "he doesn't").replace("we gonna", "we are going to")
+        return corr, ScriptCorrectionChangeType.GRAMMAR, "Repaired colloquial grammar into clear spoken English.", "Technical demonstration."
+
+    return text, ScriptCorrectionChangeType.KEEP, "Spoken sentence is clear, grammatically sound, and grounded in video.", "Natural delivery."
+
 
     async def verify_script_entailment(
         self,

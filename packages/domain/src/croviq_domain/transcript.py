@@ -293,8 +293,8 @@ class ScriptCorrectionChangeType(StrEnum):
     FILLER = "FILLER"
     FALSE_START = "FALSE_START"
     REPETITION = "REPETITION"
+    PUNCTUATION = "PUNCTUATION"
     KEEP = "KEEP"
-
 
 class EntailmentVerdict(StrEnum):
     """Closed-world entailment check verdict for a proposed script correction."""
@@ -326,6 +326,16 @@ class CorrectedTranscriptSegment(BaseModel):
         ...,
         ge=0,
         description="End offset on source video timeline in milliseconds",
+    )
+    edited_start_ms: int | None = Field(
+        default=None,
+        ge=0,
+        description="Mapped start offset on edited timeline in milliseconds",
+    )
+    edited_end_ms: int | None = Field(
+        default=None,
+        ge=0,
+        description="Mapped end offset on edited timeline in milliseconds",
     )
     original_text: str = Field(
         ...,

@@ -421,7 +421,13 @@ export type TimelineTrackId =
   | "coverage";
 
 export type ScriptCorrectionChangeType =
-  "GRAMMAR" | "TRANSCRIPTION_ERROR" | "FILLER" | "FALSE_START" | "REPETITION" | "KEEP";
+  | "GRAMMAR"
+  | "TRANSCRIPTION_ERROR"
+  | "FILLER"
+  | "FALSE_START"
+  | "REPETITION"
+  | "PUNCTUATION"
+  | "KEEP";
 
 export type EntailmentVerdict = "SUPPORTED" | "UNSUPPORTED" | "UNCERTAIN";
 
@@ -429,6 +435,8 @@ export interface CorrectedTranscriptSegment {
   segment_id: string;
   source_start_ms: number;
   source_end_ms: number;
+  edited_start_ms?: number | null;
+  edited_end_ms?: number | null;
   original_text: string;
   corrected_text: string;
   change_type: ScriptCorrectionChangeType;
