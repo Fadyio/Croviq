@@ -10,6 +10,7 @@ from croviq_domain.validators import validate_timezone_aware
 class ArtifactType(StrEnum):
     """Supported render artifact types."""
 
+    SOURCE = "SOURCE"
     PREVIEW = "PREVIEW"
     MASTER = "MASTER"
     SHORT = "SHORT"
@@ -17,6 +18,8 @@ class ArtifactType(StrEnum):
     STUDIO_VOICE_PREVIEW = "STUDIO_VOICE_PREVIEW"
     STUDIO_VOICE_MASTER = "STUDIO_VOICE_MASTER"
     FINAL_MIX = "FINAL_MIX"
+
+
 class ArtifactStatus(StrEnum):
     """Lifecycle status of a render artifact."""
 

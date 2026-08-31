@@ -6,6 +6,7 @@ import {
   type EditorDecision,
   formatCutLabel,
   formatTimecode,
+  getCanonicalTranscriptProjection,
   getExecutableCuts,
   isWordInExecutableCut,
   sourceToEditedTimeMs,
@@ -127,26 +128,25 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
     if (mode === "original") {
       setTranscriptViewMode("original");
       setRemovedWordNotice(null);
+    } else if (mode === "studio_voice" || mode === "final_mix") {
+      setTranscriptViewMode("corrected");
     } else if (prevModeRef.current === "original") {
       setTranscriptViewMode("corrected");
     }
     prevModeRef.current = mode;
   }, [mode]);
-  const activeWordIndex = useMemo(() => {
-    if (!transcript?.words || transcript.words.length === 0) return -1;
-    const exact = transcript.words.find(
-      (word) => currentTimeMs >= word.start_ms && currentTimeMs <= word.end_ms,
-    );
-    if (exact) return exact.index;
 
-    // Nearest prior word within 400ms tolerance
-    const prevWord = [...transcript.words].reverse().find((w) => w.start_ms <= currentTimeMs);
-    if (prevWord && currentTimeMs <= prevWord.end_ms + 400) {
-      return prevWord.index;
-    }
-    return -1;
-  }, [currentTimeMs, transcript?.words]);
+  const projection = useMemo(
+    () => getCanonicalTranscriptProjection(mode, transcript, correctedTranscript, edl),
+    [mode, transcript, correctedTranscript, edl],
+  );
 
+  const activeProjectedWord = useMemo(
+    () => projection.getActiveWord(currentTimeMs),
+    [projection, currentTimeMs],
+  );
+
+  const activeWordIndex = activeProjectedWord ? activeProjectedWord.index : -1;
   const transcriptSegments = useMemo<TranscriptSegment[]>(() => {
     if (!transcript) return [];
     if (transcript.segments?.length) return transcript.segments;
@@ -180,7 +180,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   useEffect(() => {
     const container = scrollRef.current;
     const activeWord = activeWordRef.current;
-    if (!container || !activeWord || activeWordIndex < 0) return;
+    if (!container || !activeWord || !activeProjectedWord) return;
     if (Date.now() < manualScrollUntilRef.current) return;
 
     const containerRect = container.getBoundingClientRect();
@@ -194,8 +194,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
     window.setTimeout(() => {
       programmaticScrollRef.current = false;
     }, 500);
-  }, [activeWordIndex]);
-
+  }, [activeProjectedWord]);
   return (
     <section
       className={`flex min-h-0 flex-1 flex-col overflow-hidden ${className}`}
@@ -379,7 +378,27 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                             Corrected:
                           </span>
                           <span className="text-emerald-300 font-semibold">
-                            {seg.corrected_text}
+                            {seg.corrected_text.trim().split(/\s+/).map((wordText, wIdx) => {
+                              const wordsList = seg.corrected_text.trim().split(/\s+/);
+                              const wordTime = segStartMs + (wIdx / Math.max(1, wordsList.length)) * Math.max(200, segEndMs - segStartMs);
+                              const isWordActive = activeProjectedWord && activeProjectedWord.text.toLowerCase() === wordText.toLowerCase() && currentTimeMs >= segStartMs && currentTimeMs <= segEndMs;
+                              return (
+                                <button
+                                  key={`corr-w-${seg.segment_id}-${wIdx}`}
+                                  ref={isWordActive ? activeWordRef : undefined}
+                                  type="button"
+                                  onClick={() => onSeek(Math.round(wordTime))}
+                                  className={`rounded-[3px] px-0.5 text-left transition-colors cursor-pointer mr-1 ${
+                                    isWordActive
+                                      ? "bg-primary font-bold text-white shadow-xs"
+                                      : "hover:bg-surface-3 text-emerald-300"
+                                  }`}
+                                  title={`Seek to ${formatTimecode(Math.round(wordTime))}`}
+                                >
+                                  {wordText}
+                                </button>
+                              );
+                            })}
                           </span>
                         </div>
                         {seg.reason && (
@@ -397,7 +416,27 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                       </div>
                     ) : (
                       <p className="text-[13px] leading-relaxed text-text-primary/90">
-                        {seg.corrected_text}
+                        {seg.corrected_text.trim().split(/\s+/).map((wordText, wIdx) => {
+                          const wordsList = seg.corrected_text.trim().split(/\s+/);
+                          const wordTime = segStartMs + (wIdx / Math.max(1, wordsList.length)) * Math.max(200, segEndMs - segStartMs);
+                          const isWordActive = activeProjectedWord && activeProjectedWord.text.toLowerCase() === wordText.toLowerCase() && currentTimeMs >= segStartMs && currentTimeMs <= segEndMs;
+                          return (
+                            <button
+                              key={`corr-w-${seg.segment_id}-${wIdx}`}
+                              ref={isWordActive ? activeWordRef : undefined}
+                              type="button"
+                              onClick={() => onSeek(Math.round(wordTime))}
+                              className={`rounded-[3px] px-0.5 text-left transition-colors cursor-pointer mr-1 ${
+                                isWordActive
+                                  ? "bg-primary font-bold text-white shadow-xs"
+                                  : "hover:bg-surface-3 text-text-primary"
+                              }`}
+                              title={`Seek to ${formatTimecode(Math.round(wordTime))}`}
+                            >
+                              {wordText}
+                            </button>
+                          );
+                        })}
                       </p>
                     )}
                   </article>

@@ -199,7 +199,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     let token = "";
     if (firebaseUser) {
       token = await firebaseUser.getIdToken();
-    } else if (import.meta.env.DEV || window.location.hostname === "localhost") {
+    } else if (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       token =
         "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
     } else {
@@ -501,25 +501,19 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         const modeParam = params.get("mode");
-        if (modeParam === "original" && canonicalOutputs.original.available) return "original";
-        if (modeParam === "edited" && canonicalOutputs.edited.available) return "edited";
         if (
-          (modeParam === "studio_voice" || modeParam === "voiceover") &&
-          canonicalOutputs.voiceover.available
-        )
+          modeParam === "original" ||
+          modeParam === "edited" ||
+          modeParam === "studio_voice" ||
+          modeParam === "final_mix"
+        ) {
+          return modeParam as PreviewMode;
+        }
+        if (modeParam === "voiceover") {
           return "studio_voice";
-        if (modeParam === "final_mix" && canonicalOutputs.final_mix.available) return "final_mix";
+        }
       }
-      if (prevMode === "final_mix" && canonicalOutputs.final_mix.available) return "final_mix";
-      if (prevMode === "studio_voice" && canonicalOutputs.voiceover.available)
-        return "studio_voice";
-      if (prevMode === "edited" && canonicalOutputs.edited.available) return "edited";
-      if (prevMode === "original" && canonicalOutputs.original.available) return "original";
-
-      if (canonicalOutputs.final_mix.available) return "final_mix";
-      if (canonicalOutputs.voiceover.available) return "studio_voice";
-      if (canonicalOutputs.edited.available) return "edited";
-      return "original";
+      return prevMode || "final_mix";
     });
     setProduction(productionPayload);
     setPlaybackUrl(originalOutput.url);
@@ -722,7 +716,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     if (firebaseUser) {
       return firebaseUser.getIdToken();
     }
-    if (import.meta.env.DEV || window.location.hostname === "localhost") {
+    if (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       return "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
     }
     throw new Error("Authentication required");
@@ -825,32 +819,74 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     async (voiceId: string) => {
       selectedVoiceInitializedRef.current = true;
       setSelectedVoice(voiceId);
+      setIsGeneratingVoiceover(true);
+      const prevVoiceover = mediaOutputs.voiceover;
+      const prevVoiceId = currentVoiceoverVoiceId;
       setMediaOutputs((prev) => ({
         ...prev,
         voiceover: {
           ...prev.voiceover,
-          available: false,
-          url: null,
-          status: "stale",
+          status: "generating",
         },
       }));
-      setPreviewMode((currentMode) => (currentMode === "studio_voice" ? "edited" : currentMode));
-      const token = await getAuthToken();
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-      await fetch("/api/workspace/agent-settings/voice", {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({
-          narration_mode: "studio_voice",
-          selected_voice: voiceId,
-          language: "en-US",
-        }),
-      });
+      try {
+        const token = await getAuthToken();
+        const headers = {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        // 1. Persist selected voice settings
+        await fetch("/api/workspace/agent-settings/voice", {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            narration_mode: "studio_voice",
+            selected_voice: voiceId,
+            language: "en-US",
+          }),
+        });
+
+        // 2. Automatically generate new studio voice narration
+        const res = await fetch(`/api/productions/${productionId}/studio-voice`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ voice_id: voiceId }),
+        });
+        if (!res.ok) {
+          throw new Error(`Could not generate ${voiceId} voiceover. Previous voiceover was kept.`);
+        }
+        const svData = await res.json();
+        if (svData.result?.voice_id) {
+          setCurrentVoiceoverVoiceId(svData.result.voice_id);
+        }
+        await loadPersistedData();
+        // 3. Mark Final Mix stale because narration changed
+        setMediaOutputs((prev) => ({
+          ...prev,
+          final_mix: {
+            ...prev.final_mix,
+            status: "needs_regeneration",
+            available: false,
+          },
+        }));
+        // 4. Switch player to newly rendered voiceover preview
+        setPreviewMode("studio_voice");
+      } catch (err: unknown) {
+        console.error("Failed to generate voiceover for voice:", voiceId, err);
+        // Restore previous valid voiceover
+        setMediaOutputs((prev) => ({
+          ...prev,
+          voiceover: prevVoiceover,
+        }));
+        if (prevVoiceId) {
+          setCurrentVoiceoverVoiceId(prevVoiceId);
+        }
+        throw err;
+      } finally {
+        setIsGeneratingVoiceover(false);
+      }
     },
-    [getAuthToken, setPreviewMode],
+    [getAuthToken, loadPersistedData, mediaOutputs.voiceover, currentVoiceoverVoiceId, productionId, setPreviewMode],
   );
 
   const handleGenerateVoiceover = useCallback(async () => {
@@ -1321,12 +1357,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             ) && (
               <button
                 type="button"
-                onClick={
-                  onNavigateRelease ||
-                  (() => {
-                    window.location.href = `/productions/${productionId}/release`;
-                  })
-                }
+                onClick={() => {
+                  const targetMode = previewMode === "studio_voice" ? "voiceover" : previewMode;
+                  if (onNavigateRelease) {
+                    onNavigateRelease();
+                  } else {
+                    window.location.href = `/productions/${productionId}/release?mode=${targetMode}`;
+                  }
+                }}
                 className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-md transition-colors shadow-sm cursor-pointer"
                 title="Send this cut to Iris for quality review"
                 aria-label="Send this cut to Iris for quality review"
@@ -1368,6 +1406,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             previewMode={previewMode}
             edl={edl}
             activeCoverage={activeCoverage}
+            transcript={transcript}
+            correctedTranscript={correctedTranscript}
             onPlayPause={handlePlayPause}
             onSeek={handleSeek}
             onRetryPlayback={async () => {

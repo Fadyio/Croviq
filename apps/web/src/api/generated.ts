@@ -1239,6 +1239,8 @@ export interface components {
     GenerateReleaseReviewRequest: {
       /** Whether to bypass cached review and execute a fresh Iris QA pass */
       force_regenerate?: boolean;
+      /** Explicit preview mode to review: original | edited | voiceover | final_mix */
+      preview_mode?: string | null;
     };
     GenerateStudioVoiceRequest: {
       /** Optional override Studio Voice catalog voice identifier */
@@ -1723,6 +1725,14 @@ export interface components {
       confidence?: number;
       /** UTC timestamp of evaluation generation */
       created_at?: string;
+      /** Reviewed preview mode: original | edited | voiceover | final_mix */
+      preview_mode?: string;
+      /** Exact RenderArtifact ID or source artifact ID reviewed */
+      reviewed_artifact_id?: string | null;
+      /** Exact GCS URI or object reviewed */
+      reviewed_artifact_uri?: string | null;
+      /** Rendered voice ID if voiceover or final_mix */
+      reviewed_voice_id?: string | null;
       /** Evaluated EditDecisionList ID */
       edl_id?: string | null;
       /** Evaluated Master RenderArtifact ID */

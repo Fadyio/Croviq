@@ -56,6 +56,8 @@ class IrisQAAgent:
         research_findings: Sequence[ResearchFinding] | None = None,
         custom_prompt: str | None = None,
         prompt_version: int = 1,
+        preview_mode: str = "final_mix",
+        voice_id: str | None = None,
         request_id: str = "unknown",
     ) -> tuple[ReleaseReview, AgentUsageMetadata]:
         """Answer whether the actual current rendered edited video is ready."""
@@ -120,6 +122,8 @@ class IrisQAAgent:
                 deterministic_results=det_results,
                 custom_prompt=custom_prompt,
                 prompt_version=prompt_version,
+                preview_mode=preview_mode,
+                voice_id=voice_id,
                 master_artifact_id=master_artifact.artifact_id,
                 master_duration_ms=master_duration,
                 request_id=request_id,

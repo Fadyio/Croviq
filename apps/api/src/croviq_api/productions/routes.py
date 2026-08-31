@@ -1496,7 +1496,7 @@ async def _execute_render_for_production(
                     except Exception as exc:
                         logger.warning("Failed to download background music %s: %s; generating on-demand", edl.background_music.music_gcs_object, exc)
                         music_bytes, _, dur_ms = await genai_client.generate_background_music(
-                            prompt=edl.background_music.prompt or "Minimal modern technology documentary underscore.",
+                            prompt=edl.background_music.prompt or "Modern understated YouTube background music for a polished technology tutorial. Warm atmospheric synths, subtle electronic rhythm, light forward momentum, clean and contemporary, unobtrusive under narration, no vocals, no dramatic cinematic swells, no distracting lead melody. Professional creator-style background music that keeps the video engaging without competing with speech.",
                             duration_s=max(5, int(edl.estimated_target_duration_ms / 1000) + 1),
                             model_id=edl.background_music.model_id or "lyria-3-pro-preview",
                             production_id=prod.production_id,
@@ -1815,10 +1815,10 @@ async def generate_production_music(
             detail=f"Production '{production_id}' has no assembled EDL",
         )
     prompt_text = body.prompt or (
-        "Minimal modern technology documentary underscore. "
-        "Warm subtle synthesizer pads, restrained soft electronic pulse, very sparse percussion, "
-        "calm focused mood, clean professional mix, instrumental only, consistent low intensity throughout. "
-        "Designed to sit quietly underneath spoken tutorial narration."
+        "Modern understated YouTube background music for a polished technology tutorial. "
+        "Warm atmospheric synths, subtle electronic rhythm, light forward momentum, clean and contemporary, "
+        "unobtrusive under narration, no vocals, no dramatic cinematic swells, no distracting lead melody. "
+        "Professional creator-style background music that keeps the video engaging without competing with speech."
     )
     duration_s = max(5, int(edl.source_duration_ms / 1000))
     wav_bytes, _, dur_ms = await genai_client.generate_background_music(
@@ -2848,7 +2848,7 @@ async def _build_release_review_response(
     if master_artifact:
         calculated_fingerprint = build_release_fingerprint(
             production_id=production_id,
-            edl_id=master_artifact.edl_id,
+            edl_id=master_artifact.edl_id or "source_edl",
             master_artifact_id=master_artifact.artifact_id,
             master_hash=master_artifact.sha256 or "unhashed",
             packaging_proposal_id=proposal.proposal_id if proposal else "none",
@@ -2912,6 +2912,7 @@ async def generate_release_review(
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)] = None,
     release_review_repo: Annotated[ReleaseReviewRepository, Depends(get_release_review_repository)] = None,
     agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)] = None,
+    studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)] = None,
     memory_store: Annotated[ChannelMemoryStore, Depends(get_memory_store)] = None,
     research_repo: Annotated[ResearchRepository, Depends(get_research_repository)] = None,
     genai_client: Annotated[GenAIClient, Depends(get_genai_client)] = None,
@@ -2919,52 +2920,101 @@ async def generate_release_review(
 ) -> ReleaseReviewDetailResponse:
     request_id = getattr(request.state, "request_id", "unknown")
     force_regenerate = payload.force_regenerate if payload else False
+    req_mode = (payload.preview_mode.lower() if payload and payload.preview_mode else "final_mix").strip()
+    if req_mode in ("voiceover", "studio_voice"):
+        req_mode = "voiceover"
+    elif req_mode not in ("original", "edited", "voiceover", "final_mix"):
+        req_mode = "final_mix"
 
     prod = await _get_owned_production(production_id, current_user, production_repo)
-
     latest_edl = await edl_repo.get_latest_edl(prod.production_id)
+    renders = await render_repo.list_render_artifacts(prod.production_id)
+    active_renders = [r for r in renders if (latest_edl is None or r.edl_id == latest_edl.edl_id)]
+
     master_artifact = None
-    if latest_edl:
-        for candidate_type in [
-            ArtifactType.FINAL_MIX,
-            ArtifactType.MASTER,
-            ArtifactType.STUDIO_VOICE_MASTER,
-            ArtifactType.VOICEOVER_PREVIEW,
-            ArtifactType.PREVIEW,
-        ]:
-            master_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, latest_edl.edl_id, candidate_type
+    reviewed_voice_id = None
+    proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
+    proposal_to_evaluate = proposal
+
+    if req_mode == "original":
+        proposal_to_evaluate = None
+        if not prod.source_media or not prod.source_media.gcs_object:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Original source media is not uploaded or available for Iris review.",
             )
-            if master_artifact and master_artifact.status == ArtifactStatus.completed:
-                break
-            master_artifact = None
-    else:
-        renders = await render_repo.list_render_artifacts(prod.production_id)
+        source_bucket = prod.source_media.gcs_bucket or os.getenv("MEDIA_BUCKET_NAME", "croviq-506602-croviq-media-raw")
+        master_artifact = RenderArtifact(
+            artifact_id=f"art_source_{prod.production_id}",
+            production_id=prod.production_id,
+            edl_id=f"edl_source_{prod.production_id}",
+            artifact_type=ArtifactType.SOURCE,
+            gcs_bucket=source_bucket,
+            gcs_object=prod.source_media.gcs_object,
+            duration_ms=(latest_edl.source_duration_ms if latest_edl else 0),
+            status=ArtifactStatus.completed,
+            created_at=prod.created_at,
+        )
+    elif req_mode == "edited":
         master_artifact = next(
-            (
-                r
-                for r in renders
-                if r.status == ArtifactStatus.completed
-                and r.artifact_type
-                in (
-                    ArtifactType.FINAL_MIX,
-                    ArtifactType.MASTER,
-                    ArtifactType.STUDIO_VOICE_MASTER,
-                    ArtifactType.VOICEOVER_PREVIEW,
-                    ArtifactType.PREVIEW,
-                )
-            ),
+            (r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.PREVIEW.value and r.status == ArtifactStatus.completed),
             None,
         )
-        if master_artifact and master_artifact.edl_id:
-            latest_edl = await edl_repo.get_edl(prod.production_id, master_artifact.edl_id)
-    if not master_artifact or master_artifact.status != ArtifactStatus.completed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Master video must be rendered and completed before executing Iris QA review.",
+        if not master_artifact:
+            master_artifact = next(
+                (r for r in renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.PREVIEW.value and r.status == ArtifactStatus.completed),
+                None,
+            )
+        if not master_artifact or master_artifact.status != ArtifactStatus.completed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Edited Preview must be rendered and completed before executing Iris QA review.",
+            )
+    elif req_mode == "voiceover":
+        sv_res = await studio_voice_repo.get_by_production_id(prod.production_id)
+        if sv_res and sv_res.voice_id:
+            reviewed_voice_id = sv_res.voice_id
+        else:
+            voice_cfg = await agent_config_repo.get_voice_settings(prod.workspace_id) if prod.workspace_id else None
+            reviewed_voice_id = voice_cfg.selected_voice if voice_cfg else "Kore"
+        master_artifact = next(
+            (r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) in (ArtifactType.VOICEOVER_PREVIEW.value, ArtifactType.STUDIO_VOICE_MASTER.value) and r.status == ArtifactStatus.completed),
+            None,
         )
+        if not master_artifact:
+            master_artifact = next(
+                (r for r in renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) in (ArtifactType.VOICEOVER_PREVIEW.value, ArtifactType.STUDIO_VOICE_MASTER.value) and r.status == ArtifactStatus.completed),
+                None,
+            )
+        if not master_artifact or master_artifact.status != ArtifactStatus.completed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Voiceover Preview must be rendered and completed before executing Iris QA review.",
+            )
+    else:
+        # final_mix
+        sv_res = await studio_voice_repo.get_by_production_id(prod.production_id)
+        if sv_res and sv_res.voice_id:
+            reviewed_voice_id = sv_res.voice_id
+        master_artifact = next(
+            (r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) in (ArtifactType.FINAL_MIX.value, ArtifactType.MASTER.value) and r.status == ArtifactStatus.completed),
+            None,
+        )
+        if not master_artifact:
+            master_artifact = next(
+                (r for r in renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) in (ArtifactType.FINAL_MIX.value, ArtifactType.MASTER.value) and r.status == ArtifactStatus.completed),
+                None,
+            )
+        if not master_artifact or master_artifact.status != ArtifactStatus.completed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Master video must be rendered and completed before executing Iris QA review.",
+            )
+    if master_artifact and master_artifact.edl_id and not latest_edl:
+        latest_edl = await edl_repo.get_edl(prod.production_id, master_artifact.edl_id)
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     overrides = await packaging_repo.get_package_overrides(prod.production_id)
+    proposal_to_evaluate = proposal if req_mode != "original" else None
 
     # Idempotency check for the same Master and packaging proposal.
     if not force_regenerate:
@@ -2972,13 +3022,14 @@ async def generate_release_review(
         if (
             latest_review
             and latest_review.master_artifact_id == master_artifact.artifact_id
-            and latest_review.packaging_proposal_id == (proposal.proposal_id if proposal else "none")
+            and getattr(latest_review, "preview_mode", "final_mix") == req_mode
+            and latest_review.packaging_proposal_id == (proposal_to_evaluate.proposal_id if proposal_to_evaluate else "none")
         ):
             return await _build_release_review_response(
                 production_id=prod.production_id,
                 review=latest_review,
                 master_artifact=master_artifact,
-                proposal=proposal,
+                proposal=proposal_to_evaluate,
                 media_storage=media_storage,
             )
 
@@ -3032,13 +3083,15 @@ async def generate_release_review(
         production_id=prod.production_id,
         master_artifact=master_artifact,
         transcript=transcript,
-        proposal=proposal,
+        proposal=proposal_to_evaluate,
         overrides=overrides,
         channel_profile=channel_profile,
         lessons=lessons,
         research_findings=research_findings,
         custom_prompt=iris_prompt_config.prompt_text if iris_prompt_config.is_custom else None,
         prompt_version=iris_prompt_config.version,
+        preview_mode=req_mode,
+        voice_id=reviewed_voice_id,
         request_id=request_id,
     )
 
@@ -3056,6 +3109,10 @@ async def generate_release_review(
     )
     review = review.model_copy(
         update={
+            "preview_mode": req_mode,
+            "reviewed_artifact_id": master_artifact.artifact_id,
+            "reviewed_artifact_uri": f"gs://{master_artifact.gcs_bucket or 'croviq-media'}/{master_artifact.gcs_object}",
+            "reviewed_voice_id": reviewed_voice_id,
             "edl_id": effective_edl_id,
             "master_hash": master_artifact.sha256,
             "package_version": package_ver,
@@ -3139,7 +3196,25 @@ async def get_release_review_details(
         )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     review = await release_review_repo.get_latest_release_review(prod.production_id)
-
+    if review and review.preview_mode == "original":
+        if prod.source_media and prod.source_media.gcs_object:
+            source_bucket = prod.source_media.gcs_bucket or os.getenv("MEDIA_BUCKET_NAME", "croviq-506602-croviq-media-raw")
+            master_artifact = RenderArtifact(
+                artifact_id=review.reviewed_artifact_id or f"art_source_{prod.production_id}",
+                production_id=prod.production_id,
+                edl_id=f"edl_source_{prod.production_id}",
+                artifact_type=ArtifactType.SOURCE,
+                gcs_bucket=source_bucket,
+                gcs_object=prod.source_media.gcs_object,
+                duration_ms=latest_edl.source_duration_ms if latest_edl else 0,
+                status=ArtifactStatus.completed,
+                created_at=prod.created_at,
+            )
+    elif review and review.reviewed_artifact_id:
+        renders = await render_repo.list_render_artifacts(prod.production_id)
+        found_art = next((r for r in renders if r.artifact_id == review.reviewed_artifact_id and r.status == ArtifactStatus.completed), None)
+        if found_art:
+            master_artifact = found_art
     return await _build_release_review_response(
         production_id=prod.production_id,
         review=review,

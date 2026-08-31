@@ -1039,3 +1039,381 @@ export function formatDuration(ms: number): string {
   const remainingSecs = Math.round(totalSeconds % 60);
   return `${minutes}m ${remainingSecs}s`;
 }
+export interface ProjectedWord {
+  id: string;
+  text: string;
+  start_ms: number;
+  end_ms: number;
+  source_start_ms: number;
+  source_end_ms: number;
+  index: number;
+  is_cut: boolean;
+  is_narration: boolean;
+  segment_id?: string;
+}
+
+export interface ProjectedSegment {
+  segment_id: string;
+  text: string;
+  start_ms: number;
+  end_ms: number;
+  source_start_ms: number;
+  source_end_ms: number;
+  words: ProjectedWord[];
+  is_narration: boolean;
+  is_corrected?: boolean;
+}
+
+export interface CanonicalActivePhrase {
+  phraseText: string;
+  startMs: number;
+  endMs: number;
+  activeWordId?: string;
+  activeWordText?: string;
+  words?: ProjectedWord[];
+}
+
+export interface CanonicalTranscriptProjection {
+  mode: PreviewMode;
+  segments: ProjectedSegment[];
+  words: ProjectedWord[];
+  getActiveWord: (currentTimeMs: number) => ProjectedWord | null;
+  getActivePhrase: (currentTimeMs: number) => CanonicalActivePhrase | null;
+}
+
+export function getCanonicalTranscriptProjection(
+  mode: PreviewMode,
+  transcript?: Transcript | null,
+  correctedTranscript?: CorrectedTranscript | null,
+  edl?: EditDecisionList | null,
+): CanonicalTranscriptProjection {
+  const isOriginal = mode === "original";
+  const isEdited = mode === "edited";
+
+  const projectedSegments: ProjectedSegment[] = [];
+  const projectedWords: ProjectedWord[] = [];
+
+  if (isOriginal) {
+    if (transcript?.segments && transcript.segments.length > 0) {
+      let wordIdx = 0;
+      for (const seg of transcript.segments) {
+        const segWords: ProjectedWord[] = [];
+        const wordsInSeg = transcript.words
+          ? transcript.words.filter(
+              (w) => w.start_ms >= seg.start_ms - 50 && w.end_ms <= seg.end_ms + 50,
+            )
+          : [];
+        if (wordsInSeg.length > 0) {
+          for (const w of wordsInSeg) {
+            const pw: ProjectedWord = {
+              id: `w_orig_${w.index ?? wordIdx}`,
+              text: w.text,
+              start_ms: w.start_ms,
+              end_ms: w.end_ms,
+              source_start_ms: w.start_ms,
+              source_end_ms: w.end_ms,
+              index: w.index ?? wordIdx,
+              is_cut: false,
+              is_narration: false,
+              segment_id: seg.segment_id,
+            };
+            segWords.push(pw);
+            projectedWords.push(pw);
+            wordIdx++;
+          }
+        } else {
+          const split = seg.text.trim().split(/\s+/).filter(Boolean);
+          const dur = Math.max(100, seg.end_ms - seg.start_ms);
+          const wordDur = dur / Math.max(1, split.length);
+          split.forEach((t, i) => {
+            const pw: ProjectedWord = {
+              id: `w_orig_${wordIdx}`,
+              text: t,
+              start_ms: Math.round(seg.start_ms + i * wordDur),
+              end_ms: Math.round(seg.start_ms + (i + 1) * wordDur),
+              source_start_ms: Math.round(seg.start_ms + i * wordDur),
+              source_end_ms: Math.round(seg.start_ms + (i + 1) * wordDur),
+              index: wordIdx,
+              is_cut: false,
+              is_narration: false,
+              segment_id: seg.segment_id,
+            };
+            segWords.push(pw);
+            projectedWords.push(pw);
+            wordIdx++;
+          });
+        }
+        projectedSegments.push({
+          segment_id: seg.segment_id,
+          text: seg.text,
+          start_ms: seg.start_ms,
+          end_ms: seg.end_ms,
+          source_start_ms: seg.start_ms,
+          source_end_ms: seg.end_ms,
+          words: segWords,
+          is_narration: false,
+        });
+      }
+    } else if (transcript?.words && transcript.words.length > 0) {
+      transcript.words.forEach((w, i) => {
+        const pw: ProjectedWord = {
+          id: `w_orig_${w.index ?? i}`,
+          text: w.text,
+          start_ms: w.start_ms,
+          end_ms: w.end_ms,
+          source_start_ms: w.start_ms,
+          source_end_ms: w.end_ms,
+          index: w.index ?? i,
+          is_cut: false,
+          is_narration: false,
+        };
+        projectedWords.push(pw);
+      });
+      projectedSegments.push({
+        segment_id: "seg_orig_0",
+        text: projectedWords.map((w) => w.text).join(" "),
+        start_ms: projectedWords[0]?.start_ms ?? 0,
+        end_ms: projectedWords.at(-1)?.end_ms ?? 0,
+        source_start_ms: projectedWords[0]?.start_ms ?? 0,
+        source_end_ms: projectedWords.at(-1)?.end_ms ?? 0,
+        words: projectedWords,
+        is_narration: false,
+      });
+    }
+  } else if (isEdited) {
+    if (transcript?.segments && transcript.segments.length > 0) {
+      let wordIdx = 0;
+      for (const seg of transcript.segments) {
+        const segWords: ProjectedWord[] = [];
+        const wordsInSeg = transcript.words
+          ? transcript.words.filter(
+              (w) => w.start_ms >= seg.start_ms - 50 && w.end_ms <= seg.end_ms + 50,
+            )
+          : [];
+        const rawWords =
+          wordsInSeg.length > 0
+            ? wordsInSeg
+            : seg.text
+                .trim()
+                .split(/\s+/)
+                .map((t, i) => {
+                  const dur = Math.max(100, seg.end_ms - seg.start_ms);
+                  const wd = dur / Math.max(1, seg.text.trim().split(/\s+/).length);
+                  return {
+                    text: t,
+                    start_ms: Math.round(seg.start_ms + i * wd),
+                    end_ms: Math.round(seg.start_ms + (i + 1) * wd),
+                    index: wordIdx + i,
+                  };
+                });
+
+        for (const w of rawWords) {
+          const cutInfo = isWordInExecutableCut(w, edl);
+          const editedStart = sourceToEditedTimeMs(w.start_ms, edl);
+          const editedEnd = sourceToEditedTimeMs(w.end_ms, edl);
+          const pw: ProjectedWord = {
+            id: `w_edit_${w.index ?? wordIdx}`,
+            text: w.text,
+            start_ms: editedStart,
+            end_ms: editedEnd,
+            source_start_ms: w.start_ms,
+            source_end_ms: w.end_ms,
+            index: w.index ?? wordIdx,
+            is_cut: cutInfo.isCut,
+            is_narration: false,
+            segment_id: seg.segment_id,
+          };
+          segWords.push(pw);
+          projectedWords.push(pw);
+          wordIdx++;
+        }
+
+        const survivingWords = segWords.filter((w) => !w.is_cut);
+        if (survivingWords.length > 0) {
+          projectedSegments.push({
+            segment_id: seg.segment_id,
+            text: survivingWords.map((w) => w.text).join(" "),
+            start_ms: survivingWords[0].start_ms,
+            end_ms: survivingWords.at(-1)?.end_ms ?? survivingWords[0].start_ms,
+            source_start_ms: survivingWords[0].source_start_ms,
+            source_end_ms:
+              survivingWords.at(-1)?.source_end_ms ?? survivingWords[0].source_start_ms,
+            words: segWords,
+            is_narration: false,
+          });
+        }
+      }
+    }
+  } else {
+    const voSegments =
+      edl?.voiceover_segments && edl.voiceover_segments.length > 0
+        ? edl.voiceover_segments
+        : null;
+    const corrSegments =
+      correctedTranscript?.segments && correctedTranscript.segments.length > 0
+        ? correctedTranscript.segments
+        : null;
+
+    if (voSegments) {
+      let wordIdx = 0;
+      for (const seg of voSegments) {
+        const editedStart = sourceToEditedTimeMs(seg.source_start_ms, edl);
+        const editedEnd = sourceToEditedTimeMs(seg.source_end_ms, edl);
+        const segDuration = Math.max(
+          200,
+          seg.generated_duration_ms && seg.generated_duration_ms > 0
+            ? seg.generated_duration_ms
+            : editedEnd - editedStart,
+        );
+        const wordsList = seg.text.trim().split(/\s+/).filter(Boolean);
+        const wordDur = segDuration / Math.max(1, wordsList.length);
+        const segWords: ProjectedWord[] = [];
+
+        wordsList.forEach((text, i) => {
+          const wStart = Math.round(editedStart + i * wordDur);
+          const wEnd = Math.round(editedStart + (i + 1) * wordDur);
+          const pw: ProjectedWord = {
+            id: `w_vo_${seg.segment_id}_${i}`,
+            text,
+            start_ms: wStart,
+            end_ms: wEnd,
+            source_start_ms: seg.source_start_ms,
+            source_end_ms: seg.source_end_ms,
+            index: wordIdx,
+            is_cut: false,
+            is_narration: true,
+            segment_id: seg.segment_id,
+          };
+          segWords.push(pw);
+          projectedWords.push(pw);
+          wordIdx++;
+        });
+
+        projectedSegments.push({
+          segment_id: seg.segment_id,
+          text: seg.text,
+          start_ms: editedStart,
+          end_ms: editedStart + segDuration,
+          source_start_ms: seg.source_start_ms,
+          source_end_ms: seg.source_end_ms,
+          words: segWords,
+          is_narration: true,
+          is_corrected: true,
+        });
+      }
+    } else if (corrSegments) {
+      let wordIdx = 0;
+      for (const seg of corrSegments) {
+        const editedStart = sourceToEditedTimeMs(seg.source_start_ms, edl);
+        const editedEnd = sourceToEditedTimeMs(seg.source_end_ms, edl);
+        const text = seg.corrected_text || seg.original_text;
+        const wordsList = text.trim().split(/\s+/).filter(Boolean);
+        const segDuration = Math.max(
+          200,
+          seg.target_duration_ms && seg.target_duration_ms > 0
+            ? seg.target_duration_ms
+            : editedEnd - editedStart,
+        );
+        const wordDur = segDuration / Math.max(1, wordsList.length);
+        const segWords: ProjectedWord[] = [];
+
+        wordsList.forEach((wText, i) => {
+          const wStart = Math.round(editedStart + i * wordDur);
+          const wEnd = Math.round(editedStart + (i + 1) * wordDur);
+          const pw: ProjectedWord = {
+            id: `w_corr_${seg.segment_id}_${i}`,
+            text: wText,
+            start_ms: wStart,
+            end_ms: wEnd,
+            source_start_ms: seg.source_start_ms,
+            source_end_ms: seg.source_end_ms,
+            index: wordIdx,
+            is_cut: false,
+            is_narration: true,
+            segment_id: seg.segment_id,
+          };
+          segWords.push(pw);
+          projectedWords.push(pw);
+          wordIdx++;
+        });
+
+        projectedSegments.push({
+          segment_id: seg.segment_id,
+          text,
+          start_ms: editedStart,
+          end_ms: editedStart + segDuration,
+          source_start_ms: seg.source_start_ms,
+          source_end_ms: seg.source_end_ms,
+          words: segWords,
+          is_narration: true,
+          is_corrected: Boolean(seg.meaning_changed || seg.change_type !== "KEEP"),
+        });
+      }
+    } else {
+      return getCanonicalTranscriptProjection("edited", transcript, correctedTranscript, edl);
+    }
+  }
+
+  const getActiveWord = (currentTimeMs: number): ProjectedWord | null => {
+    if (projectedWords.length === 0) return null;
+    const exact = projectedWords.find(
+      (w) => !w.is_cut && currentTimeMs >= w.start_ms && currentTimeMs <= w.end_ms,
+    );
+    if (exact) return exact;
+
+    const prev = [...projectedWords]
+      .reverse()
+      .find((w) => !w.is_cut && w.start_ms <= currentTimeMs);
+    if (prev && currentTimeMs <= prev.end_ms + 400) {
+      return prev;
+    }
+    return null;
+  };
+
+  const getActivePhrase = (currentTimeMs: number): CanonicalActivePhrase | null => {
+    if (projectedSegments.length === 0 && projectedWords.length === 0) return null;
+    const activeWord = getActiveWord(currentTimeMs);
+
+    const seg = projectedSegments.find(
+      (s) =>
+        (currentTimeMs >= s.start_ms && currentTimeMs <= s.end_ms) ||
+        (activeWord && s.words.some((w) => w.id === activeWord.id)),
+    );
+
+    if (seg) {
+      return {
+        phraseText: seg.text,
+        startMs: seg.start_ms,
+        endMs: seg.end_ms,
+        activeWordId: activeWord?.id,
+        activeWordText: activeWord?.text,
+        words: seg.words.filter((w) => !w.is_cut),
+      };
+    }
+
+    if (activeWord) {
+      const activeIdx = projectedWords.findIndex((w) => w.id === activeWord.id);
+      const startIdx = Math.max(0, activeIdx - 3);
+      const endIdx = Math.min(projectedWords.length, activeIdx + 4);
+      const windowWords = projectedWords.slice(startIdx, endIdx).filter((w) => !w.is_cut);
+      return {
+        phraseText: windowWords.map((w) => w.text).join(" "),
+        startMs: windowWords[0]?.start_ms ?? activeWord.start_ms,
+        endMs: windowWords.at(-1)?.end_ms ?? activeWord.end_ms,
+        activeWordId: activeWord.id,
+        activeWordText: activeWord.text,
+        words: windowWords,
+      };
+    }
+
+    return null;
+  };
+
+  return {
+    mode,
+    segments: projectedSegments,
+    words: projectedWords,
+    getActiveWord,
+    getActivePhrase,
+  };
+}

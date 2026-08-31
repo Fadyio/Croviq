@@ -254,6 +254,10 @@ class ReleaseReview(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp of evaluation generation",
     )
+    preview_mode: str = Field(default="final_mix", description="Reviewed preview mode: original | edited | voiceover | final_mix")
+    reviewed_artifact_id: str | None = Field(default=None, description="Exact RenderArtifact ID or source artifact ID reviewed")
+    reviewed_artifact_uri: str | None = Field(default=None, description="Exact GCS URI or object reviewed")
+    reviewed_voice_id: str | None = Field(default=None, description="Rendered voice ID if voiceover or final_mix")
     edl_id: str | None = Field(default=None, description="Evaluated EditDecisionList ID")
     master_artifact_id: str | None = Field(default=None, description="Evaluated Master RenderArtifact ID")
     master_hash: str | None = Field(default=None, description="SHA-256 hash of evaluated Master RenderArtifact")

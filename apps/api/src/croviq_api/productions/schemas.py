@@ -522,6 +522,10 @@ class GenerateReleaseReviewRequest(BaseModel):
         default=False,
         description="Whether to bypass cached review and execute a fresh Iris QA pass",
     )
+    preview_mode: str | None = Field(
+        default=None,
+        description="Explicit preview mode to review: original | edited | voiceover | final_mix",
+    )
 
 
 class ReleaseReviewDetailResponse(BaseModel):

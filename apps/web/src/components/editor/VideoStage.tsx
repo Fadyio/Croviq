@@ -13,14 +13,16 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   type CanonicalMediaOutputs,
+  type CorrectedTranscript,
   type CoverageMarker,
   type EditDecisionList,
   editedToSourceTimeMs,
   formatTimecode,
+  getCanonicalTranscriptProjection,
   sourceToEditedTimeMs,
+  type Transcript,
 } from "../../lib/edl-adapter";
 import type { PreviewMode } from "./PreviewToggle";
-
 interface VideoStageProps {
   playbackUrl: string | null;
   renderedPreviewUrl?: string | null;
@@ -36,6 +38,8 @@ interface VideoStageProps {
   previewMode: PreviewMode;
   edl: EditDecisionList | null;
   activeCoverage: CoverageMarker | null;
+  transcript?: Transcript | null;
+  correctedTranscript?: CorrectedTranscript | null;
   onPlayPause: () => void;
   onSeek: (targetMs: number) => void;
   onDurationChange?: (durationMs: number) => void;
@@ -59,6 +63,8 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   previewMode,
   edl,
   activeCoverage,
+  transcript,
+  correctedTranscript,
   onPlayPause,
   onSeek,
   onDurationChange,
@@ -94,6 +100,15 @@ export const VideoStage: React.FC<VideoStageProps> = ({
   const isEdlDerivedMode =
     previewMode === "edited" || previewMode === "studio_voice" || previewMode === "final_mix";
 
+  const projection = React.useMemo(
+    () => getCanonicalTranscriptProjection(previewMode, transcript, correctedTranscript, edl),
+    [previewMode, transcript, correctedTranscript, edl],
+  );
+
+  const activePhrase = React.useMemo(
+    () => projection.getActivePhrase(currentTimeMs),
+    [projection, currentTimeMs],
+  );
   const currentOutput = mediaOutputs
     ? previewMode === "original"
       ? mediaOutputs.original
@@ -516,6 +531,38 @@ export const VideoStage: React.FC<VideoStageProps> = ({
             data-testid="active-coverage-overlay"
           >
             <span>Source Screen Coverage</span>
+          </div>
+        )}
+        {/* Live Synchronized Caption / Word Overlay (Priority 6) */}
+        {activePhrase?.phraseText && activeVideoUrl && !videoError && (
+          <div
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-lg w-[90%] text-center px-3.5 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-white/15 shadow-2xl pointer-events-none z-10 transition-all duration-100"
+            data-testid="player-caption-overlay"
+          >
+            <p className="text-xs sm:text-sm font-medium text-white tracking-normal leading-relaxed line-clamp-2 drop-shadow-md">
+              {activePhrase.words && activePhrase.words.length > 0 ? (
+                activePhrase.words.map((w, idx) => {
+                  const isWordActive =
+                    w.id === activePhrase.activeWordId ||
+                    (activePhrase.activeWordText &&
+                      w.text.toLowerCase() === activePhrase.activeWordText.toLowerCase());
+                  return (
+                    <span
+                      key={w.id || idx}
+                      className={`transition-colors duration-75 ${
+                        isWordActive
+                          ? "text-primary-300 font-bold bg-primary-500/25 px-1 py-0.5 rounded shadow-xs"
+                          : "text-white/90"
+                      }`}
+                    >
+                      {w.text}{" "}
+                    </span>
+                  );
+                })
+              ) : (
+                <span>{activePhrase.phraseText}</span>
+              )}
+            </p>
           </div>
         )}
 

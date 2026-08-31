@@ -1,10 +1,11 @@
-import { Loader2, MessageSquare, Send, Sparkles, User, Wrench, X } from "lucide-react";
+import { Check, Loader2, MessageSquare, Send, Sparkles, User, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import leoAvatar from "../../assets/agents/leo.webp";
 import { type EditDecisionList, type EditorSelection, formatTimecode } from "../../lib/edl-adapter";
 import { MarkdownRenderer } from "../MarkdownRenderer";
 
 export type LeoChatContext = EditorSelection;
+
 interface ToolExecution {
   tool_name?: string;
   name?: string;
@@ -12,6 +13,7 @@ interface ToolExecution {
   goal?: string;
   status?: string;
   result?: string;
+  output?: Record<string, unknown> | string;
   [key: string]: unknown;
 }
 
@@ -48,131 +50,8 @@ const QUICK_PROMPTS = [
   "Undo that edit",
 ];
 
-const renderSelectionAttachment = (
-  selection: EditorSelection,
-  onClear: () => void,
-): React.ReactNode => {
-  const isCut = selection.selection_type === "CUT";
-  const isPoint = selection.selection_type === "POINT";
-  const isWord = selection.selection_type === "TRANSCRIPT_WORD";
-  const isSegment = selection.selection_type === "TRANSCRIPT_SEGMENT";
-  const isChapter = selection.selection_type === "CHAPTER";
-
-  const sourceDurationSec = ((selection.source_end_ms - selection.source_start_ms) / 1000).toFixed(
-    1,
-  );
-  const removedDurationSec = selection.removed_duration_ms
-    ? (selection.removed_duration_ms / 1000).toFixed(1)
-    : null;
-
-  return (
-    <div
-      className="mb-2 rounded-lg border border-primary/30 bg-primary/10 p-2 text-text-primary shadow-xs transition-all"
-      data-testid="leo-chat-selection-attachment"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-start gap-1.5">
-          <Sparkles className="mt-0.5 size-3 shrink-0 text-primary" aria-hidden="true" />
-          <div className="min-w-0 flex-1 space-y-0.5 text-[10px]">
-            {isCut ? (
-              <>
-                <div className="flex items-center gap-1.5 font-semibold text-danger">
-                  <span>Selected cut</span>
-                  <span className="font-mono tabular-nums text-text-muted">
-                    {formatTimecode(selection.source_start_ms)} →{" "}
-                    {formatTimecode(selection.source_end_ms)}
-                  </span>
-                  {removedDurationSec && (
-                    <span className="rounded bg-danger/15 px-1 py-0.2 text-[9px] font-medium text-danger">
-                      {removedDurationSec}s removed
-                    </span>
-                  )}
-                </div>
-                {selection.cut_reason && (
-                  <p className="truncate text-text-secondary">
-                    <span className="text-text-muted">Reason: </span>
-                    {selection.cut_reason}
-                  </p>
-                )}
-                {selection.transcript_text && (
-                  <p className="truncate italic text-text-muted">
-                    &ldquo;{selection.transcript_text}&rdquo;
-                  </p>
-                )}
-              </>
-            ) : isPoint ? (
-              <>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-semibold text-primary">
-                  <span>Selected point</span>
-                  {selection.coordinate_space === "EDITED" && selection.edited_start_ms !== null ? (
-                    <span className="font-mono tabular-nums text-text-secondary">
-                      Edited {formatTimecode(selection.edited_start_ms)}{" "}
-                      <span className="text-text-muted">&middot;</span> Source{" "}
-                      {formatTimecode(selection.source_start_ms)}
-                    </span>
-                  ) : (
-                    <span className="font-mono tabular-nums text-text-secondary">
-                      Source {formatTimecode(selection.source_start_ms)}
-                      {selection.edited_start_ms !== null && (
-                        <span className="text-text-muted">
-                          {" "}
-                          (Edited {formatTimecode(selection.edited_start_ms)})
-                        </span>
-                      )}
-                    </span>
-                  )}
-                </div>
-                {selection.transcript_text && (
-                  <p className="truncate italic text-text-muted">
-                    &ldquo;{selection.transcript_text}&rdquo;
-                  </p>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="flex items-center gap-1.5 font-semibold text-primary">
-                  <span>
-                    {isChapter
-                      ? "Selected chapter"
-                      : isWord
-                        ? "Selected word"
-                        : isSegment
-                          ? "Selected transcript"
-                          : "Selected range"}
-                  </span>
-                  <span className="font-mono tabular-nums text-text-secondary">
-                    {formatTimecode(selection.source_start_ms)} →{" "}
-                    {formatTimecode(selection.source_end_ms)}
-                  </span>
-                  {selection.source_end_ms > selection.source_start_ms && (
-                    <span className="text-text-muted">({sourceDurationSec}s)</span>
-                  )}
-                </div>
-                {selection.transcript_text && (
-                  <p className="line-clamp-2 italic text-text-secondary">
-                    &ldquo;{selection.transcript_text}&rdquo;
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onClear}
-          className="shrink-0 rounded p-1 text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-          aria-label="Clear selection"
-          title="Clear selection"
-          data-testid="btn-clear-selection"
-        >
-          <X className="size-3" />
-        </button>
-      </div>
-    </div>
-  );
-};
 const toolDisplayName = (tool: ToolExecution): string => {
-  const raw = String(tool.tool_name || tool.name || tool.tool || "Editor tool");
+  const raw = String(tool.tool_name || tool.name || tool.tool || "Edit applied");
   return raw.replaceAll("_", " ").replace(/\b\w/gu, (letter) => letter.toUpperCase());
 };
 
@@ -305,11 +184,12 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
 
   return (
     <section
-      className={`flex min-h-0 flex-1 flex-col overflow-hidden ${className}`}
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-1 font-sans ${className}`}
       aria-label="Chat with Leo"
       data-testid="leo-chat-panel"
     >
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-live="polite">
+      {/* Scrollable Conversation History */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 space-y-3" aria-live="polite">
         {isLoadingHistory ? (
           <div className="flex h-32 items-center justify-center gap-2 text-[11px] text-text-muted">
             <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
@@ -320,7 +200,7 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
             <img
               src={leoAvatar}
               alt=""
-              className="mb-3 size-10 rounded-full object-cover ring-1 ring-border-subtle"
+              className="mb-3 size-10 rounded-full object-cover ring-1 ring-border-subtle shadow-xs"
             />
             <p className="text-xs font-semibold text-text-primary">Edit with Leo</p>
             <p className="mt-1 max-w-60 text-[10px] leading-relaxed text-text-muted">
@@ -344,7 +224,7 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
                 )}
                 <div className="max-w-[85%] space-y-1.5">
                   <div
-                    className={`rounded-lg px-3 py-2 text-[11px] leading-relaxed ${
+                    className={`rounded-lg px-3 py-2 text-[11px] leading-relaxed shadow-xs ${
                       message.role === "user"
                         ? "bg-primary text-white"
                         : "border border-border-subtle bg-surface-2 text-text-primary"
@@ -356,39 +236,26 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
                       <p className="whitespace-pre-wrap">{message.content}</p>
                     )}
                   </div>
+
+                  {/* Compact action / result row (Priority 7) */}
                   {message.tool_executions && message.tool_executions.length > 0 && (
-                    <div className="space-y-1" aria-label="Tools Leo used">
-                      {message.tool_executions.map((tool, index) => (
-                        <div
-                          key={`${message.message_id}-tool-${index}`}
-                          className="flex items-start gap-1.5 rounded border border-border-subtle bg-surface-3/60 px-2 py-1.5 text-[9px] text-text-muted"
-                        >
-                          <Wrench
-                            className="mt-0.5 size-2.5 shrink-0 text-primary"
-                            aria-hidden="true"
-                          />
-                          <div className="min-w-0">
-                            <span className="font-semibold text-text-secondary">
-                              {toolDisplayName(tool)}
-                            </span>
-                            {tool.goal && <span className="block truncate">{tool.goal}</span>}
-                            {(tool.status || tool.result) && (
-                              <span className="block truncate">
-                                {tool.status === "no_change" || tool.status === "NO CHANGE"
-                                  ? "NO CHANGE"
-                                  : tool.status === "success" || tool.status === "SUCCESS"
-                                    ? "SUCCESS"
-                                    : String(tool.status || tool.result)}
-                                {tool.output &&
-                                typeof tool.output === "object" &&
-                                (tool.output as Record<string, unknown>).reason
-                                  ? ` · ${(tool.output as Record<string, unknown>).reason}`
-                                  : ""}
-                              </span>
-                            )}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5" aria-label="Action status">
+                      {message.tool_executions.map((tool, index) => {
+                        const reasonText =
+                          tool.output && typeof tool.output === "object" && (tool.output as Record<string, unknown>).reason
+                            ? String((tool.output as Record<string, unknown>).reason)
+                            : tool.goal || toolDisplayName(tool);
+
+                        return (
+                          <div
+                            key={`${message.message_id}-tool-${index}`}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-2 border border-border-subtle text-[10px] text-text-secondary"
+                          >
+                            <Check className="size-3 text-emerald-400 shrink-0" />
+                            <span className="font-medium text-text-primary truncate max-w-xs">{reasonText}</span>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -403,21 +270,21 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
         )}
 
         {isSending && (
-          <div className="mt-3 flex items-start gap-2">
+          <div className="mt-2 flex items-start gap-2">
             <img
               src={leoAvatar}
               alt=""
               className="size-6 rounded-full object-cover ring-1 ring-border-subtle"
             />
-            <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2 px-3 py-2 text-[10px] text-text-muted">
+            <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-2 px-3 py-1.5 text-[10px] text-text-muted">
               <Loader2 className="size-3 animate-spin text-primary" aria-hidden="true" />
-              Leo is inspecting the edit…
+              Leo is editing…
             </div>
           </div>
         )}
         {error && (
           <div
-            className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-2.5 py-2 text-[10px] text-danger"
+            className="mt-2 rounded-md border border-danger/30 bg-danger/10 px-2.5 py-2 text-[10px] text-danger"
             role="alert"
           >
             {error}
@@ -426,21 +293,58 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Pinned Bottom Composer */}
       <footer className="shrink-0 border-t border-border-subtle bg-surface-1 p-3">
-        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5" aria-label="Quick prompts">
-          {QUICK_PROMPTS.map((prompt) => (
-            <button
-              key={prompt}
-              type="button"
-              onClick={() => setInputMessage(prompt)}
-              className="shrink-0 rounded-full border border-border-subtle bg-surface-2 px-2 py-1 text-[9px] font-medium text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
+        {/* Quick starter prompts (shown before active conversation) */}
+        {messages.length <= 1 && (
+          <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5" aria-label="Quick prompts">
+            {QUICK_PROMPTS.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => setInputMessage(prompt)}
+                className="shrink-0 rounded-full border border-border-subtle bg-surface-2 px-2.5 py-1 text-[10px] font-medium text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary hover:bg-surface-3 cursor-pointer"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {context && renderSelectionAttachment(context, onClearContext)}
+        {/* Small Selection Context Chip (Priority 7) */}
+        {context && (
+          <div
+            className="mb-2 flex items-center justify-between gap-2 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20 text-[11px] text-text-primary shadow-xs"
+            data-testid="leo-chat-selection-attachment"
+          >
+            <div className="flex items-center gap-1.5 min-w-0 truncate">
+              <Sparkles className="size-3 text-primary shrink-0" />
+              <span className="font-semibold text-primary">Selected</span>
+              <span className="text-text-muted">&middot;</span>
+              <span className="font-mono tabular-nums text-text-secondary text-[10px]">
+                {formatTimecode(context.source_start_ms)}–{formatTimecode(context.source_end_ms)}
+              </span>
+              {context.transcript_text && (
+                <>
+                  <span className="text-text-muted">&middot;</span>
+                  <span className="truncate italic text-text-muted">
+                    &ldquo;{context.transcript_text}&rdquo;
+                  </span>
+                </>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={onClearContext}
+              className="shrink-0 p-0.5 rounded hover:bg-surface-3 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+              title="Clear selection"
+              aria-label="Clear selection"
+              data-testid="btn-clear-selection"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        )}
 
         <form
           className="flex items-end gap-2"
@@ -469,7 +373,7 @@ export const LeoChatPanel: React.FC<LeoChatPanelProps> = ({
           <button
             type="submit"
             disabled={!inputMessage.trim() || isSending}
-            className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 cursor-pointer"
             aria-label="Send message to Leo"
           >
             {isSending ? (

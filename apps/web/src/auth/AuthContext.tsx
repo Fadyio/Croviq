@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(() => {
     if (
       typeof window !== "undefined" &&
-      (import.meta.env.DEV || window.location.hostname === "localhost")
+      (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
     ) {
       const stored = localStorage.getItem("croviq_dev_auth_user");
       if (stored) {
@@ -160,7 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setFirebaseUser(nextFirebaseUser);
       if (!nextFirebaseUser) {
         const storedDevAuth = localStorage.getItem("croviq_dev_auth_user");
-        if (storedDevAuth && (import.meta.env.DEV || window.location.hostname === "localhost")) {
+        if (storedDevAuth && (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
           try {
             setUser(JSON.parse(storedDevAuth));
             setIsLoading(false);
@@ -239,7 +239,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (
           !isExplicitAuthError &&
           import.meta.env.DEV &&
-          window.location.hostname === "localhost" &&
+          (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") &&
           !localStorage.getItem("croviq_mock_auth_token")
         ) {
           const devUser: User = {

@@ -32,8 +32,7 @@ export interface MusicTabProps {
 }
 
 export const DEFAULT_MUSIC_PROMPT =
-  "Minimal modern technology documentary underscore, calm, focused, no vocals.";
-
+  "Modern understated YouTube background music for a polished technology tutorial. Warm atmospheric synths, subtle electronic rhythm, light forward momentum, clean and contemporary, unobtrusive under narration, no vocals, no dramatic cinematic swells, no distracting lead melody. Professional creator-style background music that keeps the video engaging without competing with speech.";
 export const MusicTab: React.FC<MusicTabProps> = ({
   backgroundMusic,
   musicPlaybackUrl,

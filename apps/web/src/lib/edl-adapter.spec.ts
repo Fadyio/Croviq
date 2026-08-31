@@ -14,6 +14,7 @@ import {
   formatCutLabel,
   formatDuration,
   formatTimecode,
+  getCanonicalTranscriptProjection,
   getExecutableCuts,
   isSourceTimeInCut,
   isWordInExecutableCut,
@@ -713,6 +714,108 @@ test.describe("EDL Adapter & Playback Logic", () => {
       expect(sel.cut_id).toBeNull();
       expect(sel.cut_reason).toBeNull();
       expect(sel.removed_duration_ms).toBeNull();
+    });
+  });
+
+  test.describe("BUG 27 — Canonical Transcript Projection Tests", () => {
+    const testEdl: EditDecisionList = {
+      edl_id: "edl_bug27_test",
+      production_id: "prod_473209137802",
+      source_duration_ms: 5000,
+      version: 1,
+      created_at: "2026-08-31T00:00:00Z",
+      cuts: [
+        {
+          cut_id: "cut_01",
+          decision_id: "dec_01",
+          decision_type: "PAUSE_TRIM",
+          transcript_start_word: 1,
+          transcript_end_word: 2,
+          requested_start_ms: 1000,
+          requested_end_ms: 2000,
+          safe_start_ms: 1000,
+          safe_end_ms: 2000,
+          removed_duration_ms: 1000,
+          left_anchor: "raw",
+          right_anchor: "words",
+          safety_status: "SAFE",
+          safety_reason: "Clean silence boundary.",
+          confidence: 0.95,
+        },
+      ],
+      voiceover_segments: [
+        {
+          segment_id: "vo_01",
+          source_start_ms: 0,
+          source_end_ms: 5000,
+          text: "Here is the new corrected narration explanation.",
+          voice_mode: "PREBUILT_STUDIO_VOICE",
+          voice_id: "Kore",
+          generated_duration_ms: 4000,
+        },
+      ],
+    };
+
+    const testTranscript: Transcript = {
+      transcript_id: "tr_01",
+      production_id: "prod_473209137802",
+      language_code: "en",
+      created_at: "2026-08-31T00:00:00Z",
+      duration_ms: 5000,
+      segments: [
+        {
+          segment_id: "seg_01",
+          start_ms: 0,
+          end_ms: 5000,
+          text: "Original raw spoken words in video.",
+          word_start_index: 0,
+          word_end_index: 5,
+        },
+      ],
+      words: [
+        { index: 0, text: "Original", start_ms: 0, end_ms: 800 },
+        { index: 1, text: "raw", start_ms: 800, end_ms: 1200 }, // in cut (1000-2000)
+        { index: 2, text: "spoken", start_ms: 1200, end_ms: 1800 }, // in cut
+        { index: 3, text: "words", start_ms: 2200, end_ms: 3000 },
+        { index: 4, text: "in", start_ms: 3000, end_ms: 3500 },
+        { index: 5, text: "video.", start_ms: 3500, end_ms: 5000 },
+      ],
+    };
+    test("Original mode uses raw words and source timestamps", () => {
+      const proj = getCanonicalTranscriptProjection("original", testTranscript, null, testEdl);
+      expect(proj.mode).toBe("original");
+      const word = proj.getActiveWord(500);
+      expect(word).not.toBeNull();
+      expect(word?.text).toBe("Original");
+      expect(word?.start_ms).toBe(0);
+    });
+
+    test("Edited mode excludes cut words and shifts post-cut timestamps", () => {
+      const proj = getCanonicalTranscriptProjection("edited", testTranscript, null, testEdl);
+      expect(proj.mode).toBe("edited");
+      // Word "words" was at 2200-3000 in source, with 1000ms cut (1000-2000), edited time is 1200-2000
+      const word = proj.getActiveWord(1500);
+      expect(word).not.toBeNull();
+      expect(word?.text).toBe("words");
+      expect(word?.is_cut).toBe(false);
+    });
+
+    test("Voiceover mode uses rendered narration text and words", () => {
+      const proj = getCanonicalTranscriptProjection("studio_voice", testTranscript, null, testEdl);
+      expect(proj.mode).toBe("studio_voice");
+      const phrase = proj.getActivePhrase(1000);
+      expect(phrase).not.toBeNull();
+      expect(phrase?.phraseText).toContain("Here is the new corrected narration");
+      const activeWord = proj.getActiveWord(500);
+      expect(activeWord).not.toBeNull();
+      expect(activeWord?.is_narration).toBe(true);
+    });
+
+    test("Final Mix mode projects identical narration words", () => {
+      const proj = getCanonicalTranscriptProjection("final_mix", testTranscript, null, testEdl);
+      expect(proj.mode).toBe("final_mix");
+      const phrase = proj.getActivePhrase(1000);
+      expect(phrase?.phraseText).toContain("Here is the new corrected narration");
     });
   });
 });

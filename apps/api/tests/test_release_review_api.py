@@ -373,3 +373,151 @@ def test_release_review_missing_prerequisites(api_client: TestClient, test_produ
     resp = api_client.post(f"/api/productions/{test_production.production_id}/release-review", json={})
     assert resp.status_code == 400
     assert "Master video must be rendered" in resp.json()["detail"]
+def test_release_review_mode_aware_endpoints(
+    test_user: User,
+    test_workspace: Workspace,
+    test_production: Production,
+    sample_master_render: RenderArtifact,
+    sample_transcript: Transcript,
+):
+    prod_repo = InMemoryProductionRepository()
+    ws_repo = InMemoryWorkspaceRepository()
+    render_repo = InMemoryRenderRepository()
+    transcript_repo = InMemoryTranscriptRepository()
+    packaging_repo = InMemoryPackagingRepository()
+    release_review_repo = InMemoryReleaseReviewRepository()
+    edl_repo = InMemoryEDLRepository()
+    editorial_repo = InMemoryEditorialRepository()
+    agent_config_repo = InMemoryAgentConfigRepository()
+    research_repo = InMemoryResearchRepository()
+    memory_store = FakeChannelMemoryStore()
+    media_storage = FakeMediaStorage()
+    fake_client = FakeGenAIClient()
+
+    from croviq_domain.render import ArtifactType, ArtifactStatus
+    from croviq_domain.edl import EditDecisionList
+    from datetime import datetime, timezone
+
+    # Set up production with source media
+    from croviq_domain.production import SourceMedia, SourceMediaStatus
+    test_production.source_media = SourceMedia(
+        upload_id="upl_01",
+        original_filename="raw.mp4",
+        content_type="video/mp4",
+        size_bytes=1024000,
+        gcs_bucket="croviq-media-raw",
+        gcs_object="workspaces/ws_test_01/productions/prod_test_01/source/upl_01/raw.mp4",
+        status=SourceMediaStatus.UPLOADED,
+        created_at=datetime.now(timezone.utc),
+    )
+    prod_repo._productions[test_production.production_id] = test_production
+    transcript_repo._transcripts[sample_transcript.transcript_id] = sample_transcript
+    transcript_repo._by_production[test_production.production_id] = sample_transcript.transcript_id
+
+    edl = EditDecisionList(
+        edl_id="edl_mode_test",
+        production_id=test_production.production_id,
+        source_duration_ms=113824,
+        cuts=[],
+        created_at=datetime.now(timezone.utc),
+    )
+    edl_repo._by_id[(test_production.production_id, edl.edl_id)] = edl
+    edl_repo._by_production[test_production.production_id] = [edl.edl_id]
+    # Add PREVIEW, VOICEOVER_PREVIEW, and FINAL_MIX render artifacts
+    preview_render = RenderArtifact(
+        artifact_id="art_preview_01",
+        production_id=test_production.production_id,
+        edl_id=edl.edl_id,
+        artifact_type=ArtifactType.PREVIEW,
+        status=ArtifactStatus.completed,
+        gcs_bucket="croviq-media-raw",
+        gcs_object="renders/preview.mp4",
+        duration_ms=113824,
+        created_at=datetime.now(timezone.utc),
+    )
+    vo_render = RenderArtifact(
+        artifact_id="art_vo_01",
+        production_id=test_production.production_id,
+        edl_id=edl.edl_id,
+        artifact_type=ArtifactType.VOICEOVER_PREVIEW,
+        status=ArtifactStatus.completed,
+        gcs_bucket="croviq-media-raw",
+        gcs_object="renders/voiceover.mp4",
+        duration_ms=113824,
+        created_at=datetime.now(timezone.utc),
+    )
+    fm_render = RenderArtifact(
+        artifact_id="art_fm_01",
+        production_id=test_production.production_id,
+        edl_id=edl.edl_id,
+        artifact_type=ArtifactType.FINAL_MIX,
+        status=ArtifactStatus.completed,
+        gcs_bucket="croviq-media-raw",
+        gcs_object="renders/final_mix.mp4",
+        duration_ms=113824,
+        created_at=datetime.now(timezone.utc),
+    )
+
+    render_repo._by_production[test_production.production_id] = {
+        preview_render.artifact_id: preview_render,
+        vo_render.artifact_id: vo_render,
+        fm_render.artifact_id: fm_render,
+    }
+
+    set_production_repository(prod_repo)
+    set_workspace_repository(ws_repo)
+    set_render_repository(render_repo)
+    set_transcript_repository(transcript_repo)
+    set_packaging_repository(packaging_repo)
+    set_release_review_repository(release_review_repo)
+    set_editorial_repository(editorial_repo)
+    set_edl_repository(edl_repo)
+    set_agent_config_repository(agent_config_repo)
+    set_memory_store(memory_store)
+    set_research_repository(research_repo)
+    set_genai_client(fake_client)
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: test_user
+    app.dependency_overrides[get_media_storage] = lambda: media_storage
+    client = TestClient(app)
+
+    # 1. Original review
+    resp_orig = client.post(
+        f"/api/productions/{test_production.production_id}/release-review",
+        json={"preview_mode": "original", "force_regenerate": True},
+    )
+    assert resp_orig.status_code == 200
+    data_orig = resp_orig.json()
+    assert data_orig["review"]["preview_mode"] == "original"
+    assert "art_source_" in data_orig["review"]["reviewed_artifact_id"]
+
+    # 2. Edited review
+    resp_edit = client.post(
+        f"/api/productions/{test_production.production_id}/release-review",
+        json={"preview_mode": "edited", "force_regenerate": True},
+    )
+    assert resp_edit.status_code == 200
+    data_edit = resp_edit.json()
+    assert data_edit["review"]["preview_mode"] == "edited"
+    assert data_edit["review"]["reviewed_artifact_id"] == "art_preview_01"
+
+    # 3. Voiceover review
+    resp_vo = client.post(
+        f"/api/productions/{test_production.production_id}/release-review",
+        json={"preview_mode": "voiceover", "force_regenerate": True},
+    )
+    assert resp_vo.status_code == 200
+    data_vo = resp_vo.json()
+    assert data_vo["review"]["preview_mode"] == "voiceover"
+    assert data_vo["review"]["reviewed_artifact_id"] == "art_vo_01"
+
+    # 4. Final mix review
+    resp_fm = client.post(
+        f"/api/productions/{test_production.production_id}/release-review",
+        json={"preview_mode": "final_mix", "force_regenerate": True},
+    )
+    assert resp_fm.status_code == 200
+    data_fm = resp_fm.json()
+    assert data_fm["review"]["preview_mode"] == "final_mix"
+    assert data_fm["review"]["reviewed_artifact_id"] == "art_fm_01"

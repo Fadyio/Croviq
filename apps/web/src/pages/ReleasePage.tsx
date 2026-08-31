@@ -87,7 +87,6 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
 }) => {
   const { firebaseUser, logout } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
-
   const [qaData, setQaData] = useState<ReleaseReviewDetailResponse | null>(null);
   const [packagingData, setPackagingData] = useState<PackagingDetailResponse | null>(null);
   const [_isLoading, setIsLoading] = useState<boolean>(true);
@@ -95,7 +94,15 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   const [isSavingMetadata, setIsSavingMetadata] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-
+  const [reviewMode, setReviewMode] = useState<"original" | "edited" | "voiceover" | "final_mix">(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const m = params.get("mode");
+      if (m === "original" || m === "edited" || m === "final_mix") return m;
+      if (m === "voiceover" || m === "studio_voice") return "voiceover";
+    }
+    return "final_mix";
+  });
   // Manual creator publish fields
   const [titleInput, setTitleInput] = useState<string>("");
   const [descriptionInput, setDescriptionInput] = useState<string>("");
@@ -125,7 +132,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     if (firebaseUser) {
       const token = await firebaseUser.getIdToken();
       headers.Authorization = `Bearer ${token}`;
-    } else if (import.meta.env.DEV || window.location.hostname === "localhost") {
+    } else if (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       headers.Authorization =
         "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
     }
@@ -221,15 +228,19 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   }, [publishJobData?.job?.status, loadPublishStatus]);
 
   // Trigger explicit Iris Quality Control pass
-  const handleRunQA = async (forceRegenerate: boolean = true) => {
+  const handleRunQA = async (forceRegenerate: boolean = true, targetMode?: "original" | "edited" | "voiceover" | "final_mix") => {
     setIsRunningQA(true);
     setErrorMessage(null);
+    const modeToRun = targetMode || reviewMode;
     try {
       const headers = await getAuthHeaders();
       const res = await fetch(`/api/productions/${productionId}/release-review`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ force_regenerate: forceRegenerate }),
+        body: JSON.stringify({
+          force_regenerate: forceRegenerate,
+          preview_mode: modeToRun,
+        }),
       });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
@@ -237,6 +248,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       }
       const data: ReleaseReviewDetailResponse = await res.json();
       setQaData(data);
+      if (targetMode) setReviewMode(targetMode);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to run Quality Control review");
     } finally {
@@ -648,10 +660,101 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                 Settings
               </button>
             </div>
-            {/* High-level Assessment Summary */}
+            {/* Mode selection & High-level Assessment Summary */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-surface-2 border border-border-subtle">
+              <div className="flex items-center gap-1.5" role="group" aria-label="Iris Review Mode">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewMode("original");
+                    handleRunQA(true, "original");
+                  }}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                    (qaData?.review?.preview_mode || reviewMode) === "original"
+                      ? "bg-surface-3 text-text-primary border border-border-strong shadow-xs"
+                      : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
+                  }`}
+                  data-testid="btn-review-mode-original"
+                >
+                  Original
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewMode("edited");
+                    handleRunQA(true, "edited");
+                  }}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                    (qaData?.review?.preview_mode || reviewMode) === "edited"
+                      ? "bg-primary text-white shadow-xs"
+                      : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
+                  }`}
+                  data-testid="btn-review-mode-edited"
+                >
+                  Edited Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewMode("voiceover");
+                    handleRunQA(true, "voiceover");
+                  }}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                    (qaData?.review?.preview_mode || reviewMode) === "voiceover"
+                      ? "bg-primary text-white shadow-xs"
+                      : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
+                  }`}
+                  data-testid="btn-review-mode-voiceover"
+                >
+                  Voiceover Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewMode("final_mix");
+                    handleRunQA(true, "final_mix");
+                  }}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                    (qaData?.review?.preview_mode || reviewMode) === "final_mix"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
+                  }`}
+                  data-testid="btn-review-mode-final-mix"
+                >
+                  Final Mix
+                </button>
+              </div>
+              <div className="text-xs text-text-muted">
+                Mode:{" "}
+                <span className="font-semibold text-text-primary">
+                  {((qaData?.review?.preview_mode || reviewMode) === "original" && "Original") ||
+                    ((qaData?.review?.preview_mode || reviewMode) === "edited" && "Edited Preview") ||
+                    ((qaData?.review?.preview_mode || reviewMode) === "voiceover" && "Voiceover Preview") ||
+                    "Final Mix"}
+                </span>
+              </div>
+            </div>
+
             {qaData?.review ? (
               <div className="p-4 rounded-xl bg-surface-2/60 border border-border-subtle space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold text-text-secondary">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-text-secondary">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-emerald-400" data-testid="iris-review-mode-label">
+                      Reviewing:{" "}
+                      {((qaData.review.preview_mode || reviewMode) === "original" && "Original") ||
+                        ((qaData.review.preview_mode || reviewMode) === "edited" && "Edited Preview") ||
+                        ((qaData.review.preview_mode || reviewMode) === "voiceover" && "Voiceover Preview") ||
+                        "Final Mix"}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-surface-3 text-text-muted font-mono" data-testid="iris-reviewed-artifact-id">
+                      {qaData.review.reviewed_artifact_id || qaData.master_artifact?.artifact_id || "Source Media"}
+                    </span>
+                    {qaData.review.reviewed_voice_id && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono" data-testid="iris-reviewed-voice-id">
+                        Voice: {qaData.review.reviewed_voice_id}
+                      </span>
+                    )}
+                  </div>
                   <span>Iris Assessment Verdict: {qaData.review.verdict}</span>
                   {typeof qaData.review.confidence === "number" && (
                     <span className="text-text-muted font-normal">
@@ -667,7 +770,6 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                 <p>Press "Run Quality Check" to inspect the rendered video artifact.</p>
               </div>
             )}
-
             {/* Checklist Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="p-3 rounded-xl bg-surface-2/40 border border-border-subtle text-xs space-y-1">
