@@ -2714,14 +2714,37 @@ async def get_packaging_details(
     latest_edl = await edl_repo.get_latest_edl(prod.production_id)
     master_artifact = None
     if latest_edl:
-        master_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
-        )
-        if not master_artifact:
+        for candidate_type in [
+            ArtifactType.FINAL_MIX,
+            ArtifactType.MASTER,
+            ArtifactType.STUDIO_VOICE_MASTER,
+            ArtifactType.VOICEOVER_PREVIEW,
+            ArtifactType.PREVIEW,
+        ]:
             master_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+                prod.production_id, latest_edl.edl_id, candidate_type
             )
-
+            if master_artifact and master_artifact.status == ArtifactStatus.completed:
+                break
+            master_artifact = None
+    else:
+        renders = await render_repo.list_render_artifacts(prod.production_id)
+        master_artifact = next(
+            (
+                r
+                for r in renders
+                if r.status == ArtifactStatus.completed
+                and r.artifact_type
+                in (
+                    ArtifactType.FINAL_MIX,
+                    ArtifactType.MASTER,
+                    ArtifactType.STUDIO_VOICE_MASTER,
+                    ArtifactType.VOICEOVER_PREVIEW,
+                    ArtifactType.PREVIEW,
+                )
+            ),
+            None,
+        )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
     overrides = await packaging_repo.get_package_overrides(prod.production_id)
 
@@ -2773,15 +2796,20 @@ async def update_packaging_overrides(
     latest_edl = await edl_repo.get_latest_edl(prod.production_id)
     master_artifact = None
     if latest_edl:
-        master_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
-        )
-        if not master_artifact:
+        for candidate_type in [
+            ArtifactType.FINAL_MIX,
+            ArtifactType.MASTER,
+            ArtifactType.STUDIO_VOICE_MASTER,
+            ArtifactType.VOICEOVER_PREVIEW,
+            ArtifactType.PREVIEW,
+        ]:
             master_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+                prod.production_id, latest_edl.edl_id, candidate_type
             )
+            if master_artifact and master_artifact.status == ArtifactStatus.completed:
+                break
+            master_artifact = None
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)
-
     return await _build_packaging_detail_response(
         production_id=prod.production_id,
         proposal=proposal,
@@ -2897,22 +2925,39 @@ async def generate_release_review(
     latest_edl = await edl_repo.get_latest_edl(prod.production_id)
     master_artifact = None
     if latest_edl:
-        master_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
-        )
-        if not master_artifact:
+        for candidate_type in [
+            ArtifactType.FINAL_MIX,
+            ArtifactType.MASTER,
+            ArtifactType.STUDIO_VOICE_MASTER,
+            ArtifactType.VOICEOVER_PREVIEW,
+            ArtifactType.PREVIEW,
+        ]:
             master_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+                prod.production_id, latest_edl.edl_id, candidate_type
             )
+            if master_artifact and master_artifact.status == ArtifactStatus.completed:
+                break
+            master_artifact = None
     else:
         renders = await render_repo.list_render_artifacts(prod.production_id)
         master_artifact = next(
-            (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+            (
+                r
+                for r in renders
+                if r.status == ArtifactStatus.completed
+                and r.artifact_type
+                in (
+                    ArtifactType.FINAL_MIX,
+                    ArtifactType.MASTER,
+                    ArtifactType.STUDIO_VOICE_MASTER,
+                    ArtifactType.VOICEOVER_PREVIEW,
+                    ArtifactType.PREVIEW,
+                )
+            ),
             None,
         )
         if master_artifact and master_artifact.edl_id:
             latest_edl = await edl_repo.get_edl(prod.production_id, master_artifact.edl_id)
-
     if not master_artifact or master_artifact.status != ArtifactStatus.completed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -3061,17 +3106,35 @@ async def get_release_review_details(
     latest_edl = await edl_repo.get_latest_edl(prod.production_id)
     master_artifact = None
     if latest_edl:
-        master_artifact = await render_repo.get_render_artifact_by_type(
-            prod.production_id, latest_edl.edl_id, ArtifactType.MASTER
-        )
-        if not master_artifact:
+        for candidate_type in [
+            ArtifactType.FINAL_MIX,
+            ArtifactType.MASTER,
+            ArtifactType.STUDIO_VOICE_MASTER,
+            ArtifactType.VOICEOVER_PREVIEW,
+            ArtifactType.PREVIEW,
+        ]:
             master_artifact = await render_repo.get_render_artifact_by_type(
-                prod.production_id, latest_edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+                prod.production_id, latest_edl.edl_id, candidate_type
             )
+            if master_artifact and master_artifact.status == ArtifactStatus.completed:
+                break
+            master_artifact = None
     else:
         renders = await render_repo.list_render_artifacts(prod.production_id)
         master_artifact = next(
-            (r for r in renders if (r.artifact_type == ArtifactType.MASTER or (hasattr(r.artifact_type, "value") and r.artifact_type.value == ArtifactType.MASTER.value)) and r.status == ArtifactStatus.completed),
+            (
+                r
+                for r in renders
+                if r.status == ArtifactStatus.completed
+                and r.artifact_type
+                in (
+                    ArtifactType.FINAL_MIX,
+                    ArtifactType.MASTER,
+                    ArtifactType.STUDIO_VOICE_MASTER,
+                    ArtifactType.VOICEOVER_PREVIEW,
+                    ArtifactType.PREVIEW,
+                )
+            ),
             None,
         )
     proposal = await packaging_repo.get_latest_packaging_proposal(prod.production_id)

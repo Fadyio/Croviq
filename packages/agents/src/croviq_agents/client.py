@@ -1,5 +1,6 @@
 """GenAI SDK client abstractions for Gemini 3.7 Flash multimodal reasoning agents."""
 
+import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -1057,7 +1058,7 @@ class GoogleGenAIClient(GenAIClient):
         start_time = time.perf_counter()
         last_error: Exception | None = None
 
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 response = await client.aio.models.generate_content(
                     model="gemini-3.1-flash-tts-preview",
@@ -1093,9 +1094,8 @@ class GoogleGenAIClient(GenAIClient):
                 return duration_ms, raw_pcm
             except Exception as exc:
                 last_error = exc
-                if attempt == 0:
-                    time.sleep(1.0)
-
+                if attempt < 2:
+                    await asyncio.sleep(1.0 * (attempt + 1))
         latency_ms = int((time.perf_counter() - start_time) * 1000)
         log_ai_event(
             event_type=EventType.AI_CALL_FAILED,

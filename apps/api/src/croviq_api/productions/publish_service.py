@@ -173,19 +173,39 @@ class YouTubePublishService:
         edl = await self.edl_repo.get_latest_edl(production_id)
         master_artifact: RenderArtifact | None = None
         if edl:
-            master_artifact = await self.render_repo.get_render_artifact_by_type(
-                production_id, edl.edl_id, ArtifactType.MASTER
-            )
-            if not master_artifact:
+            for candidate_type in [
+                ArtifactType.FINAL_MIX,
+                ArtifactType.MASTER,
+                ArtifactType.STUDIO_VOICE_MASTER,
+                ArtifactType.VOICEOVER_PREVIEW,
+                ArtifactType.PREVIEW,
+            ]:
                 master_artifact = await self.render_repo.get_render_artifact_by_type(
-                    production_id, edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+                    production_id, edl.edl_id, candidate_type
                 )
+                if master_artifact and master_artifact.status == ArtifactStatus.completed:
+                    break
+                master_artifact = None
         else:
             renders = await self.render_repo.list_render_artifacts(production_id)
-            master_artifact = next((r for r in renders if r.artifact_type in (ArtifactType.MASTER, ArtifactType.STUDIO_VOICE_MASTER) and r.status == ArtifactStatus.completed), None)
+            master_artifact = next(
+                (
+                    r
+                    for r in renders
+                    if r.status == ArtifactStatus.completed
+                    and r.artifact_type
+                    in (
+                        ArtifactType.FINAL_MIX,
+                        ArtifactType.MASTER,
+                        ArtifactType.STUDIO_VOICE_MASTER,
+                        ArtifactType.VOICEOVER_PREVIEW,
+                        ArtifactType.PREVIEW,
+                    )
+                ),
+                None,
+            )
             if master_artifact:
                 edl = await self.edl_repo.get_edl(production_id, master_artifact.edl_id)
-        # Release Review & Gate Check
         release_review = await self.release_review_repo.get_latest_release_review(production_id)
 
         # Packaging
@@ -316,19 +336,39 @@ class YouTubePublishService:
         edl = await self.edl_repo.get_latest_edl(production_id)
         master_artifact: RenderArtifact | None = None
         if edl:
-            master_artifact = await self.render_repo.get_render_artifact_by_type(
-                production_id, edl.edl_id, ArtifactType.MASTER
-            )
-            if not master_artifact:
+            for candidate_type in [
+                ArtifactType.FINAL_MIX,
+                ArtifactType.MASTER,
+                ArtifactType.STUDIO_VOICE_MASTER,
+                ArtifactType.VOICEOVER_PREVIEW,
+                ArtifactType.PREVIEW,
+            ]:
                 master_artifact = await self.render_repo.get_render_artifact_by_type(
-                    production_id, edl.edl_id, ArtifactType.STUDIO_VOICE_MASTER
+                    production_id, edl.edl_id, candidate_type
                 )
+                if master_artifact and master_artifact.status == ArtifactStatus.completed:
+                    break
+                master_artifact = None
         else:
             renders = await self.render_repo.list_render_artifacts(production_id)
-            master_artifact = next((r for r in renders if r.artifact_type in (ArtifactType.MASTER, ArtifactType.STUDIO_VOICE_MASTER) and r.status == ArtifactStatus.completed), None)
+            master_artifact = next(
+                (
+                    r
+                    for r in renders
+                    if r.status == ArtifactStatus.completed
+                    and r.artifact_type
+                    in (
+                        ArtifactType.FINAL_MIX,
+                        ArtifactType.MASTER,
+                        ArtifactType.STUDIO_VOICE_MASTER,
+                        ArtifactType.VOICEOVER_PREVIEW,
+                        ArtifactType.PREVIEW,
+                    )
+                ),
+                None,
+            )
             if master_artifact:
                 edl = await self.edl_repo.get_edl(production_id, master_artifact.edl_id)
-
         if not master_artifact or master_artifact.status != ArtifactStatus.completed:
             raise ValueError("Approved Master render artifact not found or rendering incomplete.")
 
