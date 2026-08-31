@@ -7415,10 +7415,10 @@
           },
           "tempo_adjustment": {
             "type": "number",
-            "maximum": 1.1,
-            "minimum": 0.9,
+            "maximum": 5.0,
+            "minimum": 0.5,
             "title": "Tempo Adjustment",
-            "description": "Applied tempo multiplier (max 3-5%)",
+            "description": "Applied tempo multiplier / time-fit ratio",
             "default": 1.0
           },
           "error_code": {

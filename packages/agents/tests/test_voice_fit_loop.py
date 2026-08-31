@@ -14,6 +14,7 @@ from croviq_agents.voice import (
     VoiceFitAttempt,
     VoiceReplicationService,
     find_candidate_voice_sample_interval,
+    fit_pcm_to_duration,
 )
 from croviq_domain.agent_config import (
     GOOGLE_VOICE_CONSENT_PHRASE_EN,
@@ -103,12 +104,12 @@ async def test_tts_fit_loop_retries_on_overrun_and_accepts():
 
 
 @pytest.mark.asyncio
-async def test_tts_fit_loop_fails_gracefully_after_max_attempts():
+async def test_tts_fit_loop_applies_deterministic_final_fit_after_max_attempts():
     synthesizer = StudioVoiceSynthesizer()
 
-    # Mock TTS always returning over-budget audio (e.g. 8000ms for 4000ms window)
+    # Mock TTS always returning over-budget valid PCM audio (e.g. 8000ms for 4000ms window)
     async def mock_tts(text: str, voice_id: str) -> tuple[int, bytes]:
-        return 8000, b"too_long_audio"
+        return 8000, b"\x01\x00" * (24000 * 8)
 
     async def mock_rewrite(text: str, max_dur_s: float, attempt: int) -> str:
         return f"Attempt {attempt} text"
@@ -119,18 +120,38 @@ async def test_tts_fit_loop_fails_gracefully_after_max_attempts():
         source_start_ms=0,
         source_end_ms=4000,
         available_duration_ms=4000,
-        original_text="A very long sentence that never fits in the window.",
+        original_text="A very long sentence that never fits naturally in the window.",
         voice_id="Puck",
         tts_fn=mock_tts,
         rewrite_fn=mock_rewrite,
         max_attempts=3,
     )
 
-    assert segment.status == NarrationSegmentStatus.FAILED
+    # Bounded semantic rewrites exhausted -> deterministic final-fit accepts
+    assert segment.status == NarrationSegmentStatus.ACCEPTED
     assert segment.attempts == 3
-    # Hard timing rule: Never lengthen video!
+    assert segment.generated_duration_ms == 4000
     assert segment.available_duration_ms == 4000
+    assert segment.tempo_adjustment == 2.0
 
+
+def test_fit_pcm_to_duration_resamples_cleanly():
+    # 1000ms source at 24kHz = 24,000 samples = 48,000 bytes
+    sample_pcm = b"\x05\x00\x10\x00" * 12_000
+    # Fit into 500ms (12,000 samples = 24,000 bytes)
+    fitted = fit_pcm_to_duration(
+        sample_pcm,
+        source_duration_ms=1000,
+        target_duration_ms=500,
+        sample_rate=24000,
+    )
+    assert len(fitted) == 24000
+    assert isinstance(fitted, bytes)
+    assert len(fitted) > 0
+
+    # Empty input returns empty bytes
+    assert fit_pcm_to_duration(b"", 1000, 500) == b""
+    assert fit_pcm_to_duration(sample_pcm, 1000, 0) == b""
 
 @pytest.mark.asyncio
 async def test_tts_fit_loop_converts_provider_exception_to_failed_segment_without_escaping_gather():

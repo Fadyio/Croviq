@@ -1436,7 +1436,7 @@ export interface components {
       audio_artifact_reference?: string | null;
       /** Number of TTS synthesis/rewrite attempts */
       attempts?: number;
-      /** Applied tempo multiplier (max 3-5%) */
+      /** Applied tempo multiplier / time-fit ratio */
       tempo_adjustment?: number;
       /** Stable machine-readable synthesis failure code */
       error_code?: string | null;

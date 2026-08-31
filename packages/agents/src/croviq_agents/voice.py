@@ -1,5 +1,6 @@
 """Studio Voice synthesis service, TTS fit loop, hard duration budget enforcement, and voice catalog."""
 
+import array
 import base64
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -119,6 +120,51 @@ class VoiceFitAttempt:
     tempo_adjustment: float
     status: str
 
+
+def fit_pcm_to_duration(
+    pcm_bytes: bytes,
+    source_duration_ms: int,
+    target_duration_ms: int,
+    sample_rate: int = 24000,
+) -> bytes:
+    """Deterministically time-fit 16-bit mono PCM into a target duration window.
+
+    Preserves signed 16-bit PCM, never throws for non-empty audio, and guarantees
+    exact sample count matching round(sample_rate * target_duration_ms / 1000).
+    """
+    if not pcm_bytes or target_duration_ms <= 0:
+        return b""
+    even_len = len(pcm_bytes) - (len(pcm_bytes) % 2)
+    if even_len == 0:
+        return b""
+    src_samples = array.array("h")
+    src_samples.frombytes(pcm_bytes[:even_len])
+    n_src = len(src_samples)
+    if n_src == 0:
+        return b""
+
+    target_samples = max(1, round(sample_rate * target_duration_ms / 1000.0))
+    if n_src == target_samples:
+        return pcm_bytes[:even_len]
+
+    out_samples = array.array("h", [0] * target_samples)
+    scale = (n_src - 1) / max(1, target_samples - 1)
+
+    for i in range(target_samples):
+        pos = i * scale
+        idx = int(pos)
+        frac = pos - idx
+        if idx >= n_src - 1:
+            val = src_samples[-1]
+        else:
+            val = int(round((1.0 - frac) * src_samples[idx] + frac * src_samples[idx + 1]))
+        if val > 32767:
+            val = 32767
+        elif val < -32768:
+            val = -32768
+        out_samples[i] = val
+
+    return out_samples.tobytes()
 
 class StudioVoiceSynthesizer:
     """Orchestrates section-by-section Voiceover / Studio Voice generation with 4-pass duration constraints."""
@@ -256,8 +302,46 @@ class StudioVoiceSynthesizer:
                     audio_bytes,
                 )
 
+        if last_audio_bytes and last_measured_ms > 0 and available_duration_ms > 0:
+            fitted_pcm = fit_pcm_to_duration(
+                last_audio_bytes,
+                source_duration_ms=last_measured_ms,
+                target_duration_ms=available_duration_ms,
+                sample_rate=24000,
+            )
+            tempo_adjustment = round(last_measured_ms / available_duration_ms, 3)
+            logger.info(
+                "Narration fit applied deterministic time-fit segment=%s text=%r available_duration_ms=%d generated_duration_ms=%d tempo_adjustment=%.3f",
+                segment_id,
+                current_text,
+                available_duration_ms,
+                last_measured_ms,
+                tempo_adjustment,
+            )
+            return (
+                NarrationSegment(
+                    segment_id=segment_id,
+                    production_id=production_id,
+                    source_start_ms=source_start_ms,
+                    source_end_ms=source_end_ms,
+                    edited_start_ms=edited_start_ms,
+                    edited_end_ms=edited_end_ms,
+                    change_type=change_type,
+                    meaning_preserved=True,
+                    available_duration_ms=available_duration_ms,
+                    original_text=original_text,
+                    rewritten_text=current_text,
+                    voice_id=voice_id,
+                    generated_duration_ms=available_duration_ms,
+                    status=NarrationSegmentStatus.ACCEPTED,
+                    attempts=max_attempts,
+                    tempo_adjustment=tempo_adjustment,
+                ),
+                fitted_pcm,
+            )
+
         logger.warning(
-            "Narration fit exhausted segment=%s text=%r duration_ms=%d generated_duration_ms=%d provider=%s model=%s attempt=%d",
+            "Narration fit exhausted without audio segment=%s text=%r duration_ms=%d generated_duration_ms=%d provider=%s model=%s attempt=%d",
             segment_id,
             current_text,
             available_duration_ms,

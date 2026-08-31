@@ -462,15 +462,15 @@ async def test_studio_voice_generation_marks_incomplete_when_no_audio_synthesize
         edl_id=edl.edl_id,
     )
 
-    # Create fake genai client where TTS returns 10,000ms audio (exceeds 500ms budget)
-    class AlwaysOverbudgetClient(FakeGenAIClient):
+    # Create fake genai client where TTS returns empty audio
+    class NoAudioClient(FakeGenAIClient):
         async def synthesize_studio_voice(self, text: str, voice_id: str = "Puck", production_id: str = "unknown", request_id: str = "unknown"):
-            return 10000, b"\x00" * 480000
+            return 0, b""
 
         async def generate_narration_rewrite(self, original_text: str, available_duration_s: float, attempt: int = 1, production_id: str = "unknown", request_id: str = "unknown"):
             return original_text
 
-    app.dependency_overrides[get_genai_client] = lambda: AlwaysOverbudgetClient()
+    app.dependency_overrides[get_genai_client] = lambda: NoAudioClient()
 
     gen_resp = client.post(f"/api/productions/{prod_id}/studio-voice")
     assert gen_resp.status_code == 200
@@ -507,10 +507,12 @@ class _RecordingStudioVoiceClient(FakeGenAIClient):
         self.synthesized_texts.append(text)
         self.synthesized_voices.append(voice_id)
         if self.fault == "failed" and "second canonical" in text.lower():
-            return 20_000, b"\x01" * 960_000
+            raise RuntimeError("TTS provider failed")
+        if self.fault == "error" and "second canonical" in text.lower():
+            raise RuntimeError("TTS provider failed")
         if self.fault == "missing" and "second canonical" in text.lower():
             return 500, b""
-        return 500, b"\x01" * 24_000
+        return 500, b"\x01\x00" * 12_000
 
     async def generate_narration_rewrite(
         self,
