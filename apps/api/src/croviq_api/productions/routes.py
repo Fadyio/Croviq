@@ -1821,7 +1821,37 @@ async def update_production_music(
     )
 
 
-
+@router.delete(
+    "/productions/{production_id}/music",
+    response_model=EDLDetailResponse,
+    summary="Remove Background Music Mix",
+    description="Remove background music from the active EDL.",
+)
+async def delete_production_music(
+    production_id: str,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
+    edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
+) -> EDLDetailResponse:
+    prod = await _get_owned_production(production_id, current_user, production_repo)
+    edl = await edl_repo.get_latest_edl(production_id)
+    if not edl:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active EDL found for production",
+        )
+    updated_edl = edl.model_copy(update={
+        "version": edl.version + 1,
+        "background_music": None,
+        "created_at": datetime.now(timezone.utc),
+    })
+    await edl_repo.save_edl(updated_edl)
+    from croviq_domain.edl import derive_keep_segments
+    return EDLDetailResponse(
+        edl=updated_edl,
+        keep_segments=derive_keep_segments(updated_edl),
+    )
 @router.get(
     "/productions/{production_id}/renders",
     response_model=RenderListResponse,
@@ -1936,13 +1966,18 @@ async def get_production_playback_urls(
     fm_eligible = fm_art and (fm_art.status.value if hasattr(fm_art.status, "value") else str(fm_art.status)).lower() == "completed"
     tasks.append(_sign_target(fm_art.gcs_bucket, fm_art.gcs_object, check_exists=True) if fm_eligible else asyncio.sleep(0, result=None))
 
+    music_eligible = bool(prod.source_media and latest_edl and latest_edl.background_music and latest_edl.background_music.music_gcs_object)
+    music_bucket = prod.source_media.gcs_bucket if prod.source_media else ""
+    music_obj = latest_edl.background_music.music_gcs_object if (latest_edl and latest_edl.background_music) else ""
+    tasks.append(_sign_target(music_bucket, music_obj, check_exists=False) if music_eligible else asyncio.sleep(0, result=None))
+
     signed_results = await asyncio.gather(*tasks)
     source_url = signed_results[0]
     preview_url = signed_results[1]
     master_url = signed_results[2]
     sv_url = signed_results[3]
     final_mix_url = signed_results[4]
-
+    music_url = signed_results[5]
     source_dur = transcript.duration_ms if transcript else (latest_edl.source_duration_ms if latest_edl else 0)
     original_state = MediaOutputState(
         available=bool(source_url),
@@ -2002,6 +2037,7 @@ async def get_production_playback_urls(
         master_url=master_url,
         studio_voice_preview_url=sv_url,
         final_mix_url=final_mix_url,
+        music_url=music_url,
         original=original_state,
         edited=edited_state,
         voiceover=voiceover_state,
@@ -2143,7 +2179,7 @@ async def generate_studio_voice(
                         avail_ms = ed_end - ed_start
                         if avail_ms <= 0:
                             continue
-                        speech_intervals.append((ed_start, min(total_dur_ms, ed_start + seg.generated_duration_ms)))
+                        speech_intervals.append((ed_start, max(ed_end, min(total_dur_ms, ed_start + seg.generated_duration_ms))))
                         start_sample = int(sample_rate * ed_start / 1000)
                         start_byte = start_sample * 2
                         copy_len = min(len(pcm_bytes), avail_ms * 48, len(audio_buffer) - start_byte)
@@ -2237,31 +2273,33 @@ async def generate_studio_voice(
 
                 settings = get_settings()
                 target = await media_storage.generate_signed_read_target(
-                    bucket=art.gcs_bucket,
-                    object_name=art.gcs_object,
+                    bucket=prod.source_media.gcs_bucket,
+                    object_name=gcs_obj,
                     expiry_seconds=settings.signed_url_expiry_seconds,
                 )
                 sv_playback_url = target.read_url
 
-                accepted_vo = [
+                vo_segments = [
                     VoiceoverSegment(
                         segment_id=s.segment_id,
                         source_start_ms=s.source_start_ms,
                         source_end_ms=s.source_end_ms,
-                        text=s.rewritten_text,
+                        text=s.rewritten_text or s.original_text,
                         original_text=s.original_text,
+                        voice_mode="STUDIO_VOICE",
                         voice_id=selected_voice,
                         generated_duration_ms=s.generated_duration_ms,
-                        preview_artifact_id=art.artifact_id,
                     )
                     for s in segments
                     if s.status == NarrationSegmentStatus.ACCEPTED
                 ]
-                edl.voiceover_segments = accepted_vo
+                edl = edl.model_copy(update={
+                    "voiceover_segments": vo_segments,
+                    "created_at": datetime.now(timezone.utc),
+                })
                 await edl_repo.save_edl(edl)
         except Exception as exc:
             logger.warning("Voiceover render preview failed: %s", exc)
-
     accepted_count = sum(1 for s in segments if s.status == NarrationSegmentStatus.ACCEPTED)
     if narration_gcs_obj:
         for s in segments:

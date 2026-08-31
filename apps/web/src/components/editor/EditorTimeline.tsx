@@ -14,10 +14,10 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   formatTimecode,
+  type PreviewMode,
   type TimelineBlock,
   type TwickTimelineRepresentation,
 } from "../../lib/edl-adapter";
-
 interface EditorTimelineProps {
   twickData: TwickTimelineRepresentation;
   currentTimeMs: number;
@@ -28,6 +28,7 @@ interface EditorTimelineProps {
   onSelectRange?: (startMs: number, endMs: number) => void;
   onSelectPoint?: (targetMs: number) => void;
   isPlaying?: boolean;
+  previewMode?: PreviewMode;
   className?: string;
 }
 
@@ -40,9 +41,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   onSeek,
   onSelectRange,
   onSelectPoint,
+  previewMode = "final_mix",
   className = "",
 }) => {
-  const _containerRef = useRef<HTMLDivElement>(null);
   const trackAreaRef = useRef<HTMLDivElement>(null);
   const scrubStartMsRef = useRef<number | null>(null);
   const latestScrubMsRef = useRef<number | null>(null);
@@ -188,6 +189,35 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   const chapterBlocks = twickData.blocks.filter((b) => b.trackId === "chapters");
   const captionBlocks = twickData.blocks.filter((b) => b.trackId === "captions");
 
+  const isOriginalMode = previewMode === "original";
+  const isEditedMode = previewMode === "edited";
+  const isVoiceoverMode = previewMode === "studio_voice";
+  const isFinalMixMode = !previewMode || previewMode === "final_mix";
+
+  // Mode-specific Track Visibility Rules:
+  // ORIGINAL: Video, Original Audio. Hide Edits, Coverage, Voiceover, Music, Chapters, Captions.
+  // EDITED: Video, Audio, Edits, Coverage, Chapters, Captions. Hide Voiceover, Music.
+  // VOICEOVER: Video, Voiceover, Edits, Coverage, Chapters, Captions. Hide Audio, Music.
+  // FINAL_MIX: Video, Audio, Edits, Coverage, Voiceover, Music, Chapters, Captions.
+  const showVideoTrack = true;
+  const showAudioTrack = isOriginalMode || isEditedMode || isFinalMixMode;
+  const showEditsTrack = !isOriginalMode;
+  const showCoverageTrack = !isOriginalMode && coverageBlocks.length > 0;
+  const showVoiceoverTrack = (isVoiceoverMode || isFinalMixMode) && voiceoverBlocks.length > 0;
+  const showMusicTrack = isFinalMixMode && musicBlocks.length > 0;
+  const showChaptersTrack = !isOriginalMode && chapterBlocks.length > 0;
+  const showCaptionsTrack = !isOriginalMode && captionBlocks.length > 0;
+
+  // Mode-specific Video Keep Segments:
+  const visibleKeepSegments = isOriginalMode
+    ? [[0, durationMs]]
+    : twickData.keepSegments;
+
+  // Mode-specific Audio Regions:
+  const visibleAudioRegions = isOriginalMode
+    ? [{ type: "speech" as const, startMs: 0, endMs: durationMs, label: "Original source audio" }]
+    : twickData.audioRegions;
+
   return (
     <div
       className={`h-[180px] shrink-0 flex flex-col bg-surface-1 rounded-xl border border-border-subtle overflow-hidden select-none shadow-md ${className}`}
@@ -199,14 +229,23 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           <span className="text-[11px] font-semibold text-text-primary tracking-tight">
             Timeline
           </span>
-          <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-text-muted">
-            <span>&middot;</span>
-            <span className="font-medium text-text-secondary">{twickData.activeCutCount} cuts</span>
-            <span>&middot;</span>
-            <span>{twickData.coverageMarkerCount} coverage</span>
-            <span>&middot;</span>
-            <span>{chapterBlocks.length} chapters</span>
-          </div>
+          {isOriginalMode ? (
+            <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-text-muted">
+              <span>&middot;</span>
+              <span className="font-medium text-text-secondary">Untouched source media</span>
+              <span>&middot;</span>
+              <span>No edits</span>
+            </div>
+          ) : (
+            <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-text-muted">
+              <span>&middot;</span>
+              <span className="font-medium text-text-secondary">{twickData.activeCutCount} cuts</span>
+              <span>&middot;</span>
+              <span>{twickData.coverageMarkerCount} coverage</span>
+              <span>&middot;</span>
+              <span>{chapterBlocks.length} chapters</span>
+            </div>
+          )}
         </div>
 
         {/* Zoom Controls */}
@@ -246,24 +285,31 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
         {/* Left Track Headers Column (Fixed Width 90px) */}
         <div className="w-[90px] shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col pt-5 z-10 overflow-y-auto divide-y divide-border-subtle/30">
           {/* Track 1 Header: Video */}
-          <div className="h-5 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
-            <Video className="w-3 h-3 text-text-muted/70 shrink-0" />
-            <span className="truncate">Video</span>
-          </div>
+          {showVideoTrack && (
+            <div className="h-5 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
+              <Video className="w-3 h-3 text-text-muted/70 shrink-0" />
+              <span className="truncate">Video</span>
+            </div>
+          )}
 
           {/* Track 2 Header: Audio */}
-          <div className="h-5 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
-            <Volume2 className="w-3 h-3 text-text-muted/70 shrink-0" />
-            <span className="truncate">Audio</span>
-          </div>
+          {showAudioTrack && (
+            <div className="h-5 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
+              <Volume2 className="w-3 h-3 text-text-muted/70 shrink-0" />
+              <span className="truncate">{isOriginalMode ? "Original Audio" : "Audio"}</span>
+            </div>
+          )}
 
           {/* Track 3 Header: Edits */}
-          <div className="h-8 px-2 flex items-center gap-1.5 text-[10px] font-semibold text-text-primary">
-            <Scissors className="w-3 h-3 text-primary shrink-0" />
-            <span className="truncate">Edits</span>
-          </div>
+          {showEditsTrack && (
+            <div className="h-8 px-2 flex items-center gap-1.5 text-[10px] font-semibold text-text-primary">
+              <Scissors className="w-3 h-3 text-primary shrink-0" />
+              <span className="truncate">Edits</span>
+            </div>
+          )}
+
           {/* Track 4 Header: Coverage */}
-          {coverageBlocks.length > 0 && (
+          {showCoverageTrack && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
               <Layers className="w-3 h-3 text-info shrink-0" />
               <span className="truncate">Coverage</span>
@@ -271,7 +317,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           )}
 
           {/* Track 5 Header: Voiceover */}
-          {voiceoverBlocks.length > 0 && (
+          {showVoiceoverTrack && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-blue-400">
               <Mic className="w-3 h-3 text-blue-400 shrink-0" />
               <span className="truncate">Voiceover</span>
@@ -279,7 +325,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           )}
 
           {/* Track 6 Header: Music */}
-          {musicBlocks.length > 0 && (
+          {showMusicTrack && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-purple-400">
               <Music className="w-3 h-3 text-purple-400 shrink-0" />
               <span className="truncate">Music</span>
@@ -287,7 +333,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           )}
 
           {/* Track 7 Header: Chapters */}
-          {chapterBlocks.length > 0 && (
+          {showChaptersTrack && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-amber-400/80">
               <Bookmark className="w-3 h-3 text-amber-400 shrink-0" />
               <span className="truncate">Chapters</span>
@@ -295,13 +341,14 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           )}
 
           {/* Track 8 Header: Captions */}
-          {captionBlocks.length > 0 && (
+          {showCaptionsTrack && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-secondary">
               <FileText className="w-3 h-3 text-text-muted shrink-0" />
               <span className="truncate">Captions</span>
             </div>
           )}
         </div>
+
         {/* Right Scrollable Timeline Canvas */}
         <div
           ref={trackAreaRef}
@@ -336,136 +383,145 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             </div>
 
             {/* 2. Track 1 Content: VIDEO (Continuous solid rail with cuts) */}
-            <div className="h-5 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-1">
-              <div className="absolute inset-x-1 h-2 rounded bg-surface-3/90 border border-border-subtle flex overflow-hidden">
-                {twickData.keepSegments.map(([startMs, endMs], idx) => {
-                  const segLeft = msToPixels(startMs);
-                  const segWidth = Math.max(2, msToPixels(endMs) - segLeft);
-                  return (
-                    <button
-                      type="button"
-                      key={`keep-${idx}`}
-                      onMouseDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSelectBlock({
-                          id: `keep-${idx}`,
-                          trackId: "video",
-                          label: "Video section",
-                          startMs,
-                          endMs,
-                          durationMs: endMs - startMs,
-                          type: "keep",
-                          details: { summary: "Continuous source footage retained in the edit." },
-                        });
-                      }}
-                      className={`absolute top-0 bottom-0 bg-primary/40 border-r border-background/60 hover:bg-primary/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
-                        selectedBlockId === `keep-${idx}` ? "ring-1 ring-primary" : ""
-                      }`}
-                      style={{ left: `${segLeft}px`, width: `${segWidth}px` }}
-                      title={`Video section ${formatTimecode(startMs)} → ${formatTimecode(endMs)}`}
-                      aria-label={`Select video section from ${formatTimecode(startMs)} to ${formatTimecode(endMs)}`}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 3. Track 2 Content: AUDIO (Media Analysis Grounded: Speech, Silence, Removed) */}
-            <div className="h-5 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-2/10 overflow-hidden">
-              <div className="absolute inset-x-1 h-0.5 bg-surface-3/40 rounded-full" />
-              {twickData.audioRegions && twickData.audioRegions.length > 0 ? (
-                twickData.audioRegions.map((region, idx) => {
-                  const leftPx = msToPixels(region.startMs);
-                  const widthPx = Math.max(2, msToPixels(region.endMs) - leftPx);
-                  const label =
-                    region.label ||
-                    (region.type === "speech"
-                      ? "Spoken audio"
-                      : region.type === "removed"
-                        ? "Removed audio"
-                        : "Pause");
-                  return (
-                    <button
-                      type="button"
-                      key={`aud-${idx}`}
-                      onMouseDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSelectBlock({
-                          id: `audio-${idx}`,
-                          trackId: "audio",
-                          label,
-                          startMs: region.startMs,
-                          endMs: region.endMs,
-                          durationMs: region.endMs - region.startMs,
-                          type: region.type === "removed" ? "cut-safe" : "source",
-                          details: {
-                            summary:
-                              region.type === "speech"
-                                ? "Speech activity detected in the source audio."
-                                : region.type === "removed"
-                                  ? "This audio range is removed by the edit."
-                                  : "A pause was detected in the source audio.",
-                          },
-                        });
-                      }}
-                      className={`absolute top-1 bottom-1 rounded-xs border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
-                        region.type === "speech"
-                          ? "border-emerald-400/80 bg-emerald-500/50 hover:bg-emerald-500/70"
-                          : region.type === "removed"
-                            ? "border-danger/60 bg-danger/40 hover:bg-danger/60"
-                            : "border-border-strong bg-surface-3/80 hover:bg-surface-3"
-                      } ${selectedBlockId === `audio-${idx}` ? "ring-1 ring-primary" : ""}`}
-                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                      title={`${label} ${formatTimecode(region.startMs)} → ${formatTimecode(region.endMs)}`}
-                      aria-label={`Select ${label.toLowerCase()} from ${formatTimecode(region.startMs)} to ${formatTimecode(region.endMs)}`}
-                    />
-                  );
-                })
-              ) : (
-                <div className="absolute inset-x-1 h-1.5 rounded-full bg-emerald-500/30 border border-emerald-500/40" />
-              )}
-            </div>
-            {/* 4. Track 3 Content: EDITS (Clean Human Tooltips & Badges) */}
-            <div className="h-8 border-b border-border-subtle/30 relative flex items-center px-1 bg-surface-2/20 shrink-0">
-              {dialogueCutBlocks.length === 0 ? (
-                <div className="absolute inset-0 flex items-center px-3 text-[10px] text-text-muted pointer-events-none">
-                  <span>No dialogue cuts</span>
+            {showVideoTrack && (
+              <div className="h-5 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-1">
+                <div className="absolute inset-x-1 h-2 rounded bg-surface-3/90 border border-border-subtle flex overflow-hidden">
+                  {visibleKeepSegments.map(([startMs, endMs], idx) => {
+                    const segLeft = msToPixels(startMs);
+                    const segWidth = Math.max(2, msToPixels(endMs) - segLeft);
+                    return (
+                      <button
+                        type="button"
+                        key={`keep-${idx}`}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onSelectBlock({
+                            id: `keep-${idx}`,
+                            trackId: "video",
+                            label: isOriginalMode ? "Original Video" : "Video section",
+                            startMs,
+                            endMs,
+                            durationMs: endMs - startMs,
+                            type: "keep",
+                            details: {
+                              summary: isOriginalMode
+                                ? "Full untouched continuous source video."
+                                : "Continuous source footage retained in the edit.",
+                            },
+                          });
+                        }}
+                        className={`absolute top-0 bottom-0 bg-primary/40 border-r border-background/60 hover:bg-primary/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+                          selectedBlockId === `keep-${idx}` ? "ring-1 ring-primary" : ""
+                        }`}
+                        style={{ left: `${segLeft}px`, width: `${segWidth}px` }}
+                        title={`Video section ${formatTimecode(startMs)} → ${formatTimecode(endMs)}`}
+                        aria-label={`Select video section from ${formatTimecode(startMs)} to ${formatTimecode(endMs)}`}
+                      />
+                    );
+                  })}
                 </div>
-              ) : (
-                dialogueCutBlocks.map((cut) => {
-                  const leftPx = msToPixels(cut.startMs);
-                  const widthPx = Math.max(16, msToPixels(cut.endMs) - leftPx);
-                  const isSelected = selectedBlockId === cut.id;
+              </div>
+            )}
+            {/* 3. Track 2 Content: AUDIO */}
+            {showAudioTrack && (
+              <div className="h-5 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-2/10 overflow-hidden">
+                <div className="absolute inset-x-1 h-0.5 bg-surface-3/40 rounded-full" />
+                {visibleAudioRegions && visibleAudioRegions.length > 0 ? (
+                  visibleAudioRegions.map((region, idx) => {
+                    const leftPx = msToPixels(region.startMs);
+                    const widthPx = Math.max(2, msToPixels(region.endMs) - leftPx);
+                    const label =
+                      region.label ||
+                      (region.type === "speech"
+                        ? "Spoken audio"
+                        : region.type === "removed"
+                          ? "Removed audio"
+                          : "Pause");
+                    return (
+                      <button
+                        type="button"
+                        key={`aud-${idx}`}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onSelectBlock({
+                            id: `audio-${idx}`,
+                            trackId: "audio",
+                            label,
+                            startMs: region.startMs,
+                            endMs: region.endMs,
+                            durationMs: region.endMs - region.startMs,
+                            type: region.type === "removed" ? "cut-safe" : "source",
+                            details: {
+                              summary:
+                                region.type === "speech"
+                                  ? "Speech activity detected in the source audio."
+                                  : region.type === "removed"
+                                    ? "This audio range is removed by the edit."
+                                    : "A pause was detected in the source audio.",
+                            },
+                          });
+                        }}
+                        className={`absolute top-1 bottom-1 rounded-xs border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+                          region.type === "speech"
+                            ? "border-emerald-400/80 bg-emerald-500/50 hover:bg-emerald-500/70"
+                            : region.type === "removed"
+                              ? "border-danger/60 bg-danger/40 hover:bg-danger/60"
+                              : "border-border-strong bg-surface-3/80 hover:bg-surface-3"
+                        } ${selectedBlockId === `audio-${idx}` ? "ring-1 ring-primary" : ""}`}
+                        style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                        title={`${label} ${formatTimecode(region.startMs)} → ${formatTimecode(region.endMs)}`}
+                        aria-label={`Select ${label.toLowerCase()} from ${formatTimecode(region.startMs)} to ${formatTimecode(region.endMs)}`}
+                      />
+                    );
+                  })
+                ) : (
+                  <div className="absolute inset-x-1 h-1.5 rounded-full bg-emerald-500/30 border border-emerald-500/40" />
+                )}
+              </div>
+            )}
+            {/* 4. Track 3 Content: EDITS */}
+            {showEditsTrack && (
+              <div className="h-8 border-b border-border-subtle/30 relative flex items-center px-1 bg-surface-2/20 shrink-0">
+                {dialogueCutBlocks.length === 0 ? (
+                  <div className="absolute inset-0 flex items-center px-3 text-[10px] text-text-muted pointer-events-none">
+                    <span>No dialogue cuts</span>
+                  </div>
+                ) : (
+                  dialogueCutBlocks.map((cut) => {
+                    const leftPx = msToPixels(cut.startMs);
+                    const widthPx = Math.max(16, msToPixels(cut.endMs) - leftPx);
+                    const isSelected = selectedBlockId === cut.id;
 
-                  return (
-                    <button
-                      type="button"
-                      key={cut.id}
-                      onMouseDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSelectBlock(cut);
-                      }}
-                      className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center justify-center px-1.5 text-[9px] font-mono font-medium truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                        cut.type === "cut-safe"
-                          ? "bg-danger/20 border border-danger/60 text-danger hover:bg-danger/35 shadow-xs"
-                          : cut.type === "cut-needs-coverage"
-                            ? "bg-warning/20 border border-warning/60 text-warning hover:bg-warning/35 shadow-xs"
-                            : "bg-surface-3 border border-border-strong text-text-muted line-through opacity-60"
-                      } ${isSelected ? "ring-2 ring-primary shadow-md scale-[1.02] z-10" : ""}`}
-                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                      title={`${cut.label}: ${formatTimecode(cut.startMs)} → ${formatTimecode(cut.endMs)}`}
-                    >
-                      <span className="truncate font-sans font-semibold">{cut.label}</span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
+                    return (
+                      <button
+                        type="button"
+                        key={cut.id}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onSelectBlock(cut);
+                        }}
+                        className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all flex items-center justify-center px-1.5 text-[9px] font-mono font-medium truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                          cut.type === "cut-safe"
+                            ? "bg-danger/20 border border-danger/60 text-danger hover:bg-danger/35 shadow-xs"
+                            : cut.type === "cut-needs-coverage"
+                              ? "bg-warning/20 border border-warning/60 text-warning hover:bg-warning/35 shadow-xs"
+                              : "bg-surface-3 border border-border-strong text-text-muted line-through opacity-60"
+                        } ${isSelected ? "ring-2 ring-primary shadow-md scale-[1.02] z-10" : ""}`}
+                        style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                        title={`${cut.label}: ${formatTimecode(cut.startMs)} → ${formatTimecode(cut.endMs)}`}
+                      >
+                        <span className="truncate font-sans font-semibold">{cut.label}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
             {/* 5. Track 4 Content: COVERAGE */}
-            {coverageBlocks.length > 0 && (
+            {showCoverageTrack && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-1">
                 {coverageBlocks.map((cov) => {
                   const leftPx = msToPixels(cov.startMs);
@@ -496,8 +552,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 })}
               </div>
             )}
-            {/* 6. Track 5 Content: VOICEOVER (Individually visible voiceover replacement regions) */}
-            {voiceoverBlocks.length > 0 && (
+            {/* 6. Track 5 Content: VOICEOVER */}
+            {showVoiceoverTrack && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-blue-500/5">
                 {voiceoverBlocks.map((vo) => {
                   const leftPx = msToPixels(vo.startMs);
@@ -526,8 +582,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               </div>
             )}
 
-            {/* 7. Track 6 Content: MUSIC (Lyria background music bed with controls) */}
-            {musicBlocks.length > 0 && (
+            {/* 7. Track 6 Content: MUSIC */}
+            {showMusicTrack && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-purple-500/5">
                 {musicBlocks.map((mb) => {
                   const leftPx = msToPixels(mb.startMs);
@@ -555,9 +611,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 })}
               </div>
             )}
-
-            {/* 8. Track 7 Content: CHAPTERS (Semantic Chapter Markers) */}
-            {chapterBlocks.length > 0 && (
+            {/* 8. Track 7 Content: CHAPTERS */}
+            {showChaptersTrack && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-amber-500/5">
                 {chapterBlocks.map((chap) => {
                   const leftPx = msToPixels(chap.startMs);
@@ -585,9 +640,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 })}
               </div>
             )}
-
             {/* 9. Track 8 Content: CAPTIONS */}
-            {captionBlocks.length > 0 && (
+            {showCaptionsTrack && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-2/10">
                 {captionBlocks.map((cap) => {
                   const leftPx = msToPixels(cap.startMs);
@@ -613,7 +667,6 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 })}
               </div>
             )}
-
             {selectedTimeRange && (
               <div
                 className="pointer-events-none absolute bottom-0 top-5 z-10 border-x border-primary/60 bg-primary/10"

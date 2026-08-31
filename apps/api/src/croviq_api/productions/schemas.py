@@ -447,7 +447,7 @@ class ProductionPlaybackResponse(BaseModel):
     master_url: str | None = Field(default=None, description="Master video playback URL")
     studio_voice_preview_url: str | None = Field(default=None, description="Studio Voice video playback URL")
     final_mix_url: str | None = Field(default=None, description="Final Mix video playback URL")
-
+    music_url: str | None = Field(default=None, description="Signed background music track playback URL")
     original: MediaOutputState = Field(default_factory=MediaOutputState, description="Original source media state")
     edited: MediaOutputState = Field(default_factory=MediaOutputState, description="Edited preview render state")
     voiceover: MediaOutputState = Field(default_factory=MediaOutputState, description="Voiceover/Studio Voice preview render state")

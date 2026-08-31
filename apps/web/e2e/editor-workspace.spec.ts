@@ -902,6 +902,116 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
       });
     },
   );
+
+  await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/studio-voice`, async (route) => {
+    if (route.request().method() === "POST") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          result: {
+            production_id: FAIRPHONE_PRODUCTION_ID,
+            voice_id: "Charon",
+            total_segments: 2,
+            accepted_segments: 2,
+            all_within_budget: true,
+            status: "completed",
+            segments: [
+              {
+                segment_id: "vo_01",
+                source_start_ms: 0,
+                source_end_ms: 12540,
+                original_text: "The Fairphone 6 Plus is an even snazzier version...",
+                rewritten_text: "The Fairphone 6 Plus is an upgraded version with more memory.",
+                voice_id: "Charon",
+                generated_duration_ms: 11200,
+                status: "accepted",
+              },
+            ],
+            created_at: "2026-08-26T00:02:40Z",
+            updated_at: "2026-08-26T00:02:45Z",
+          },
+          studio_voice_preview_url: "https://storage.googleapis.com/fake-voice-preview.mp4",
+        }),
+      });
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          voice_id: "Puck",
+          total_segments: 2,
+          accepted_segments: 2,
+          status: "completed",
+          created_at: "2026-08-26T00:02:40Z",
+          updated_at: "2026-08-26T00:02:45Z",
+        }),
+      });
+    }
+  });
+
+  await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/music/generate`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        edl: {
+          ...defaultFairphoneEdl,
+          background_music: {
+            style: "Minimal modern technology documentary underscore",
+            model_id: "lyria-3-pro-preview",
+            prompt: "Minimal modern technology documentary underscore, calm, focused, no vocals.",
+            volume_db: -24.0,
+            ducking_db: -14.0,
+            target_lufs: -32.0,
+            music_gcs_object: "workspaces/ws_demo/music/lyria_score.wav",
+            is_muted: false,
+          },
+        },
+        keep_segments: [[0, 113824]],
+      }),
+    });
+  });
+
+  await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/music`, async (route) => {
+    if (route.request().method() === "DELETE") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          edl: {
+            ...defaultFairphoneEdl,
+            background_music: null,
+          },
+          keep_segments: [[0, 113824]],
+        }),
+      });
+    } else {
+      const payload = route.request().postDataJSON() || {};
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          edl: {
+            ...defaultFairphoneEdl,
+            background_music: {
+              style: payload.style || "Minimal modern technology documentary underscore",
+              model_id: "lyria-3-pro-preview",
+              prompt: "Minimal modern technology documentary underscore",
+              volume_db: payload.volume_db ?? -24.0,
+              ducking_db: payload.ducking_db ?? -14.0,
+              target_lufs: -32.0,
+              music_gcs_object: "workspaces/ws_demo/music/lyria_score.wav",
+              is_muted: payload.is_muted ?? false,
+            },
+          },
+          keep_segments: [[0, 113824]],
+        }),
+      });
+    }
+  });
 };
 
 const loginAndNavigateToEditor = async (page: Page, options: MockEditorOptions = {}) => {
@@ -1581,5 +1691,123 @@ test.describe("Editor Workspace (Issue #28)", () => {
         fullPage: true,
       });
     }
+  });
+
+  test("BUG 18: Phase 1 & 5: Preview modes project truthful timeline tracks and media", async ({
+    page,
+  }) => {
+    await loginAndNavigateToEditor(page);
+    await expect(page.getByTestId("editor-workspace")).toBeVisible();
+
+    // 1. Initial default mode: Final Mix
+    await expect(page.getByTestId("preview-toggle-final-mix")).toBeVisible();
+    await expect(page.getByText("Video", { exact: true })).toBeVisible();
+    await expect(page.getByText("Voiceover", { exact: true })).toBeVisible();
+    await expect(page.getByText("Music", { exact: true })).toBeVisible();
+
+    // 2. Select Original mode
+    await page.getByRole("button", { name: "Original" }).first().click();
+    // In Original mode: Video and Original Audio should be visible
+    await expect(page.getByText("Video", { exact: true })).toBeVisible();
+    await expect(page.getByText("Original Audio", { exact: true })).toBeVisible();
+    await expect(page.getByText("Untouched source media")).toBeVisible();
+    // Edits, Voiceover, Music tracks must be hidden on timeline
+    await expect(
+      page.locator("[data-testid='editor-timeline']").getByText("Voiceover", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.locator("[data-testid='editor-timeline']").getByText("Music", { exact: true }),
+    ).toHaveCount(0);
+
+    // 3. Select Edited Preview mode
+    await page.getByTestId("preview-toggle-edited").click();
+    await expect(page.getByText("Video", { exact: true })).toBeVisible();
+    await expect(page.getByText("Audio", { exact: true })).toBeVisible();
+    await expect(page.getByText("Edits", { exact: true })).toBeVisible();
+    // Voiceover and Music must be hidden in Edited Preview
+    await expect(
+      page.locator("[data-testid='editor-timeline']").getByText("Voiceover", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.locator("[data-testid='editor-timeline']").getByText("Music", { exact: true }),
+    ).toHaveCount(0);
+
+    // 4. Select Voiceover Preview mode
+    await page.getByTestId("preview-toggle-studio-voice").click();
+    await expect(page.getByText("Video", { exact: true })).toBeVisible();
+    await expect(page.getByText("Voiceover", { exact: true })).toBeVisible();
+    await expect(page.getByText("Edits", { exact: true })).toBeVisible();
+    // Music must be hidden in Voiceover Preview
+    await expect(
+      page.locator("[data-testid='editor-timeline']").getByText("Music", { exact: true }),
+    ).toHaveCount(0);
+  });
+
+  test("BUG 18: Phase 3: Voice tab shows real voices, audition button, voice selection and regeneration", async ({
+    page,
+  }) => {
+    await loginAndNavigateToEditor(page);
+    await expect(page.getByTestId("editor-workspace")).toBeVisible();
+
+    // Click VOICE tab
+    await page.getByTestId("tab-voice").click();
+    await expect(page.getByTestId("voice-settings-tab")).toBeVisible();
+
+    // Verify Active Voice Card shows Puck
+    await expect(page.getByTestId("selected-voice-card")).toContainText("Puck");
+
+    // Verify available voices grid
+    await expect(page.getByTestId("voice-option-puck")).toBeVisible();
+    await expect(page.getByTestId("voice-option-charon")).toBeVisible();
+    await expect(page.getByTestId("voice-option-kore")).toBeVisible();
+    await expect(page.getByTestId("voice-option-aoede")).toBeVisible();
+
+    // Verify fixed audition phrase is visible
+    await expect(
+      page.getByText("Let's turn this recording into a clear, polished explanation."),
+    ).toBeVisible();
+
+    // Click Audition on selected voice
+    await page.getByTestId("btn-play-selected-preview").click();
+
+    // Switch voice to Charon
+    await page.getByTestId("voice-option-charon").click();
+    await expect(page.getByTestId("selected-voice-card")).toContainText("Charon");
+
+    // Click Regenerate Voiceover
+    await page.getByTestId("btn-generate-voiceover").click();
+  });
+
+  test("BUG 18: Phase 4: Music tab allows prompt input, generation, preview, volume slider, mute, and remove", async ({
+    page,
+  }) => {
+    await loginAndNavigateToEditor(page);
+    await expect(page.getByTestId("editor-workspace")).toBeVisible();
+
+    // Click MUSIC tab
+    await page.getByTestId("tab-music").click();
+    await expect(page.getByTestId("music-settings-tab")).toBeVisible();
+
+    // Verify prompt textarea and model selection
+    const promptInput = page.getByTestId("music-prompt-textarea");
+    await expect(promptInput).toBeVisible();
+    await expect(page.getByTestId("music-model-select")).toBeVisible();
+
+    // Verify Mode Policy Callout
+    await expect(page.getByText("Preview Mode Policy")).toBeVisible();
+    await expect(page.getByText(/Background music is only rendered in the Final Mix/i)).toBeVisible();
+
+    // Verify Active Music Card controls
+    await expect(page.getByTestId("active-music-card")).toBeVisible();
+    await expect(page.getByTestId("slider-music-volume")).toBeVisible();
+    await expect(page.getByTestId("slider-music-ducking")).toBeVisible();
+    await expect(page.getByTestId("btn-toggle-music-mute")).toBeVisible();
+    await expect(page.getByTestId("btn-remove-music")).toBeVisible();
+
+    // Test mute toggle
+    await page.getByTestId("btn-toggle-music-mute").click();
+
+    // Test remove music
+    await page.getByTestId("btn-remove-music").click();
   });
 });

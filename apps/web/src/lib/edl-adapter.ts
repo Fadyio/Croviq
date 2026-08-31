@@ -27,9 +27,9 @@ export type EditorSelectionType =
   "POINT" | "RANGE" | "TRANSCRIPT_WORD" | "TRANSCRIPT_SEGMENT" | "CUT" | "CHAPTER";
 
 export type CoordinateSpace = "SOURCE" | "EDITED";
+export type PreviewMode = "original" | "edited" | "studio_voice" | "final_mix";
 
 export type ActivePreviewMode = "ORIGINAL" | "EDITED" | "VOICEOVER" | "FINAL_MIX";
-
 export interface EditorSelection {
   production_id: string;
   selection_type: EditorSelectionType;
@@ -334,7 +334,13 @@ export function buildTranscriptSegmentSelection({
   };
 }
 
-export type MediaOutputStatus = "ready" | "generating" | "failed" | "unavailable";
+export type MediaOutputStatus =
+  | "ready"
+  | "generating"
+  | "incomplete"
+  | "stale"
+  | "failed"
+  | "unavailable";
 
 export interface MediaOutputState {
   available: boolean;

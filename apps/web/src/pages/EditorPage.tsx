@@ -6,6 +6,8 @@ import {
   Loader2,
   LogOut,
   MessageSquare,
+  Mic,
+  Music,
   ScrollText,
   ShieldCheck,
 } from "lucide-react";
@@ -24,11 +26,17 @@ import {
   type LeoChatResponse,
 } from "../components/editor/LeoChatPanel";
 import { MediaBin } from "../components/editor/MediaBin";
+import { MusicTab } from "../components/editor/MusicTab";
 import { type PreviewMode, PreviewToggle } from "../components/editor/PreviewToggle";
 import {
   TranscriptPanel,
   type TranscriptRangeSelection,
 } from "../components/editor/TranscriptPanel";
+import {
+  FALLBACK_GEMINI_VOICES,
+  type VoiceCatalogItem,
+  VoiceSettingsTab,
+} from "../components/editor/VoiceSettingsTab";
 import { VideoStage } from "../components/editor/VideoStage";
 import {
   type AgentActivity,
@@ -137,12 +145,18 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [previewMode, setPreviewMode] = useState<PreviewMode>("final_mix");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<TimelineBlock | null>(null);
-
-  const [rightPanelTab, setRightPanelTab] = useState<"agent-log" | "chat" | "transcript">(
-    "agent-log",
-  );
+  const [rightPanelTab, setRightPanelTab] = useState<
+    "agent-log" | "chat" | "transcript" | "voice" | "music"
+  >("agent-log");
   const [chatContext, setChatContext] = useState<LeoChatContext | null>(null);
 
+  // Voice and Music tab states
+  const [selectedVoice, setSelectedVoice] = useState<string>("Puck");
+  const [currentVoiceoverVoiceId, setCurrentVoiceoverVoiceId] = useState<string | null>(null);
+  const [voices, setVoices] = useState<VoiceCatalogItem[]>(FALLBACK_GEMINI_VOICES);
+  const [isGeneratingVoiceover, setIsGeneratingVoiceover] = useState<boolean>(false);
+  const [musicPlaybackUrl, setMusicPlaybackUrl] = useState<string | null>(null);
+  const [isGeneratingMusic, setIsGeneratingMusic] = useState<boolean>(false);
   // Agent settings drawer state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsAgentId, setSettingsAgentId] = useState<"leo">("leo");
@@ -192,6 +206,28 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       })
       .catch(() => {});
 
+    // Load workspace voice settings and voices in background
+    void fetch("/api/workspace/agent-settings", { headers })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.voice_settings?.selected_voice) {
+          setSelectedVoice(data.voice_settings.selected_voice);
+        }
+        if (data?.voices && Array.isArray(data.voices) && data.voices.length > 0) {
+          setVoices(data.voices);
+        }
+      })
+      .catch(() => {});
+
+    // Load latest studio voice state
+    void fetch(`/api/productions/${productionId}/studio-voice`, { headers })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((svData) => {
+        if (svData?.voice_id) {
+          setCurrentVoiceoverVoiceId(svData.voice_id);
+        }
+      })
+      .catch(() => {});
     const [
       productionPayload,
       playbackPayload,
@@ -395,7 +431,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setStudioVoicePreviewUrl(voiceoverOutput.url);
     setMasterUrl(master?.playback_url ?? playbackPayload?.master_url ?? null);
     setFinalMixUrl(finalMixOutput.url);
-
+    if (playbackPayload?.music_url) {
+      setMusicPlaybackUrl(playbackPayload.music_url);
+    }
     setPreviewArtifact(preview);
     setMasterArtifact(master);
     setStudioVoiceArtifact(svPreview);
@@ -579,6 +617,16 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     };
   }, [loadPersistedData, productionId, beginProductionRun]);
 
+  const getAuthToken = useCallback(async (): Promise<string> => {
+    if (firebaseUser) {
+      return firebaseUser.getIdToken();
+    }
+    if (import.meta.env.DEV || window.location.hostname === "localhost") {
+      return "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
+    }
+    throw new Error("Authentication required");
+  }, [firebaseUser]);
+
   // Handle seeking and synchronized block selections
   const handleSeek = useCallback((targetMs: number) => {
     setCurrentTimeMs(targetMs);
@@ -672,7 +720,147 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     },
     [handleSeek, productionId, previewMode, edl, transcript],
   );
+  const handleSelectVoice = useCallback(
+    async (voiceId: string) => {
+      setSelectedVoice(voiceId);
+      const token = await getAuthToken();
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      await fetch("/api/workspace/agent-settings/voice", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          narration_mode: "studio_voice",
+          selected_voice: voiceId,
+          language: "en-US",
+        }),
+      });
+      if (currentVoiceoverVoiceId && currentVoiceoverVoiceId !== voiceId) {
+        setMediaOutputs((prev) => ({
+          ...prev,
+          voiceover: {
+            ...prev.voiceover,
+            status: "stale",
+          },
+        }));
+      }
+    },
+    [currentVoiceoverVoiceId, getAuthToken],
+  );
 
+  const handleGenerateVoiceover = useCallback(async () => {
+    setIsGeneratingVoiceover(true);
+    setMediaOutputs((prev) => ({
+      ...prev,
+      voiceover: {
+        ...prev.voiceover,
+        status: "generating",
+      },
+    }));
+    try {
+      const token = await getAuthToken();
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch(`/api/productions/${productionId}/studio-voice`, {
+        method: "POST",
+        headers,
+      });
+      if (!res.ok) {
+        throw new Error(`Voiceover generation failed (${res.status})`);
+      }
+      const svData = await res.json();
+      setCurrentVoiceoverVoiceId(svData.result?.voice_id || selectedVoice);
+      await loadPersistedData();
+      setPreviewMode("studio_voice");
+    } finally {
+      setIsGeneratingVoiceover(false);
+    }
+  }, [getAuthToken, loadPersistedData, productionId, selectedVoice]);
+
+  const handleGenerateMusic = useCallback(
+    async (prompt: string, modelId = "lyria-3-pro-preview") => {
+      setIsGeneratingMusic(true);
+      try {
+        const token = await getAuthToken();
+        const headers = {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const res = await fetch(`/api/productions/${productionId}/music/generate`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            prompt,
+            model_id: modelId,
+            volume_db: -24.0,
+            ducking_db: -14.0,
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`Music generation failed (${res.status})`);
+        }
+        const edlData = await res.json();
+        if (edlData.edl) {
+          setEdl(edlData.edl);
+        }
+        await loadPersistedData();
+      } finally {
+        setIsGeneratingMusic(false);
+      }
+    },
+    [getAuthToken, loadPersistedData, productionId],
+  );
+
+  const handleUpdateMusicSettings = useCallback(
+    async (settings: {
+      volume_db?: number;
+      ducking_db?: number;
+      is_muted?: boolean;
+      style?: string;
+    }) => {
+      const token = await getAuthToken();
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch(`/api/productions/${productionId}/music`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(settings),
+      });
+      if (!res.ok) {
+        throw new Error(`Updating music mix failed (${res.status})`);
+      }
+      const edlData = await res.json();
+      if (edlData.edl) {
+        setEdl(edlData.edl);
+      }
+    },
+    [getAuthToken, productionId],
+  );
+
+  const handleRemoveMusic = useCallback(async () => {
+    const token = await getAuthToken();
+    const headers = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    const res = await fetch(`/api/productions/${productionId}/music`, {
+      method: "DELETE",
+      headers,
+    });
+    if (!res.ok) {
+      throw new Error(`Removing music failed (${res.status})`);
+    }
+    const edlData = await res.json();
+    if (edlData.edl) {
+      setEdl(edlData.edl);
+    }
+    setMusicPlaybackUrl(null);
+  }, [getAuthToken, productionId]);
   const handleTimelinePoint = useCallback(
     (targetMs: number) => {
       handleSeek(targetMs);
@@ -753,11 +941,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     },
     [handleSeek, productionId, previewMode, edl, transcript],
   );
-
-  const getAuthToken = useCallback(async (): Promise<string> => {
-    if (!firebaseUser) throw new Error("Authentication required");
-    return firebaseUser.getIdToken();
-  }, [firebaseUser]);
 
   const handleChatWorkspaceUpdated = useCallback(
     async (response: LeoChatResponse) => {
@@ -1011,6 +1194,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           currentMode={previewMode}
           sourceDurationMs={durationMs}
           editedDurationMs={derivedEditedDurationMs}
+          activeCutCount={twickData.activeCutCount}
           studioVoiceDurationMs={
             mediaOutputs.voiceover.durationMs || studioVoiceArtifact?.duration_ms
           }
@@ -1091,7 +1275,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           </div>
 
           <div
-            className="grid grid-cols-3 border-b border-border-subtle bg-surface-2/20 px-2"
+            className="grid grid-cols-5 border-b border-border-subtle bg-surface-2/20 px-1"
             role="tablist"
             aria-label="Editor information"
           >
@@ -1108,7 +1292,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               data-testid="tab-agent-log"
             >
               <ScrollText className="size-3 shrink-0" aria-hidden="true" />
-              <span>AGENT LOG</span>
+              <span className="truncate">LOG</span>
             </button>
             <button
               type="button"
@@ -1123,7 +1307,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               data-testid="tab-chat-leo"
             >
               <MessageSquare className="size-3 shrink-0" aria-hidden="true" />
-              <span>CHAT WITH LEO</span>
+              <span className="truncate">CHAT</span>
             </button>
             <button
               type="button"
@@ -1138,7 +1322,37 @@ export const EditorPage: React.FC<EditorPageProps> = ({
               data-testid="tab-transcript"
             >
               <FileText className="size-3 shrink-0" aria-hidden="true" />
-              <span>TRANSCRIPT</span>
+              <span className="truncate">TRANSCRIPT</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={rightPanelTab === "voice"}
+              onClick={() => setRightPanelTab("voice")}
+              className={`flex min-w-0 items-center justify-center gap-1 border-b-2 px-1 py-2.5 text-[9px] font-semibold tracking-wide transition-colors ${
+                rightPanelTab === "voice"
+                  ? "border-primary text-text-primary"
+                  : "border-transparent text-text-muted hover:text-text-secondary"
+              }`}
+              data-testid="tab-voice"
+            >
+              <Mic className="size-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">VOICE</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={rightPanelTab === "music"}
+              onClick={() => setRightPanelTab("music")}
+              className={`flex min-w-0 items-center justify-center gap-1 border-b-2 px-1 py-2.5 text-[9px] font-semibold tracking-wide transition-colors ${
+                rightPanelTab === "music"
+                  ? "border-primary text-text-primary"
+                  : "border-transparent text-text-muted hover:text-text-secondary"
+              }`}
+              data-testid="tab-music"
+            >
+              <Music className="size-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">MUSIC</span>
             </button>
           </div>
 
@@ -1182,7 +1396,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                 onClearContext={() => setChatContext(null)}
                 onWorkspaceUpdated={handleChatWorkspaceUpdated}
               />
-            ) : (
+            ) : rightPanelTab === "transcript" ? (
               <TranscriptPanel
                 transcript={transcript}
                 correctedTranscript={correctedTranscript}
@@ -1200,6 +1414,30 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                 onSelectSegment={handleTranscriptSegment}
                 className="h-full"
               />
+            ) : rightPanelTab === "voice" ? (
+              <VoiceSettingsTab
+                productionId={productionId}
+                selectedVoice={selectedVoice}
+                currentVoiceoverVoiceId={currentVoiceoverVoiceId}
+                voiceoverStatus={mediaOutputs.voiceover.status}
+                voices={voices}
+                getAuthToken={getAuthToken}
+                onSelectVoice={handleSelectVoice}
+                onGenerateVoiceover={handleGenerateVoiceover}
+                isGeneratingVoiceover={isGeneratingVoiceover}
+                className="h-full"
+              />
+            ) : (
+              <MusicTab
+                productionId={productionId}
+                backgroundMusic={edl?.background_music}
+                musicPlaybackUrl={musicPlaybackUrl}
+                onGenerateMusic={handleGenerateMusic}
+                onUpdateMusicSettings={handleUpdateMusicSettings}
+                onRemoveMusic={handleRemoveMusic}
+                isGenerating={isGeneratingMusic}
+                className="h-full"
+              />
             )}
           </div>
         </aside>
@@ -1211,6 +1449,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           twickData={twickData}
           currentTimeMs={currentTimeMs}
           durationMs={durationMs}
+          previewMode={previewMode}
           selectedBlockId={selectedBlock?.id || null}
           onSelectBlock={handleSelectBlock}
           onSeek={handleSeek}

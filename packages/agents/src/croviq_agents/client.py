@@ -1297,6 +1297,64 @@ class GoogleGenAIClient(GenAIClient):
             function_args=function_args,
         )
 
+def derive_grounded_script_correction(text: str) -> tuple[str, ScriptCorrectionChangeType, str, str]:
+    """Deterministic rule-based source-grounded correction helper for testing and offline execution."""
+    import re
+    lower = text.lower()
+    # 1. Transcription / Terminology errors (verified against screen)
+    if "github action tutorial" in lower:
+        return (
+            "This is a GitHub Actions tutorial.",
+            ScriptCorrectionChangeType.TRANSCRIPTION_ERROR,
+            "Corrected singular 'action' to official product name 'GitHub Actions'.",
+            "GitHub repository tab showing Actions workflow menu.",
+        )
+    if "get hub" in lower or "git hub" in lower or "gethub" in lower:
+        corr = re.sub(r"(?i)\b(?:get hub|git hub|gethub)\b", "GitHub", text)
+        return corr, ScriptCorrectionChangeType.TRANSCRIPTION_ERROR, "Corrected speech recognition error 'get hub' to official 'GitHub'.", "GitHub Actions workflow repository visible in browser and editor."
+    if "yamel" in lower or "yaaml" in lower:
+        corr = re.sub(r"(?i)\b(?:yamel|yaaml)\b", "YAML", text)
+        return corr, ScriptCorrectionChangeType.TRANSCRIPTION_ERROR, "Corrected phonetic transcription 'yamel' to 'YAML'.", ".github/workflows/deploy.yml editor view."
+    # 2. False start / repetition
+    if "to edit to edit your workflow" in lower or "workflow like this workflow is for cloudflare dns" in lower:
+        return (
+            "To edit your workflow, this workflow is for Cloudflare DNS.",
+            ScriptCorrectionChangeType.FALSE_START,
+            "Removed repeated 'to edit' stutter and conversational filler 'like'.",
+            "Editor displaying Cloudflare DNS deploy workflow YAML.",
+        )
+    if "you here you can find here the issues" in lower:
+        return (
+            "Here you can find the issues.",
+            ScriptCorrectionChangeType.FALSE_START,
+            "Removed false start 'You here' and repetition of 'here'.",
+            "Repository Issues tab.",
+        )
+    if re.search(r"\b(\w+)\s+\1\b", lower):
+        corr = re.sub(r"\b(\w+)\s+\1\b", r"\1", text, flags=re.IGNORECASE)
+        return corr, ScriptCorrectionChangeType.REPETITION, "Removed accidental repeated word.", "Presenter paused momentarily while typing."
+    if "what we're gonna... what we're gonna do" in lower or "we gonna basically" in lower:
+        corr = "So what we're going to do now is deploy it." if "what we're" in lower else "We're going to deploy this now."
+        return corr, ScriptCorrectionChangeType.FALSE_START, "Cleaned up spoken false start and filler repetition.", "IDE terminal shows deployment command ready."
+    # 3. Filler removal
+    if re.search(r"\b(um|uh|you know|basically|like)\b", lower):
+        corr = re.sub(r"\b(um|uh|you know|basically|like)\b,?\s*", "", text, flags=re.IGNORECASE).strip()
+        corr = corr[0].upper() + corr[1:] if corr else text
+        return corr, ScriptCorrectionChangeType.FILLER, "Removed conversational speech filler to improve pacing and clarity.", "Screen shows code demonstration."
+    # 4. Grammar improvement
+    if "deploy which is and how to deploy" in lower:
+        return (
+            "And how to deploy our application to Google Cloud with a test-verified workflow and everything working.",
+            ScriptCorrectionChangeType.GRAMMAR,
+            "Cleaned up broken sentence structure while preserving technical deploy steps.",
+            "Google Cloud deploy workflow in editor.",
+        )
+    if "we is" in lower or "he don't" in lower or "we gonna" in lower:
+        corr = text.replace("we is", "we are").replace("he don't", "he doesn't").replace("we gonna", "we are going to")
+        return corr, ScriptCorrectionChangeType.GRAMMAR, "Repaired colloquial grammar into clear spoken English.", "Technical demonstration."
+
+    return text, ScriptCorrectionChangeType.KEEP, "Spoken sentence is clear, grammatically sound, and grounded in video.", "Natural delivery."
+
 class FakeGenAIClient(GenAIClient):
     """Deterministic fake GenAI client for unit tests and local non-cloud execution."""
 
@@ -1693,64 +1751,6 @@ class FakeGenAIClient(GenAIClient):
         return derive_grounded_script_correction(text)
 
 
-def derive_grounded_script_correction(text: str) -> tuple[str, ScriptCorrectionChangeType, str, str]:
-    """Deterministic rule-based source-grounded correction helper for testing and offline execution."""
-    import re
-    lower = text.lower()
-    # 1. Transcription / Terminology errors (verified against screen)
-    if "github action tutorial" in lower:
-        return (
-            "This is a GitHub Actions tutorial.",
-            ScriptCorrectionChangeType.TRANSCRIPTION_ERROR,
-            "Corrected singular 'action' to official product name 'GitHub Actions'.",
-            "GitHub repository tab showing Actions workflow menu.",
-        )
-    if "get hub" in lower or "git hub" in lower or "gethub" in lower:
-        corr = re.sub(r"(?i)\b(?:get hub|git hub|gethub)\b", "GitHub", text)
-        return corr, ScriptCorrectionChangeType.TRANSCRIPTION_ERROR, "Corrected speech recognition error 'get hub' to official 'GitHub'.", "GitHub Actions workflow repository visible in browser and editor."
-    if "yamel" in lower or "yaaml" in lower:
-        corr = re.sub(r"(?i)\b(?:yamel|yaaml)\b", "YAML", text)
-        return corr, ScriptCorrectionChangeType.TRANSCRIPTION_ERROR, "Corrected phonetic transcription 'yamel' to 'YAML'.", ".github/workflows/deploy.yml editor view."
-    # 2. False start / repetition
-    if "to edit to edit your workflow" in lower or "workflow like this workflow is for cloudflare dns" in lower:
-        return (
-            "To edit your workflow, this workflow is for Cloudflare DNS.",
-            ScriptCorrectionChangeType.FALSE_START,
-            "Removed repeated 'to edit' stutter and conversational filler 'like'.",
-            "Editor displaying Cloudflare DNS deploy workflow YAML.",
-        )
-    if "you here you can find here the issues" in lower:
-        return (
-            "Here you can find the issues.",
-            ScriptCorrectionChangeType.FALSE_START,
-            "Removed false start 'You here' and repetition of 'here'.",
-            "Repository Issues tab.",
-        )
-    if re.search(r"\b(\w+)\s+\1\b", lower):
-        corr = re.sub(r"\b(\w+)\s+\1\b", r"\1", text, flags=re.IGNORECASE)
-        return corr, ScriptCorrectionChangeType.REPETITION, "Removed accidental repeated word.", "Presenter paused momentarily while typing."
-    if "what we're gonna... what we're gonna do" in lower or "we gonna basically" in lower:
-        corr = "So what we're going to do now is deploy it." if "what we're" in lower else "We're going to deploy this now."
-        return corr, ScriptCorrectionChangeType.FALSE_START, "Cleaned up spoken false start and filler repetition.", "IDE terminal shows deployment command ready."
-    # 3. Filler removal
-    if re.search(r"\b(um|uh|you know|basically|like)\b", lower):
-        corr = re.sub(r"\b(um|uh|you know|basically|like)\b,?\s*", "", text, flags=re.IGNORECASE).strip()
-        corr = corr[0].upper() + corr[1:] if corr else text
-        return corr, ScriptCorrectionChangeType.FILLER, "Removed conversational speech filler to improve pacing and clarity.", "Screen shows code demonstration."
-    # 4. Grammar improvement
-    if "deploy which is and how to deploy" in lower:
-        return (
-            "And how to deploy our application to Google Cloud with a test-verified workflow and everything working.",
-            ScriptCorrectionChangeType.GRAMMAR,
-            "Cleaned up broken sentence structure while preserving technical deploy steps.",
-            "Google Cloud deploy workflow in editor.",
-        )
-    if "we is" in lower or "he don't" in lower or "we gonna" in lower:
-        corr = text.replace("we is", "we are").replace("he don't", "he doesn't").replace("we gonna", "we are going to")
-        return corr, ScriptCorrectionChangeType.GRAMMAR, "Repaired colloquial grammar into clear spoken English.", "Technical demonstration."
-
-    return text, ScriptCorrectionChangeType.KEEP, "Spoken sentence is clear, grammatically sound, and grounded in video.", "Natural delivery."
-
 
     async def verify_script_entailment(
         self,
@@ -1929,6 +1929,25 @@ def derive_grounded_script_correction(text: str) -> tuple[str, ScriptCorrectionC
                     "intensity": "standard",
                     "active_edl_id": active_edl_id,
                 }
+        elif any(
+            w in msg_lower for w in [
+                "remove music", "remove the music", "delete music", "delete the music", "stop the music", "mute music"
+            ]
+        ):
+            function_name = "remove_background_music"
+            function_args = {}
+        elif any(
+            w in msg_lower for w in [
+                "use another voice", "change voice", "switch voice", "different voice", "regenerate voiceover", "regenerate the voiceover", "warmer voice", "make the voice warmer"
+            ]
+        ):
+            reply = "You can audition and choose from the official Google Gemini TTS voices (such as Aoede, Charon, or Puck) in the Voice tab on the right panel, then click 'Regenerate Voiceover' to synthesize replacement narration."
+        elif any(
+            w in msg_lower for w in [
+                "make the music quieter", "quieter music", "lower music volume", "music volume", "quieter"
+            ]
+        ) and "music" in msg_lower:
+            reply = "You can fine-tune the music bed volume (e.g. -28 dB) and speech ducking attenuation in the Music tab on the right panel."
         elif any(
             w in msg_lower for w in [
                 "add b-roll", "add broll", "generate b-roll", "generate broll",

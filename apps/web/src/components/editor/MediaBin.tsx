@@ -10,6 +10,7 @@ interface MediaBinProps {
   studioVoiceDurationMs?: number | null;
   finalMixDurationMs?: number | null;
   masterDurationMs?: number | null;
+  activeCutCount?: number;
   hasRenderedPreview: boolean;
   hasStudioVoice: boolean;
   hasFinalMix?: boolean;
@@ -71,6 +72,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
   editedDurationMs,
   studioVoiceDurationMs,
   finalMixDurationMs,
+  activeCutCount,
   hasRenderedPreview,
   hasStudioVoice,
   hasFinalMix = false,
@@ -130,7 +132,10 @@ export const MediaBin: React.FC<MediaBinProps> = ({
             name: "Voiceover Preview",
             mode: "studio_voice" as PreviewMode,
             durationMs: voDur,
-            description: "Voice corrections included",
+            description:
+              mediaOutputs?.voiceover.status === "incomplete"
+                ? "Voiceover incomplete"
+                : "Full narration replacement",
             icon: Mic2,
           },
         ]
@@ -142,7 +147,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
             name: "Final Mix",
             mode: "final_mix" as PreviewMode,
             durationMs: fmDur,
-            description: "Voice corrections + background music",
+            description: "Voiceover + music",
             icon: Music,
           },
         ]
