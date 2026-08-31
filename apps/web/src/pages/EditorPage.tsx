@@ -748,7 +748,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         selection.label = `${block.label} (${formatTimecode(block.startMs)} → ${formatTimecode(block.endMs)})`;
       }
       setChatContext(selection);
-      setRightPanelTab("chat");
+      setRightPanelTab((prev) => (prev === "voice" || prev === "music" ? "agent-log" : prev));
     },
     [handleSeek, edl, productionId, previewMode, transcript],
   );
@@ -769,7 +769,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         selection.label =
           decision.concise_reason || `Edit at ${formatTimecode(decision.source_start_ms)}`;
         setChatContext(selection);
-        setRightPanelTab("agent-log");
+        setRightPanelTab((prev) => (prev === "voice" || prev === "music" ? "agent-log" : prev));
       }
     },
     [handleSeek, productionId, previewMode, edl, transcript],
@@ -1507,33 +1507,63 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                 />
               </div>
             ) : rightPanelTab === "chat" ? (
-              <LeoChatPanel
-                productionId={productionId}
-                currentPlayheadMs={currentTimeMs}
-                activeEdlId={edl?.edl_id}
-                context={chatContext}
-                getAuthToken={getAuthToken}
-                onClearContext={() => setChatContext(null)}
-                onWorkspaceUpdated={handleChatWorkspaceUpdated}
-              />
+              <div className="flex min-h-0 flex-1 flex-col">
+                {(selectedDecision || selectedBlock) && (
+                  <div className="max-h-[56%] shrink-0 overflow-y-auto border-b border-border-subtle p-2">
+                    <DecisionInspector
+                      decision={selectedDecision}
+                      selectedBlock={selectedBlock}
+                      onClose={() => {
+                        setSelectedDecisionId(null);
+                        setSelectedBlock(null);
+                      }}
+                      onSeek={handleSeek}
+                    />
+                  </div>
+                )}
+                <LeoChatPanel
+                  productionId={productionId}
+                  currentPlayheadMs={currentTimeMs}
+                  activeEdlId={edl?.edl_id}
+                  context={chatContext}
+                  getAuthToken={getAuthToken}
+                  onClearContext={() => setChatContext(null)}
+                  onWorkspaceUpdated={handleChatWorkspaceUpdated}
+                />
+              </div>
             ) : rightPanelTab === "transcript" ? (
-              <TranscriptPanel
-                transcript={transcript}
-                correctedTranscript={correctedTranscript}
-                edl={edl}
-                mode={previewMode}
-                currentTimeMs={currentTimeMs}
-                decisions={proposal?.decisions || []}
-                selectedDecisionId={selectedDecisionId}
-                onSelectDecision={handleSelectDecision}
-                onSeek={handleSeek}
-                onModeChange={setPreviewMode}
-                onRangeSelect={(selection) => handleTranscriptRange(selection)}
-                onSendRangeToChat={(selection) => handleTranscriptRange(selection, true)}
-                onSelectWord={handleTranscriptWord}
-                onSelectSegment={handleTranscriptSegment}
-                className="h-full"
-              />
+              <div className="flex min-h-0 flex-1 flex-col">
+                {(selectedDecision || selectedBlock) && (
+                  <div className="max-h-[56%] shrink-0 overflow-y-auto border-b border-border-subtle p-2">
+                    <DecisionInspector
+                      decision={selectedDecision}
+                      selectedBlock={selectedBlock}
+                      onClose={() => {
+                        setSelectedDecisionId(null);
+                        setSelectedBlock(null);
+                      }}
+                      onSeek={handleSeek}
+                    />
+                  </div>
+                )}
+                <TranscriptPanel
+                  transcript={transcript}
+                  correctedTranscript={correctedTranscript}
+                  edl={edl}
+                  mode={previewMode}
+                  currentTimeMs={currentTimeMs}
+                  decisions={proposal?.decisions || []}
+                  selectedDecisionId={selectedDecisionId}
+                  onSelectDecision={handleSelectDecision}
+                  onSeek={handleSeek}
+                  onModeChange={setPreviewMode}
+                  onRangeSelect={(selection) => handleTranscriptRange(selection)}
+                  onSendRangeToChat={(selection) => handleTranscriptRange(selection, true)}
+                  onSelectWord={handleTranscriptWord}
+                  onSelectSegment={handleTranscriptSegment}
+                  className="h-full"
+                />
+              </div>
             ) : rightPanelTab === "voice" ? (
               <VoiceSettingsTab
                 productionId={productionId}

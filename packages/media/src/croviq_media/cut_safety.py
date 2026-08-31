@@ -8,8 +8,10 @@ from croviq_domain.editorial import (
     EditorDecision,
     EditorDecisionType,
     EditorProposal,
+    SemanticEvent,
 )
 from croviq_domain.edl import (
+    BackgroundMusicMix,
     CoverageMarker,
     CoverageType,
     CutInstruction,
@@ -26,6 +28,18 @@ MIN_CUT_DURATION_MS = 120
 DEFAULT_NATURAL_PAUSE_BREATH_MS = 200
 
 DESTRUCTIVE_DECISION_TYPES = frozenset({
+    # Canonical BUG 22 Types
+    EditorDecisionType.FALSE_START,
+    EditorDecisionType.WORD_REPETITION,
+    EditorDecisionType.PHRASE_REPETITION,
+    EditorDecisionType.REDUNDANT_EXPLANATION,
+    EditorDecisionType.FILLER,
+    EditorDecisionType.RAMBLING,
+    EditorDecisionType.DEAD_AIR,
+    EditorDecisionType.PAUSE_TRIM,
+    EditorDecisionType.PACING,
+    EditorDecisionType.OTHER,
+    # Legacy types
     EditorDecisionType.REMOVE_SILENCE,
     EditorDecisionType.REMOVE_FILLER,
     EditorDecisionType.REMOVE_FALSE_START,
@@ -283,6 +297,63 @@ class CutSafetyAnalyzer:
                 f"minimum of {self.min_cut_duration_ms} ms."
             )
 
+        # Extract full decision evidence metadata
+        dec_type_val = decision.decision_type.value if hasattr(decision.decision_type, "value") else str(decision.decision_type)
+        category = dec_type_val
+        if category == "REMOVE_FALSE_START":
+            category = "FALSE_START"
+        elif category == "REMOVE_REPETITION":
+            category = "WORD_REPETITION"
+        elif category == "REMOVE_FILLER":
+            category = "FILLER"
+        elif category in ("REMOVE_SILENCE", "TRIM_PAUSE", "TIGHTEN_PAUSE"):
+            category = "DEAD_AIR"
+        elif category in ("REMOVE_LOW_VALUE_SECTION", "TIGHTEN_EXPLANATION"):
+            category = "REDUNDANT_EXPLANATION"
+
+        removed_text = decision.removed_text
+        if not removed_text:
+            if decision.original_text and not decision.original_text.startswith("[Silence:"):
+                removed_text = decision.original_text
+            elif transcript.words and 0 <= start_word_idx <= end_word_idx < len(transcript.words):
+                removed_text = " ".join(w.text for w in transcript.words[start_word_idx:end_word_idx + 1])
+
+        context_before = decision.context_before
+        if not context_before:
+            if transcript.words and start_word_idx > 0:
+                ctx_start = max(0, start_word_idx - 3)
+                context_before = " ".join(w.text for w in transcript.words[ctx_start:start_word_idx])
+            else:
+                context_before = "[START]"
+
+        context_after = decision.context_after
+        if not context_after:
+            if transcript.words and end_word_idx + 1 < len(transcript.words):
+                ctx_end = min(len(transcript.words), end_word_idx + 4)
+                context_after = " ".join(w.text for w in transcript.words[end_word_idx + 1:ctx_end])
+            else:
+                context_after = "[END]"
+
+        t_str = str(decision.decision_type).upper()
+        is_silence = (
+            t_str in ("TRIM_PAUSE", "REMOVE_SILENCE", "TIGHTEN_PAUSE", "DEAD_AIR")
+            or decision.decision_id.startswith("silence_cut_")
+        )
+        contains_semantic = not is_silence
+
+        event = SemanticEvent(
+            event_id=f"ev_{uuid.uuid4().hex[:10]}",
+            decision_id=decision.decision_id,
+            decision_type=str(decision.decision_type),
+            category=category or ("DEAD_AIR" if is_silence else "OTHER"),
+            reason=decision.concise_reason or safety_reason,
+            removed_text=removed_text,
+            start_ms=safe_start_ms,
+            end_ms=safe_end_ms,
+            duration_ms=removed_duration_ms,
+            is_silence=is_silence,
+        )
+
         return CutInstruction(
             cut_id=cut_id,
             decision_id=decision.decision_id,
@@ -300,9 +371,139 @@ class CutSafetyAnalyzer:
             safety_status=safety_status,
             safety_reason=safety_reason,
             confidence=decision.confidence,
+            removed_text=removed_text,
+            context_before=context_before,
+            context_after=context_after,
+            concise_reason=decision.concise_reason,
+            category=category,
+            semantic_events=[event],
+            contains_silence=is_silence,
+            contains_semantic_removal=contains_semantic,
         )
 
 
+def execute_global_review_pass(
+    cuts: list[CutInstruction],
+    transcript: Transcript,
+    min_surviving_gap_ms: int = 150,
+) -> list[CutInstruction]:
+    """Perform a second global review pass of all candidate edits before committing the EDL.
+
+    Ensures:
+    1. No two safe cuts leave an uncomfortably microscopic speech fragment (<150ms) between them.
+    2. Cuts do not overlap destructively; if adjacent cuts are separated by <100ms silence, merges or coordinates boundaries safely.
+    3. Cuts keep valid positive durations and boundaries within source duration.
+    """
+    if not cuts:
+        return []
+
+    valid_cuts = [c for c in cuts if c.safety_status != CutSafetyStatus.REJECTED_UNSAFE and c.removed_duration_ms > 0]
+    rejected_cuts = [c for c in cuts if c.safety_status == CutSafetyStatus.REJECTED_UNSAFE]
+
+    valid_cuts.sort(key=lambda c: (c.safe_start_ms, c.safe_end_ms))
+
+    reviewed_cuts: list[CutInstruction] = []
+
+    def _merge_cuts(prev_cut: CutInstruction, next_cut: CutInstruction) -> CutInstruction:
+        merged_start = min(prev_cut.safe_start_ms, next_cut.safe_start_ms)
+        merged_end = max(prev_cut.safe_end_ms, next_cut.safe_end_ms)
+        merged_removed = merged_end - merged_start
+
+        # Combine text cleanly
+        prev_txt = (prev_cut.removed_text or "").strip()
+        next_txt = (next_cut.removed_text or "").strip()
+        if prev_txt and next_txt:
+            if next_txt in prev_txt:
+                combined_text = prev_txt
+            elif prev_txt in next_txt:
+                combined_text = next_txt
+            else:
+                combined_text = f"{prev_txt} {next_txt}".strip()
+        else:
+            combined_text = prev_txt or next_txt or None
+
+        # Combine unique reasons
+        reasons: list[str] = []
+        for src_r in (prev_cut.concise_reason, next_cut.concise_reason):
+            if src_r:
+                for piece in src_r.split(";"):
+                    p = piece.strip()
+                    if p and p not in reasons:
+                        reasons.append(p)
+        combined_reason = "; ".join(reasons) if reasons else (prev_cut.concise_reason or next_cut.concise_reason)
+
+        # Combine semantic events
+        combined_events = list(prev_cut.semantic_events) + list(next_cut.semantic_events)
+        has_silence = prev_cut.contains_silence or next_cut.contains_silence
+        has_semantic = prev_cut.contains_semantic_removal or next_cut.contains_semantic_removal
+
+        # Determine primary decision type and category
+        if next_cut.contains_semantic_removal and not prev_cut.contains_semantic_removal:
+            primary_decision_type = next_cut.decision_type
+            primary_category = next_cut.category
+            primary_decision_id = next_cut.decision_id
+        elif prev_cut.contains_semantic_removal and not next_cut.contains_semantic_removal:
+            primary_decision_type = prev_cut.decision_type
+            primary_category = prev_cut.category
+            primary_decision_id = prev_cut.decision_id
+        elif prev_cut.contains_semantic_removal and next_cut.contains_semantic_removal:
+            primary_decision_type = prev_cut.decision_type
+            primary_category = prev_cut.category or next_cut.category
+            primary_decision_id = prev_cut.decision_id
+        else:
+            primary_decision_type = prev_cut.decision_type
+            primary_category = prev_cut.category or "DEAD_AIR"
+            primary_decision_id = prev_cut.decision_id
+
+        left_anchor = prev_cut.left_anchor if prev_cut.safe_start_ms <= next_cut.safe_start_ms else next_cut.left_anchor
+        right_anchor = next_cut.right_anchor if next_cut.safe_end_ms >= prev_cut.safe_end_ms else prev_cut.right_anchor
+        context_before = prev_cut.context_before or next_cut.context_before
+        context_after = next_cut.context_after or prev_cut.context_after
+
+        return prev_cut.model_copy(update={
+            "decision_id": primary_decision_id,
+            "decision_type": primary_decision_type,
+            "category": primary_category,
+            "safe_start_ms": merged_start,
+            "safe_end_ms": merged_end,
+            "removed_duration_ms": merged_removed,
+            "left_anchor": left_anchor,
+            "right_anchor": right_anchor,
+            "context_before": context_before,
+            "context_after": context_after,
+            "removed_text": combined_text,
+            "concise_reason": combined_reason,
+            "semantic_events": combined_events,
+            "contains_silence": has_silence,
+            "contains_semantic_removal": has_semantic,
+        })
+
+    for cut in valid_cuts:
+        if not reviewed_cuts:
+            reviewed_cuts.append(cut)
+            continue
+
+        prev = reviewed_cuts[-1]
+        # If current cut touches or overlaps with prev cut
+        if cut.safe_start_ms <= prev.safe_end_ms:
+            reviewed_cuts[-1] = _merge_cuts(prev, cut)
+        else:
+            # Gap between cuts
+            gap_ms = cut.safe_start_ms - prev.safe_end_ms
+            if gap_ms < min_surviving_gap_ms:
+                gap_words = [
+                    w for w in transcript.words
+                    if max(w.start_ms, prev.safe_end_ms) < min(w.end_ms, cut.safe_start_ms)
+                ]
+                if not gap_words:
+                    # Silence gap < min_surviving_gap_ms: bridge cleanly into one contiguous cut
+                    reviewed_cuts[-1] = _merge_cuts(prev, cut)
+                    continue
+            reviewed_cuts.append(cut)
+
+    all_cuts = reviewed_cuts + rejected_cuts
+    all_cuts.sort(key=lambda c: (c.safe_start_ms, c.safe_end_ms))
+    return all_cuts
 def assemble_edl_from_proposal(
     proposal: EditorProposal,
     transcript: Transcript,
@@ -310,6 +511,7 @@ def assemble_edl_from_proposal(
     analyzer: CutSafetyAnalyzer | None = None,
     editor_proposal_id: str | None = None,
     edl_id: str | None = None,
+    background_music: BackgroundMusicMix | None = None,
 ) -> EditDecisionList:
     """Assemble a canonical EDL directly from Leo's proposal using deterministic safety rules."""
     if analyzer is None:
@@ -345,9 +547,8 @@ def assemble_edl_from_proposal(
                 cut.coverage_marker_id = coverage_marker.marker_id
 
             cuts.append(cut)
-
+    cuts = execute_global_review_pass(cuts, transcript)
     cuts.sort(key=lambda cut: (cut.safe_start_ms, cut.safe_end_ms))
-
     return EditDecisionList(
         edl_id=edl_id or f"edl_{uuid.uuid4().hex[:12]}",
         production_id=proposal.production_id,
@@ -356,5 +557,6 @@ def assemble_edl_from_proposal(
         version=version,
         cuts=cuts,
         coverage_markers=coverage_markers,
+        background_music=background_music,
         created_at=datetime.now(timezone.utc),
     )

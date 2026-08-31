@@ -5,8 +5,14 @@ from enum import StrEnum
 from typing import Any, Sequence
 import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from croviq_domain.editorial import EditorDecisionType, EditorVoiceMode
+from croviq_domain.editorial import (
+    EditorialCategoryBreakdown,
+    EditorialQualityReport,
+    EditorDecisionType,
+    EditorVoiceMode,
+    SemanticEvent,
+    SemanticEventBreakdown,
+)
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
 from croviq_domain.validators import validate_timezone_aware
 
@@ -212,7 +218,38 @@ class CutInstruction(BaseModel):
         default=False,
         description="Whether a room-tone bridge is recommended across the join",
     )
-
+    removed_text: str | None = Field(
+        default=None,
+        description="Exact spoken transcript text removed by this cut",
+    )
+    context_before: str | None = Field(
+        default=None,
+        description="Retained spoken context immediately preceding the cut",
+    )
+    context_after: str | None = Field(
+        default=None,
+        description="Retained spoken context immediately following the cut",
+    )
+    concise_reason: str | None = Field(
+        default=None,
+        description="Editorial rationale explaining why this cut was made",
+    )
+    category: str | None = Field(
+        default=None,
+        description="Canonical category name (e.g. FALSE_START, WORD_REPETITION)",
+    )
+    semantic_events: list[SemanticEvent] = Field(
+        default_factory=list,
+        description="All individual semantic decisions / events represented inside this physical cut",
+    )
+    contains_silence: bool = Field(
+        default=False,
+        description="Whether this physical cut removes dead air / silence",
+    )
+    contains_semantic_removal: bool = Field(
+        default=False,
+        description="Whether this physical cut removes semantic speech",
+    )
     @model_validator(mode="after")
     def validate_cut_bounds(self) -> "CutInstruction":
         if self.transcript_end_word < self.transcript_start_word:
@@ -702,4 +739,175 @@ def derive_edited_transcript(
         segments=edited_segments,
         silence_intervals=[],
         created_at=datetime.now(timezone.utc),
+    )
+
+
+def compute_editorial_quality_report(
+    edl: EditDecisionList,
+    current_edited_duration_ms: int | None = None,
+) -> EditorialQualityReport:
+    """Compute the canonical editorial quality report, physical cut duration breakdown, and semantic event breakdown from an EDL."""
+    source_dur = edl.source_duration_ms
+    new_dur = edl.estimated_target_duration_ms
+    cur_dur = current_edited_duration_ms if current_edited_duration_ms is not None else source_dur
+    total_removed = edl.total_removed_duration_ms
+
+    dead_air_ms = 0
+    dead_air_count = 0
+    false_start_ms = 0
+    false_start_count = 0
+    word_rep_ms = 0
+    word_rep_count = 0
+    phrase_rep_ms = 0
+    phrase_rep_count = 0
+    redundant_ms = 0
+    redundant_count = 0
+    filler_ms = 0
+    filler_count = 0
+    pacing_ms = 0
+    pacing_count = 0
+    other_ms = 0
+    other_count = 0
+
+    false_start_events = 0
+    word_rep_events = 0
+    phrase_rep_events = 0
+    redundant_events = 0
+    filler_events = 0
+    rambling_events = 0
+    pause_trim_events = 0
+    pacing_events = 0
+    other_events = 0
+
+    physical_cuts_count = 0
+    semantic_cuts_count = 0
+
+    for cut in edl.cuts:
+        if cut.safety_status == CutSafetyStatus.REJECTED_UNSAFE:
+            continue
+        physical_cuts_count += 1
+        dur = cut.removed_duration_ms
+        t = str(cut.decision_type).upper()
+        cat = (cut.category or "").upper()
+
+        if t in ("DEAD_AIR", "PAUSE_TRIM", "REMOVE_SILENCE", "TRIM_PAUSE", "TIGHTEN_PAUSE") and cat in ("DEAD_AIR", "PAUSE_TRIM", "SILENCE", "") and not cut.contains_semantic_removal:
+            dead_air_ms += dur
+            dead_air_count += 1
+        elif t in ("FALSE_START", "REMOVE_FALSE_START") or cat == "FALSE_START":
+            false_start_ms += dur
+            false_start_count += 1
+            semantic_cuts_count += 1
+        elif t in ("WORD_REPETITION", "REMOVE_REPETITION") or cat == "WORD_REPETITION":
+            word_rep_ms += dur
+            word_rep_count += 1
+            semantic_cuts_count += 1
+        elif t == "PHRASE_REPETITION" or cat == "PHRASE_REPETITION":
+            phrase_rep_ms += dur
+            phrase_rep_count += 1
+            semantic_cuts_count += 1
+        elif t in ("REDUNDANT_EXPLANATION", "TIGHTEN_EXPLANATION", "REMOVE_LOW_VALUE_SECTION") or cat == "REDUNDANT_EXPLANATION":
+            redundant_ms += dur
+            redundant_count += 1
+            semantic_cuts_count += 1
+        elif t in ("FILLER", "REMOVE_FILLER") or cat == "FILLER":
+            filler_ms += dur
+            filler_count += 1
+            semantic_cuts_count += 1
+        elif t in ("PACING",) or cat == "PACING":
+            pacing_ms += dur
+            pacing_count += 1
+            semantic_cuts_count += 1
+        else:
+            if cut.contains_semantic_removal or (cut.removed_text and cut.removed_text != "None"):
+                other_ms += dur
+                other_count += 1
+                semantic_cuts_count += 1
+            else:
+                dead_air_ms += dur
+                dead_air_count += 1
+
+        if cut.semantic_events:
+            for ev in cut.semantic_events:
+                ev_t = str(ev.decision_type).upper()
+                ev_cat = str(ev.category).upper()
+                if ev.is_silence or ev_t in ("DEAD_AIR", "PAUSE_TRIM", "REMOVE_SILENCE", "TRIM_PAUSE", "TIGHTEN_PAUSE") or ev_cat in ("DEAD_AIR", "PAUSE_TRIM", "SILENCE"):
+                    pause_trim_events += 1
+                elif ev_t in ("FALSE_START", "REMOVE_FALSE_START") or ev_cat == "FALSE_START":
+                    false_start_events += 1
+                elif ev_t in ("WORD_REPETITION", "REMOVE_REPETITION") or ev_cat == "WORD_REPETITION":
+                    word_rep_events += 1
+                elif ev_t == "PHRASE_REPETITION" or ev_cat == "PHRASE_REPETITION":
+                    phrase_rep_events += 1
+                elif ev_t in ("REDUNDANT_EXPLANATION", "TIGHTEN_EXPLANATION") or ev_cat == "REDUNDANT_EXPLANATION":
+                    redundant_events += 1
+                elif ev_t in ("FILLER", "REMOVE_FILLER") or ev_cat == "FILLER":
+                    filler_events += 1
+                elif ev_t in ("RAMBLING",) or ev_cat == "RAMBLING":
+                    rambling_events += 1
+                elif ev_t in ("PACING",) or ev_cat == "PACING":
+                    pacing_events += 1
+                else:
+                    other_events += 1
+        else:
+            if t in ("DEAD_AIR", "PAUSE_TRIM", "REMOVE_SILENCE", "TRIM_PAUSE", "TIGHTEN_PAUSE") or cat in ("DEAD_AIR", "PAUSE_TRIM", "SILENCE"):
+                pause_trim_events += 1
+            elif t in ("FALSE_START", "REMOVE_FALSE_START") or cat == "FALSE_START":
+                false_start_events += 1
+            elif t in ("WORD_REPETITION", "REMOVE_REPETITION") or cat == "WORD_REPETITION":
+                word_rep_events += 1
+            elif t == "PHRASE_REPETITION" or cat == "PHRASE_REPETITION":
+                phrase_rep_events += 1
+            elif t in ("REDUNDANT_EXPLANATION", "TIGHTEN_EXPLANATION") or cat == "REDUNDANT_EXPLANATION":
+                redundant_events += 1
+            elif t in ("FILLER", "REMOVE_FILLER") or cat == "FILLER":
+                filler_events += 1
+            elif t in ("RAMBLING",) or cat == "RAMBLING":
+                rambling_events += 1
+            elif t in ("PACING",) or cat == "PACING":
+                pacing_events += 1
+            else:
+                other_events += 1
+
+    total_events = (
+        false_start_events + word_rep_events + phrase_rep_events +
+        redundant_events + filler_events + rambling_events +
+        pause_trim_events + pacing_events + other_events
+    )
+    semantic_events_count = (
+        false_start_events + word_rep_events + phrase_rep_events +
+        redundant_events + filler_events + rambling_events +
+        pacing_events + other_events
+    )
+
+    silence_only = semantic_cuts_count == 0 and semantic_events_count == 0
+
+    return EditorialQualityReport(
+        source_duration_ms=source_dur,
+        current_edited_duration_ms=cur_dur,
+        new_edited_duration_ms=new_dur,
+        total_removed_ms=total_removed,
+        dead_air=EditorialCategoryBreakdown(count=dead_air_count, duration_ms=dead_air_ms),
+        false_start=EditorialCategoryBreakdown(count=false_start_count, duration_ms=false_start_ms),
+        word_repetition=EditorialCategoryBreakdown(count=word_rep_count, duration_ms=word_rep_ms),
+        phrase_repetition=EditorialCategoryBreakdown(count=phrase_rep_count, duration_ms=phrase_rep_ms),
+        redundant_explanation=EditorialCategoryBreakdown(count=redundant_count, duration_ms=redundant_ms),
+        filler=EditorialCategoryBreakdown(count=filler_count, duration_ms=filler_ms),
+        pacing=EditorialCategoryBreakdown(count=pacing_count, duration_ms=pacing_ms),
+        other=EditorialCategoryBreakdown(count=other_count, duration_ms=other_ms),
+        physical_cuts_count=physical_cuts_count,
+        semantic_cuts_count=semantic_cuts_count,
+        silence_only_edit=silence_only,
+        semantic_events=SemanticEventBreakdown(
+            false_start=false_start_events,
+            word_repetition=word_rep_events,
+            phrase_repetition=phrase_rep_events,
+            redundant_explanation=redundant_events,
+            filler=filler_events,
+            rambling=rambling_events,
+            pause_trim=pause_trim_events,
+            pacing=pacing_events,
+            other=other_events,
+            total_events=total_events,
+            semantic_events_count=semantic_events_count,
+        ),
     )

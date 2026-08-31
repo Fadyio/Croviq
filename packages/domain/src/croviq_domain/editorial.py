@@ -10,7 +10,21 @@ from croviq_domain.validators import validate_timezone_aware
 
 class EditorDecisionType(StrEnum):
     """Semantic action types supported by Video Editor (Leo)."""
+    # Canonical BUG 22 Editorial Decision Types
+    FALSE_START = "FALSE_START"
+    WORD_REPETITION = "WORD_REPETITION"
+    PHRASE_REPETITION = "PHRASE_REPETITION"
+    REDUNDANT_EXPLANATION = "REDUNDANT_EXPLANATION"
+    FILLER = "FILLER"
+    RAMBLING = "RAMBLING"
+    DEAD_AIR = "DEAD_AIR"
+    PAUSE_TRIM = "PAUSE_TRIM"
+    PACING = "PACING"
+    OTHER = "OTHER"
+
+    # Legacy & operational types for backward compatibility
     KEEP = "KEEP"
+    KEEP_FOR_CLARITY = "KEEP_FOR_CLARITY"
     REMOVE_SILENCE = "REMOVE_SILENCE"
     REMOVE_FILLER = "REMOVE_FILLER"
     REMOVE_FALSE_START = "REMOVE_FALSE_START"
@@ -19,12 +33,10 @@ class EditorDecisionType(StrEnum):
     TIGHTEN_PAUSE = "TIGHTEN_PAUSE"
     TIGHTEN_EXPLANATION = "TIGHTEN_EXPLANATION"
     REMOVE_LOW_VALUE_SECTION = "REMOVE_LOW_VALUE_SECTION"
-    KEEP_FOR_CLARITY = "KEEP_FOR_CLARITY"
     SOURCE_COVER = "SOURCE_COVER"
     CHAPTER_MARKER = "CHAPTER_MARKER"
     NARRATION_REWRITE = "NARRATION_REWRITE"
     CAPTION_EMPHASIS = "CAPTION_EMPHASIS"
-
 class EditorSelectionType(StrEnum):
     """Canonical timeline selection type in Croviq Editor."""
     POINT = "POINT"
@@ -323,6 +335,18 @@ class EditorDecision(BaseModel):
         max_length=500,
         description="Potential editorial or audio risk associated with the cut",
     )
+    removed_text: str | None = Field(
+        default=None,
+        description="Exact spoken transcript text removed by this decision",
+    )
+    context_before: str | None = Field(
+        default=None,
+        description="Retained spoken context immediately preceding the cut",
+    )
+    context_after: str | None = Field(
+        default=None,
+        description="Retained spoken context immediately following the cut",
+    )
 
     @model_validator(mode="after")
     def validate_indexes_and_times(self) -> "EditorDecision":
@@ -497,3 +521,80 @@ class EditorialRun(BaseModel):
     @classmethod
     def validate_run_datetimes(cls, v: datetime | None) -> datetime | None:
         return validate_timezone_aware(v)
+
+
+class EditorialCategoryBreakdown(BaseModel):
+    """Exact count and duration breakdown for a canonical editorial removal category."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    count: int = Field(default=0, ge=0)
+    duration_ms: int = Field(default=0, ge=0)
+
+    @property
+    def duration_s(self) -> float:
+        return self.duration_ms / 1000.0
+
+class SemanticEvent(BaseModel):
+    """An individual editorial decision / semantic event contained within a physical cut."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    event_id: str = Field(..., description="Unique event identifier")
+    decision_id: str = Field(..., description="Originating Editor decision identifier")
+    decision_type: str = Field(..., description="Decision type (e.g. FALSE_START, FILLER, TRIM_PAUSE)")
+    category: str = Field(..., description="Canonical category (e.g. FALSE_START, FILLER, DEAD_AIR)")
+    reason: str = Field(..., description="Editorial rationale for the event")
+    removed_text: str | None = Field(default=None, description="Removed text for this event if applicable")
+    start_ms: int = Field(default=0, ge=0, description="Start time in milliseconds")
+    end_ms: int = Field(default=0, ge=0, description="End time in milliseconds")
+    duration_ms: int = Field(default=0, ge=0, description="Event duration in milliseconds")
+    is_silence: bool = Field(default=False, description="Whether this event is a silence/pause trim")
+
+
+class SemanticEventBreakdown(BaseModel):
+    """Event counts for canonical semantic editorial categories."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    false_start: int = Field(default=0, ge=0)
+    word_repetition: int = Field(default=0, ge=0)
+    phrase_repetition: int = Field(default=0, ge=0)
+    redundant_explanation: int = Field(default=0, ge=0)
+    filler: int = Field(default=0, ge=0)
+    rambling: int = Field(default=0, ge=0)
+    pause_trim: int = Field(default=0, ge=0)
+    pacing: int = Field(default=0, ge=0)
+    other: int = Field(default=0, ge=0)
+    total_events: int = Field(default=0, ge=0)
+    semantic_events_count: int = Field(default=0, ge=0)
+
+
+class EditorialQualityReport(BaseModel):
+    """Comprehensive editorial quality report summarizing source duration and categorized removals."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    source_duration_ms: int = Field(default=0, ge=0)
+    current_edited_duration_ms: int = Field(default=0, ge=0)
+    new_edited_duration_ms: int = Field(default=0, ge=0)
+    total_removed_ms: int = Field(default=0, ge=0)
+
+    dead_air: EditorialCategoryBreakdown = Field(default_factory=EditorialCategoryBreakdown)
+    false_start: EditorialCategoryBreakdown = Field(default_factory=EditorialCategoryBreakdown)
+    word_repetition: EditorialCategoryBreakdown = Field(default_factory=EditorialCategoryBreakdown)
+    phrase_repetition: EditorialCategoryBreakdown = Field(default_factory=EditorialCategoryBreakdown)
+    redundant_explanation: EditorialCategoryBreakdown = Field(default_factory=EditorialCategoryBreakdown)
+    filler: EditorialCategoryBreakdown = Field(default_factory=EditorialCategoryBreakdown)
+    pacing: EditorialCategoryBreakdown = Field(default_factory=EditorialCategoryBreakdown)
+    other: EditorialCategoryBreakdown = Field(default_factory=EditorialCategoryBreakdown)
+
+    physical_cuts_count: int = Field(default=0, ge=0)
+    semantic_cuts_count: int = Field(default=0, ge=0)
+    silence_only_edit: bool = Field(default=False)
+
+    semantic_events: SemanticEventBreakdown = Field(default_factory=SemanticEventBreakdown)
+
+    @property
+    def total_removed_s(self) -> float:
+        return self.total_removed_ms / 1000.0

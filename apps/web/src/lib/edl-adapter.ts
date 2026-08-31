@@ -561,19 +561,30 @@ export function getExecutableCuts(edl?: EditDecisionList | null): CutInstruction
 export function formatCutLabel(decisionType: string, durationMs: number): string {
   const durS = (durationMs / 1000).toFixed(1);
   switch (decisionType) {
+    case "DEAD_AIR":
+    case "PAUSE_TRIM":
     case "REMOVE_SILENCE":
     case "TRIM_PAUSE":
       return `Silence removed ${durS}s`;
+    case "FALSE_START":
     case "REMOVE_FALSE_START":
       return `False start removed ${durS}s`;
+    case "WORD_REPETITION":
+      return `Repeated word removed ${durS}s`;
+    case "PHRASE_REPETITION":
     case "REMOVE_REPETITION":
       return `Repetition removed ${durS}s`;
-    case "TIGHTEN_PAUSE":
-    case "TIGHTEN_EXPLANATION":
-      return `Tightened pause ${durS}s`;
+    case "REDUNDANT_EXPLANATION":
+    case "RAMBLING":
     case "REMOVE_LOW_VALUE_SECTION":
+    case "TIGHTEN_EXPLANATION":
+      return `Redundant explanation removed ${durS}s`;
+    case "FILLER":
     case "REMOVE_FILLER":
       return `Filler removed ${durS}s`;
+    case "PACING":
+    case "TIGHTEN_PAUSE":
+      return `Tightened pause ${durS}s`;
     case "KEEP_FOR_CLARITY":
     case "KEEP":
       return `Walkthrough preserved`;

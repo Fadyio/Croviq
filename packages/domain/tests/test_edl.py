@@ -2,8 +2,10 @@
 
 from datetime import datetime, timezone
 import pytest
-
-from croviq_domain.editorial import EditorDecisionType
+from croviq_domain.editorial import (
+    EditorDecisionType,
+    SemanticEvent,
+)
 from croviq_domain.edl import (
     CoverageMarker,
     CoverageType,
@@ -12,6 +14,7 @@ from croviq_domain.edl import (
     EditDecisionList,
     audit_proposed_cuts,
     classify_cut_overlap,
+    compute_editorial_quality_report,
     compute_interval_union,
     compute_intervals_duration,
     derive_keep_segments,
@@ -503,3 +506,178 @@ def test_case_d_multiple_overlapping_proposed_cuts():
     audit = audit_proposed_cuts(proposed, existing_cuts)
     assert audit["effective_removed_ms"] == 6000
     assert audit["has_effective_change"] is True
+
+
+def test_compute_editorial_quality_report_with_semantic_events():
+    """Verify physical duration summing and semantic event counts in compute_editorial_quality_report."""
+    now = datetime.now(timezone.utc)
+    cut1 = CutInstruction(
+        cut_id="cut_1",
+        decision_id="dec_silence_1",
+        decision_type=EditorDecisionType.TRIM_PAUSE,
+        transcript_start_word=0,
+        transcript_end_word=0,
+        requested_start_ms=5000,
+        requested_end_ms=7000,
+        safe_start_ms=5000,
+        safe_end_ms=7000,
+        removed_duration_ms=2000,
+        left_anchor="intro",
+        right_anchor="content",
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="Clean silence pause",
+        confidence=1.0,
+        category="DEAD_AIR",
+        contains_silence=True,
+        contains_semantic_removal=False,
+        semantic_events=[
+            SemanticEvent(
+                event_id="ev_1",
+                decision_id="dec_silence_1",
+                decision_type="TRIM_PAUSE",
+                category="DEAD_AIR",
+                reason="Trim silence",
+                start_ms=5000,
+                end_ms=7000,
+                duration_ms=2000,
+                is_silence=True,
+            )
+        ],
+    )
+    cut2 = CutInstruction(
+        cut_id="cut_2",
+        decision_id="dec_filler_1",
+        decision_type=EditorDecisionType.FILLER,
+        transcript_start_word=5,
+        transcript_end_word=5,
+        requested_start_ms=10000,
+        requested_end_ms=10500,
+        safe_start_ms=9800,
+        safe_end_ms=13000,
+        removed_duration_ms=3200,
+        left_anchor="word1",
+        right_anchor="word2",
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="Clean filler cut merged with silence",
+        confidence=1.0,
+        removed_text="Okay.",
+        concise_reason="Deterministic silence cleanup: 2.7s; Removed filler 'Okay.'",
+        category="FILLER",
+        contains_silence=True,
+        contains_semantic_removal=True,
+        semantic_events=[
+            SemanticEvent(
+                event_id="ev_2a",
+                decision_id="silence_before_filler",
+                decision_type="TRIM_PAUSE",
+                category="DEAD_AIR",
+                reason="Trim silence before filler",
+                start_ms=9800,
+                end_ms=10000,
+                duration_ms=200,
+                is_silence=True,
+            ),
+            SemanticEvent(
+                event_id="ev_2b",
+                decision_id="dec_filler_1",
+                decision_type="FILLER",
+                category="FILLER",
+                reason="Removed filler 'Okay.'",
+                removed_text="Okay.",
+                start_ms=10000,
+                end_ms=10500,
+                duration_ms=500,
+                is_silence=False,
+            ),
+            SemanticEvent(
+                event_id="ev_2c",
+                decision_id="silence_after_filler",
+                decision_type="TRIM_PAUSE",
+                category="DEAD_AIR",
+                reason="Trim silence after filler",
+                start_ms=10500,
+                end_ms=13000,
+                duration_ms=2500,
+                is_silence=True,
+            ),
+        ],
+    )
+    cut3 = CutInstruction(
+        cut_id="cut_3",
+        decision_id="dec_false_start_1",
+        decision_type=EditorDecisionType.FALSE_START,
+        transcript_start_word=10,
+        transcript_end_word=11,
+        requested_start_ms=20000,
+        requested_end_ms=21000,
+        safe_start_ms=19500,
+        safe_end_ms=21500,
+        removed_duration_ms=2000,
+        left_anchor="before",
+        right_anchor="after",
+        safety_status=CutSafetyStatus.SAFE,
+        safety_reason="Cut false start",
+        confidence=1.0,
+        removed_text="the GitHub",
+        concise_reason="Remove false start 'the GitHub'",
+        category="FALSE_START",
+        contains_silence=False,
+        contains_semantic_removal=True,
+        semantic_events=[
+            SemanticEvent(
+                event_id="ev_3",
+                decision_id="dec_false_start_1",
+                decision_type="FALSE_START",
+                category="FALSE_START",
+                reason="Remove false start",
+                removed_text="the GitHub",
+                start_ms=19500,
+                end_ms=21500,
+                duration_ms=2000,
+                is_silence=False,
+            )
+        ],
+    )
+
+    edl = EditDecisionList(
+        edl_id="edl_test_semantic_report",
+        production_id="prod_test",
+        source_duration_ms=50000,
+        version=1,
+        cuts=[cut1, cut2, cut3],
+        created_at=now,
+    )
+
+    report = compute_editorial_quality_report(edl)
+    assert report.source_duration_ms == 50000
+    assert report.new_edited_duration_ms == 50000 - (2000 + 3200 + 2000)  # 42800ms
+    assert report.total_removed_ms == 7200
+
+    # Physical breakdown duration sums to exact total
+    phys_sum = (
+        report.dead_air.duration_ms
+        + report.filler.duration_ms
+        + report.false_start.duration_ms
+        + report.word_repetition.duration_ms
+        + report.phrase_repetition.duration_ms
+        + report.redundant_explanation.duration_ms
+        + report.pacing.duration_ms
+        + report.other.duration_ms
+    )
+    assert phys_sum == report.total_removed_ms == 7200
+    assert report.dead_air.count == 1
+    assert report.dead_air.duration_ms == 2000
+    assert report.filler.count == 1
+    assert report.filler.duration_ms == 3200
+    assert report.false_start.count == 1
+    assert report.false_start.duration_ms == 2000
+    assert report.physical_cuts_count == 3
+    assert report.semantic_cuts_count == 2
+    assert report.silence_only_edit is False
+
+    # Semantic events breakdown
+    assert report.semantic_events.filler == 1
+    assert report.semantic_events.false_start == 1
+    assert report.semantic_events.pause_trim == 3
+    assert report.semantic_events.total_events == 5
+    assert report.semantic_events.semantic_events_count == 2

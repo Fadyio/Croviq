@@ -9,10 +9,12 @@ from croviq_domain.editorial import (
     EditorProposal,
 )
 from croviq_domain.edl import (
+    BackgroundMusicMix,
     CoverageType,
     CutInstruction,
     CutSafetyStatus,
     EditDecisionList,
+    compute_editorial_quality_report,
 )
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
@@ -397,3 +399,101 @@ def test_assemble_edl_from_proposal_with_multiple_cuts():
     assert edl.cuts[1].decision_id == "dec_rep"
     assert edl.cuts[0].safe_start_ms < edl.cuts[1].safe_start_ms
     assert edl.total_removed_duration_ms > 0
+
+
+def test_merged_silence_and_semantic_cuts_preserves_category_and_events():
+    """Verify that merging adjacent silence and filler/false-start cuts retains the semantic category and events."""
+    words = [
+        (0, "Intro", 100, 400),
+        (1, "content", 450, 800),
+        # silence: 800-4000 (3.2s)
+        (2, "Okay.", 4050, 4300),
+        # silence: 4300-6000 (1.7s)
+        (3, "And", 6050, 6300),
+        (4, "next", 6350, 6700),
+    ]
+    transcript = _create_sample_transcript(words)
+
+    proposal = EditorProposal(
+        production_id="prod_merge_test",
+        model="gemini-3.7-flash",
+        summary="Silence and filler merging test",
+        decisions=[
+            EditorDecision(
+                decision_id="silence_cut_001",
+                decision_type=EditorDecisionType.TRIM_PAUSE,
+                transcript_start_word=1,
+                transcript_end_word=2,
+                source_start_ms=1050,
+                source_end_ms=3950,
+                original_text="[Silence: content ... Okay.]",
+                action="trim",
+                concise_reason="Deterministic silence cleanup: 2.9s",
+                confidence=1.0,
+            ),
+            EditorDecision(
+                decision_id="dec_filler_01",
+                decision_type=EditorDecisionType.FILLER,
+                transcript_start_word=2,
+                transcript_end_word=2,
+                source_start_ms=4050,
+                source_end_ms=4300,
+                original_text="Okay.",
+                action="remove",
+                concise_reason="Removed filler word 'Okay.'",
+                confidence=0.95,
+            ),
+            EditorDecision(
+                decision_id="silence_cut_002",
+                decision_type=EditorDecisionType.TRIM_PAUSE,
+                transcript_start_word=2,
+                transcript_end_word=3,
+                source_start_ms=4400,
+                source_end_ms=5800,
+                original_text="[Silence: Okay. ... And]",
+                action="trim",
+                concise_reason="Deterministic silence cleanup: 1.4s",
+                confidence=1.0,
+            ),
+        ],
+        overall_confidence=0.96,
+    )
+
+    bgm = BackgroundMusicMix(
+        style="tech ambient",
+        prompt="Ambient synth score",
+        model_id="lyria-3-pro-preview",
+        music_gcs_object="music/test.wav",
+        preview_artifact_id="art_mus_test",
+    )
+
+    edl = assemble_edl_from_proposal(
+        proposal=proposal,
+        transcript=transcript,
+        background_music=bgm,
+    )
+
+    # All three decisions should merge into 1 contiguous physical cut
+    assert len(edl.cuts) == 1
+    merged_cut = edl.cuts[0]
+    assert merged_cut.decision_type == EditorDecisionType.FILLER
+    assert merged_cut.category == "FILLER"
+    assert merged_cut.contains_silence is True
+    assert merged_cut.contains_semantic_removal is True
+    assert "Okay." in (merged_cut.removed_text or "")
+    assert "Removed filler word 'Okay.'" in (merged_cut.concise_reason or "")
+    assert len(merged_cut.semantic_events) == 3
+    assert edl.background_music == bgm
+
+    # Compute report
+    report = compute_editorial_quality_report(edl)
+    assert report.filler.count == 1
+    assert report.filler.duration_ms == merged_cut.removed_duration_ms
+    assert report.dead_air.count == 0
+    assert report.dead_air.duration_ms == 0
+    assert report.semantic_cuts_count == 1
+    assert report.silence_only_edit is False
+    assert report.semantic_events.filler == 1
+    assert report.semantic_events.pause_trim == 2
+    assert report.semantic_events.total_events == 3
+    assert report.semantic_events.semantic_events_count == 1

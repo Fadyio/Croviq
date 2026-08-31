@@ -23,6 +23,16 @@ interface DecisionInspectorProps {
 
 const decisionLabel = (decisionType: string): string => {
   const labels: Record<string, string> = {
+    FALSE_START: "Remove false start",
+    WORD_REPETITION: "Remove repeated word",
+    PHRASE_REPETITION: "Remove repeated phrase",
+    REDUNDANT_EXPLANATION: "Remove redundant explanation",
+    FILLER: "Remove verbal filler",
+    RAMBLING: "Remove rambling",
+    DEAD_AIR: "Trim dead air",
+    PAUSE_TRIM: "Trim the pause",
+    PACING: "Tighten pacing",
+    OTHER: "Editorial refinement",
     SOURCE_COVER: "Use source-screen coverage",
     KEEP_FOR_CLARITY: "Preserve this explanation",
     KEEP: "Keep this section",

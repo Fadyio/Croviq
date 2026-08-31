@@ -49,9 +49,17 @@ interface TranscriptPanelProps {
 const isPauseDecision = (decision: EditorDecision): boolean =>
   decision.decision_type === "TRIM_PAUSE" ||
   decision.decision_type === "REMOVE_SILENCE" ||
-  decision.decision_type === "TIGHTEN_PAUSE";
-
+  decision.decision_type === "TIGHTEN_PAUSE" ||
+  decision.decision_type === "DEAD_AIR" ||
+  decision.decision_type === "PAUSE_TRIM";
 const isRemovedSpeech = (decision: EditorDecision): boolean =>
+  decision.decision_type === "FALSE_START" ||
+  decision.decision_type === "WORD_REPETITION" ||
+  decision.decision_type === "PHRASE_REPETITION" ||
+  decision.decision_type === "REDUNDANT_EXPLANATION" ||
+  decision.decision_type === "FILLER" ||
+  decision.decision_type === "RAMBLING" ||
+  decision.decision_type === "PACING" ||
   decision.decision_type === "REMOVE_FALSE_START" ||
   decision.decision_type === "REMOVE_REPETITION" ||
   decision.decision_type === "REMOVE_FILLER" ||
@@ -59,17 +67,17 @@ const isRemovedSpeech = (decision: EditorDecision): boolean =>
   decision.decision_type === "TIGHTEN_EXPLANATION";
 
 const decisionTitle = (decision: EditorDecision): string => {
-  if (decision.decision_type === "REMOVE_FALSE_START") return "False start removed";
-  if (decision.decision_type === "REMOVE_REPETITION") return "Repetition removed";
-  if (decision.decision_type === "REMOVE_FILLER") return "Filler removed";
-  if (decision.decision_type === "REMOVE_LOW_VALUE_SECTION") return "Low-value section removed";
-  if (decision.decision_type === "TIGHTEN_EXPLANATION") return "Explanation tightened";
+  if (decision.decision_type === "FALSE_START" || decision.decision_type === "REMOVE_FALSE_START") return "False start removed";
+  if (decision.decision_type === "WORD_REPETITION") return "Repeated word removed";
+  if (decision.decision_type === "PHRASE_REPETITION" || decision.decision_type === "REMOVE_REPETITION") return "Repetition removed";
+  if (decision.decision_type === "FILLER" || decision.decision_type === "REMOVE_FILLER") return "Filler removed";
+  if (decision.decision_type === "REDUNDANT_EXPLANATION" || decision.decision_type === "RAMBLING" || decision.decision_type === "REMOVE_LOW_VALUE_SECTION") return "Redundant explanation removed";
+  if (decision.decision_type === "PACING" || decision.decision_type === "TIGHTEN_EXPLANATION") return "Pacing tightened";
   if (decision.decision_type === "SOURCE_COVER") return "Source coverage";
-  if (decision.decision_type === "KEEP_FOR_CLARITY") return "Preserved for clarity";
-  if (isPauseDecision(decision)) return "Pause removed";
+  if (decision.decision_type === "KEEP_FOR_CLARITY" || decision.decision_type === "KEEP") return "Preserved for clarity";
+  if (isPauseDecision(decision)) return "Pause trimmed";
   return "Editorial note";
 };
-
 const shouldInsertSpace = (text: string, wordPosition: number): boolean =>
   wordPosition > 0 && !/^[,.;:!?)}\]'"’]/u.test(text);
 

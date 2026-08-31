@@ -645,9 +645,11 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
               <div className="p-4 rounded-xl bg-surface-2/60 border border-border-subtle space-y-2">
                 <div className="flex items-center justify-between text-xs font-semibold text-text-secondary">
                   <span>Iris Assessment Verdict: {qaData.review.verdict}</span>
-                  <span className="text-text-muted font-normal">
-                    Confidence: {Math.round((qaData.review.confidence || 0.95) * 100)}%
-                  </span>
+                  {typeof qaData.review.confidence === "number" && (
+                    <span className="text-text-muted font-normal">
+                      Confidence: {Math.round(qaData.review.confidence * 100)}%
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-text-primary leading-relaxed">{qaData.review.summary}</p>
               </div>

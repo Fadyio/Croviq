@@ -135,6 +135,7 @@ class EDLService:
                 version=next_version,
                 analyzer=self._cut_safety_analyzer,
                 editor_proposal_id=run.editor_proposal_id,
+                background_music=existing_edl.background_music if existing_edl else None,
             )
 
             # 10. Persist EDL in Firestore

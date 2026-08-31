@@ -44,14 +44,85 @@ const describeActivity = (
   const key = `${activity.activity_type} ${activity.message}`.toLowerCase();
   const reasonText = cleanReason(activity.message, decision);
 
-  if (includesAny(key, ["analyz", "inspect", "reviewing footage", "media"])) {
+  if (activity.activity_type === "dialogue_analysis" || key.includes("analyzing dialogue")) {
     return {
-      action: includesAny(key, ["inspect", "media"])
-        ? "Inspected source media"
-        : "Analyzed the full video",
+      action: "Analyzing dialogue",
+      reason: reasonText,
+      status: "Completed",
+      tool: "Dialogue clarity pass",
+    };
+  }
+  if (activity.activity_type === "repetition_detection" || key.includes("detecting repetitions")) {
+    return {
+      action: "Detecting repetitions",
+      reason: reasonText,
+      status: "Completed",
+      tool: "Repetition & false-start detector",
+    };
+  }
+  if (activity.activity_type === "pacing_evaluation" || key.includes("evaluating pacing")) {
+    return {
+      action: "Evaluating pacing",
+      reason: reasonText,
+      status: "Completed",
+      tool: "Narrative pacing analyzer",
+    };
+  }
+  if (activity.activity_type === "continuity_check" || key.includes("checking technical continuity")) {
+    return {
+      action: "Checking technical continuity",
+      reason: reasonText,
+      status: "Completed",
+      tool: "Technical continuity validator",
+    };
+  }
+  if (activity.activity_type === "safe_cuts" || key.includes("applying safe cuts")) {
+    return {
+      action: "Applying safe cuts",
+      reason: reasonText,
+      status: "Completed",
+      tool: "Natural cut safety engine",
+    };
+  }
+  if (activity.activity_type === "sequence_review" || key.includes("reviewing edited sequence")) {
+    return {
+      action: "Reviewing edited sequence",
+      reason: reasonText,
+      status: "Completed",
+      tool: "Global sequence reviewer",
+    };
+  }
+  if (activity.activity_type === "render_preview" || key.includes("rendering edited preview")) {
+    return {
+      action: "Rendering Edited Preview",
+      reason: reasonText,
+      status: "Completed",
+      tool: "FFmpeg Preview renderer",
+    };
+  }
+  if (activity.activity_type === "result_review" || key.includes("reviewing rendered result")) {
+    return {
+      action: "Reviewing rendered result",
+      reason: reasonText,
+      status: "Completed",
+      tool: "Leo multimodal preview review",
+    };
+  }
+
+  if (includesAny(key, ["analyz", "reviewing footage"])) {
+    return {
+      action: "Analyzed the full video",
       reason: reasonText,
       status: includesAny(key, ["reviewing", "progress", "started"]) ? "In progress" : "Completed",
       tool: "Gemini video analysis",
+    };
+  }
+  if (includesAny(key, ["inspect", "media"])) {
+    return {
+      action: "Inspected source media",
+      reason: reasonText,
+      status: "Completed",
+      tool: "Media inspector",
     };
   }
   if (includesAny(key, ["reject", "unsafe"])) {

@@ -164,6 +164,20 @@ def reconcile_editor_proposal_with_transcript(
             text_words = transcript.words[start_idx : end_idx + 1]
             original_text = " ".join(w.text for w in text_words) or d.original_text
 
+        removed_text = d.removed_text or (original_text if not original_text.startswith("[Silence:") else "")
+        context_before = d.context_before
+        if not context_before and transcript.words:
+            if start_idx > 0:
+                context_before = " ".join(w.text for w in transcript.words[max(0, start_idx - 3):start_idx])
+            else:
+                context_before = "[START]"
+        context_after = d.context_after
+        if not context_after and transcript.words:
+            if end_idx + 1 < len(transcript.words):
+                context_after = " ".join(w.text for w in transcript.words[end_idx + 1:min(len(transcript.words), end_idx + 4)])
+            else:
+                context_after = "[END]"
+
         reconciled_decisions.append(
             EditorDecision(
                 decision_id=d.decision_id,
@@ -179,9 +193,11 @@ def reconcile_editor_proposal_with_transcript(
                 visual_context=d.visual_context,
                 preserve_context=d.preserve_context,
                 risk=d.risk,
+                removed_text=removed_text,
+                context_before=context_before,
+                context_after=context_after,
             )
         )
-
 
     reconciled_chapters: list[ChapterMarker] = []
     total_dur_ms = transcript.duration_ms or (transcript.words[-1].end_ms if transcript.words else 0)
@@ -603,7 +619,7 @@ class GoogleGenAIClient(GenAIClient):
             response_mime_type="application/json",
             response_schema=EditorProposal,
             temperature=0.2,
-            max_output_tokens=8192,
+            max_output_tokens=16384,
             thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
 

@@ -56,5 +56,8 @@ coverage/
 **/*.pyc
 # Screenshots and local acceptance test artifacts
 docs/screenshots/
+**/docs/screenshots/
 apps/web/e2e/screenshots/
 download/
+temp_media/
+**/temp_media/

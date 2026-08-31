@@ -851,6 +851,18 @@ def build_editor_chat_tool_registry(
     analyzer = CutSafetyAnalyzer()
 
     destructive_types = {
+        # Canonical BUG 22 types
+        EditorDecisionType.FALSE_START,
+        EditorDecisionType.WORD_REPETITION,
+        EditorDecisionType.PHRASE_REPETITION,
+        EditorDecisionType.REDUNDANT_EXPLANATION,
+        EditorDecisionType.FILLER,
+        EditorDecisionType.RAMBLING,
+        EditorDecisionType.DEAD_AIR,
+        EditorDecisionType.PAUSE_TRIM,
+        EditorDecisionType.PACING,
+        EditorDecisionType.OTHER,
+        # Legacy types
         EditorDecisionType.REMOVE_SILENCE,
         EditorDecisionType.REMOVE_FILLER,
         EditorDecisionType.REMOVE_FALSE_START,
@@ -998,16 +1010,27 @@ def build_editor_chat_tool_registry(
             (item for item in current_edl.coverage_markers if item.decision_id == decision.decision_id),
             None,
         )
+        category = (cut.category if cut and cut.category else (decision.decision_type.value if hasattr(decision.decision_type, "value") else str(decision.decision_type)))
+        removed_text = (cut.removed_text if cut and cut.removed_text else (decision.removed_text or (decision.original_text if not decision.original_text.startswith("[Silence:") else "")))
+        context_before = (cut.context_before if cut and cut.context_before else (decision.context_before or ""))
+        context_after = (cut.context_after if cut and cut.context_after else (decision.context_after or ""))
+        reason = (cut.concise_reason if cut and cut.concise_reason else (decision.concise_reason or (cut.safety_reason if cut else "")))
+        source_range = [cut.safe_start_ms, cut.safe_end_ms] if cut else [decision.source_start_ms, decision.source_end_ms]
+
         return {
-            "WHAT": decision.decision_type.value,
-            "WHY": decision.concise_reason,
-            "SOURCE_RANGE": [decision.source_start_ms, decision.source_end_ms],
+            "WHAT": category,
+            "CATEGORY": category,
+            "WHY": reason,
+            "SOURCE_RANGE": source_range,
+            "REMOVED_TEXT": removed_text,
+            "CONTEXT_BEFORE": context_before,
+            "CONTEXT_AFTER": context_after,
             "RESULT": (
                 cut.model_dump(mode="json") if cut
                 else marker.model_dump(mode="json") if marker
                 else {"action": decision.action}
             ),
-            "EVIDENCE": inspect_range(decision.source_start_ms, decision.source_end_ms),
+            "EVIDENCE": inspect_range(source_range[0], source_range[1]),
         }
 
     registry.register(ToolDefinition(
@@ -1016,8 +1039,10 @@ def build_editor_chat_tool_registry(
         parameters_schema=ExplainEditArgs,
         handler=explain_edit,
         human_summary_formatter=lambda args, out: (
-            f"**WHAT**: {out['WHAT']}\n\n"
-            f"**WHY**: {out['WHY']}\n\n"
+            f"**CATEGORY**: {out.get('CATEGORY', out.get('WHAT', 'Edit'))}\n\n"
+            f"**REMOVED**: \"{out.get('REMOVED_TEXT', '')}\"\n\n"
+            f"**CONTEXT**: Before: \"{out.get('CONTEXT_BEFORE', '')}\" | After: \"{out.get('CONTEXT_AFTER', '')}\"\n\n"
+            f"**REASON**: {out['WHY']}\n\n"
             f"**SOURCE RANGE**: {out['SOURCE_RANGE'][0]/1000.0:.2f}s – {out['SOURCE_RANGE'][1]/1000.0:.2f}s\n\n"
             f"**RESULT**: {out['RESULT'].get('safety_reason') or out['RESULT'].get('action') or 'Cut applied'}"
         ),
