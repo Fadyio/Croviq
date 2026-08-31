@@ -66,8 +66,8 @@ def test_zero_cut_preview_render(synthetic_5s_video: Path, tmp_path: Path):
                 decision_id="dec_001",
                 source_start_ms=1000,
                 source_end_ms=2000,
-                coverage_type=CoverageType.BROLL_CANDIDATE,
-                reason="Insert b-roll over test",
+                coverage_type=CoverageType.SOURCE_SCREEN,
+                reason="Screen coverage over test",
             )
         ],
         created_at=now,
@@ -185,7 +185,7 @@ def test_multi_cut_render_with_coverage_and_rejected_cuts(synthetic_5s_video: Pa
         right_anchor="pause_right",
         transition_ms=20,
         safety_status=CutSafetyStatus.NEEDS_COVERAGE,
-        safety_reason="Jump cut requires B-roll",
+        safety_reason="Jump cut requires visual coverage",
         confidence=0.90,
     )
     # Cut 3: 4200 - 4800 (REJECTED_UNSAFE -> MUST BE IGNORED)
@@ -312,62 +312,6 @@ def test_render_studio_voice_preview(synthetic_5s_video: Path, tmp_path: Path):
     assert res.duration_ms >= 4800
     assert res.video_codec == "h264"
     assert res.audio_codec == "aac"
-
-def test_render_broll_placement_isolates_audio_and_trims_duration(synthetic_5s_video: Path, tmp_path: Path):
-    """Verify B-roll visual placement trims asset to interval, isolates audio, and preserves EDL timeline."""
-    renderer = FFmpegRenderService()
-    now = datetime.now(timezone.utc)
-    edl = EditDecisionList(
-        edl_id="edl_broll_test",
-        production_id="prod_broll",
-        source_duration_ms=5000,
-        cuts=[],
-        coverage_markers=[
-            CoverageMarker(
-                marker_id="cov_01",
-                decision_id="dec_01",
-                source_start_ms=1000,
-                source_end_ms=3500,
-                coverage_type=CoverageType.BROLL_CANDIDATE,
-                reason="Visual coverage",
-            )
-        ],
-        created_at=now,
-    )
-    # Create 10s B-roll with distinct audio (e.g. 1000Hz tone) to prove audio is stripped
-    broll_video = tmp_path / "omni_broll_10s.mp4"
-    _create_synthetic_video(broll_video, duration_sec=10, size="640x360")
-
-    out_path = tmp_path / "broll_master.mp4"
-    res = renderer.render_broll_placement(
-        source_path=synthetic_5s_video,
-        edl=edl,
-        broll_path=broll_video,
-        coverage_start_ms=1000,
-        coverage_end_ms=3500,
-        output_path=out_path,
-        is_master=True,
-    )
-
-    assert res.output_path.exists()
-    assert res.artifact_type == ArtifactType.BROLL_MASTER
-    # Duration matches EDL target duration (5s), not the 10s B-roll duration!
-    assert abs(res.duration_ms - 5000) <= 200
-    assert res.video_codec == "h264"
-    assert res.audio_codec == "aac"
-
-    # Verify with FakeRenderService as well
-    fake = FakeRenderService()
-    fake_res = fake.render_broll_placement(
-        source_path=synthetic_5s_video,
-        edl=edl,
-        broll_path=broll_video,
-        coverage_start_ms=1000,
-        coverage_end_ms=3500,
-        is_master=False,
-    )
-    assert fake_res.artifact_type == ArtifactType.BROLL_PREVIEW
-    assert fake_res.duration_ms == 5000
 
 
 def test_render_final_mix_with_cuts_preserves_edited_timeline_duration(synthetic_5s_video: Path, tmp_path: Path):
@@ -523,30 +467,15 @@ def test_single_segment_narration_audio_is_not_dropped(synthetic_5s_video: Path,
     assert abs(res.duration_ms - 3000) <= 250
 
 
-def test_broll_placement_pts_offset(synthetic_5s_video: Path, tmp_path: Path):
-    """Verify B-roll overlay filter includes start time PTS offset to prevent early termination."""
-    renderer = FFmpegRenderService()
-    fg, maps = renderer._build_filtergraph(
-        keep_segments=[(0, 5000)],
-        source_duration_ms=5000,
-        broll_path=synthetic_5s_video,
-        coverage_start_ms=2000,
-        coverage_end_ms=4000,
-    )
-    assert fg is not None
-    # Must have PTS offset of +2.0000/TB (coverage_start_s)
-    assert "setpts=PTS-STARTPTS+2.0000/TB" in fg
-    assert "between(t,2.0000,4.0000)" in fg
-
 
 def test_render_service_abstract_interface_contract_parity():
     """Verify RenderService, FakeRenderService, and FFmpegRenderService share identical method signatures."""
     import inspect
     from croviq_media.render import RenderService, FakeRenderService, FFmpegRenderService
 
-    abc_sig = inspect.signature(RenderService.render_broll_placement)
-    fake_sig = inspect.signature(FakeRenderService.render_broll_placement)
-    ffmpeg_sig = inspect.signature(FFmpegRenderService.render_broll_placement)
+    abc_sig = inspect.signature(RenderService.render_final_mix)
+    fake_sig = inspect.signature(FakeRenderService.render_final_mix)
+    ffmpeg_sig = inspect.signature(FFmpegRenderService.render_final_mix)
 
     assert list(abc_sig.parameters.keys()) == list(fake_sig.parameters.keys())
     assert list(abc_sig.parameters.keys()) == list(ffmpeg_sig.parameters.keys())

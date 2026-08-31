@@ -6,7 +6,6 @@ dependencies = [
     "croviq-domain",
     "croviq-observability",
     "google-genai>=2.20.0",
-    "pydantic>=2.10.0",
 ]
 
 [tool.uv.sources]

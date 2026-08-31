@@ -323,18 +323,6 @@ def test_assemble_edl_from_proposal_zero_cuts():
                 concise_reason="Strong hook",
                 confidence=0.98,
             ),
-            EditorDecision(
-                decision_id="dec_b1",
-                decision_type=EditorDecisionType.BROLL_COVER_CANDIDATE,
-                transcript_start_word=0,
-                transcript_end_word=3,
-                source_start_ms=0,
-                source_end_ms=1400,
-                original_text="The phone is modular",
-                action="cover",
-                concise_reason="Close-up macro insert",
-                confidence=0.95,
-            ),
         ],
         overall_confidence=0.97,
     )
@@ -346,8 +334,7 @@ def test_assemble_edl_from_proposal_zero_cuts():
 
     assert edl.production_id == "prod_01"
     assert edl.cuts == []
-    assert len(edl.coverage_markers) == 1
-    assert edl.coverage_markers[0].coverage_type == CoverageType.BROLL_CANDIDATE
+    assert len(edl.coverage_markers) == 0
     assert edl.active_cuts_count == 0
     assert edl.total_removed_duration_ms == 0
 

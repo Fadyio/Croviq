@@ -3,16 +3,6 @@ import React from "react";
 import { type CanonicalMediaOutputs, formatDuration } from "../../lib/edl-adapter";
 export type PreviewMode = "original" | "edited" | "studio_voice" | "final_mix";
 
-export interface BRollAssetItem {
-  artifactId: string;
-  sourceStartMs: number;
-  sourceEndMs: number;
-  durationMs: number;
-  promptSummary: string;
-  status?: string;
-  isGenerated?: boolean;
-}
-
 interface MediaBinProps {
   currentMode: PreviewMode;
   sourceDurationMs: number;
@@ -26,7 +16,6 @@ interface MediaBinProps {
   hasMaster?: boolean;
   hasProposalOrEdl?: boolean;
   isRunFailed?: boolean;
-  brollAssets?: BRollAssetItem[];
   mediaOutputs?: CanonicalMediaOutputs;
   onSeek?: (timeMs: number) => void;
   onSelectMode: (mode: PreviewMode) => void;
@@ -129,7 +118,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
             name: "Edited Preview",
             mode: "edited" as PreviewMode,
             durationMs: editedDur,
-            description: "Cuts and visual B-roll",
+            description: "Applied cuts",
             icon: Film,
           },
         ]
@@ -153,7 +142,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
             name: "Final Mix",
             mode: "final_mix" as PreviewMode,
             durationMs: fmDur,
-            description: "Voice corrections + B-roll + background music",
+            description: "Voice corrections + background music",
             icon: Music,
           },
         ]

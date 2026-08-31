@@ -24,11 +24,11 @@ def test_coverage_marker_valid():
         decision_id="dec_002",
         source_start_ms=26160,
         source_end_ms=42340,
-        coverage_type=CoverageType.BROLL_CANDIDATE,
+        coverage_type=CoverageType.SOURCE_SCREEN,
         reason="Close-up macro insert over assembly commentary",
     )
     assert marker.marker_id == "cov_001"
-    assert marker.coverage_type == CoverageType.BROLL_CANDIDATE
+    assert marker.coverage_type == CoverageType.SOURCE_SCREEN
     assert marker.source_end_ms > marker.source_start_ms
 
 
@@ -154,7 +154,7 @@ def test_edit_decision_list_zero_cut_valid():
                 decision_id="dec_002",
                 source_start_ms=26160,
                 source_end_ms=42340,
-                coverage_type=CoverageType.BROLL_CANDIDATE,
+                coverage_type=CoverageType.SOURCE_SCREEN,
                 reason="Plate swap macro footage",
             )
         ],

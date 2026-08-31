@@ -411,7 +411,6 @@ export type TimelineTrackId =
   | "video"
   | "audio"
   | "edits"
-  | "broll"
   | "voiceover"
   | "music"
   | "chapters"
@@ -487,7 +486,6 @@ export interface TimelineBlock {
     | "cut-safe"
     | "cut-needs-coverage"
     | "cut-rejected"
-    | "coverage-broll"
     | "coverage-screen"
     | "voiceover"
     | "music"
@@ -559,9 +557,6 @@ export function formatCutLabel(decisionType: string, durationMs: number): string
     case "REMOVE_LOW_VALUE_SECTION":
     case "REMOVE_FILLER":
       return `Filler removed ${durS}s`;
-    case "BROLL_COVER":
-    case "BROLL_COVER_CANDIDATE":
-      return `B-roll cover ${durS}s`;
     case "KEEP_FOR_CLARITY":
     case "KEEP":
       return `Walkthrough preserved`;
@@ -862,9 +857,8 @@ export function edlToTwickTimeline(
     });
   }
 
-  // 3. B-ROLL / COVERAGE track
+  // 3. COVERAGE track
   const coverageMarkers = edl.coverage_markers || [];
-  const coverageDecisionIds = new Set(coverageMarkers.map((marker) => marker.decision_id));
   let coverageBlockCount = 0;
   for (const marker of coverageMarkers) {
     const leoDec = leoDecisionMap[marker.decision_id];
@@ -872,12 +866,12 @@ export function edlToTwickTimeline(
     const duration = marker.source_end_ms - marker.source_start_ms;
     blocks.push({
       id: `cov-${marker.marker_id}`,
-      trackId: "broll",
-      label: marker.coverage_type === "BROLL_CANDIDATE" ? "B-Roll Visual" : "Source Coverage",
+      trackId: "coverage",
+      label: "Source Coverage",
       startMs: marker.source_start_ms,
       endMs: marker.source_end_ms,
       durationMs: duration,
-      type: marker.coverage_type === "BROLL_CANDIDATE" ? "coverage-broll" : "coverage-screen",
+      type: "coverage-screen",
       decisionId: marker.decision_id,
       markerId: marker.marker_id,
       details: {
@@ -885,37 +879,6 @@ export function edlToTwickTimeline(
         conciseReason: marker.reason || leoDec?.concise_reason,
         confidence: leoDec?.confidence,
         coverageType: marker.coverage_type,
-      },
-    });
-    coverageBlockCount += 1;
-  }
-
-  // Persisted proposal candidates can precede EDL marker assembly. Keep them visible
-  // on the canonical B-roll track without duplicating assembled coverage markers.
-  for (const candidate of proposal?.decisions || []) {
-    if (
-      (candidate.decision_type !== "BROLL_COVER_CANDIDATE" &&
-        candidate.decision_type !== "BROLL_COVER") ||
-      coverageDecisionIds.has(candidate.decision_id)
-    ) {
-      continue;
-    }
-
-    const duration = Math.max(0, candidate.source_end_ms - candidate.source_start_ms);
-    blocks.push({
-      id: `cov-decision-${candidate.decision_id}`,
-      trackId: "broll",
-      label: "B-roll candidate",
-      startMs: candidate.source_start_ms,
-      endMs: candidate.source_end_ms,
-      durationMs: duration,
-      type: "coverage-broll",
-      decisionId: candidate.decision_id,
-      details: {
-        originalText: candidate.original_text,
-        conciseReason: candidate.concise_reason,
-        confidence: candidate.confidence,
-        coverageType: "BROLL_CANDIDATE",
       },
     });
     coverageBlockCount += 1;
@@ -1003,12 +966,12 @@ export function edlToTwickTimeline(
   }
 
   // Construct Twick Track instances in canonical order:
-  // VIDEO, AUDIO, EDITS, B-ROLL, VOICEOVER, MUSIC, CHAPTERS, CAPTIONS
+  // VIDEO, AUDIO, EDITS, COVERAGE, VOICEOVER, MUSIC, CHAPTERS, CAPTIONS
   const tracks = [
     new Track("Video", "ELEMENT", "track-video"),
     new Track("Audio", "ELEMENT", "track-audio"),
     new Track("Edits", "ELEMENT", "track-edits"),
-    new Track("B-roll", "ELEMENT", "track-broll"),
+    new Track("Coverage", "ELEMENT", "track-coverage"),
     new Track("Voiceover", "ELEMENT", "track-voiceover"),
     new Track("Music", "ELEMENT", "track-music"),
     new Track("Chapters", "ELEMENT", "track-chapters"),

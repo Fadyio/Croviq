@@ -20,8 +20,6 @@ class EditorDecisionType(StrEnum):
     TIGHTEN_EXPLANATION = "TIGHTEN_EXPLANATION"
     REMOVE_LOW_VALUE_SECTION = "REMOVE_LOW_VALUE_SECTION"
     KEEP_FOR_CLARITY = "KEEP_FOR_CLARITY"
-    BROLL_COVER = "BROLL_COVER"
-    BROLL_COVER_CANDIDATE = "BROLL_COVER_CANDIDATE"
     SOURCE_COVER = "SOURCE_COVER"
     CHAPTER_MARKER = "CHAPTER_MARKER"
     NARRATION_REWRITE = "NARRATION_REWRITE"
@@ -252,7 +250,7 @@ class EditorDecision(BaseModel):
     """Individual editorial decision proposed by Leo (Video Editor)."""
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="ignore",
         str_strip_whitespace=True,
         validate_assignment=True,
     )
@@ -263,7 +261,7 @@ class EditorDecision(BaseModel):
         max_length=64,
         description="Unique identifier for the decision within the proposal",
     )
-    decision_type: EditorDecisionType = Field(
+    decision_type: EditorDecisionType | str = Field(
         ...,
         description="Semantic category of the editing decision",
     )

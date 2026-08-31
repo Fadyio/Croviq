@@ -249,7 +249,7 @@ class EditorSelfReview(BaseModel):
     )
     coverage_needed: bool = Field(
         default=False,
-        description="Whether additional B-roll visual coverage is recommended",
+        description="Whether additional visual coverage is recommended",
     )
     findings: list[str] = Field(
         default_factory=list,

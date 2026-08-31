@@ -91,7 +91,7 @@ The deterministic verification pipeline ensuring audio cutpoints fall on natural
 _Avoid_: Hard Cut, Blind Slice, Frame Chop
 
 **Transition Strategy**:
-The specific technique applied to smooth a cut (clean dialogue boundary, audio crossfade, room-tone bridge, J/L cut, screen B-roll coverage).
+The specific technique applied to smooth a cut (clean dialogue boundary, audio crossfade, room-tone bridge, J/L cut, screen visual coverage).
 _Avoid_: Blend, Fade Effect
 
 **Master**:
@@ -108,7 +108,7 @@ A bounded, executable unit of work within a Run owned by an Agent or the determi
 _Avoid_: Task, Step, Stage, Action
 
 **Artifact**:
-An immutable, versioned digital asset produced or consumed during a Run (source video, EDL, master render, Studio Voice narration, B-roll overlay, QA report).
+An immutable, versioned digital asset produced or consumed during a Run (source video, EDL, master render, Studio Voice narration, background music mix, QA report).
 _Avoid_: Output, File, Result, Asset
 
 **Approval Gate**:

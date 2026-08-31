@@ -33,11 +33,9 @@ from croviq_observability.logger import (
     set_logger,
     log_upload_event,
     log_transcription_event,
-    log_media_inspect_event,
     log_edl_event,
     log_cut_safety_event,
     log_render_event,
-    log_editor_correction_event,
     log_master_approved_event,
 )
 try:
@@ -81,11 +79,9 @@ __all__ = [
     "log_workspace_event",
     "log_upload_event",
     "log_transcription_event",
-    "log_media_inspect_event",
     "log_edl_event",
     "log_cut_safety_event",
     "log_render_event",
-    "log_editor_correction_event",
     "log_master_approved_event",
     "register_error_handlers",
     "sanitize_payload",

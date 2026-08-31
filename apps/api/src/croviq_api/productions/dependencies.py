@@ -67,10 +67,6 @@ from croviq_api.productions.studio_voice_repository import (
     StudioVoiceRepository,
     get_studio_voice_repository,
 )
-from croviq_api.productions.broll_repository import (
-    BRollRepository,
-    get_broll_repository,
-)
 from croviq_api.channels.youtube_publisher import (
     YouTubePublishClient,
     get_youtube_publish_client,
@@ -207,7 +203,6 @@ def get_publish_service(
     packaging_repo: Annotated[PackagingRepository, Depends(get_packaging_repository)],
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
-    broll_repo: Annotated[BRollRepository, Depends(get_broll_repository)],
     thumbnail_repo: Annotated[ThumbnailRepository, Depends(get_thumbnail_repository)],
     publish_job_repo: Annotated[PublishJobRepository, Depends(get_publish_job_repository)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
@@ -224,7 +219,6 @@ def get_publish_service(
         packaging_repo=packaging_repo,
         render_repo=render_repo,
         studio_voice_repo=studio_voice_repo,
-        broll_repo=broll_repo,
         thumbnail_repo=thumbnail_repo,
         publish_job_repo=publish_job_repo,
         media_storage=media_storage,

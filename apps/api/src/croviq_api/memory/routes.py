@@ -75,7 +75,7 @@ async def get_channel_lessons(
     ),
     target_agent: TargetAgent | None = Query(
         default=None,
-        description="Optional filter by target agent (director, editor, packaging, qa).",
+        description="Optional filter by target agent (alex, leo, iris).",
     ),
 ) -> list[ChannelLesson]:
     """Retrieve structured channel lessons for collaborative agent workflows."""

@@ -82,29 +82,6 @@ def measure_ebur128_loudness(
     )
 
 
-class SpeechEnhancementPipeline:
-    """Deterministic, FFmpeg-native speech audio enhancement and loudness mastering pipeline."""
-
-    def __init__(
-        self,
-        filter_chain: str = DEFAULT_SPEECH_ENHANCEMENT_FILTER,
-        ffmpeg_binary: str = "ffmpeg",
-    ) -> None:
-        self.filter_chain = filter_chain
-        self.ffmpeg_binary = ffmpeg_binary
-
-    def get_filter_chain(self) -> str:
-        """Return the composite FFmpeg audio filter string."""
-        return self.filter_chain
-
-    def build_audio_filter_graph(
-        self,
-        input_label: str = "0:a",
-        output_label: str = "aout",
-    ) -> str:
-        """Construct FFmpeg filtergraph segment connecting input stream label to output stream label."""
-        return f"[{input_label}]{self.filter_chain}[{output_label}]"
-
 
 class StudioVoiceAudioMixer:
     """Mixes synthesized Studio Voice narration track with ambient background audio, ducking original speech."""

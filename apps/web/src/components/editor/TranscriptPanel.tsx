@@ -64,8 +64,6 @@ const decisionTitle = (decision: EditorDecision): string => {
   if (decision.decision_type === "REMOVE_FILLER") return "Filler removed";
   if (decision.decision_type === "REMOVE_LOW_VALUE_SECTION") return "Low-value section removed";
   if (decision.decision_type === "TIGHTEN_EXPLANATION") return "Explanation tightened";
-  if (decision.decision_type === "BROLL_COVER_CANDIDATE") return "B-roll coverage";
-  if (decision.decision_type === "BROLL_COVER") return "B-roll coverage";
   if (decision.decision_type === "SOURCE_COVER") return "Source coverage";
   if (decision.decision_type === "KEEP_FOR_CLARITY") return "Preserved for clarity";
   if (isPauseDecision(decision)) return "Pause removed";
@@ -543,10 +541,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                         const previousWord = (transcript.words ?? [])
                           .filter((word) => word.index < decision.transcript_start_word)
                           .at(-1)?.text;
-                        const isCoverage =
-                          decision.decision_type === "BROLL_COVER_CANDIDATE" ||
-                          decision.decision_type === "BROLL_COVER" ||
-                          decision.decision_type === "SOURCE_COVER";
+                        const isCoverage = decision.decision_type === "SOURCE_COVER";
                         const isProtected = decision.decision_type === "KEEP_FOR_CLARITY";
                         const AnnotationIcon = isCoverage
                           ? Layers

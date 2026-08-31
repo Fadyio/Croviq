@@ -23,7 +23,7 @@ import {
   LeoChatPanel,
   type LeoChatResponse,
 } from "../components/editor/LeoChatPanel";
-import { type BRollAssetItem, MediaBin } from "../components/editor/MediaBin";
+import { MediaBin } from "../components/editor/MediaBin";
 import { type PreviewMode, PreviewToggle } from "../components/editor/PreviewToggle";
 import {
   TranscriptPanel,
@@ -72,7 +72,6 @@ const waitForRunUpdate = async (): Promise<void> => {
 
 type Production = components["schemas"]["Production"];
 type EditorialRunDetail = components["schemas"]["EditorialRunDetailResponse"];
-type BRollArtifact = components["schemas"]["BRollArtifact"];
 
 interface LoadedEditorData {
   productionRun: PersistedProductionRun;
@@ -124,7 +123,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [proposal, setProposal] = useState<EditorProposal | null>(null);
   const [activities, setActivities] = useState<AgentActivity[]>([]);
-  const [brollArtifacts, setBrollArtifacts] = useState<BRollArtifact[]>([]);
   const [editorialRun, setEditorialRun] = useState<EditorialRunDetail["run"] | null>(null);
   const [edl, setEdl] = useState<EditDecisionList | null>(null);
 
@@ -164,7 +162,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       runResponse,
       edlResponse,
       rendersResponse,
-      brollResponse,
     ] = await Promise.all([
       fetch(`/api/productions/${productionId}`, { headers }),
       fetch(`/api/productions/${productionId}/playback`, { headers }).catch(() => null),
@@ -172,7 +169,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       fetch(`/api/productions/${productionId}/editorial-run`, { headers }),
       fetch(`/api/productions/${productionId}/edl`, { headers }),
       fetch(`/api/productions/${productionId}/renders`, { headers }).catch(() => null),
-      fetch(`/api/productions/${productionId}/broll`, { headers }).catch(() => null),
     ]);
     if (!productionResponse.ok) {
       throw new Error(`Production '${productionId}' could not be loaded`);
@@ -197,7 +193,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       runPayload,
       edlPayload,
       rendersPayload,
-      brollPayload,
     ] = await Promise.all([
       productionResponse.json() as Promise<Production>,
       playbackResponse
@@ -216,9 +211,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       readOptionalJson<EditDecisionList>(edlResponse, "EDL"),
       rendersResponse
         ? readOptionalJson<components["schemas"]["RenderListResponse"]>(rendersResponse, "Renders")
-        : Promise.resolve(null),
-      brollResponse
-        ? readOptionalJson<components["schemas"]["BRollListResponse"]>(brollResponse, "BRoll")
         : Promise.resolve(null),
     ]);
     let actualEdl: EditDecisionList | null = null;
@@ -402,9 +394,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setMasterArtifact(master);
     setStudioVoiceArtifact(svPreview);
     setFinalMixArtifact(finalMix);
-    if (brollPayload?.artifacts) {
-      setBrollArtifacts(brollPayload.artifacts);
-    }
 
     setTranscript(transcriptPayload);
     setEdl(actualEdl);
@@ -551,7 +540,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     setTranscript(null);
     setProposal(null);
     setActivities([]);
-    setBrollArtifacts([]);
     setEditorialRun(null);
     setEdl(null);
     setSelectedDecisionId(null);
@@ -843,18 +831,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     );
   }, [edl, currentTimeMs]);
 
-  // Derive B-roll items for Media Bin
-  const brollBinItems = useMemo<BRollAssetItem[]>(() => {
-    return brollArtifacts.map((b: BRollArtifact) => ({
-      artifactId: b.artifact_id,
-      sourceStartMs: b.source_start_ms,
-      sourceEndMs: b.source_end_ms,
-      durationMs: b.duration_ms,
-      promptSummary: b.prompt_summary || "",
-      status: b.status,
-      isGenerated: b.status === "accepted" || Boolean(b.gcs_object),
-    }));
-  }, [brollArtifacts]);
   const processingFailureMessage: Record<ProcessingStage, string> = {
     transcript: "Transcription failed",
     "leo-edit": "Leo analysis failed",
@@ -1044,7 +1020,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             (edl?.cuts && edl.cuts.length > 0),
           )}
           isRunFailed={Boolean(editorialRun?.status === "failed" || failedProcessingStage !== null)}
-          brollAssets={brollBinItems}
           mediaOutputs={mediaOutputs}
           onSelectMode={setPreviewMode}
           onSeek={handleSeek}

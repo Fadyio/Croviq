@@ -165,25 +165,6 @@ async def main() -> None:
         print(f"✗ Gemini 3.1 Flash TTS Call Failed: {exc}")
         tts_success = False
 
-    # -------------------------------------------------------------------------
-    # 4. API CAPABILITY TEST: Gemini Omni 1.1 Flash via Interactions API
-    # -------------------------------------------------------------------------
-    print("\n--- [4/4] Testing Gemini Omni 1.1 Flash Capability (Interactions API) ---")
-    try:
-        from croviq_agents.client import GoogleGenAIClient
-        omni_client = GoogleGenAIClient(project_id=project_id, location="global")
-        bytes_out, interaction_id, dur_ms, actual_res = await omni_client.generate_broll_clip(
-            prompt="Clean cinematic close-up B-roll of a developer reviewing a CI workflow on a laptop",
-            production_id="prod_live_verify",
-            duration_ms=4000,
-            resolution="360p",
-        )
-        print(f"  ✓ Omni Interactions API Success: ID={interaction_id}, size={len(bytes_out)}B, res={actual_res}")
-        omni_status = "PROVEN_LIVE"
-    except Exception as exc:
-        print(f"  ✗ Omni Interactions API Failed: {exc}")
-        omni_status = "FAILED"
-    # -------------------------------------------------------------------------
     # 5. BIGQUERY AI OBSERVABILITY LOG CORRELATION
     # -------------------------------------------------------------------------
     print("\n--- [5/5] BigQuery AI Observability Request/Response Logs ---")
@@ -216,7 +197,6 @@ async def main() -> None:
     print(f"TRANSCRIBE (gemini-3.5-transcribe-preview): {'PROVEN_LIVE' if transcribe_success else 'FAILED'}")
     print(f"REASONING (gemini-3.7-flash):               {'PROVEN_LIVE' if gemini37_success else 'FAILED'}")
     print(f"STUDIO VOICE (gemini-3.1-flash-tts-preview): {'PROVEN_LIVE' if (tts_success and tts_ffprobe_ok) else 'FAILED'}")
-    print(f"OMNI (gemini-omni-1.1-flash-preview):        {omni_status}")
     print(f"BIGQUERY LOGGING (croviq_ai_observability):  {'PROVEN_LIVE' if bq_success else 'FAILED'}")
     print("=" * 70)
 

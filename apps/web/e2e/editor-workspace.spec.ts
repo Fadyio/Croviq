@@ -329,17 +329,6 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
     });
   });
 
-  await page.route("**/api/productions/*/broll", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        production_id: FAIRPHONE_PRODUCTION_ID,
-        artifacts: [],
-      }),
-    });
-  });
-
   await page.route("**/api/client-events", async (route) => {
     await route.fulfill({
       status: 200,
@@ -542,7 +531,7 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
             },
             {
               decision_id: "dec_002",
-              decision_type: "BROLL_COVER_CANDIDATE",
+              decision_type: "SOURCE_COVER",
               transcript_start_word: 70,
               transcript_end_word: 121,
               source_start_ms: 26160,
@@ -551,7 +540,7 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
                 "However, you will have to undo a couple of teeny screws, so make sure you don't have too many Bacardi breezes before attempting this. That then slides off, bung the new one on, try and get those tiny bloody screws back in, and there you go, Fairphone now ready for my fingers.",
               action: "cover",
               concise_reason:
-                "Close-up macro demonstration of unscrewing and swapping the rear plate accessory works best with focused insert B-roll over the commentary.",
+                "Close-up macro demonstration of unscrewing and swapping the rear plate accessory works best with focused visual coverage over the commentary.",
               confidence: 0.94,
             },
             {
@@ -628,7 +617,7 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
             run_id: FAIRPHONE_RUN_ID,
             agent: "leo",
             activity_type: "editorial_proposal",
-            message: "[BROLL_COVER_CANDIDATE] At 00:26.2, use close-up visual coverage.",
+            message: "[SOURCE_COVER] At 00:26.2, use close-up visual coverage.",
             related_decision_id: "dec_002",
             created_at: "2026-08-26T00:02:15Z",
           },
@@ -637,7 +626,7 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
     });
   });
 
-  // Mock Canonical EDL (Fairphone 0 cuts, 1 B-Roll coverage marker)
+  // Mock Canonical EDL (Fairphone 0 cuts, 1 visual coverage marker)
   const defaultFairphoneEdl = {
     edl_id: "edl_6324ea33234a",
     production_id: FAIRPHONE_PRODUCTION_ID,
@@ -649,9 +638,9 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
         decision_id: "dec_002",
         source_start_ms: 26160,
         source_end_ms: 42340,
-        coverage_type: "BROLL_CANDIDATE",
+        coverage_type: "SOURCE_SCREEN",
         reason:
-          "Close-up macro demonstration of unscrewing and swapping the rear plate accessory works best with focused insert B-roll over the commentary.",
+          "Close-up macro demonstration of unscrewing and swapping the rear plate accessory works best with focused visual coverage over the commentary.",
       },
     ],
     voiceover_segments: [
@@ -1144,7 +1133,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.locator("[data-testid='editor-timeline']")).toBeVisible();
     await expect(page.getByText("Video", { exact: true })).toBeVisible();
     await expect(page.getByText("Edits", { exact: true })).toBeVisible();
-    await expect(page.getByText("B-roll", { exact: true })).toBeVisible();
+    await expect(page.getByText("Coverage", { exact: true })).toBeVisible();
     await expect(page.getByText("No dialogue cuts")).toBeVisible();
     await expect(page.getByText("Natural dialogue rhythm fully preserved")).toHaveCount(0);
     await expect(page.getByTestId("production-run-strip")).toHaveCount(0);
@@ -1168,7 +1157,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByText("Review Completed")).toHaveCount(0);
     await expect(page.getByText(/editorial decisions|decisions approved/i)).toHaveCount(0);
     await expect(page.getByText(/Close-up macro demonstration/i)).toBeVisible();
-    await expect(page.getByText(/\[(KEEP|BROLL_COVER_CANDIDATE|APPROVE)\]/)).toHaveCount(0);
+    await expect(page.getByText(/\[(KEEP|SOURCE_COVER|APPROVE)\]/)).toHaveCount(0);
 
     // 6. Activity selection seeks the media and opens concise decision details.
     const actBtn = page
@@ -1192,7 +1181,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await loginAndNavigateToEditor(page);
     await page.getByTestId("tab-transcript").click();
 
-    // Click on the B-Roll section word in transcript ("However,")
+    // Click on the coverage section word in transcript ("However,")
     const howeverWord = page.locator("[data-word-index='70']");
     await expect(howeverWord).toBeVisible();
     await howeverWord.click();
@@ -1200,7 +1189,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.locator("[data-testid='decision-inspector']")).toBeVisible();
     await expect(page.locator("[data-testid='active-coverage-overlay']")).toBeVisible();
     await expect(
-      page.locator("[data-testid='active-coverage-overlay']").getByText("B-Roll Coverage"),
+      page.locator("[data-testid='active-coverage-overlay']").getByText("Source Screen Coverage"),
     ).toBeVisible();
     await expect(
       page.locator("[data-testid='decision-inspector']").getByText(/00:26\.16/),
@@ -1293,7 +1282,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
           decision_id: "dec_002",
           source_start_ms: 26160,
           source_end_ms: 42340,
-          coverage_type: "BROLL_CANDIDATE",
+          coverage_type: "SOURCE_SCREEN",
           reason: "Close-up macro teardown insert",
         },
       ],
@@ -1315,7 +1304,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     const mediaBin = page.getByTestId("project-bin").or(page.getByTestId("media-bin"));
     await expect(mediaBin.getByTestId("asset-edited").getByText("1m 49s")).toBeVisible();
 
-    // 4. Verify chapters, short, and b-roll appear on timeline
+    // 4. Verify chapters appear on timeline
     await expect(page.getByText("Modular Teardown & Screws")).toBeVisible();
   });
 
@@ -1482,7 +1471,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(feed.getByTestId("activity-message-leo").first()).toBeVisible();
   });
 
-  test("renders canonical timeline tracks in exact order: Video, Audio, Edits, B-roll, Voiceover, Music, Chapters, Captions", async ({
+  test("renders canonical timeline tracks in exact order: Video, Audio, Edits, Coverage, Voiceover, Music, Chapters, Captions", async ({
     page,
   }) => {
     await loginAndNavigateToEditor(page);
@@ -1491,7 +1480,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByText("Video", { exact: true })).toBeVisible();
     await expect(page.getByText("Audio", { exact: true })).toBeVisible();
     await expect(page.getByText("Edits", { exact: true })).toBeVisible();
-    await expect(page.getByText("B-roll", { exact: true })).toBeVisible();
+    await expect(page.getByText("Coverage", { exact: true })).toBeVisible();
     await expect(page.getByText("Voiceover", { exact: true })).toBeVisible();
     await expect(page.getByText("Music", { exact: true })).toBeVisible();
     await expect(page.getByText("Chapters", { exact: true })).toBeVisible();

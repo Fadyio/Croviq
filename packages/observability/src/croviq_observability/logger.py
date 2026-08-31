@@ -511,60 +511,6 @@ def log_transcription_event(
     )
 
 
-def log_media_inspect_event(
-    event_type: str,
-    status: int | str,
-    request_id: str,
-    production_id: str,
-    duration_ms: int | None = None,
-    width: int | None = None,
-    height: int | None = None,
-    video_codec: str | None = None,
-    audio_codec: str | None = None,
-    latency_ms: float | None = None,
-    message: str | None = None,
-    error_code: str | None = None,
-    exception: BaseException | None = None,
-    **kwargs: Any,
-) -> dict[str, Any]:
-    """Log structured media inspection event for Google Cloud Logging ingestion."""
-    severity: LogSeverity = "ERROR" if (str(status).startswith("4") or str(status).startswith("5") or status == "failed" or exception is not None) else "INFO"
-    status_code: int | None = None
-    if isinstance(status, int):
-        status_code = status
-    elif isinstance(status, str) and status.isdigit():
-        status_code = int(status)
-
-    extra: dict[str, Any] = {
-        "production_id": production_id,
-    }
-    if not isinstance(status, int):
-        extra["execution_status"] = str(status)
-    if duration_ms is not None:
-        extra["duration_ms"] = duration_ms
-    if width is not None:
-        extra["width"] = width
-    if height is not None:
-        extra["height"] = height
-    if video_codec is not None:
-        extra["video_codec"] = video_codec
-    if audio_codec is not None:
-        extra["audio_codec"] = audio_codec
-    if latency_ms is not None:
-        extra["latency_ms"] = latency_ms
-
-    return _default_logger.log(
-        event_type=event_type,
-        severity=severity,
-        status=status_code,
-        request_id=request_id,
-        message=message,
-        error_code=error_code,
-        exception=exception,
-        **extra,
-        **kwargs,
-    )
-
 
 def log_edl_event(
     event_type: str,
@@ -717,55 +663,6 @@ def log_render_event(
 
 
 
-
-def log_editor_correction_event(
-    event_type: str | EventType,
-    production_id: str,
-    edl_id: str,
-    run_id: str | None = None,
-    agent: str = "leo",
-    model: str | None = None,
-    latency_ms: int | None = None,
-    input_tokens: int | None = None,
-    output_tokens: int | None = None,
-    request_id: str | None = None,
-    git_sha: str | None = None,
-    error_code: str | None = None,
-    message: str | None = None,
-    **kwargs: Any,
-) -> dict[str, Any]:
-    """Log structured editor correction lifecycle event."""
-    normalized_type = event_type.value if isinstance(event_type, EventType) else str(event_type)
-    severity: LogSeverity = "ERROR" if (normalized_type == EventType.EDITOR_CORRECTION_FAILED.value or error_code) else "INFO"
-
-    extra: dict[str, Any] = {
-        "production_id": production_id,
-        "edl_id": edl_id,
-        "agent": agent,
-    }
-    if run_id is not None:
-        extra["run_id"] = run_id
-    if model is not None:
-        extra["model"] = model
-    if latency_ms is not None:
-        extra["latency_ms"] = latency_ms
-    if input_tokens is not None:
-        extra["input_tokens"] = input_tokens
-    if output_tokens is not None:
-        extra["output_tokens"] = output_tokens
-    if git_sha is not None:
-        extra["git_sha"] = git_sha
-
-    return _default_logger.log(
-        event_type=normalized_type,
-        severity=severity,
-        status=500 if severity == "ERROR" else 200,
-        request_id=request_id,
-        message=message or f"Editor correction {normalized_type}",
-        error_code=error_code,
-        **extra,
-        **kwargs,
-    )
 
 
 def log_master_approved_event(

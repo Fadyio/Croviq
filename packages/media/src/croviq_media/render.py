@@ -95,21 +95,6 @@ class RenderService(ABC):
         pass
 
     @abstractmethod
-    def render_broll_placement(
-        self,
-        source_path: Path | str,
-        edl: EditDecisionList,
-        broll_path: Path | str,
-        coverage_start_ms: int,
-        coverage_end_ms: int,
-        output_path: Path | str | None = None,
-        narration_audio_path: Path | str | None = None,
-        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
-        is_master: bool = False,
-    ) -> RenderExecutionResult:
-        """Render MP4 with visual B-roll coverage inserted strictly over [coverage_start_ms, coverage_end_ms], trimming the B-roll asset deterministically and isolating B-roll audio (video-only)."""
-        pass
-    @abstractmethod
     def render_background_music_preview(
         self,
         source_path: Path | str,
@@ -130,15 +115,12 @@ class RenderService(ABC):
         edl: EditDecisionList,
         music_audio_path: Path | str,
         narration_audio_path: Path | str | None = None,
-        broll_path: Path | str | None = None,
-        coverage_start_ms: int | None = None,
-        coverage_end_ms: int | None = None,
         speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
         output_path: Path | str | None = None,
         music_volume_db: float = -24.0,
         music_ducking_db: float = -14.0,
     ) -> RenderExecutionResult:
-        """Render Final Mix combining cuts, B-roll overlays, voiceover corrections, and background music."""
+        """Render Final Mix combining cuts, voiceover corrections, and background music."""
         pass
 
 
@@ -193,20 +175,6 @@ class FakeRenderService(RenderService):
     ) -> RenderExecutionResult:
         return self._simulate_render(source_path, edl, ArtifactType.STUDIO_VOICE_MASTER, output_path)
 
-    def render_broll_placement(
-        self,
-        source_path: Path | str,
-        edl: EditDecisionList,
-        broll_path: Path | str,
-        coverage_start_ms: int,
-        coverage_end_ms: int,
-        output_path: Path | str | None = None,
-        narration_audio_path: Path | str | None = None,
-        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
-        is_master: bool = False,
-    ) -> RenderExecutionResult:
-        art_type = ArtifactType.BROLL_MASTER if is_master else ArtifactType.BROLL_PREVIEW
-        return self._simulate_render(source_path, edl, art_type, output_path)
     def render_background_music_preview(
         self,
         source_path: Path | str,
@@ -225,9 +193,6 @@ class FakeRenderService(RenderService):
         edl: EditDecisionList,
         music_audio_path: Path | str,
         narration_audio_path: Path | str | None = None,
-        broll_path: Path | str | None = None,
-        coverage_start_ms: int | None = None,
-        coverage_end_ms: int | None = None,
         speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
         output_path: Path | str | None = None,
         music_volume_db: float = -24.0,
@@ -417,41 +382,6 @@ class FFmpegRenderService(RenderService):
             narration_path=narration_audio_path,
             speech_intervals_ms=speech_intervals_ms,
         )
-    def render_broll_placement(
-        self,
-        source_path: Path | str,
-        edl: EditDecisionList,
-        broll_path: Path | str,
-        coverage_start_ms: int,
-        coverage_end_ms: int,
-        output_path: Path | str | None = None,
-        narration_audio_path: Path | str | None = None,
-        speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
-        is_master: bool = False,
-    ) -> RenderExecutionResult:
-        """Render high quality MP4 with visual B-roll coverage inserted deterministically over [coverage_start_ms, coverage_end_ms], isolating B-roll audio (video-only)."""
-        art_type = ArtifactType.BROLL_MASTER if is_master else ArtifactType.BROLL_PREVIEW
-        encoding_args = [
-            "-c:v", "libx264",
-            "-preset", "medium" if is_master else "veryfast",
-            "-crf", "18" if is_master else "23",
-            "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-b:a", "192k" if is_master else "128k",
-        ]
-        return self._execute_render(
-            source_path=source_path,
-            edl=edl,
-            artifact_type=art_type,
-            encoding_args=encoding_args,
-            output_path=output_path,
-            narration_path=narration_audio_path,
-            speech_intervals_ms=speech_intervals_ms,
-            broll_path=broll_path,
-            coverage_start_ms=coverage_start_ms,
-            coverage_end_ms=coverage_end_ms,
-        )
-
 
 
     def render_background_music_preview(
@@ -486,15 +416,12 @@ class FFmpegRenderService(RenderService):
         edl: EditDecisionList,
         music_audio_path: Path | str,
         narration_audio_path: Path | str | None = None,
-        broll_path: Path | str | None = None,
-        coverage_start_ms: int | None = None,
-        coverage_end_ms: int | None = None,
         speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
         output_path: Path | str | None = None,
         music_volume_db: float = -24.0,
         music_ducking_db: float = -14.0,
     ) -> RenderExecutionResult:
-        """Render Final Mix with cuts, B-roll overlays, voiceover corrections, and ducked background music."""
+        """Render Final Mix with cuts, voiceover corrections, and ducked background music."""
         encoding_args = [
             "-c:v", "libx264",
             "-preset", "medium",
@@ -511,14 +438,10 @@ class FFmpegRenderService(RenderService):
             output_path=output_path,
             narration_path=narration_audio_path,
             speech_intervals_ms=speech_intervals_ms,
-            broll_path=broll_path,
-            coverage_start_ms=coverage_start_ms,
-            coverage_end_ms=coverage_end_ms,
             music_path=music_audio_path,
             music_volume_db=music_volume_db,
             music_ducking_db=music_ducking_db,
         )
-
 
     def _build_filtergraph(
         self,
@@ -526,16 +449,12 @@ class FFmpegRenderService(RenderService):
         source_duration_ms: int,
         has_narration: bool = False,
         speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
-        broll_path: Path | str | None = None,
-        coverage_start_ms: int | None = None,
-        coverage_end_ms: int | None = None,
-        broll_input_idx: int = 1,
         music_path: Path | str | None = None,
         music_input_idx: int = 1,
         music_volume_db: float = -24.0,
         music_ducking_db: float = -14.0,
     ) -> tuple[str | None, list[str]]:
-        """Build the cut, narration, video-only B-roll, and speech-ducked music graph."""
+        """Build the cut, narration, and speech-ducked music graph."""
         num_segs = len(keep_segments)
         if num_segs == 0:
             raise RenderError("Cannot render EDL with zero keep segments")
@@ -549,19 +468,6 @@ class FFmpegRenderService(RenderService):
         if speech_intervals_ms:
             music_gain = 10 ** (music_ducking_db / 20.0)
             music_ducking_cond = f"if({'+'.join(conds)},{music_gain:.6f},1.0)"
-
-        has_broll = broll_path is not None and coverage_start_ms is not None and coverage_end_ms is not None
-        broll_filter = ""
-        if has_broll:
-            cov_start_s = max(0.0, coverage_start_ms / 1000.0)
-            cov_end_s = max(cov_start_s + 0.001, coverage_end_ms / 1000.0)
-            placement_dur_s = cov_end_s - cov_start_s
-            broll_filter = (
-                f"[{broll_input_idx}:v]trim=start=0:duration={placement_dur_s:.4f},"
-                f"setpts=PTS-STARTPTS+{cov_start_s:.4f}/TB,scale=1920:1080:force_original_aspect_ratio=increase,"
-                f"crop=1920:1080,setsar=1[broll_v_trim]"
-            )
-
         # Multiple keep segments with 20ms audio micro-transitions
         video_filters: list[str] = []
         audio_filters: list[str] = []
@@ -596,7 +502,7 @@ class FFmpegRenderService(RenderService):
             audio_filters.append(f"[0:a]{','.join(afilt)}[a{i}]")
             audio_inputs.append(f"[a{i}]")
 
-        if num_segs == 1 and keep_segments[0][0] == 0 and keep_segments[0][1] >= source_duration_ms and not has_broll:
+        if num_segs == 1 and keep_segments[0][0] == 0 and keep_segments[0][1] >= source_duration_ms:
             audio_parts: list[str] = []
             primary_label = "a_primary"
             if has_narration:
@@ -620,8 +526,7 @@ class FFmpegRenderService(RenderService):
                 )
             return ";".join(audio_parts), ["-map", "0:v", "-map", "[aout]"]
 
-        if num_segs == 1 and not has_broll and not has_music and not has_narration:
-            start_ms, end_ms = keep_segments[0]
+        if num_segs == 1 and not has_music and not has_narration:
             start_s = start_ms / 1000.0
             end_s = end_ms / 1000.0
             filter_graph = (
@@ -630,18 +535,7 @@ class FFmpegRenderService(RenderService):
             )
             return filter_graph, ["-map", "[vout]", "-map", "[aout]"]
 
-        v_base_label = "[v_base]" if has_broll else "[vout]"
-        vconcat = f"{''.join(video_inputs)}concat=n={num_segs}:v=1:a=0{v_base_label}"
-
-        extra_filters = []
-        if has_broll:
-            cov_start_s = max(0.0, coverage_start_ms / 1000.0)
-            cov_end_s = max(cov_start_s + 0.001, coverage_end_ms / 1000.0)
-            extra_filters.append(broll_filter)
-            extra_filters.append(
-                f"[v_base][broll_v_trim]overlay=enable='between(t,{cov_start_s:.4f},{cov_end_s:.4f})':eof_action=pass[vout]"
-            )
-
+        vconcat = f"{''.join(video_inputs)}concat=n={num_segs}:v=1:a=0[vout]"
         audio_chain = f"{''.join(audio_inputs)}concat=n={num_segs}:v=0:a=1[a_raw]"
         if has_narration:
             audio_chain += (
@@ -662,7 +556,7 @@ class FFmpegRenderService(RenderService):
         else:
             audio_chain += ";[a_primary]loudnorm=I=-16:TP=-1.5:LRA=10,alimiter=limit=0.85:level=false[aout]"
 
-        full_filter = ";".join(video_filters + audio_filters + [vconcat] + extra_filters + [audio_chain])
+        full_filter = ";".join(video_filters + audio_filters + [vconcat] + [audio_chain])
         return full_filter, ["-map", "[vout]", "-map", "[aout]"]
     def _execute_render(
         self,
@@ -673,9 +567,6 @@ class FFmpegRenderService(RenderService):
         output_path: Path | str | None = None,
         narration_path: Path | str | None = None,
         speech_intervals_ms: Sequence[tuple[int, int]] | None = None,
-        broll_path: Path | str | None = None,
-        coverage_start_ms: int | None = None,
-        coverage_end_ms: int | None = None,
         music_path: Path | str | None = None,
         music_volume_db: float = -24.0,
         music_ducking_db: float = -14.0,
@@ -705,20 +596,14 @@ class FFmpegRenderService(RenderService):
             created_temp = True
 
         has_narration = narration_path is not None and Path(narration_path).exists()
-        has_broll = broll_path is not None and Path(broll_path).exists()
         has_music = music_path is not None and Path(music_path).exists()
-        broll_input_idx = 2 if has_narration else 1
-        music_input_idx = 1 + int(has_narration) + int(has_broll)
+        music_input_idx = 1 + int(has_narration)
 
         filter_graph, map_args = self._build_filtergraph(
             keep_segments,
             edl.source_duration_ms,
             has_narration=has_narration,
             speech_intervals_ms=speech_intervals_ms,
-            broll_path=broll_path if has_broll else None,
-            coverage_start_ms=coverage_start_ms,
-            coverage_end_ms=coverage_end_ms,
-            broll_input_idx=broll_input_idx,
             music_path=music_path if has_music else None,
             music_input_idx=music_input_idx,
             music_volume_db=music_volume_db,
@@ -733,8 +618,6 @@ class FFmpegRenderService(RenderService):
         ]
         if has_narration and narration_path is not None:
             cmd.extend(["-i", str(narration_path)])
-        if has_broll and broll_path is not None:
-            cmd.extend(["-i", str(broll_path)])
         if has_music and music_path is not None:
             cmd.extend(["-stream_loop", "-1", "-i", str(music_path)])
         if filter_graph is not None:

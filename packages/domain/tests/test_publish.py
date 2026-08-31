@@ -222,24 +222,6 @@ def test_derive_synthetic_media_status_my_voice() -> None:
     )
 
 
-def test_derive_synthetic_media_status_generated_broll() -> None:
-    # Realistic generated Omni B-roll composited into master -> True
-    assert (
-        derive_synthetic_media_status(
-            master_artifact_type=ArtifactType.MASTER,
-            generated_broll_used=True,
-        )
-        is True
-    )
-    # Draft or uncomposited B-roll in repo does not trigger disclosure
-    assert (
-        derive_synthetic_media_status(
-            master_artifact_type=ArtifactType.MASTER,
-            generated_broll_used=False,
-        )
-        is False
-    )
-
 
 def test_derive_synthetic_media_status_from_release_object() -> None:
     now = datetime.now(timezone.utc)

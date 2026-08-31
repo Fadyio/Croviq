@@ -122,7 +122,7 @@ export const PreviewToggle: React.FC<PreviewToggleProps> = ({
               : "text-text-secondary hover:text-text-primary hover:bg-surface-3/50"
           }`}
           aria-pressed={mode === "final_mix"}
-          title="Play Final Mix with voice corrections, B-roll, and background music"
+          title="Play Final Mix with voice corrections and background music"
           data-testid="preview-toggle-final-mix"
         >
           {isFinalMixGenerating ? (

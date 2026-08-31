@@ -28,7 +28,6 @@ from croviq_api.media.dependencies import get_media_storage, set_media_storage
 from croviq_api.media.fake import FakeMediaStorage
 from croviq_api.memory.dependencies import get_memory_store, set_memory_store
 from croviq_api.memory.fake import FakeChannelMemoryStore
-from croviq_api.productions.broll_repository import InMemoryBRollRepository, get_broll_repository
 from croviq_api.productions.dependencies import get_genai_client, set_genai_client, set_render_service
 from croviq_api.productions.edl_repository import InMemoryEDLRepository, get_edl_repository, set_edl_repository
 from croviq_api.productions.editorial_repository import InMemoryEditorialRepository, get_editorial_repository, set_editorial_repository
@@ -64,7 +63,6 @@ def mock_env():
     edit_repo = InMemoryEditorialRepository()
     ws_repo = InMemoryWorkspaceRepository()
     cfg_repo = InMemoryAgentConfigRepository()
-    broll_repo = InMemoryBRollRepository()
     mem_store = FakeChannelMemoryStore()
     media_store = FakeMediaStorage()
     render_svc = FakeRenderService()
@@ -91,7 +89,6 @@ def mock_env():
     app.dependency_overrides[get_editorial_repository] = lambda: edit_repo
     app.dependency_overrides[get_workspace_repository] = lambda: ws_repo
     app.dependency_overrides[get_agent_config_repository] = lambda: cfg_repo
-    app.dependency_overrides[get_broll_repository] = lambda: broll_repo
     app.dependency_overrides[get_memory_store] = lambda: mem_store
     app.dependency_overrides[get_media_storage] = lambda: media_store
     app.dependency_overrides[get_genai_client] = lambda: genai_client

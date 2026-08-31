@@ -20,17 +20,15 @@ class CutSafetyStatus(StrEnum):
 
 
 class CoverageType(StrEnum):
-    """Visual coverage types supported for jump-cut mitigation and B-roll insertion."""
+    """Visual coverage types supported for jump-cut mitigation."""
 
     SOURCE_SCREEN = "SOURCE_SCREEN"
-    BROLL_CANDIDATE = "BROLL_CANDIDATE"
-
 
 class CoverageMarker(BaseModel):
     """Visual coverage metadata identifying footage insertion candidates."""
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="ignore",
         str_strip_whitespace=True,
         validate_assignment=True,
     )
@@ -57,9 +55,9 @@ class CoverageMarker(BaseModel):
         ge=0,
         description="End timestamp in source video milliseconds",
     )
-    coverage_type: CoverageType = Field(
-        ...,
-        description="Coverage category (e.g. SOURCE_SCREEN, BROLL_CANDIDATE)",
+    coverage_type: CoverageType | str = Field(
+        default=CoverageType.SOURCE_SCREEN,
+        description="Coverage category (e.g. SOURCE_SCREEN)",
     )
     reason: str = Field(
         ...,
@@ -276,7 +274,7 @@ class EditDecisionList(BaseModel):
     )
     coverage_markers: list[CoverageMarker] = Field(
         default_factory=list,
-        description="Visual coverage markers for B-roll and screen recordings",
+        description="Visual coverage markers for screen recordings",
     )
     voiceover_segments: list[VoiceoverSegment] = Field(
         default_factory=list,

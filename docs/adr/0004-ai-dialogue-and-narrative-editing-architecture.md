@@ -24,7 +24,7 @@ We implement a hybrid AI Dialogue Editing and Batch Review architecture:
      -> Word/Sentence Alignment (Phonetic/Word Timestamps)
      -> Natural Speech Boundary Detection
      -> Cut Safety & Discontinuity Inspection
-     -> Transition Strategy Selection (Crossfade, Room Tone, Screen B-Roll Cover)
+    -> Transition Strategy Selection (Crossfade, Room Tone, Screen Visual Cover)
      -> Canonical Edit Decision List (EDL)
      -> Deterministic Cloud Run FFmpeg Rendering
    ```
@@ -37,6 +37,6 @@ We implement a hybrid AI Dialogue Editing and Batch Review architecture:
    - Following the master edit, Leo extracts the strongest self-contained 20–60s highlight, formats it as 9:16 vertical video with burned-in synchronized captions, and registers it as a standalone artifact.
 
 ## Consequences
-- Eliminates mechanical word clipping and jarring jump cuts through deterministic safety boundaries and screen B-roll coverage.
+- Eliminates mechanical word clipping and jarring jump cuts through deterministic safety boundaries and screen visual coverage.
 - Provides a judge-visible agent collaboration moment where Maya and Leo interact credibly in front of the creator.
 - Protects the creator from approving micro-cuts while keeping the master render fully automated and verifiable.

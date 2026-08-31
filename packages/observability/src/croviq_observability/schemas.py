@@ -55,8 +55,8 @@ class StandardLogEvent(BaseModel):
         default=None, description="Sanitized exception message"
     )
 
-    # Future AI / Agent fields (Defined now, consumed in future agent department jobs)
-    agent: str | None = Field(default=None, description="Department agent name (e.g. Director, Editor, Packaging, QA)")
+    # AI / Agent telemetry fields
+    agent: str | None = Field(default=None, description="Department agent name (e.g. alex, leo, iris)")
     model: str | None = Field(default=None, description="Multimodal LLM model identifier (e.g. gemini-3.7-flash)")
     run_id: str | None = Field(default=None, description="Immutable workflow Run ID")
     job_id: str | None = Field(default=None, description="Bounded execution Job ID within Run")

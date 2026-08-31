@@ -387,26 +387,6 @@ class GenAIClient(ABC):
         pass
 
     @abstractmethod
-    async def generate_broll_clip(
-        self,
-        prompt: str,
-        production_id: str,
-        duration_ms: int = 4000,
-        task: str = "text_to_video",
-        resolution: str = "360p",
-        aspect_ratio: str = "16:9",
-        first_frame_uri: str | None = None,
-        last_frame_uri: str | None = None,
-        reference_video_uri: str | None = None,
-        previous_interaction_id: str | None = None,
-        scene_extension_prior_context_ms: int | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[bytes, str, int, str]:
-        """Invoke Gemini Omni 1.1 Flash on Vertex AI Interactions API to generate a video clip."""
-        pass
-
-    @abstractmethod
     async def correct_transcript_with_video_grounding(
         self,
         video_uri: str,
@@ -1008,212 +988,6 @@ class GoogleGenAIClient(GenAIClient):
         )
         raise GenAIError(f"Gemini TTS synthesis failed after retry: {last_error}", cause=last_error)
 
-    async def generate_broll_clip(
-        self,
-        prompt: str,
-        production_id: str,
-        duration_ms: int = 3000,
-        task: str = "text_to_video",
-        resolution: str = "360p",
-        aspect_ratio: str = "16:9",
-        first_frame_uri: str | None = None,
-        last_frame_uri: str | None = None,
-        reference_video_uri: str | None = None,
-        previous_interaction_id: str | None = None,
-        scene_extension_prior_context_ms: int | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[bytes, str, int, str]:
-        import asyncio
-        import base64
-        # Strict duration validation: 3s through 10s (3000ms-10000ms)
-        dur_sec = int(round(duration_ms / 1000.0))
-        if dur_sec not in (3, 4, 5, 6, 7, 8, 9, 10):
-            raise ValueError(
-                f"Invalid duration {duration_ms}ms ({dur_sec}s). Supported Omni generation durations are 3s through 10s (3000ms-10000ms)."
-            )
-
-        # Strict resolution validation: 360p, 720p, 1080p, 4k
-        if resolution not in ("360p", "720p", "1080p", "4k"):
-            raise ValueError(
-                f"Invalid resolution '{resolution}'. Supported resolutions are '360p', '720p', '1080p', '4k'."
-            )
-
-        client = self._get_client()
-        target_model = "gemini-omni-1.1-flash-preview"
-
-        log_ai_event(
-            event_type=EventType.AI_REQUEST_STARTED,
-            agent="leo",
-            model=target_model,
-            status="started",
-            provider="google",
-            backend="agent_platform",
-            operation="video_generation",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-        )
-        log_ai_event(
-            event_type=EventType.BROLL_GENERATION_STARTED,
-            agent="leo",
-            model=target_model,
-            status="started",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-        )
-
-        start_time = time.perf_counter()
-        last_error: Exception | None = None
-
-        # Explicit draft/standard/finishing response format (never omit resolution or duration)
-        response_format: dict[str, Any] = {
-            "type": "video",
-            "resolution": resolution,
-            "duration": f"{dur_sec}s",
-        }
-        if aspect_ratio in ("16:9", "9:16"):
-            response_format["aspect_ratio"] = aspect_ratio
-
-        kwargs: dict[str, Any] = {
-            "model": target_model,
-            "input": prompt,
-            "response_format": response_format,
-        }
-        if previous_interaction_id:
-            kwargs["previous_interaction_id"] = previous_interaction_id
-        if task and task != "text_to_video":
-            kwargs["generation_config"] = {"video_config": {"task": task}}
-
-        if reference_video_uri:
-            kwargs["input"] = [
-                {"type": "video", "uri": reference_video_uri},
-                prompt,
-            ]
-        elif first_frame_uri or last_frame_uri:
-            content_list = []
-            if first_frame_uri:
-                content_list.append({"type": "image", "uri": first_frame_uri})
-            if last_frame_uri:
-                content_list.append({"type": "image", "uri": last_frame_uri})
-            content_list.append(prompt)
-            kwargs["input"] = content_list
-
-        max_retries = 2
-        for attempt in range(max_retries + 1):
-            try:
-                res = client.interactions.create(**kwargs)
-                interaction_id = getattr(res, "id", None) or f"omni_{int(time.time())}"
-                output_video = getattr(res, "output_video", None)
-                if not output_video:
-                    raise GenAIError(f"Omni interaction {interaction_id} completed without output_video")
-
-                raw_video_bytes: bytes
-                if output_video.data:
-                    raw_video_bytes = base64.b64decode(output_video.data)
-                elif output_video.uri:
-                    import httpx
-                    import google.auth
-                    from google.auth.transport.requests import Request as GRequest
-
-                    creds, _ = google.auth.default()
-                    creds.refresh(GRequest())
-                    resp = httpx.get(
-                        output_video.uri,
-                        headers={"Authorization": f"Bearer {creds.token}"},
-                        timeout=60.0,
-                    )
-                    resp.raise_for_status()
-                    raw_video_bytes = resp.content
-                else:
-                    raise GenAIError("Omni output_video has neither data nor uri")
-
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                actual_res = getattr(output_video, "resolution", None) or resolution
-
-                log_ai_event(
-                    event_type=EventType.AI_REQUEST_COMPLETED,
-                    agent="leo",
-                    model=target_model,
-                    status="success",
-                    provider="google",
-                    backend="agent_platform",
-                    operation="video_generation",
-                    production_id=production_id,
-                    run_id=run_id,
-                    request_id=request_id,
-                    latency_ms=latency_ms,
-                )
-                log_ai_event(
-                    event_type=EventType.BROLL_GENERATION_COMPLETED,
-                    agent="leo",
-                    model=target_model,
-                    status="success",
-                    production_id=production_id,
-                    run_id=run_id,
-                    request_id=request_id,
-                    latency_ms=latency_ms,
-                )
-                return raw_video_bytes, interaction_id, duration_ms, actual_res
-            except Exception as exc:
-                last_error = exc
-                err_text = str(exc)
-
-                # 403: permission denied -> fail closed immediately
-                if "403" in err_text or "PermissionDenied" in type(exc).__name__:
-                    logger.error("Omni permission denied (403): %s", exc)
-                    break
-
-                # 429: rate limit / quota exceeded -> bounded retry if attempts remain
-                if "429" in err_text or "Quota exceeded" in err_text or "RateLimit" in type(exc).__name__:
-                    if attempt < max_retries:
-                        # Bounded backoff: 2s, 4s
-                        backoff_sec = 2.0 * (attempt + 1)
-                        logger.warning("Omni quota limit (429), retrying attempt %d/%d after %.1fs: %s", attempt + 1, max_retries, backoff_sec, exc)
-                        await asyncio.sleep(backoff_sec)
-                        continue
-                    break
-
-                # 5xx: upstream temporary server error -> bounded retry
-                if "500" in err_text or "503" in err_text or "InternalServerError" in type(exc).__name__:
-                    if attempt < max_retries:
-                        backoff_sec = 2.0 * (attempt + 1)
-                        logger.warning("Omni upstream temporary error (5xx), retrying attempt %d/%d after %.1fs: %s", attempt + 1, max_retries, backoff_sec, exc)
-                        await asyncio.sleep(backoff_sec)
-                        continue
-                    break
-
-                # Other client errors -> fail closed immediately
-                break
-        latency_ms = int((time.perf_counter() - start_time) * 1000)
-        log_ai_event(
-            event_type=EventType.AI_REQUEST_FAILED,
-            agent="leo",
-            model=target_model,
-            status="failed",
-            provider="google",
-            backend="agent_platform",
-            operation="video_generation",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-            latency_ms=latency_ms,
-            error=str(last_error),
-        )
-        log_ai_event(
-            event_type=EventType.BROLL_GENERATION_FAILED,
-            agent="leo",
-            model=target_model,
-            status="failed",
-            production_id=production_id,
-            run_id=run_id,
-            request_id=request_id,
-            latency_ms=latency_ms,
-            error=str(last_error),
-        )
-        raise GenAIError(f"Gemini Omni video generation failed: {last_error}", cause=last_error)
-
     async def correct_transcript_with_video_grounding(
         self,
         video_uri: str,
@@ -1779,53 +1553,6 @@ class FakeGenAIClient(GenAIClient):
         num_bytes = dur_ms * 48
         return dur_ms, b"\x00" * num_bytes
 
-    async def generate_broll_clip(
-        self,
-        prompt: str,
-        production_id: str,
-        duration_ms: int = 3000,
-        task: str = "text_to_video",
-        resolution: str = "360p",
-        aspect_ratio: str = "16:9",
-        first_frame_uri: str | None = None,
-        last_frame_uri: str | None = None,
-        reference_video_uri: str | None = None,
-        previous_interaction_id: str | None = None,
-        scene_extension_prior_context_ms: int | None = None,
-        run_id: str | None = None,
-        request_id: str = "unknown",
-    ) -> tuple[bytes, str, int, str]:
-        import uuid
-
-        dur_sec = int(round(duration_ms / 1000.0))
-        if dur_sec not in (3, 4, 5, 6, 7, 8, 9, 10):
-            raise ValueError(
-                f"Invalid duration {duration_ms}ms ({dur_sec}s). Supported Omni generation durations are 3s through 10s (3000ms-10000ms)."
-            )
-        if resolution not in ("360p", "720p", "1080p", "4k"):
-            raise ValueError(
-                f"Invalid resolution '{resolution}'. Supported resolutions are '360p', '720p', '1080p', '4k'."
-            )
-        self.call_history.append({
-            "method": "generate_broll_clip",
-            "prompt": prompt,
-            "production_id": production_id,
-            "duration_ms": duration_ms,
-            "task": task,
-            "resolution": resolution,
-            "aspect_ratio": aspect_ratio,
-            "first_frame_uri": first_frame_uri,
-            "last_frame_uri": last_frame_uri,
-            "reference_video_uri": reference_video_uri,
-            "previous_interaction_id": previous_interaction_id,
-            "scene_extension_prior_context_ms": scene_extension_prior_context_ms,
-            "run_id": run_id,
-            "request_id": request_id,
-        })
-        interaction_id = f"fake_interaction_{uuid.uuid4().hex[:8]}"
-        mock_mp4 = b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41" + b"\x00" * 1024
-        return mock_mp4, interaction_id, duration_ms, resolution
-
     async def correct_transcript_with_video_grounding(
         self,
         video_uri: str,
@@ -2066,7 +1793,7 @@ class FakeGenAIClient(GenAIClient):
                     "why was it cut", "why did you leave", "why keep this", "why preserve",
                     "what's happening", "what is happening", "what happened",
                     "should this be tighter", "can you make this tighter", "make this tighter?",
-                    "would b-roll help", "would visual coverage help", "where would b-roll help",
+                    "would visual coverage help",
                     "what section did i select", "what did i select", "what is selected",
                     "is this too slow", "how is the pacing", "what does this cut do"
                 )
@@ -2109,6 +1836,15 @@ class FakeGenAIClient(GenAIClient):
                     "intensity": "standard",
                     "active_edl_id": active_edl_id,
                 }
+        elif any(
+            w in msg_lower for w in [
+                "add b-roll", "add broll", "generate b-roll", "generate broll",
+                "insert b-roll", "insert broll", "cover with b-roll", "cover with broll",
+                "cover this with b-roll", "cover this with broll", "put b-roll", "put broll",
+                "add visual coverage", "cover with visual coverage", "b-roll", "broll"
+            ]
+        ):
+            reply = "B-roll generation is not currently an available Croviq editing capability."
         elif is_cleared and any(w in msg_lower for w in ["what section", "what did i select", "what is selected", "which section"]):
             reply = "No section is currently selected on the timeline. Click or drag any region on the timeline or transcript to select it."
         elif any(w in msg_lower for w in ["why was this cut", "why did you cut", "why cut", "why remove", "why did you remove", "why was it cut"]):
@@ -2126,8 +1862,8 @@ class FakeGenAIClient(GenAIClient):
                 reply = f"The selected speech (\"{selected_text}\") is relatively clear, but we could tighten the surrounding breath pause by ~0.4s for a snappier delivery."
             else:
                 reply = "This section has a solid cadence, but trimming the trailing pause could make the transition to the next step crisper."
-        elif any(w in msg_lower for w in ["b-roll", "broll", "visual", "coverage"]):
-            reply = "Adding B-roll visual coverage here would work well to illustrate the concepts while keeping your original spoken explanation intact."
+        elif any(w in msg_lower for w in ["visual", "coverage"]):
+            reply = "I inspected the visual context here. The demonstration and screen content align cleanly with your dialogue."
         elif any(w in msg_lower for w in ["why did you leave", "why keep", "why retain"]):
             if selected_text:
                 reply = f"I kept this part (\"{selected_text}\") because it provides essential technical context for the tutorial walkthrough."

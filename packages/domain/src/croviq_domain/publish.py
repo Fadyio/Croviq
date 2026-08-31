@@ -78,7 +78,6 @@ def derive_synthetic_media_status(
     narration_mode: str | None = None,
     my_voice_used: bool = False,
     studio_voice_used: bool = False,
-    generated_broll_used: bool = False,
     edl: Any = None,
 ) -> bool:
     """Deterministically derive whether YouTube content contains synthetic or realistic altered media.
@@ -86,7 +85,6 @@ def derive_synthetic_media_status(
     Ground truth is derived strictly from actual inputs present in the final rendered Master:
     - Master rendered with Studio Voice (ArtifactType.STUDIO_VOICE_MASTER or studio_voice_used=True) -> True
     - Master rendered with My Voice replication (my_voice_used=True or narration_mode='my_voice') -> True
-    - Master composited with realistic generated Omni B-roll (generated_broll_used=True) -> True
     - Unaltered original footage + original or enhanced original voice only -> False
 
     Strictly excludes:
@@ -96,7 +94,7 @@ def derive_synthetic_media_status(
     - Stale draft states
     """
     # 1. Inspect explicit flags
-    if my_voice_used or studio_voice_used or generated_broll_used:
+    if my_voice_used or studio_voice_used:
         return True
 
     # 2. Inspect narration mode

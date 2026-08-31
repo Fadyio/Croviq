@@ -356,14 +356,6 @@ export interface paths {
       };
     };
   };
-  "/api/productions/{production_id}/broll": {
-    get: {
-      responses: {
-        200: components["schemas"]["BRollListResponse"];
-        422: components["schemas"]["HTTPValidationError"];
-      };
-    };
-  };
   "/api/productions/{production_id}/packaging": {
     get: {
       responses: {
@@ -615,8 +607,6 @@ export interface components {
       | "VOICEOVER_PREVIEW"
       | "STUDIO_VOICE_PREVIEW"
       | "STUDIO_VOICE_MASTER"
-      | "BROLL_PREVIEW"
-      | "BROLL_MASTER"
       | "FINAL_MIX";
     AssembleEDLResponse: {
       /** Unique identifier for the assembled Edit Decision List */
@@ -627,7 +617,7 @@ export interface components {
       version: number;
       /** Number of executable cut instructions (SAFE + NEEDS_COVERAGE) */
       cut_count: number;
-      /** Number of visual coverage markers (B-roll + jump cut covers) */
+      /** Number of visual coverage markers (jump cut covers) */
       coverage_marker_count: number;
       /** Total duration of the source video in milliseconds */
       source_duration_ms: number;
@@ -678,78 +668,6 @@ export interface components {
       git_sha?: string | null;
       event_type: "auth.token.refreshed";
     };
-    BRollArtifact: {
-      /** Unique artifact identifier */
-      artifact_id: string;
-      /** Associated production identifier */
-      production_id: string;
-      /** Optional associated editor decision id */
-      decision_id?: string | null;
-      /** Start time on source timeline in ms */
-      source_start_ms: number;
-      /** End time on source timeline in ms */
-      source_end_ms: number;
-      gcs_bucket: string;
-      gcs_object: string;
-      /** Target clip duration in ms (~2000-10000ms) */
-      duration_ms: number;
-      status?: components["schemas"]["BRollArtifactStatus"];
-      /** Human summary of B-roll visual intent */
-      prompt_summary?: string;
-      /** Generation quality mode */
-      quality_mode?: components["schemas"]["BRollQualityMode"];
-      /** Requested output resolution: 360p, 720p, 1080p, 4k */
-      requested_resolution?: string;
-      /** Output resolution: 360p, 720p, 1080p, 4k */
-      resolution?: string;
-      /** Actual output video width in pixels */
-      actual_width?: number | null;
-      /** Actual output video height in pixels */
-      actual_height?: number | null;
-      /** Requested generation duration in ms (3000-10000ms) */
-      requested_duration_ms?: number;
-      /** Actual generated video duration in ms from Omni */
-      generated_duration_ms?: number | null;
-      /** Exact target EDL placement duration in ms */
-      placement_duration_ms?: number;
-      /** Whether the generated Omni asset contains an audio stream */
-      has_generated_audio?: boolean;
-      /** Whether generated Omni audio enters master mix (default: False / video-only) */
-      audio_used_in_master?: boolean;
-      /** SHA256 hex digest of the raw generated video bytes */
-      sha256?: string | null;
-      /** Model ID */
-      model?: string;
-      /** Interactions video generation task */
-      task?: string;
-      /** True if generated at 360p draft resolution */
-      is_draft?: boolean;
-      /** Initial keyframe URI for transition interpolation */
-      first_frame_uri?: string | null;
-      /** Terminal keyframe URI for transition interpolation */
-      last_frame_uri?: string | null;
-      /** Optional video reference URI */
-      reference_video_uri?: string | null;
-      /** Interaction ID returned by Google Interactions API */
-      interaction_id?: string | null;
-      /** Previous interaction ID for scene extension or continuation */
-      previous_interaction_id?: string | null;
-      /** Scene extension prior context in ms */
-      scene_extension_prior_context_ms?: number | null;
-      /** Whether raw Omni source asset contains C2PA/JUMBF credentials */
-      source_c2pa_present?: boolean;
-      /** C2PA provenance status of the final composed master */
-      master_c2pa_status?: string;
-      created_at: string;
-    };
-    BRollArtifactStatus: "pending" | "planned" | "accepted" | "rejected" | "failed";
-    BRollListResponse: {
-      /** Unique production identifier */
-      production_id: string;
-      /** List of generated B-roll clips */
-      artifacts?: components["schemas"]["BRollArtifact"][];
-    };
-    BRollQualityMode: "draft" | "standard" | "finishing" | "4k";
     BackgroundMusicMix: {
       style: string;
       model_id?: string;
@@ -833,7 +751,7 @@ export interface components {
       channel_id: string;
       /** Actionable instruction for the agent. */
       directive: string;
-      /** Agent role this lesson directs (director, editor, packaging, qa). */
+      /** Agent role this lesson directs (alex, leo, iris). */
       target_agent: components["schemas"]["TargetAgent"];
       /** Statistical or qualitative summary of evidence supporting this directive. */
       evidence_summary: string;
@@ -982,12 +900,12 @@ export interface components {
       source_start_ms: number;
       /** End timestamp in source video milliseconds */
       source_end_ms: number;
-      /** Coverage category (e.g. SOURCE_SCREEN, BROLL_CANDIDATE) */
-      coverage_type: components["schemas"]["CoverageType"];
+      /** Coverage category (e.g. SOURCE_SCREEN) */
+      coverage_type?: components["schemas"]["CoverageType"] | string;
       /** Editorial justification for the visual coverage */
       reason: string;
     };
-    CoverageType: "SOURCE_SCREEN" | "BROLL_CANDIDATE";
+    CoverageType: "SOURCE_SCREEN";
     CreateMemoryRequest: {
       /** Durable memory, lesson, or preference statement */
       fact: string;
@@ -1136,7 +1054,7 @@ export interface components {
       version?: number;
       /** Ordered list of deterministic cut instructions */
       cuts?: components["schemas"]["CutInstruction"][];
-      /** Visual coverage markers for B-roll and screen recordings */
+      /** Visual coverage markers for screen recordings */
       coverage_markers?: components["schemas"]["CoverageMarker"][];
       /** Persisted generated narration segments mixed into the preview */
       voiceover_segments?: components["schemas"]["VoiceoverSegment"][];
@@ -1149,7 +1067,7 @@ export interface components {
       /** Unique identifier for the decision within the proposal */
       decision_id: string;
       /** Semantic category of the editing decision */
-      decision_type: components["schemas"]["EditorDecisionType"];
+      decision_type: components["schemas"]["EditorDecisionType"] | string;
       /** Canonical 0-indexed transcript start word index */
       transcript_start_word: number;
       /** Canonical 0-indexed transcript end word index */
@@ -1184,8 +1102,6 @@ export interface components {
       | "TIGHTEN_EXPLANATION"
       | "REMOVE_LOW_VALUE_SECTION"
       | "KEEP_FOR_CLARITY"
-      | "BROLL_COVER"
-      | "BROLL_COVER_CANDIDATE"
       | "SOURCE_COVER"
       | "CHAPTER_MARKER"
       | "NARRATION_REWRITE"
@@ -1623,7 +1539,7 @@ export interface components {
       suggested_tags?: string[];
       /** Default category ID (28 = Science & Technology) */
       suggested_category_id?: string;
-      /** Suggested synthetic media disclosure based on Studio Voice/BRoll */
+      /** Suggested synthetic media disclosure based on Studio Voice narration */
       suggested_synthetic_media?: boolean;
       /** Verified thumbnail frame candidates */
       verified_thumbnail_frames?: Record<string, unknown>[];

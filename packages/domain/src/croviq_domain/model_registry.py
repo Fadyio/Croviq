@@ -37,9 +37,7 @@ class ModelCapabilityEntry(BaseModel):
     implemented: ModelImplementationStatus = Field(..., description="Implementation status in codebase")
     live_upstream_proven: UpstreamVerificationStatus = Field(..., description="Google-side call proof status")
     last_verified_at: str = Field(..., description="ISO 8601 date string of last verification")
-    draft_360p_verified: bool = Field(default=False, description="Whether 360p draft resolution control is verified")
-    duration_control_verified: bool = Field(default=False, description="Whether duration control (3s-10s) is verified")
-    audio_isolation_verified: bool = Field(default=False, description="Whether audio isolation (video-only B-roll) is verified")
+    duration_control_verified: bool = Field(default=False, description="Whether duration control is verified")
     notes: str = Field(default="", description="Technical context or API constraints")
 
 
@@ -72,18 +70,6 @@ CANONICAL_MODEL_REGISTRY: list[ModelCapabilityEntry] = [
         notes="Direct generate_content TTS call on Vertex AI returning 24kHz PCM audio adhering to hard duration budget.",
     ),
     ModelCapabilityEntry(
-        model_id="gemini-omni-1.1-flash-preview",
-        feature="B-Roll Video Generation & Visual Coverage",
-        code_path="croviq_agents.client.GoogleGenAIClient.generate_broll_clip",
-        implemented=ModelImplementationStatus.IMPLEMENTED,
-        live_upstream_proven=UpstreamVerificationStatus.YES,
-        last_verified_at="2026-08-29",
-        draft_360p_verified=True,
-        duration_control_verified=True,
-        audio_isolation_verified=True,
-        notes="Gemini Omni 1.1 Flash is operated through Vertex AI Interactions API (POST /v1beta1/projects/{project}/locations/global/interactions) for text-to-video, reference-to-video, and visual coverage B-roll.",
-    ),
-    ModelCapabilityEntry(
         model_id="lyria-3-pro-preview",
         feature="Background Music Generation (Long-form)",
         code_path="croviq_agents.client.GoogleGenAIClient.generate_background_music",
@@ -101,7 +87,7 @@ CANONICAL_MODEL_REGISTRY: list[ModelCapabilityEntry] = [
         live_upstream_proven=UpstreamVerificationStatus.YES,
         last_verified_at="2026-08-30",
         duration_control_verified=True,
-        notes="Google Lyria 3 Clip preview generates 30-second music assets for short video formats.",
+        notes="Google Lyria 3 Clip preview generates 30-second background music asset clips.",
     ),
 ]
 

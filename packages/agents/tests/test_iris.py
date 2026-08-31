@@ -6,7 +6,6 @@ import pytest
 from croviq_agents.client import FakeGenAIClient
 from croviq_agents.iris import IrisQAAgent
 from croviq_agents.prompts import DEFAULT_IRIS_PROMPT, build_release_qa_prompt
-from croviq_agents.tools import build_default_iris_tool_registry
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
 from croviq_domain.release_review import ReleaseVerdict
 from croviq_domain.transcript import Transcript, TranscriptWord
@@ -92,24 +91,3 @@ async def test_iris_pass_on_clean_production(
     assert len(review.issues) == 0
     assert review.checklist.all_passed is True
 
-
-def test_iris_tool_registry(
-    sample_transcript,
-    sample_master_artifact,
-):
-    registry = build_default_iris_tool_registry(
-        master_artifact=sample_master_artifact,
-        transcript=sample_transcript,
-        proposal=None,
-    )
-    assert registry.has_tool("inspect_media")
-    assert registry.has_tool("probe_media")
-    assert registry.has_tool("analyze_audio")
-    assert registry.has_tool("extract_frames")
-    assert registry.has_tool("extract_clip")
-    assert registry.has_tool("inspect_transcript")
-    assert registry.has_tool("inspect_captions")
-    assert registry.has_tool("inspect_chapters")
-    assert registry.has_tool("inspect_packaging")
-    assert registry.has_tool("verify_claim")
-    assert registry.has_tool("compare_timeline")

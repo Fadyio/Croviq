@@ -1,12 +1,10 @@
-"""Tests for Narration, Studio Voice, B-roll, and Agent Configuration domain models."""
+"""Tests for Narration, Studio Voice, and Agent Configuration domain models."""
 
 from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
 from croviq_domain.narration import (
-    BRollArtifact,
-    BRollArtifactStatus,
     NarrationSegment,
     NarrationSegmentStatus,
     StudioVoiceResult,
@@ -83,23 +81,6 @@ def test_studio_voice_result_aggregation():
     )
     assert res.all_within_budget is True
     assert len(res.segments) == 1
-
-
-def test_broll_artifact_creation():
-    now = datetime.now(timezone.utc)
-    broll = BRollArtifact(
-        artifact_id="broll_01",
-        production_id="prod_123",
-        source_start_ms=10000,
-        source_end_ms=15000,
-        gcs_bucket="bucket",
-        gcs_object="workspaces/ws1/productions/prod_123/broll/broll_01.mp4",
-        duration_ms=5000,
-        prompt_summary="Deployment transition cloud diagram",
-        created_at=now,
-    )
-    assert broll.status == BRollArtifactStatus.ACCEPTED
-    assert broll.duration_ms == 5000
 
 
 def test_agent_prompt_config():

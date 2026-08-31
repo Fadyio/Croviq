@@ -26,7 +26,7 @@ from croviq_domain.transcript import (
     Transcript,
 )
 from croviq_domain.render import ArtifactStatus, ArtifactType, RenderArtifact
-from croviq_domain.narration import BRollArtifact, StudioVoiceResult
+from croviq_domain.narration import StudioVoiceResult
 from croviq_domain.release_review import (
     ClaimSupportStatus,
     ClaimVerification,
@@ -254,7 +254,7 @@ class AssembleEDLResponse(BaseModel):
     )
     coverage_marker_count: int = Field(
         ...,
-        description="Number of visual coverage markers (B-roll + jump cut covers)",
+        description="Number of visual coverage markers (jump cut covers)",
     )
     source_duration_ms: int = Field(
         ...,
@@ -462,15 +462,6 @@ class StudioVoiceGenerationResponse(BaseModel):
     studio_voice_preview_url: str | None = Field(default=None, description="Signed playback URL for Studio Voice preview")
 
 
-class BRollListResponse(BaseModel):
-    """Response listing generated B-roll artifacts for a production."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    production_id: str = Field(..., description="Unique production identifier")
-    artifacts: list[BRollArtifact] = Field(default_factory=list, description="List of generated B-roll clips")
-
-
 class DeleteProductionResponse(BaseModel):
     """Response returned upon successful deletion of a production and all associated media storage objects."""
 
@@ -481,16 +472,6 @@ class DeleteProductionResponse(BaseModel):
     deleted_storage_objects_count: int = Field(default=0, description="Count of GCS media storage objects deleted")
     deleted_at: datetime = Field(..., description="UTC timestamp of the deletion")
 
-
-class GeneratePackagingRequest(BaseModel):
-    """Request payload to generate packaging proposal for a production."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    force_regenerate: bool = Field(
-        default=False,
-        description="Whether to bypass cached proposal and generate a fresh packaging proposal",
-    )
 
 
 class UpdatePackagingOverridesRequest(BaseModel):
@@ -572,7 +553,7 @@ class PublishPreparationResponse(BaseModel):
     suggested_chapters: list[PackagingChapter] = Field(default_factory=list, description="Verified YouTube chapters")
     suggested_tags: list[str] = Field(default_factory=list, description="Keywords for YouTube tags")
     suggested_category_id: str = Field(default="28", description="Default category ID (28 = Science & Technology)")
-    suggested_synthetic_media: bool = Field(default=False, description="Suggested synthetic media disclosure based on Studio Voice/BRoll")
+    suggested_synthetic_media: bool = Field(default=False, description="Suggested synthetic media disclosure based on Studio Voice narration")
     verified_thumbnail_frames: list[dict[str, Any]] = Field(default_factory=list, description="Verified thumbnail frame candidates")
     release_ready: bool = Field(default=False, description="Whether Iris has approved the release (verdict PASS)")
 

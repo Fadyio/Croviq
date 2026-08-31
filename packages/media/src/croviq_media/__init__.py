@@ -40,7 +40,6 @@ from croviq_media.silence import (
     DEFAULT_MIN_SILENCE_DURATION_MS,
     DEFAULT_NATURAL_PAUSE_MS,
     SilenceCleanupPlanner,
-    format_silence_plan_for_prompt,
 )
 from croviq_media.qa import (
     AudioQAResult,
@@ -87,8 +86,6 @@ __all__ = [
     "DEFAULT_MIN_SILENCE_DURATION_MS",
     "DEFAULT_NATURAL_PAUSE_MS",
     "SilenceCleanupPlanner",
-    "format_silence_plan_for_prompt",
-    "AudioQAResult",
     "CaptionQAResult",
     "ChapterQAResult",
     "DeterministicMediaQAService",

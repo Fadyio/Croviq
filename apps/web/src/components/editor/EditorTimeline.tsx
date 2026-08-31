@@ -180,9 +180,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   const dialogueCutBlocks = twickData.blocks.filter(
     (b) => b.trackId === "edits" || b.trackId === "dialogue-edits",
   );
-  const coverageBlocks = twickData.blocks.filter(
-    (b) => b.trackId === "broll" || b.trackId === "coverage",
-  );
+  const coverageBlocks = twickData.blocks.filter((b) => b.trackId === "coverage");
   const voiceoverBlocks = twickData.blocks.filter(
     (b) => b.trackId === "voiceover" || b.trackId === "narration",
   );
@@ -264,11 +262,11 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             <Scissors className="w-3 h-3 text-primary shrink-0" />
             <span className="truncate">Edits</span>
           </div>
-          {/* Track 4 Header: B-roll */}
+          {/* Track 4 Header: Coverage */}
           {coverageBlocks.length > 0 && (
             <div className="h-6 px-2 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
               <Layers className="w-3 h-3 text-info shrink-0" />
-              <span className="truncate">B-roll</span>
+              <span className="truncate">Coverage</span>
             </div>
           )}
 
@@ -466,7 +464,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 })
               )}
             </div>
-            {/* 5. Track 4 Content: B-ROLL & COVERAGE */}
+            {/* 5. Track 4 Content: COVERAGE */}
             {coverageBlocks.length > 0 && (
               <div className="h-6 border-b border-border-subtle/30 relative flex items-center px-1 shrink-0 bg-surface-1">
                 {coverageBlocks.map((cov) => {
@@ -485,13 +483,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                         event.stopPropagation();
                         onSelectBlock(cov);
                       }}
-                      className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                        cov.type === "coverage-broll"
-                          ? "bg-info/25 border border-info/70 text-info hover:bg-info/35"
-                          : "bg-surface-3 border border-border-strong text-text-secondary hover:bg-surface-3/80"
-                      } ${isSelected ? "ring-2 ring-primary shadow-md" : ""} ${
-                        isCurrentActive ? "ring-1 ring-info animate-pulse" : ""
-                      }`}
+                      className={`absolute top-0.5 bottom-0.5 rounded cursor-pointer transition-all flex items-center gap-1 px-1.5 text-[9px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary bg-surface-3 border border-border-strong text-text-secondary hover:bg-surface-3/80 ${
+                        isSelected ? "ring-2 ring-primary shadow-md" : ""
+                      } ${isCurrentActive ? "ring-1 ring-info animate-pulse" : ""}`}
                       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
                       title={`Coverage: ${cov.label} (${formatTimecode(cov.startMs)} → ${formatTimecode(cov.endMs)})`}
                     >

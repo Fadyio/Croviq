@@ -17,14 +17,14 @@ We enforce a strict division of labor between AI reasoning, word-level alignment
    - Word start/end anchors from Gemini 3.5 Transcribe prevent naive mid-word slicing; the cut-safety layer decides actual media cut boundaries.
    - Micro-crossfades (10–30ms) on audio transitions eliminate click/pop artifacts.
    - Room-tone continuity checks bridge silent gaps.
-   - Screen-recording / terminal B-roll footage is automatically prioritized to cover talking-head visual jump cuts.
+- Screen-recording / terminal footage is automatically prioritized to cover talking-head visual jump cuts.
 
 3. **Vendor-Neutral Canonical EDL**:
    - The contract between Gemini reasoning, transcription alignment, and FFmpeg rendering is a typed, versioned JSON schema (`EditDecisionList`).
    - The backend renderer has zero proprietary dependencies on Twick or external cloud exporter APIs.
 
-4. **Optional Generative Video Boundary**:
-   - Google generative video models (e.g. Omni) may be used *only* as an optional shot-level creative tool (e.g. generated B-roll for cut coverage). The core edit pipeline operates 100% deterministically without generative video dependencies.
+4. **Deterministic Edit Pipeline**:
+   - The core edit pipeline operates 100% deterministically with FFmpeg and cut-safety algorithms without generative video dependencies.
 
 ## Consequences
 - Guarantees natural, broadcast-quality speech flow and video playback using Gemini 3.5 Transcribe word-level timing anchors plus deterministic cut-safety checks.

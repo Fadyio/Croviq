@@ -285,7 +285,6 @@ dependencies = [
     { name = "croviq-domain" },
     { name = "croviq-observability" },
     { name = "google-genai" },
-    { name = "pydantic" },
 ]
 
 [package.dev-dependencies]
@@ -299,7 +298,6 @@ requires-dist = [
     { name = "croviq-domain", editable = "../domain" },
     { name = "croviq-observability", editable = "../observability" },
     { name = "google-genai", specifier = ">=2.20.0" },
-    { name = "pydantic", specifier = ">=2.10.0" },
 ]
 
 [package.metadata.requires-dev]

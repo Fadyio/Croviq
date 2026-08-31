@@ -65,8 +65,6 @@ def format_leo_decision_message(decision: EditorDecision) -> str:
     elif decision.decision_type in (EditorDecisionType.REMOVE_LOW_VALUE_SECTION, EditorDecisionType.REMOVE_FILLER):
         clean = reason.removeprefix("Remove filler ").removeprefix("Removed filler ").removeprefix("Remove ").removeprefix("Removed ")
         return f"Removed filler hesitation at {start_tc}: {clean}"
-    elif decision.decision_type in (EditorDecisionType.BROLL_COVER, EditorDecisionType.BROLL_COVER_CANDIDATE):
-        return f"Flagged B-roll visual coverage at {start_tc}"
     elif decision.decision_type in (EditorDecisionType.KEEP, EditorDecisionType.KEEP_FOR_CLARITY):
         clean = reason.removeprefix("Preserve ").removeprefix("Keep ").removeprefix("Retain ")
         return f"Preserved technical walkthrough at {start_tc}: {clean}"
@@ -478,7 +476,7 @@ class LeoVideoEditor:
             arguments = model_result.function_args or {}
 
             # Fill in selection context arguments if not explicitly provided
-            if tool_name in ("remove_selection", "tighten_selection", "add_cut", "restore_source_range", "add_broll", "add_chapter"):
+            if tool_name in ("remove_selection", "tighten_selection", "add_cut", "restore_source_range", "add_chapter"):
                 if "start_ms" not in arguments or arguments.get("start_ms") is None:
                     arguments["start_ms"] = start_ms
                 if "end_ms" not in arguments or arguments.get("end_ms") is None:
@@ -567,8 +565,6 @@ class LeoVideoEditor:
             "mark_keep": "I marked that range to keep and removed conflicting cuts.",
             "add_chapter": "I added the chapter to the editorial plan.",
             "rename_chapter": "I renamed the chapter.",
-            "add_broll": "I added the B-roll coverage, preserving the original audio.",
-            "remove_broll": "I removed the B-roll coverage.",
             "generate_voiceover": "I generated the voiceover preview and mixed it under the source.",
             "remove_voiceover": "I removed the voiceover and restored the source audio.",
             "add_background_music": "I added the background music mix with speech ducking.",
@@ -649,5 +645,3 @@ class LeoVideoEditor:
         return self_review, usage, activities
 
 
-# Backward-compatible alias
-LeoDialogueEditor = LeoVideoEditor

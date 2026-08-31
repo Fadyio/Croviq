@@ -15,7 +15,6 @@ def test_canonical_model_registry_contains_all_core_models():
     assert "gemini-3.7-flash" in models
     assert "gemini-3.5-transcribe-preview" in models
     assert "gemini-3.1-flash-tts-preview" in models
-    assert "gemini-omni-1.1-flash-preview" in models
 
 
 def test_gemini_37_reasoning_capability_is_implemented_and_proven():
@@ -41,16 +40,6 @@ def test_gemini_31_tts_capability_is_implemented_and_proven():
     assert entry.live_upstream_proven == UpstreamVerificationStatus.YES
     assert "synthesize_studio_voice" in entry.code_path
 
-
-def test_gemini_omni_capability_is_implemented_and_proven():
-    entry = get_model_capability("gemini-omni-1.1-flash-preview")
-    assert entry is not None
-    assert entry.implemented == ModelImplementationStatus.IMPLEMENTED
-    assert entry.live_upstream_proven == UpstreamVerificationStatus.YES
-    assert entry.draft_360p_verified is True
-    assert entry.duration_control_verified is True
-    assert entry.audio_isolation_verified is True
-    assert "generate_broll_clip" in entry.code_path
 
 
 def test_unknown_model_returns_none():

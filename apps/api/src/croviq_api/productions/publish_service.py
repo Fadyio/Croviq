@@ -43,10 +43,6 @@ from croviq_api.channels.youtube_repository import (
 )
 from croviq_api.config import get_settings
 from croviq_api.media.storage import MediaStorage
-from croviq_api.productions.broll_repository import (
-    BRollRepository,
-    get_broll_repository,
-)
 from croviq_api.productions.edl_repository import (
     EDLRepository,
     get_edl_repository,
@@ -125,7 +121,6 @@ class YouTubePublishService:
         packaging_repo: PackagingRepository,
         render_repo: RenderRepository,
         studio_voice_repo: StudioVoiceRepository,
-        broll_repo: BRollRepository,
         thumbnail_repo: ThumbnailRepository,
         publish_job_repo: PublishJobRepository,
         media_storage: MediaStorage,
@@ -140,7 +135,6 @@ class YouTubePublishService:
         self.packaging_repo = packaging_repo
         self.render_repo = render_repo
         self.studio_voice_repo = studio_voice_repo
-        self.broll_repo = broll_repo
         self.thumbnail_repo = thumbnail_repo
         self.publish_job_repo = publish_job_repo
         self.media_storage = media_storage

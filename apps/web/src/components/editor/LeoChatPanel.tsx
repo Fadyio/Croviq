@@ -44,9 +44,8 @@ interface LeoChatPanelProps {
 const QUICK_PROMPTS = [
   "Why did you remove this?",
   "Can we make this section faster?",
-  "Where would B-roll help?",
   "Tighten selected section",
-  "Add B-roll here",
+  "Undo that edit",
 ];
 
 const renderSelectionAttachment = (

@@ -409,17 +409,13 @@ export const VideoStage: React.FC<VideoStageProps> = ({
           </div>
         )}
 
-        {/* Visual B-roll Coverage Overlay */}
+        {/* Visual Screen Coverage Overlay */}
         {activeCoverage && (
           <div
             className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-info/90 text-white text-xs font-semibold backdrop-blur-md shadow-lg transition-all animate-pulse"
             data-testid="active-coverage-overlay"
           >
-            <span>
-              {activeCoverage.coverage_type === "BROLL_CANDIDATE"
-                ? "B-Roll Coverage"
-                : "Source Screen Coverage"}
-            </span>
+            <span>Source Screen Coverage</span>
           </div>
         )}
 

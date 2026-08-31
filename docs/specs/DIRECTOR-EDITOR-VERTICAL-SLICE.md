@@ -112,7 +112,7 @@ SampleChannelDataProvider (FastAPI / Domain Service)
 1. **Word-Level Timing (Gemini 3.5 Transcribe Preview)**: Extract millisecond start/end timing anchors for each spoken word.
 2. **Boundary Padding & Silence Envelope**: Ensure cutpoints snap to inter-word silence intervals rather than mid-phoneme.
 3. **Audio Smoothing**: Apply 20ms audio micro-crossfades to prevent clicks.
-4. **Visual Discontinuity Mitigation**: When speech cuts cause a jarring talking-head jump, prioritize screen demo / terminal B-roll footage as an overlay.
+4. **Visual Discontinuity Mitigation**: When speech cuts cause a jarring talking-head jump, prioritize screen demo / terminal footage as an overlay.
 
 ### 2.7 Twick Editor Workspace (80/20 Split)
 - **Left 80%**:

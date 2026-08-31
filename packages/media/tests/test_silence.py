@@ -11,7 +11,7 @@ from croviq_domain.transcript import (
     TranscriptSegment,
     TranscriptWord,
 )
-from croviq_media.silence import SilenceCleanupPlanner, format_silence_plan_for_prompt
+from croviq_media.silence import SilenceCleanupPlanner
 
 
 def _create_transcript_with_silence(
@@ -118,21 +118,3 @@ def test_silence_cut_never_intersects_words():
         assert not (decision.source_start_ms < w.start_ms < decision.source_end_ms)
         assert not (decision.source_start_ms < w.end_ms < decision.source_end_ms)
 
-
-def test_format_silence_plan_for_prompt():
-    """Format silence cleanup decisions into a clean human/agent-readable prompt section."""
-    words = [
-        (0, "First", 1000, 2000),
-        (1, "Second", 9700, 11000),
-        (2, "Third", 15000, 16000),  # 4.0s gap
-    ]
-    silences = [(2000, 9700), (11000, 15000)]
-    transcript = _create_transcript_with_silence(words, silences, total_duration_ms=20000)
-
-    planner = SilenceCleanupPlanner()
-    decisions = planner.plan_silence_cleanup(transcript)
-    prompt_str = format_silence_plan_for_prompt(decisions)
-
-    assert "Deterministic Silence Cleanup Plan" in prompt_str
-    assert "00:02.1" in prompt_str or "00:02" in prompt_str
-    assert "7.45s dead air trimmed" in prompt_str or "7.5s" in prompt_str

@@ -8,11 +8,6 @@ from croviq_api.auth.dependencies import get_current_user
 from croviq_api.main import create_app
 from croviq_api.media.dependencies import get_media_storage, set_media_storage
 from croviq_api.media.fake import FakeMediaStorage
-from croviq_api.productions.broll_repository import (
-    InMemoryBRollRepository,
-    get_broll_repository,
-    set_broll_repository,
-)
 from croviq_api.productions.edl_repository import (
     InMemoryEDLRepository,
     get_edl_repository,
@@ -55,8 +50,6 @@ from croviq_domain.editorial import (
     EditorProposal,
 )
 from croviq_domain.narration import (
-    BRollArtifact,
-    BRollArtifactStatus,
     NarrationSegment,
     NarrationSegmentStatus,
     StudioVoiceResult,
@@ -109,7 +102,6 @@ def test_setup(user_a: User):
     edl_repo = InMemoryEDLRepository()
     render_repo = InMemoryRenderRepository()
     studio_voice_repo = InMemoryStudioVoiceRepository()
-    broll_repo = InMemoryBRollRepository()
     media_storage = FakeMediaStorage()
 
     set_production_repository(prod_repo)
@@ -119,7 +111,6 @@ def test_setup(user_a: User):
     set_edl_repository(edl_repo)
     set_render_repository(render_repo)
     set_studio_voice_repository(studio_voice_repo)
-    set_broll_repository(broll_repo)
     set_media_storage(media_storage)
 
     app = create_app()
@@ -131,7 +122,6 @@ def test_setup(user_a: User):
     app.dependency_overrides[get_edl_repository] = lambda: edl_repo
     app.dependency_overrides[get_render_repository] = lambda: render_repo
     app.dependency_overrides[get_studio_voice_repository] = lambda: studio_voice_repo
-    app.dependency_overrides[get_broll_repository] = lambda: broll_repo
     app.dependency_overrides[get_media_storage] = lambda: media_storage
 
     client = TestClient(app)
@@ -146,7 +136,6 @@ def test_setup(user_a: User):
         "edl_repo": edl_repo,
         "render_repo": render_repo,
         "studio_voice_repo": studio_voice_repo,
-        "broll_repo": broll_repo,
         "media_storage": media_storage,
     }
 
@@ -157,7 +146,6 @@ def test_setup(user_a: User):
     set_edl_repository(None)
     set_render_repository(None)
     set_studio_voice_repository(None)
-    set_broll_repository(None)
     set_media_storage(None)
 
 
@@ -171,7 +159,6 @@ async def test_delete_production_success(test_setup, user_a: User):
     edl_repo: InMemoryEDLRepository = test_setup["edl_repo"]
     render_repo: InMemoryRenderRepository = test_setup["render_repo"]
     studio_voice_repo: InMemoryStudioVoiceRepository = test_setup["studio_voice_repo"]
-    broll_repo: InMemoryBRollRepository = test_setup["broll_repo"]
     media_storage: FakeMediaStorage = test_setup["media_storage"]
 
     now = datetime.now(timezone.utc)
@@ -289,24 +276,10 @@ async def test_delete_production_success(test_setup, user_a: User):
     )
     await studio_voice_repo.save(sv_result)
 
-    # 8. Seed B-roll
-    broll = BRollArtifact(
-        artifact_id="broll_01",
-        production_id=production_id,
-        source_start_ms=0,
-        source_end_ms=4000,
-        gcs_bucket=bucket,
-        gcs_object=f"workspaces/{workspace.workspace_id}/productions/{production_id}/broll/broll_01.mp4",
-        duration_ms=4000,
-        status=BRollArtifactStatus.ACCEPTED,
-        created_at=now,
-    )
-    await broll_repo.save(broll)
 
     # 9. Seed GCS Storage objects
     media_storage.simulate_uploaded_object(bucket, prod.source_media.gcs_object, 10_000_000, "video/mp4", b"raw video")
     media_storage.simulate_uploaded_object(bucket, render_art.gcs_object, 5_000_000, "video/mp4", b"preview video")
-    media_storage.simulate_uploaded_object(bucket, broll.gcs_object, 2_000_000, "video/mp4", b"broll video")
 
     # Act: DELETE /api/productions/{production_id}
     response = client.delete(f"/api/productions/{production_id}")
@@ -315,7 +288,7 @@ async def test_delete_production_success(test_setup, user_a: User):
     data = response.json()
     assert data["status"] == "deleted"
     assert data["production_id"] == production_id
-    assert data["deleted_storage_objects_count"] == 3
+    assert data["deleted_storage_objects_count"] == 2
     assert "deleted_at" in data
 
     # Verify Firestore state is gone
@@ -325,12 +298,10 @@ async def test_delete_production_success(test_setup, user_a: User):
     assert await edl_repo.get_latest_edl(production_id) is None
     assert len(await render_repo.list_render_artifacts(production_id)) == 0
     assert await studio_voice_repo.get_by_production_id(production_id) is None
-    assert len(await broll_repo.list_by_production_id(production_id)) == 0
 
     # Verify GCS objects are deleted
     assert (await media_storage.get_object_metadata(bucket, prod.source_media.gcs_object)).exists is False
     assert (await media_storage.get_object_metadata(bucket, render_art.gcs_object)).exists is False
-    assert (await media_storage.get_object_metadata(bucket, broll.gcs_object)).exists is False
 
     # Subsequent GET returns 404
     get_res = client.get(f"/api/productions/{production_id}")
@@ -515,7 +486,6 @@ async def test_delete_production_subcollection_missing(test_setup, user_a: User)
     client: TestClient = test_setup["client"]
     prod_repo: InMemoryProductionRepository = test_setup["prod_repo"]
     workspace_repo: InMemoryWorkspaceRepository = test_setup["workspace_repo"]
-    broll_repo: InMemoryBRollRepository = test_setup["broll_repo"]
 
     now = datetime.now(timezone.utc)
     workspace, _ = await workspace_repo.get_or_create_default_workspace(user_a)
@@ -532,25 +502,11 @@ async def test_delete_production_subcollection_missing(test_setup, user_a: User)
     )
     await prod_repo.create_production(prod)
 
-    # Only BRoll exists; no transcript, no renders, no edl, no editorial
-    broll = BRollArtifact(
-        artifact_id="broll_only_01",
-        production_id=production_id,
-        source_start_ms=0,
-        source_end_ms=2000,
-        gcs_bucket="croviq-506602-croviq-media-raw",
-        gcs_object=f"workspaces/{workspace.workspace_id}/productions/{production_id}/broll/broll.mp4",
-        duration_ms=2000,
-        status=BRollArtifactStatus.ACCEPTED,
-        created_at=now,
-    )
-    await broll_repo.save(broll)
 
     response = client.delete(f"/api/productions/{production_id}")
     assert response.status_code == 200
     assert response.json()["status"] == "deleted"
     assert await prod_repo.get_production(production_id) is None
-    assert len(await broll_repo.list_by_production_id(production_id)) == 0
 
 
 @pytest.mark.asyncio

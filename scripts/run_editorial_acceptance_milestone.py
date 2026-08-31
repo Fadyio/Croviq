@@ -2,7 +2,7 @@
 
 Runs end-to-end acceptance across multiple real speech and video productions covering:
 - Case 1: Real Spoken Review (Dead air, false starts, repetitions, filler)
-- Case 2: Real Screen Recording & Visible Demonstration (Technical walkthrough, B-roll candidate)
+- Case 2: Real Screen Recording & Visible Demonstration (Technical walkthrough)
 - Case 3: Multimodal No-Cut Decision (Silence containing critical visual action that must be KEPT)
 
 Records full metrics, physical cut reviews, Leo self-review, and Iris QA verdicts.
@@ -72,7 +72,6 @@ async def execute_acceptance_case(
     title: str,
     local_source_path: Path,
     is_multimodal_keep_case: bool = False,
-    is_broll_case: bool = False,
 ) -> dict:
     """Execute complete editorial pipeline for an acceptance production."""
     project_id = "croviq-506602"
@@ -445,12 +444,11 @@ async def main():
     )
     results.append(res1)
     # Production 2: Real Screen Recording & Visible Demonstration (GitHub Actions)
-    # Covers: Screen recording walkthrough, visible demonstration, B-roll opportunity candidate
+    # Covers: Screen recording walkthrough, visible demonstration
     res2 = await execute_acceptance_case(
         prod_id=f"prod_acc_demo_{int(time.time())}",
         title="Screen Recording & Visible Demonstration (GitHub Actions Walkthrough)",
         local_source_path=Path("/tmp/github_optimized.mp4"),
-        is_broll_case=True,
     )
     results.append(res2)
 

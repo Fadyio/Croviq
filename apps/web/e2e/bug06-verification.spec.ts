@@ -238,7 +238,7 @@ test.describe("Bug 6 Verification: Diverse Ecosystem Grounded Research in UI", (
 
     await page.waitForURL("**/app*");
     await page.waitForSelector("aside");
-    await expect(page.locator("aside article").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("aside article:has(h4)").first()).toBeVisible({ timeout: 10000 });
 
     // Verify top 3 primary entities are distinct and channel-relevant
     const entities = await page.locator("aside article:has(h4) span.uppercase").allTextContents();

@@ -180,14 +180,6 @@ test.describe("BUG 12 — Editor Media State Truth and Consistency", () => {
       });
     });
 
-    await page.route(`**/api/productions/${prodId}/broll`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ production_id: prodId, artifacts: [] }),
-      });
-    });
-
     await page.route(`**/api/productions/${prodId}/corrected-script`, async (route) => {
       await route.fulfill({ status: 404 });
     });
@@ -352,14 +344,6 @@ test.describe("BUG 12 — Editor Media State Truth and Consistency", () => {
             },
           ],
         }),
-      });
-    });
-
-    await page.route(`**/api/productions/${prodId}/broll`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ production_id: prodId, artifacts: [] }),
       });
     });
 
@@ -564,14 +548,6 @@ test.describe("BUG 12 — Editor Media State Truth and Consistency", () => {
       });
     });
 
-    await page.route(`**/api/productions/${prodId}/broll`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ production_id: prodId, artifacts: [] }),
-      });
-    });
-
     await page.route(`**/api/productions/${prodId}/corrected-script`, async (route) => {
       await route.fulfill({ status: 404 });
     });
@@ -723,14 +699,6 @@ test.describe("BUG 12 — Editor Media State Truth and Consistency", () => {
       });
     });
 
-    await page.route(`**/api/productions/${prodId}/broll`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ production_id: prodId, artifacts: [] }),
-      });
-    });
-
     await page.route(`**/api/productions/${prodId}/corrected-script`, async (route) => {
       await route.fulfill({ status: 404 });
     });
@@ -860,14 +828,6 @@ test.describe("BUG 12 — Editor Media State Truth and Consistency", () => {
             },
           ],
         }),
-      });
-    });
-
-    await page.route(`**/api/productions/${prodId}/broll`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ production_id: prodId, artifacts: [] }),
       });
     });
 
@@ -1041,14 +1001,6 @@ test.describe("BUG 12 — Editor Media State Truth and Consistency", () => {
       });
     });
 
-    await page.route(`**/api/productions/${prodA}/broll`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ production_id: prodA, artifacts: [] }),
-      });
-    });
-
     await page.route(`**/api/productions/${prodA}/corrected-script`, async (route) => {
       await route.fulfill({ status: 404 });
     });
@@ -1135,14 +1087,6 @@ test.describe("BUG 12 — Editor Media State Truth and Consistency", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ production_id: prodB, renders: [] }),
-      });
-    });
-
-    await page.route(`**/api/productions/${prodB}/broll`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ production_id: prodB, artifacts: [] }),
       });
     });
 

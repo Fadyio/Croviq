@@ -37,12 +37,6 @@ from croviq_domain.editorial import (
 from croviq_domain.media_metadata import MediaMetadata
 from croviq_domain.memory import ChannelLesson, ChannelMemoryProfile, ChannelProfileBuilder
 from croviq_domain.production import Production, SourceMediaStatus
-from croviq_domain.narration import (
-    BRollArtifact,
-    BRollArtifactStatus,
-    BRollQualityMode,
-    QUALITY_MODE_TO_RESOLUTION,
-)
 from croviq_domain.render import (
     ArtifactStatus,
     ArtifactType,
@@ -243,7 +237,6 @@ class EditorialService:
         selected_element: dict[str, object] | None = None,
         active_edl_id: str | None = None,
         request_id: str = "unknown",
-        broll_repo: object | None = None,
         voice_settings: object | None = None,
     ) -> dict[str, object]:
         """Load persisted editor state, execute Leo's typed tool, and render changed previews."""
@@ -331,95 +324,6 @@ class EditorialService:
                 completed_at=now,
             )
             await self._render_repo.save_render_artifact(artifact)
-            return artifact
-
-        async def add_broll(
-            *,
-            start_ms: int,
-            end_ms: int,
-            prompt: str,
-            quality_mode: str,
-            marker: object,
-            edl: EditDecisionList,
-        ) -> BRollArtifact:
-            if broll_repo is None:
-                raise RuntimeError("B-roll repository is unavailable")
-            quality = BRollQualityMode(quality_mode)
-            resolution = QUALITY_MODE_TO_RESOLUTION[quality]
-            requested_duration = max(3000, min(10_000, end_ms - start_ms))
-            video_bytes, interaction_id, generated_duration, actual_resolution = (
-                await self._genai_client.generate_broll_clip(
-                    prompt=prompt,
-                    production_id=production.production_id,
-                    duration_ms=requested_duration,
-                    task="text_to_video",
-                    resolution=resolution,
-                    aspect_ratio="16:9",
-                )
-            )
-            if not video_bytes:
-                raise RuntimeError("Gemini Omni returned no B-roll media")
-            artifact_id = f"broll_{uuid.uuid4().hex[:12]}"
-            object_name = (
-                f"workspaces/{production.workspace_id}/productions/"
-                f"{production.production_id}/broll/{artifact_id}.mp4"
-            )
-            with tempfile.TemporaryDirectory() as temp_dir:
-                root = Path(temp_dir)
-                source_path = root / "source.mp4"
-                broll_path = root / "broll.mp4"
-                preview_path = root / "preview.mp4"
-                broll_path.write_bytes(video_bytes)
-                await self._media_storage.download_object_to_path(
-                    bucket=production.source_media.gcs_bucket,
-                    object_name=production.source_media.gcs_object,
-                    target_path=source_path,
-                )
-                await self._media_storage.upload_object_from_path(
-                    bucket=production.source_media.gcs_bucket,
-                    object_name=object_name,
-                    source_path=broll_path,
-                    content_type="video/mp4",
-                )
-                result = await asyncio.to_thread(
-                    self._render_service.render_broll_placement,
-                    source_path=source_path,
-                    edl=edl,
-                    broll_path=broll_path,
-                    coverage_start_ms=map_source_time_to_edited(start_ms, edl),
-                    coverage_end_ms=map_source_time_to_edited(end_ms, edl),
-                    output_path=preview_path,
-                )
-                await _save_rendered_preview(
-                    local_output=preview_path,
-                    edl=edl,
-                    render_result=result,
-                    artifact_type=ArtifactType.PREVIEW,
-                )
-            artifact = BRollArtifact(
-                artifact_id=artifact_id,
-                production_id=production.production_id,
-                decision_id=marker.decision_id,
-                source_start_ms=start_ms,
-                source_end_ms=end_ms,
-                gcs_bucket=production.source_media.gcs_bucket,
-                gcs_object=object_name,
-                duration_ms=generated_duration,
-                status=BRollArtifactStatus.ACCEPTED,
-                prompt_summary=prompt,
-                quality_mode=quality,
-                requested_resolution=resolution,
-                resolution=actual_resolution,
-                requested_duration_ms=requested_duration,
-                generated_duration_ms=generated_duration,
-                placement_duration_ms=end_ms - start_ms,
-                audio_used_in_master=False,
-                sha256=hashlib.sha256(video_bytes).hexdigest(),
-                interaction_id=interaction_id,
-                is_draft=quality == BRollQualityMode.DRAFT,
-                created_at=datetime.now(timezone.utc),
-            )
-            await broll_repo.save(artifact)
             return artifact
 
         async def generate_voiceover(
@@ -586,7 +490,6 @@ class EditorialService:
                 "rerender_preview": rerender_preview,
                 "save_revision_history": save_revision_history,
                 "pop_revision_history": pop_revision_history,
-                "add_broll": add_broll,
                 "generate_voiceover": generate_voiceover,
                 "add_background_music": add_background_music,
             },

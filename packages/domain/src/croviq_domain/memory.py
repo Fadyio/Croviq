@@ -107,7 +107,7 @@ class ChannelLesson(BaseModel):
     )
     target_agent: TargetAgent = Field(
         ...,
-        description="Agent role this lesson directs (director, editor, packaging, qa).",
+        description="Agent role this lesson directs (alex, leo, iris).",
     )
     evidence_summary: str = Field(
         ...,

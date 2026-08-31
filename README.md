@@ -11,7 +11,7 @@
 
 ---
 
-Croviq is an autonomous, visible multi-agent production team and channel intelligence platform built for YouTube creators. Croviq learns a creator's channel, transforms raw video footage into polished releases with natural dialogue editing, synthesizes Studio Voice voiceover audio, plans generative B-roll visual coverage, executes continuous grounded web research with verifiable citations, and distills performance lessons into a persistent Channel Memory Bank.
+Croviq is an autonomous, visible multi-agent production team and channel intelligence platform built for YouTube creators. Croviq learns a creator's channel, transforms raw video footage into polished releases with natural dialogue editing, synthesizes Studio Voice voiceover audio, mixes background music, executes continuous grounded web research with verifiable citations, and distills performance lessons into a persistent Channel Memory Bank.
 
 - **Live Production Application**: [https://app.croviq.app](https://app.croviq.app)
 - **Backend API Docs (Swagger)**: `http://localhost:8080/docs` (or production `/api/docs`)
@@ -98,7 +98,7 @@ The terminal will display the active services:
 3. **Explore Key Capabilities**:
    - **Channel Intelligence Overview** (`/`): Inspect channel retention trends, subscriber growth velocity, Alex's Google Search-grounded competitive research findings with citations, and Channel Memory Bank lessons.
    - **Video Timeline & Dialogue Editor** (`/productions` → select any production → **Editor**): Inspect the interactive Twick multi-track timeline, synchronized transcript with word-level strike-through cuts, Leo's semantic dialogue edit decisions, Studio Voice synthesis preview, and Iris's quality control report.
-   - **Release Gate & Packaging** (`/productions/.../release`): Inspect publishing assets (title, description, tags, B-roll status, QA certificate), human approval gate, and private YouTube release dispatch.
+   - **Release Gate & Packaging** (`/productions/.../release`): Inspect publishing assets (title, description, tags, QA certificate), human approval gate, and private YouTube release dispatch.
 4. **Backend OpenAPI Documentation**: Explore interactive FastAPI Swagger endpoints at **`http://localhost:8080/docs`**.
 
 ---
@@ -157,7 +157,7 @@ make dev
 │ • Channel intelligence│ • Dialogue boundary cuts │ • Rendered artifact inspection│
 │ • Google Search ground│ • Filler/pause removal   │ • Jump cut & dead air checks  │
 │ • Python code analysis│ • Studio Voice synthesis │ • Loudness audit (~ -16 LUFS) │
-│ • Falsifiable lessons │ • B-roll coverage plan   │ • Caption sync & fact check   │
+│ • Falsifiable lessons │ • Audio-safe cut plan    │ • Caption sync & fact check   │
 │ • Channel Memory Bank │ • Twick timeline sync    │ • Failsafe release gatekeeper │
 └───────────────────────┴──────────────────────────┴───────────────────────────────┘
 ```
@@ -172,7 +172,7 @@ make dev
    - Performs full-timeline semantic dialogue editing, identifying filler words, false starts, and redundant explanations.
    - Generates Edit Decision Lists (EDLs) with natural cut-safety micro-crossfades and audio envelope padding.
    - Rewrites and synthesizes voiceover scripts via **Gemini 3.1 Flash TTS Preview** with prebuilt voice personas.
-   - Plans visual B-roll coverage overlays (framing, timing, prompt directives, and transitions) synchronized with audio ducking.
+   - Generates background music and audio-safe speech ducking.
 
 3. **Iris (Quality Control & Gatekeeper)**:
    - Evaluates the rendered master video against strict broadcast and YouTube standards.

@@ -78,16 +78,12 @@ const describeActivity = (
       tool: "Editorial decision tools",
     };
   }
-  if (includesAny(key, ["b-roll", "broll", "coverage"])) {
+  if (includesAny(key, ["coverage"])) {
     return {
-      action: includesAny(key, ["generated", "created"])
-        ? "Generated B-roll coverage"
-        : "Identified B-roll coverage",
+      action: "Identified visual coverage",
       reason: reasonText,
       status: "Completed",
-      tool: includesAny(key, ["generated", "created"])
-        ? "Gemini B-roll generator"
-        : "Visual coverage analyzer",
+      tool: "Visual coverage analyzer",
     };
   }
   if (includesAny(key, ["voiceover", "voice over", "narration", "tts"])) {
@@ -212,7 +208,7 @@ export const AgentLogPanel: React.FC<AgentLogPanelProps> = ({
               const Icon =
                 entry.status === "Rejected"
                   ? ShieldAlert
-                  : entry.tool.includes("B-roll")
+                  : entry.tool.includes("coverage") || entry.tool.includes("Coverage")
                     ? Layers
                     : entry.tool.includes("cut") || entry.tool.includes("Cut")
                       ? Scissors

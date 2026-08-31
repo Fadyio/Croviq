@@ -8,7 +8,6 @@ class EventType(StrEnum):
     CONFIG_LOADED = "config.loaded"
 
     # HTTP events
-    HTTP_REQUEST = "http.request"
     HTTP_RESPONSE = "http.response"
     # Auth events
     AUTH_LOGIN_ATTEMPT = "auth.login_attempt"
@@ -30,14 +29,8 @@ class EventType(StrEnum):
 
     # Media Upload events
     UPLOAD_CREATED = "upload.created"
-    UPLOAD_STARTED = "upload.started"
     UPLOAD_COMPLETED = "upload.completed"
     UPLOAD_FAILED = "upload.failed"
-
-    # Media Inspect events
-    MEDIA_INSPECT_COMPLETED = "media.inspect.completed"
-    MEDIA_INSPECT_FAILED = "media.inspect.failed"
-
     # Transcription events
     TRANSCRIPTION_STARTED = "transcription.started"
     TRANSCRIPTION_COMPLETED = "transcription.completed"
@@ -58,9 +51,6 @@ class EventType(StrEnum):
     AI_REQUEST_STARTED = "ai.request.started"
     AI_REQUEST_COMPLETED = "ai.request.completed"
     AI_REQUEST_FAILED = "ai.request.failed"
-    BROLL_GENERATION_STARTED = "broll.generation.started"
-    BROLL_GENERATION_COMPLETED = "broll.generation.completed"
-    BROLL_GENERATION_FAILED = "broll.generation.failed"
 
     # Agent Tool lifecycle events
     AGENT_TOOL_STARTED = "agent.tool.started"
@@ -88,10 +78,6 @@ class EventType(StrEnum):
 
 
 
-    # Editor Correction events (Issue #30)
-    EDITOR_CORRECTION_STARTED = "editor.correction.started"
-    EDITOR_CORRECTION_COMPLETED = "editor.correction.completed"
-    EDITOR_CORRECTION_FAILED = "editor.correction.failed"
 
     # Master render approval event (Issue #30)
     MASTER_APPROVED = "master.approved"
@@ -107,9 +93,6 @@ class EventType(StrEnum):
     ALEX_RESEARCH_FAILED = "alex.research.failed"
     ALEX_CODE_EXECUTION_STARTED = "alex.code_execution.started"
     ALEX_CODE_EXECUTION_COMPLETED = "alex.code_execution.completed"
-    ALEX_INSIGHT_CREATED = "alex.insight.created"
-    ALEX_EXPERIMENT_CREATED = "alex.experiment.created"
-    ALEX_EXPERIMENT_UPDATED = "alex.experiment.updated"
 
     # YouTube Integration events
     YOUTUBE_OAUTH_CONNECTED = "youtube.oauth.connected"
@@ -122,19 +105,12 @@ class EventType(StrEnum):
     RESEARCH_SCHEDULER_SKIPPED = "research.scheduler.skipped"
     RESEARCH_SCHEDULER_COMPLETED = "research.scheduler.completed"
 
-    # Packaging events
-    PACKAGING_STARTED = "packaging.started"
-    PACKAGING_COMPLETED = "packaging.completed"
-    PACKAGING_FAILED = "packaging.failed"
-    PACKAGING_REGENERATED = "packaging.regenerated"
 
     # Iris QA & Release Gate events (Issue #33)
     RELEASE_REVIEW_STARTED = "release.review.started"
     RELEASE_REVIEW_COMPLETED = "release.review.completed"
     RELEASE_REVIEW_FAILED = "release.review.failed"
-    QA_CORRECTION_STARTED = "qa.correction.started"
-    QA_CORRECTION_COMPLETED = "qa.correction.completed"
-    QA_CORRECTION_FAILED = "qa.correction.failed"
+
 # Normalized set of all standard event names
 NORMALIZED_EVENT_TYPES: frozenset[str] = frozenset(e.value for e in EventType)
 
@@ -144,7 +120,6 @@ CLIENT_ALLOWED_EVENT_TYPES: frozenset[str] = frozenset(
         EventType.CLIENT_ERROR.value,
         EventType.AUTH_LOGIN_ATTEMPT.value,
         EventType.AUTH_LOGIN_FAILED.value,
-        EventType.UPLOAD_STARTED.value,
         EventType.UPLOAD_COMPLETED.value,
         EventType.UPLOAD_FAILED.value,
     ]

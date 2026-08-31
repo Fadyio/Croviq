@@ -268,7 +268,7 @@ async def test_assemble_edl_success_and_idempotency(app_and_deps):
     proposal = EditorProposal(
         production_id=prod.production_id,
         model="gemini-3.7-flash",
-        summary="Leo proposal with 1 filler cut and 1 b-roll marker",
+        summary="Leo proposal with 1 filler cut requiring coverage",
         decisions=[
             EditorDecision(
                 decision_id="dec_filler_01",
@@ -281,19 +281,7 @@ async def test_assemble_edl_success_and_idempotency(app_and_deps):
                 action="remove",
                 concise_reason="Remove filler um",
                 confidence=0.95,
-                visual_context="screen recording demo",
-            ),
-            EditorDecision(
-                decision_id="dec_broll_01",
-                decision_type=EditorDecisionType.BROLL_COVER_CANDIDATE,
-                transcript_start_word=3,
-                transcript_end_word=4,
-                source_start_ms=1400,
-                source_end_ms=2200,
-                original_text="this tutorial",
-                action="cover",
-                concise_reason="B-roll insert candidate",
-                confidence=0.92,
+                visual_context="talking head presenter",
             ),
         ],
         overall_confidence=0.94,

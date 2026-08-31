@@ -28,7 +28,6 @@ from croviq_api.media.dependencies import set_media_inspector, set_media_storage
 from croviq_api.media.fake import FakeMediaStorage
 from croviq_api.memory.dependencies import set_memory_store
 from croviq_api.memory.fake import FakeChannelMemoryStore
-from croviq_api.productions.broll_repository import InMemoryBRollRepository, get_broll_repository
 from croviq_api.productions.dependencies import set_genai_client, set_render_service
 from croviq_api.productions.edl_repository import InMemoryEDLRepository, set_edl_repository
 from croviq_api.productions.editorial_repository import InMemoryEditorialRepository, set_editorial_repository
@@ -124,7 +123,6 @@ def test_stack(current_user: User) -> dict[str, Any]:
     render_service = FakeRenderService()
     media_storage = FakeMediaStorage()
     inspector = FakeInspector()
-    broll_repo = InMemoryBRollRepository()
     agent_config_repo = InMemoryAgentConfigRepository()
 
     set_production_repository(prod_repo)
@@ -379,7 +377,6 @@ def test_stack(current_user: User) -> dict[str, Any]:
 
     app = create_app()
     app.dependency_overrides[get_current_user] = lambda: current_user
-    app.dependency_overrides[get_broll_repository] = lambda: broll_repo
     app.dependency_overrides[get_agent_config_repository] = lambda: agent_config_repo
     client = TestClient(app)
 

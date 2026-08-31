@@ -39,7 +39,7 @@ def test_render_review_issue_rejects_inverted_times() -> None:
             source_end_ms=9000,
             severity=RenderReviewSeverity.HIGH,
             message="Visual jump cut detected",
-            suggested_action="Cover with B-roll",
+            suggested_action="Cover with source screen footage",
         )
 
 

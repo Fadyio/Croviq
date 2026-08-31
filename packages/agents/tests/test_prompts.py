@@ -112,7 +112,7 @@ def test_build_editor_prompt_includes_anchors_and_policy() -> None:
     assert "Short candidate" not in prompt
     assert "filler" in prompt.lower()
     assert "false start" in prompt.lower()
-    assert "B-roll" in prompt
+    assert "tightening" in prompt.lower()
     assert "chapter" in prompt.lower()
 def test_build_editor_prompt_includes_silence_plan() -> None:
     tr = _sample_transcript()

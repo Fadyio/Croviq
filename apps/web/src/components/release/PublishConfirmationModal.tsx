@@ -559,7 +559,7 @@ export const PublishConfirmationModal: React.FC<PublishConfirmationModalProps> =
                   </div>
                   <p className="text-[11px] text-text-muted">
                     {prepData?.suggested_synthetic_media
-                      ? "Suggested: Yes (Studio Voice narration or Omni generated B-roll detected in production)."
+                      ? "Suggested: Yes (Studio Voice narration detected in production)."
                       : "Declare if video contains realistic altered or generated AI media."}
                   </p>
                   <div className="space-y-2 pt-1 text-xs">

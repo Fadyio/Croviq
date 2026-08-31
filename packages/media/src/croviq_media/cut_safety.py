@@ -266,7 +266,6 @@ class CutSafetyAnalyzer:
                 and "screen" not in vis_ctx
                 and "demo" not in vis_ctx
                 and "terminal" not in vis_ctx
-                and "b-roll" not in vis_ctx
             ):
                 safety_status = CutSafetyStatus.NEEDS_COVERAGE
                 safety_reason = "Audio join is safe, but visual context indicates talking-head jump cut requiring coverage."
@@ -303,26 +302,6 @@ class CutSafetyAnalyzer:
             confidence=decision.confidence,
         )
 
-    def extract_coverage_marker(
-        self,
-        decision: EditorDecision,
-    ) -> CoverageMarker | None:
-        """Extract a visual coverage marker for B-roll insert footage."""
-        if decision.decision_type in (
-            EditorDecisionType.BROLL_COVER_CANDIDATE,
-            EditorDecisionType.BROLL_COVER,
-        ):
-            return CoverageMarker(
-                marker_id=f"cov_{uuid.uuid4().hex[:12]}",
-                decision_id=decision.decision_id,
-                source_start_ms=decision.source_start_ms,
-                source_end_ms=decision.source_end_ms,
-                coverage_type=CoverageType.BROLL_CANDIDATE,
-                reason=decision.concise_reason,
-            )
-
-        return None
-
 
 def assemble_edl_from_proposal(
     proposal: EditorProposal,
@@ -346,9 +325,6 @@ def assemble_edl_from_proposal(
     coverage_markers: list[CoverageMarker] = []
 
     for decision in proposal.decisions:
-        marker = analyzer.extract_coverage_marker(decision)
-        if marker is not None:
-            coverage_markers.append(marker)
 
         if decision.decision_type in DESTRUCTIVE_DECISION_TYPES:
             cut = analyzer.analyze_cut(

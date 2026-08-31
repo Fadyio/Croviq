@@ -16,8 +16,6 @@ class ArtifactType(StrEnum):
     VOICEOVER_PREVIEW = "VOICEOVER_PREVIEW"
     STUDIO_VOICE_PREVIEW = "STUDIO_VOICE_PREVIEW"
     STUDIO_VOICE_MASTER = "STUDIO_VOICE_MASTER"
-    BROLL_PREVIEW = "BROLL_PREVIEW"
-    BROLL_MASTER = "BROLL_MASTER"
     FINAL_MIX = "FINAL_MIX"
 class ArtifactStatus(StrEnum):
     """Lifecycle status of a render artifact."""

@@ -31,7 +31,6 @@ from croviq_api.media.dependencies import get_media_inspector, get_media_storage
 from croviq_api.media.fake import FakeMediaStorage
 from croviq_api.memory.dependencies import get_memory_store, set_memory_store
 from croviq_api.memory.fake import FakeChannelMemoryStore
-from croviq_api.productions.broll_repository import InMemoryBRollRepository, get_broll_repository
 from croviq_api.productions.dependencies import (
     get_genai_client,
     set_genai_client,
@@ -399,7 +398,6 @@ def test_stack(current_user: User) -> dict[str, Any]:
     )
     render_repo._by_production[production_id] = {preview_art.artifact_id: preview_art}
 
-    broll_repo = InMemoryBRollRepository()
     agent_config_repo = InMemoryAgentConfigRepository()
 
     set_render_service(render_service)
@@ -411,7 +409,6 @@ def test_stack(current_user: User) -> dict[str, Any]:
     app.dependency_overrides[get_editorial_repository] = lambda: editorial_repo
     app.dependency_overrides[get_edl_repository] = lambda: edl_repo
     app.dependency_overrides[get_render_repository] = lambda: render_repo
-    app.dependency_overrides[get_broll_repository] = lambda: broll_repo
     app.dependency_overrides[get_agent_config_repository] = lambda: agent_config_repo
     app.dependency_overrides[get_memory_store] = lambda: memory_store
     app.dependency_overrides[get_media_storage] = lambda: media_storage

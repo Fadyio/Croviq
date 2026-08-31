@@ -45,11 +45,6 @@ from croviq_api.memory.dependencies import (
 )
 from croviq_api.memory.fake import FakeChannelMemoryStore
 from croviq_api.memory.google import GoogleMemoryBankStore
-from croviq_api.productions.broll_repository import (
-    FirestoreBRollRepository,
-    get_broll_repository,
-    set_broll_repository,
-)
 from croviq_api.productions.dependencies import (
     FakeGenAIClient,
     GoogleGenAIClient,
@@ -122,7 +117,6 @@ def clean_singletons():
     import croviq_api.channels.research_repository as res_repo
     import croviq_api.workspaces.repository as ws_repo
     import croviq_api.workspaces.agent_config_repository as ac_repo
-    import croviq_api.productions.broll_repository as broll_repo
     import croviq_api.productions.studio_voice_repository as sv_repo
     import croviq_api.productions.thumbnail_repository as thumb_repo
     import croviq_api.productions.publish_job_repository as pub_job_repo
@@ -147,7 +141,6 @@ def clean_singletons():
         res_repo._global_repository = None
         ws_repo._global_workspace_repo = None
         ac_repo._global_agent_config_repo = None
-        broll_repo._global_broll_repo = None
         sv_repo._global_studio_voice_repo = None
         thumb_repo._global_thumbnail_repo = None
         pub_job_repo._global_publish_job_repo = None
@@ -220,11 +213,6 @@ def test_all_firestore_repositories_fail_closed_in_production_without_project_id
         mock_ac_settings.return_value = Settings(environment="production", gcp_project_id=None)
         with pytest.raises(RuntimeError, match="Production mode requires FirestoreAgentConfigRepository"):
             get_agent_config_repository()
-
-    with patch("croviq_api.productions.broll_repository.get_settings") as mock_broll_settings:
-        mock_broll_settings.return_value = Settings(environment="production", gcp_project_id=None)
-        with pytest.raises(RuntimeError, match="Production mode requires FirestoreBRollRepository"):
-            get_broll_repository()
 
     with patch("croviq_api.productions.studio_voice_repository.get_settings") as mock_sv_settings:
         mock_sv_settings.return_value = Settings(environment="production", gcp_project_id=None)

@@ -113,8 +113,6 @@ from croviq_domain.transcript import (
 from croviq_domain.user import User
 from croviq_domain.workspace import Workspace
 from croviq_domain.narration import (
-    BRollArtifact,
-    BRollArtifactStatus,
     NarrationSegment,
     NarrationSegmentStatus,
     StudioVoiceResult,
@@ -290,8 +288,6 @@ __all__ = [
     "RenderReviewIssueType",
     "RenderReviewSeverity",
     "RenderReviewVerdict",
-    "BRollArtifact",
-    "BRollArtifactStatus",
     "NarrationSegment",
     "NarrationSegmentStatus",
     "StudioVoiceResult",

@@ -23,8 +23,6 @@ interface DecisionInspectorProps {
 
 const decisionLabel = (decisionType: string): string => {
   const labels: Record<string, string> = {
-    BROLL_COVER_CANDIDATE: "B-Roll Coverage",
-    BROLL_COVER: "B-Roll Coverage",
     SOURCE_COVER: "Use source-screen coverage",
     KEEP_FOR_CLARITY: "Preserve this explanation",
     KEEP: "Keep this section",
@@ -53,7 +51,6 @@ const resultLabel = (decision?: EditorDecision | null, block?: TimelineBlock | n
   if (block?.type === "cut-rejected") return "Not applied — continuity safety rejected the cut.";
   if (block?.type === "cut-needs-coverage") return "Applied only with visual coverage.";
   if (block?.type === "cut-safe") return "Removed from the edited timeline.";
-  if (block?.type === "coverage-broll") return "Covered by a B-roll region on the timeline.";
   if (block?.type === "coverage-screen") return "Covered with source-screen footage.";
   if (decision?.action) {
     return decision.action

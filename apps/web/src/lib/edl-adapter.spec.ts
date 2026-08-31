@@ -33,7 +33,7 @@ test.describe("EDL Adapter & Playback Logic", () => {
         decision_id: "dec_002",
         source_start_ms: 26160,
         source_end_ms: 42340,
-        coverage_type: "BROLL_CANDIDATE",
+        coverage_type: "SOURCE_SCREEN",
         reason: "Close-up macro demonstration of unscrewing plate",
       },
     ],
@@ -91,7 +91,7 @@ test.describe("EDL Adapter & Playback Logic", () => {
           left_anchor: "next",
           right_anchor: "step",
           safety_status: "NEEDS_COVERAGE",
-          safety_reason: "Jump cut requires B-roll coverage",
+          safety_reason: "Jump cut requires visual screen coverage",
           confidence: 0.92,
         },
         {
@@ -149,7 +149,7 @@ test.describe("EDL Adapter & Playback Logic", () => {
     expect(twickData.tracks[0].getName()).toBe("Video");
     expect(twickData.tracks[1].getName()).toBe("Audio");
     expect(twickData.tracks[2].getName()).toBe("Edits");
-    expect(twickData.tracks[3].getName()).toBe("B-roll");
+    expect(twickData.tracks[3].getName()).toBe("Coverage");
     expect(twickData.tracks[4].getName()).toBe("Voiceover");
     expect(twickData.tracks[5].getName()).toBe("Music");
     expect(twickData.tracks[6].getName()).toBe("Chapters");
@@ -157,13 +157,11 @@ test.describe("EDL Adapter & Playback Logic", () => {
     expect(twickData.coverageMarkerCount).toBe(1);
 
     // Coverage block matches Fairphone fixture
-    const covBlock = twickData.blocks.find(
-      (b) => b.trackId === "broll" || b.trackId === "coverage",
-    );
+    const covBlock = twickData.blocks.find((b) => b.trackId === "coverage");
     expect(covBlock).toBeDefined();
     expect(covBlock?.startMs).toBe(26160);
     expect(covBlock?.endMs).toBe(42340);
-    expect(covBlock?.type).toBe("coverage-broll");
+    expect(covBlock?.type).toBe("coverage-screen");
   });
   test("deriveAudioRegions identifies speech and removed cut regions", () => {
     const audioRegions = deriveAudioRegions(fairphoneEDL);

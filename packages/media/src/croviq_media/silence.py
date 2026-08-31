@@ -129,21 +129,3 @@ class SilenceCleanupPlanner:
 
         return decisions
 
-
-def format_silence_plan_for_prompt(silence_decisions: Sequence[EditorDecision]) -> str:
-    """Format deterministic silence cleanup decisions into a concise agent prompt context section."""
-    if not silence_decisions:
-        return "Deterministic Silence Cleanup: No long dead-air pauses detected (>=1.2s)."
-
-    lines = [
-        "Deterministic Silence Cleanup Plan (Already Scheduled):",
-        "The following long dead-air pauses are already scheduled for automatic cleanup.",
-        "Do NOT waste editorial decisions rediscovering these obvious pauses:",
-    ]
-    for d in silence_decisions:
-        start_tc = format_timecode_ms(d.source_start_ms)
-        end_tc = format_timecode_ms(d.source_end_ms)
-        dur_s = (d.source_end_ms - d.source_start_ms) / 1000.0
-        lines.append(f"- {start_tc} -> {end_tc} ({dur_s:.2f}s dead air trimmed)")
-
-    return "\n".join(lines)
