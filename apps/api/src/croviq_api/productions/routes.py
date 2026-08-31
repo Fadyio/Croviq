@@ -2497,15 +2497,15 @@ async def generate_studio_voice(
     def _needs_merge(section: dict[str, Any]) -> bool:
         available_ms = section["available_duration_ms"]
         word_count = len(section["text"].split())
-        return available_ms < 1000 or (
-            available_ms < 2000 and word_count * 310 > available_ms
+        return available_ms < 1200 or (
+            available_ms < 2200 and word_count * 310 > available_ms
         )
 
-    def _are_edited_time_adjacent(
+    def _are_mergeable(
         left: dict[str, Any], right: dict[str, Any]
     ) -> bool:
-        return left["edited_end_ms"] == right["edited_start_ms"]
-
+        gap_ms = right["edited_start_ms"] - left["edited_end_ms"]
+        return 0 <= gap_ms <= 1500
     def _merge_sections(
         left: dict[str, Any], right: dict[str, Any]
     ) -> dict[str, Any]:
@@ -2532,14 +2532,14 @@ async def generate_studio_voice(
         while _needs_merge(current):
             if (
                 index < len(prepared_segments)
-                and _are_edited_time_adjacent(
+                and _are_mergeable(
                     current, prepared_segments[index]
                 )
             ):
                 current = _merge_sections(current, prepared_segments[index])
                 index += 1
                 continue
-            if merged_segments and _are_edited_time_adjacent(
+            if merged_segments and _are_mergeable(
                 merged_segments[-1], current
             ):
                 current = _merge_sections(merged_segments.pop(), current)
