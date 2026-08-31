@@ -516,7 +516,7 @@ async def build_channel_dashboard(
     videos = await provider.get_videos(limit=100, offset=0)
     if not videos:
         raise ValueError("channel has no videos")
-    period_end = end_date or datetime.now(UTC).date()
+    period_end = end_date or getattr(provider, "canonical_end_date", None) or datetime.now(UTC).date()
     current_start = period_end - timedelta(days=days - 1)
     previous_end = current_start - timedelta(days=1)
     previous_start = previous_end - timedelta(days=days - 1)

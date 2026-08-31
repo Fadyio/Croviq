@@ -56,6 +56,7 @@ class ChannelDataProvider(ABC):
 class SampleChannelDataProvider(ChannelDataProvider):
     """Deterministic sample channel provider that reads a committed static JSON fixture."""
 
+    canonical_end_date: date = date(2026, 8, 26)
     def __init__(self, fixture_path: Path | str | None = None) -> None:
         if fixture_path is None:
             base_dir = Path(__file__).resolve().parent

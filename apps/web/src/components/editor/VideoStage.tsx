@@ -401,7 +401,7 @@ export const VideoStage: React.FC<VideoStageProps> = ({
                 ) : (
                   <>
                     <RotateCcw className="size-3" />
-                    <span>Retry Playback</span>
+                    <span>Reload Playback</span>
                   </>
                 )}
               </button>
