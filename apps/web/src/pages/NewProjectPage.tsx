@@ -367,177 +367,177 @@ export const NewProjectPage: React.FC<NewProjectPageProps> = ({
         <div className="space-y-8">
           {/* Upload Dropzone Card */}
           <div className="bg-surface-1 border border-border-subtle rounded-xl p-6 shadow-sm flex flex-col gap-5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-2">
-                  <Upload className="h-4 w-4 text-primary" />
-                  Start with raw footage
-                </span>
-                <span className="text-[11px] text-text-muted">Max 1 GB</span>
-              </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-2">
+                <Upload className="h-4 w-4 text-primary" />
+                Start with raw footage
+              </span>
+              <span className="text-[11px] text-text-muted">Max 1 GB</span>
+            </div>
 
-              {!selectedFile ? (
-                <div
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`flex flex-col items-center justify-center p-8 sm:p-10 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
-                    isDragOver
-                      ? "border-primary bg-primary/5 scale-[1.01]"
-                      : "border-border-strong hover:border-primary/60 hover:bg-surface-2/50"
-                  }`}
-                  role="button"
-                  tabIndex={0}
-                  aria-label="Upload video area"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      fileInputRef.current?.click();
-                    }
-                  }}
-                >
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
-                    accept=".mp4,.mov,.webm,.mkv,.m4v"
-                    className="hidden"
-                  />
+            {!selectedFile ? (
+              <div
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onClick={() => fileInputRef.current?.click()}
+                className={`flex flex-col items-center justify-center p-8 sm:p-10 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                  isDragOver
+                    ? "border-primary bg-primary/5 scale-[1.01]"
+                    : "border-border-strong hover:border-primary/60 hover:bg-surface-2/50"
+                }`}
+                role="button"
+                tabIndex={0}
+                aria-label="Upload video area"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+                  accept=".mp4,.mov,.webm,.mkv,.m4v"
+                  className="hidden"
+                />
 
-                  <div className="h-12 w-12 rounded-full bg-surface-2 flex items-center justify-center text-text-secondary mb-3 shadow-inner">
-                    <Upload className="size-6 text-primary" />
-                  </div>
-
-                  <p className="text-sm font-semibold text-text-primary text-center">
-                    Click to browse or drag and drop video
-                  </p>
-                  <p className="text-xs text-text-muted mt-1 text-center">
-                    MP4, MOV, WEBM, or MKV (up to 1 GB)
-                  </p>
+                <div className="h-12 w-12 rounded-full bg-surface-2 flex items-center justify-center text-text-secondary mb-3 shadow-inner">
+                  <Upload className="size-6 text-primary" />
                 </div>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center justify-between p-3.5 bg-surface-2/80 rounded-lg border border-border-subtle">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-2 rounded bg-surface-3 text-text-primary shrink-0">
-                        <Video className="size-5 text-primary" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-text-primary truncate">
-                          {selectedFile.name}
-                        </p>
-                        <p className="text-[11px] text-text-muted">
-                          {formatBytes(selectedFile.size)}
-                        </p>
-                      </div>
-                    </div>
 
-                    {uploadStatus === "idle" && (
-                      <button
-                        onClick={handleResetUpload}
-                        className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-surface-3 transition-colors"
-                        title="Remove file"
-                        aria-label="Remove selected file"
-                      >
-                        <X className="size-4" />
-                      </button>
-                    )}
+                <p className="text-sm font-semibold text-text-primary text-center">
+                  Click to browse or drag and drop video
+                </p>
+                <p className="text-xs text-text-muted mt-1 text-center">
+                  MP4, MOV, WEBM, or MKV (up to 1 GB)
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between p-3.5 bg-surface-2/80 rounded-lg border border-border-subtle">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 rounded bg-surface-3 text-text-primary shrink-0">
+                      <Video className="size-5 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-text-primary truncate">
+                        {selectedFile.name}
+                      </p>
+                      <p className="text-[11px] text-text-muted">
+                        {formatBytes(selectedFile.size)}
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Dynamic Upload Progress & State */}
-                  {uploadStatus !== "idle" && (
-                    <div className="space-y-2.5 bg-surface-2/40 p-3.5 rounded-lg border border-border-subtle">
-                      <div className="flex justify-between text-xs font-medium">
-                        <span className="text-text-secondary flex items-center gap-2">
-                          {uploadStatus === "initiating" && (
-                            <>
-                              <Loader2 className="size-3.5 animate-spin text-primary" />
-                              Initializing session...
-                            </>
-                          )}
-                          {uploadStatus === "uploading" && (
-                            <>
-                              <Loader2 className="size-3.5 animate-spin text-primary" />
-                              Uploading {uploadProgress}%
-                            </>
-                          )}
-                          {uploadStatus === "verifying" && (
-                            <>
-                              <Loader2 className="size-3.5 animate-spin text-primary" />
-                              Inspecting media...
-                            </>
-                          )}
-                          {uploadStatus === "uploaded" && (
-                            <>
-                              <CheckCircle2 className="size-3.5 text-success" />
-                              Opening Editor...
-                            </>
-                          )}
-                        </span>
-                        <span className="font-mono text-text-primary">{uploadProgress}%</span>
-                      </div>
+                  {uploadStatus === "idle" && (
+                    <button
+                      onClick={handleResetUpload}
+                      className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-surface-3 transition-colors"
+                      title="Remove file"
+                      aria-label="Remove selected file"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  )}
+                </div>
 
-                      <div className="w-full bg-surface-3 h-2 rounded-full overflow-hidden">
-                        <div
-                          className="bg-primary h-full transition-all duration-200"
-                          style={{ width: `${uploadProgress}%` }}
-                        />
-                      </div>
+                {/* Dynamic Upload Progress & State */}
+                {uploadStatus !== "idle" && (
+                  <div className="space-y-2.5 bg-surface-2/40 p-3.5 rounded-lg border border-border-subtle">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span className="text-text-secondary flex items-center gap-2">
+                        {uploadStatus === "initiating" && (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin text-primary" />
+                            Initializing session...
+                          </>
+                        )}
+                        {uploadStatus === "uploading" && (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin text-primary" />
+                            Uploading {uploadProgress}%
+                          </>
+                        )}
+                        {uploadStatus === "verifying" && (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin text-primary" />
+                            Inspecting media...
+                          </>
+                        )}
+                        {uploadStatus === "uploaded" && (
+                          <>
+                            <CheckCircle2 className="size-3.5 text-success" />
+                            Opening Editor...
+                          </>
+                        )}
+                      </span>
+                      <span className="font-mono text-text-primary">{uploadProgress}%</span>
                     </div>
+
+                    <div className="w-full bg-surface-3 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-primary h-full transition-all duration-200"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Notification */}
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  {uploadStatus === "idle" && (
+                    <button
+                      onClick={handleResetUpload}
+                      className="px-3.5 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
+                    >
+                      Cancel
+                    </button>
                   )}
 
-                  {/* Error Notification */}
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    onClick={handleStartUpload}
+                    disabled={uploadStatus !== "idle" && uploadStatus !== "failed"}
+                    className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all shadow-sm disabled:opacity-50"
+                  >
                     {uploadStatus === "idle" && (
-                      <button
-                        onClick={handleResetUpload}
-                        className="px-3.5 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
-                      >
-                        Cancel
-                      </button>
+                      <>
+                        <Upload className="size-3.5" />
+                        <span>Start Production</span>
+                      </>
                     )}
-
-                    <button
-                      onClick={handleStartUpload}
-                      disabled={uploadStatus !== "idle" && uploadStatus !== "failed"}
-                      className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all shadow-sm disabled:opacity-50"
-                    >
-                      {uploadStatus === "idle" && (
-                        <>
-                          <Upload className="size-3.5" />
-                          <span>Start Production</span>
-                        </>
-                      )}
-                      {uploadStatus === "failed" && <span>Retry Upload</span>}
-                      {(uploadStatus === "initiating" ||
-                        uploadStatus === "uploading" ||
-                        uploadStatus === "verifying") && (
-                        <>
-                          <Loader2 className="size-3.5 animate-spin" />
-                          <span>Processing...</span>
-                        </>
-                      )}
-                      {uploadStatus === "uploaded" && <span>Success</span>}
-                    </button>
-                  </div>
+                    {uploadStatus === "failed" && <span>Retry Upload</span>}
+                    {(uploadStatus === "initiating" ||
+                      uploadStatus === "uploading" ||
+                      uploadStatus === "verifying") && (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" />
+                        <span>Processing...</span>
+                      </>
+                    )}
+                    {uploadStatus === "uploaded" && <span>Success</span>}
+                  </button>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Error Notification */}
-              {errorMessage && (
-                <div
-                  role="alert"
-                  className="p-3 bg-danger/10 border border-danger/20 rounded-lg flex items-start gap-2 text-danger text-xs"
-                >
-                  <AlertCircle className="size-4 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-semibold">Upload failed</p>
-                    <p className="text-[11px] opacity-90">{errorMessage}</p>
-                  </div>
+            {/* Error Notification */}
+            {errorMessage && (
+              <div
+                role="alert"
+                className="p-3 bg-danger/10 border border-danger/20 rounded-lg flex items-start gap-2 text-danger text-xs"
+              >
+                <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold">Upload failed</p>
+                  <p className="text-[11px] opacity-90">{errorMessage}</p>
                 </div>
-              )}
+              </div>
+            )}
           </div>
 
           {/* Recent Projects directly underneath upload area */}

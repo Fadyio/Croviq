@@ -163,7 +163,9 @@ test.describe("BUG 25 — New Project Quick UX Cleanup", () => {
 
       // 2. Check duplicate Channel Intelligence link is removed
       // There should only be the top nav button "Back to Channel Intelligence"
-      const backNavBtn = page.getByRole("button", { name: "Back to Channel Intelligence" }).filter({ hasText: "Back to Channel Intelligence" });
+      const backNavBtn = page
+        .getByRole("button", { name: "Back to Channel Intelligence" })
+        .filter({ hasText: "Back to Channel Intelligence" });
       await expect(backNavBtn).toBeVisible();
       // Ensure no secondary standalone link exists in the header div
       const mainHeader = page.locator("main > div").first();
@@ -182,7 +184,9 @@ test.describe("BUG 25 — New Project Quick UX Cleanup", () => {
 
       // Verify Recent Projects is positioned below the upload area (bounding box y comparison)
       const uploadBox = await page.locator("main > div > div.bg-surface-1").first().boundingBox();
-      const recentBox = await page.locator("section[aria-labelledby='recent-projects-heading']").boundingBox();
+      const recentBox = await page
+        .locator("section[aria-labelledby='recent-projects-heading']")
+        .boundingBox();
 
       expect(uploadBox).not.toBeNull();
       expect(recentBox).not.toBeNull();
@@ -193,7 +197,9 @@ test.describe("BUG 25 — New Project Quick UX Cleanup", () => {
       }
 
       // 5. Check Project Row contents
-      const firstRow = page.getByText("github.mp4").locator("xpath=ancestor::div[contains(@class, 'group')]");
+      const firstRow = page
+        .getByText("github.mp4")
+        .locator("xpath=ancestor::div[contains(@class, 'group')]");
       await expect(firstRow).toBeVisible();
       await expect(firstRow.getByText("46.5 MB")).toBeVisible();
       await expect(firstRow.getByText("Aug 27")).toBeVisible();
@@ -228,7 +234,7 @@ test.describe("BUG 25 — New Project Quick UX Cleanup", () => {
 
     const deleteModal = page.getByTestId("modal-delete-confirmation");
     await expect(deleteModal).toBeVisible();
-    await expect(deleteModal.getByText('Delete “github.mp4”?')).toBeVisible();
+    await expect(deleteModal.getByText("Delete “github.mp4”?")).toBeVisible();
 
     // Cancel modal
     await deleteModal.getByRole("button", { name: "Cancel" }).click();
