@@ -34,9 +34,15 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
     const productionId = "prod_6d3399e433a4";
 
     // Refresh token via REST
-    const tokenRes = await request.post(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${authPayload.apiKey}`, {
-      data: { token: fs.readFileSync("/tmp/custom-token.txt", "utf-8").trim(), returnSecureToken: true },
-    });
+    const tokenRes = await request.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${authPayload.apiKey}`,
+      {
+        data: {
+          token: fs.readFileSync("/tmp/custom-token.txt", "utf-8").trim(),
+          returnSecureToken: true,
+        },
+      },
+    );
     if (tokenRes.ok()) {
       const tokenData = await tokenRes.json();
       idToken = tokenData.idToken;
@@ -74,7 +80,9 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
 
     // Wait for authenticated home page to load first
     await page.goto("https://app.croviq.app/app");
-    await expect(page.getByText(/Croviq|Sample|New Project/i).first()).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/Croviq|Sample|New Project/i).first()).toBeVisible({
+      timeout: 20000,
+    });
 
     // 2. Open Production Editor
     await page.goto(`https://app.croviq.app/productions/${productionId}/editor`);
@@ -110,16 +118,22 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
     expect(playResult.ok).toBe(true);
 
     // 4. Select Charon & Generate Voiceover
-    const setCharonRes = await request.put("https://app.croviq.app/api/workspace/agent-settings/voice", {
-      headers: { Authorization: `Bearer ${idToken}` },
-      data: { narration_mode: "studio_voice", selected_voice: "Charon", language: "en-US" },
-    });
+    const setCharonRes = await request.put(
+      "https://app.croviq.app/api/workspace/agent-settings/voice",
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+        data: { narration_mode: "studio_voice", selected_voice: "Charon", language: "en-US" },
+      },
+    );
     expect(setCharonRes.status()).toBe(200);
 
     // Trigger Studio Voice generation with Charon
-    const studioVoiceRes = await request.post(`https://app.croviq.app/api/productions/${productionId}/studio-voice`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+    const studioVoiceRes = await request.post(
+      `https://app.croviq.app/api/productions/${productionId}/studio-voice`,
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+      },
+    );
     expect(studioVoiceRes.status()).toBe(200);
     const studioVoiceData = await studioVoiceRes.json();
     expect(studioVoiceData.result.status).toBe("completed");
@@ -128,12 +142,16 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
     // 5. Verify Voiceover Preview in UI
     await page.reload();
     await expect(page.getByText("Test.mp4").first()).toBeVisible({ timeout: 20000 });
-    const voiceoverToggle = page.getByTestId("preview-toggle-studio-voice").or(page.getByTestId("preview-toggle-voiceover"));
+    const voiceoverToggle = page
+      .getByTestId("preview-toggle-studio-voice")
+      .or(page.getByTestId("preview-toggle-voiceover"));
     await expect(voiceoverToggle).toBeVisible({ timeout: 20000 });
     await voiceoverToggle.click();
 
     // Verify timeline contains Voiceover blocks
-    const timelineVoBlocks = page.locator("[data-track-id='voiceover'], [data-block-type='voiceover'], .timeline-block-voiceover, div:has-text('Studio Voiceover')");
+    const timelineVoBlocks = page.locator(
+      "[data-track-id='voiceover'], [data-block-type='voiceover'], .timeline-block-voiceover, div:has-text('Studio Voiceover')",
+    );
     expect(await timelineVoBlocks.count()).toBeGreaterThan(0);
 
     // Play Voiceover at beginning, middle, and end
@@ -171,9 +189,12 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
     });
     expect(voPlayPositions.ok).toBe(true);
     // 6. Build Initial Final Mix with Charon
-    const charonFinalMixRes = await request.post(`https://app.croviq.app/api/productions/${productionId}/renders/final-mix`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+    const charonFinalMixRes = await request.post(
+      `https://app.croviq.app/api/productions/${productionId}/renders/final-mix`,
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+      },
+    );
     expect(charonFinalMixRes.status()).toBe(200);
     const charonFinalMixData = await charonFinalMixRes.json();
     expect(charonFinalMixData.status).toBe("completed");
@@ -184,15 +205,21 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
     await expect(voiceoverToggle).toBeVisible({ timeout: 15000 });
 
     // 8. Select Kore & Generate New Voiceover Artifact
-    const switchVoiceRes = await request.put("https://app.croviq.app/api/workspace/agent-settings/voice", {
-      headers: { Authorization: `Bearer ${idToken}` },
-      data: { narration_mode: "studio_voice", selected_voice: "Kore", language: "en-US" },
-    });
+    const switchVoiceRes = await request.put(
+      "https://app.croviq.app/api/workspace/agent-settings/voice",
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+        data: { narration_mode: "studio_voice", selected_voice: "Kore", language: "en-US" },
+      },
+    );
     expect(switchVoiceRes.status()).toBe(200);
 
-    const koreVoiceRes = await request.post(`https://app.croviq.app/api/productions/${productionId}/studio-voice`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+    const koreVoiceRes = await request.post(
+      `https://app.croviq.app/api/productions/${productionId}/studio-voice`,
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+      },
+    );
     expect(koreVoiceRes.status()).toBe(200);
     const koreVoiceData = await koreVoiceRes.json();
     expect(koreVoiceData.result.status).toBe("completed");
@@ -206,26 +233,35 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
 
     // 9. Final Mix Verification
     // Check playback status -> final_mix must be needs_regeneration / unavailable
-    const stalePlaybackRes = await request.get(`https://app.croviq.app/api/productions/${productionId}/playback`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+    const stalePlaybackRes = await request.get(
+      `https://app.croviq.app/api/productions/${productionId}/playback`,
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+      },
+    );
     const stalePlayback = await stalePlaybackRes.json();
     expect(stalePlayback.final_mix.status).toBe("needs_regeneration");
     expect(stalePlayback.final_mix.available).toBe(false);
 
     // Rebuild Final Mix
-    const rebuildFinalMixRes = await request.post(`https://app.croviq.app/api/productions/${productionId}/renders/final-mix`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+    const rebuildFinalMixRes = await request.post(
+      `https://app.croviq.app/api/productions/${productionId}/renders/final-mix`,
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+      },
+    );
     expect(rebuildFinalMixRes.status()).toBe(200);
     const finalMixData = await rebuildFinalMixRes.json();
     expect(finalMixData.status).toBe("completed");
     const finalMixArtifactId = finalMixData.artifact_id;
 
     // Verify ready Final Mix playback
-    const readyPlaybackRes = await request.get(`https://app.croviq.app/api/productions/${productionId}/playback`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+    const readyPlaybackRes = await request.get(
+      `https://app.croviq.app/api/productions/${productionId}/playback`,
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+      },
+    );
     const readyPlayback = await readyPlaybackRes.json();
     expect(readyPlayback.final_mix.status).toBe("ready");
     expect(readyPlayback.final_mix.available).toBe(true);
@@ -234,15 +270,20 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
 
     // 10. Iris / Release Gates
     await page.goto(`https://app.croviq.app/productions/${productionId}/release`);
-    await expect(page.locator("h1, h2, header")).toContainText(/Release|Quality|Test\.mp4/i, { timeout: 20000 });
+    await expect(page.locator("h1, h2, header")).toContainText(/Release|Quality|Test\.mp4/i, {
+      timeout: 20000,
+    });
 
     // Test sending 4 modes to Iris
     const modes = ["original", "edited", "voiceover", "final_mix"];
     for (const mode of modes) {
-      const irisRes = await request.post(`https://app.croviq.app/api/productions/${productionId}/release-review`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-        data: { preview_mode: mode },
-      });
+      const irisRes = await request.post(
+        `https://app.croviq.app/api/productions/${productionId}/release-review`,
+        {
+          headers: { Authorization: `Bearer ${idToken}` },
+          data: { preview_mode: mode },
+        },
+      );
       expect(irisRes.status()).toBe(200);
       const irisData = await irisRes.json();
       expect(irisData.verdict).toBeTruthy();
@@ -254,9 +295,12 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
     }
 
     // Test Title & Description AI generation with Reese
-    const reeseRes = await request.post(`https://app.croviq.app/api/productions/${productionId}/packaging/regenerate-reese`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+    const reeseRes = await request.post(
+      `https://app.croviq.app/api/productions/${productionId}/packaging/regenerate-reese`,
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+      },
+    );
     expect(reeseRes.status()).toBe(200);
     const reeseData = await reeseRes.json();
     expect(reeseData.proposal).toBeTruthy();
@@ -264,13 +308,16 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
     expect(reeseData.proposal.description).toBeTruthy();
 
     // Save metadata overrides
-    const saveRes = await request.patch(`https://app.croviq.app/api/productions/${productionId}/packaging`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-      data: {
-        selected_title: reeseData.proposal.primary_title,
-        custom_description: reeseData.proposal.description,
+    const saveRes = await request.patch(
+      `https://app.croviq.app/api/productions/${productionId}/packaging`,
+      {
+        headers: { Authorization: `Bearer ${idToken}` },
+        data: {
+          selected_title: reeseData.proposal.primary_title,
+          custom_description: reeseData.proposal.description,
+        },
       },
-    });
+    );
     expect(saveRes.status()).toBe(200);
     const saveData = await saveRes.json();
     expect(saveData.effective_title).toBe(reeseData.proposal.primary_title);
@@ -291,8 +338,8 @@ test.describe("FINAL PRODUCTION RELEASE GATE - LIVE DEPLOYED APP", () => {
           failedRequests,
         },
         null,
-        2
-      )
+        2,
+      ),
     );
   });
 });
