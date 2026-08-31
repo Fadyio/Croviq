@@ -1,7 +1,6 @@
 import {
   AlertCircle,
   ArrowLeft,
-  CheckCircle2,
   FileText,
   Loader2,
   LogOut,
@@ -25,7 +24,6 @@ import {
   LeoChatPanel,
   type LeoChatResponse,
 } from "../components/editor/LeoChatPanel";
-import { MediaBin } from "../components/editor/MediaBin";
 import { MusicTab } from "../components/editor/MusicTab";
 import { type PreviewMode, PreviewToggle } from "../components/editor/PreviewToggle";
 import {
@@ -1240,25 +1238,18 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           </span>
         </div>
 
-        <div
-          className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-2/70 border border-border-subtle text-xs"
-          data-testid="compact-status-banner"
-        >
-          {activeProcessingStage ? (
-            <>
-              <Loader2 className="size-3.5 animate-spin text-primary shrink-0" />
-              <span className="text-text-primary font-medium">{compactStatus}</span>
-              {renderSubStatus && (
-                <span className="text-text-muted text-[11px]">&middot; {renderSubStatus}</span>
-              )}
-            </>
-          ) : (
-            <>
-              <CheckCircle2 className="size-3.5 text-success shrink-0" />
-              <span className="text-text-primary font-medium">Edit ready</span>
-            </>
-          )}
-        </div>
+        {activeProcessingStage && (
+          <div
+            className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-2/70 border border-border-subtle text-xs"
+            data-testid="compact-status-banner"
+          >
+            <Loader2 className="size-3.5 animate-spin text-primary shrink-0" />
+            <span className="text-text-primary font-medium">{compactStatus}</span>
+            {renderSubStatus && (
+              <span className="text-text-muted text-[11px]">&middot; {renderSubStatus}</span>
+            )}
+          </div>
+        )}
 
         {/* Right: Preview Mode Switcher + User Actions */}
         <div className="flex items-center gap-3">
@@ -1287,11 +1278,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                   })
                 }
                 className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-md transition-colors shadow-sm cursor-pointer"
-                title="Run Quality Check with Iris"
+                title="Send this cut to Iris for quality review"
+                aria-label="Send this cut to Iris for quality review"
                 data-testid="btn-run-check"
               >
                 <ShieldCheck className="size-3.5" />
-                <span>Check</span>
+                <span>Send to Iris</span>
               </button>
             )}
           <button
@@ -1305,36 +1297,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         </div>
       </header>
 
-      {/* Main Professional Editor NLE Workstation (3 Columns) */}
+      {/* Main Professional Editor NLE Workstation (2 Columns: Large Player + Leo Panel) */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Left Column: compact project artifacts */}
-        <MediaBin
-          currentMode={previewMode}
-          sourceDurationMs={durationMs}
-          editedDurationMs={derivedEditedDurationMs}
-          activeCutCount={twickData.activeCutCount}
-          studioVoiceDurationMs={
-            mediaOutputs.voiceover.durationMs || studioVoiceArtifact?.duration_ms
-          }
-          finalMixDurationMs={mediaOutputs.final_mix.durationMs || finalMixArtifact?.duration_ms}
-          hasRenderedPreview={mediaOutputs.edited.available}
-          hasMaster={Boolean(
-            (masterArtifact?.playback_url || masterUrl) && masterArtifact?.status === "completed",
-          )}
-          hasStudioVoice={mediaOutputs.voiceover.available}
-          hasFinalMix={mediaOutputs.final_mix.available}
-          hasProposalOrEdl={Boolean(
-            (proposal?.decisions && proposal.decisions.length > 0) ||
-            (edl?.cuts && edl.cuts.length > 0),
-          )}
-          isRunFailed={Boolean(editorialRun?.status === "failed" || failedProcessingStage !== null)}
-          mediaOutputs={mediaOutputs}
-          onSelectMode={setPreviewMode}
-          onSeek={handleSeek}
-          className="w-48 shrink-0"
-        />
-
-        {/* Center Column: Video Canvas */}
+        {/* Main Video Player Canvas Area */}
         <div className="flex-1 min-h-0 min-w-0 flex flex-col bg-black overflow-hidden relative">
           <VideoStage
             playbackUrl={playbackUrl}

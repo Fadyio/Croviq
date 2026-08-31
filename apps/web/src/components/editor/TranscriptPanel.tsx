@@ -117,10 +117,21 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   const programmaticScrollRef = useRef(false);
   const [selectedRange, setSelectedRange] = useState<TranscriptRangeSelection | null>(null);
   const [removedWordNotice, setRemovedWordNotice] = useState<RemovedWordNotice | null>(null);
+  const isOriginalMode = mode === "original";
   const [transcriptViewMode, setTranscriptViewMode] = useState<"original" | "corrected">(
-    "original",
+    isOriginalMode ? "original" : "corrected",
   );
+  const prevModeRef = useRef<PreviewMode>(mode);
 
+  useEffect(() => {
+    if (mode === "original") {
+      setTranscriptViewMode("original");
+      setRemovedWordNotice(null);
+    } else if (prevModeRef.current === "original") {
+      setTranscriptViewMode("corrected");
+    }
+    prevModeRef.current = mode;
+  }, [mode]);
   const activeWordIndex = useMemo(() => {
     if (!transcript?.words || transcript.words.length === 0) return -1;
     const exact = transcript.words.find(
@@ -191,32 +202,38 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
       data-testid="transcript-panel"
     >
       <div className="flex shrink-0 items-center justify-between border-b border-border-subtle px-3 py-2">
-        <div className="flex items-center gap-1 rounded-md border border-border-subtle bg-surface-2 p-0.5 text-[10px]">
-          <button
-            type="button"
-            onClick={() => setTranscriptViewMode("original")}
-            className={`rounded px-2 py-0.5 font-semibold transition-colors ${
-              transcriptViewMode === "original"
-                ? "bg-surface-1 text-text-primary shadow-xs"
-                : "text-text-muted hover:text-text-secondary"
-            }`}
-          >
-            Original Transcript
-          </button>
-          <button
-            type="button"
-            onClick={() => setTranscriptViewMode("corrected")}
-            className={`rounded px-2 py-0.5 font-semibold transition-colors ${
-              transcriptViewMode === "corrected"
-                ? "bg-surface-1 text-text-primary shadow-xs"
-                : "text-text-muted hover:text-text-secondary"
-            }`}
-          >
-            Corrected Script
-          </button>
-        </div>
+        {isOriginalMode ? (
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-primary px-1">
+            <span>Original Transcript</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 rounded-md border border-border-subtle bg-surface-2 p-0.5 text-[10px]">
+            <button
+              type="button"
+              onClick={() => setTranscriptViewMode("original")}
+              className={`rounded px-2 py-0.5 font-semibold transition-colors ${
+                transcriptViewMode === "original"
+                  ? "bg-surface-1 text-text-primary shadow-xs"
+                  : "text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              Original Transcript
+            </button>
+            <button
+              type="button"
+              onClick={() => setTranscriptViewMode("corrected")}
+              className={`rounded px-2 py-0.5 font-semibold transition-colors ${
+                transcriptViewMode === "corrected"
+                  ? "bg-surface-1 text-text-primary shadow-xs"
+                  : "text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              Corrected Script
+            </button>
+          </div>
+        )}
         <span className="rounded border border-border-subtle bg-surface-2 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-text-muted">
-          {mode === "original" ? "Source time" : "Edited time"}
+          {isOriginalMode ? "Source time" : "Edited time"}
         </span>
       </div>
 
@@ -461,18 +478,18 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                             (decision) => decision.decision_id === selectedDecisionId,
                           );
                           const { isCut, cut } = isWordInExecutableCut(word, edl);
-                          const isEditedMode = mode !== "original";
-                          const isRemovedInEdited = isCut && isEditedMode;
+                          const isRemovedInEdited = isCut && !isOriginalMode;
                           // Check if there is an inter-word pause cut immediately preceding this word
                           const prevWord = wordPosition > 0 ? segmentWords[wordPosition - 1] : null;
-                          const precedingCut = prevWord
-                            ? executableCuts.find(
-                                (c) =>
-                                  c.safe_start_ms >= prevWord.end_ms - 200 &&
-                                  c.safe_end_ms <= word.start_ms + 200 &&
-                                  c.cut_id !== cut?.cut_id,
-                              )
-                            : null;
+                          const precedingCut =
+                            !isOriginalMode && prevWord
+                              ? executableCuts.find(
+                                  (c) =>
+                                    c.safe_start_ms >= prevWord.end_ms - 200 &&
+                                    c.safe_end_ms <= word.start_ms + 200 &&
+                                    c.cut_id !== cut?.cut_id,
+                                )
+                              : null;
 
                           const wordSelection: TranscriptRangeSelection = {
                             id: `transcript-word-${word.index}`,
@@ -501,7 +518,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                             setRemovedWordNotice(null);
                             selectRange(wordSelection);
                             onSelectWord?.(word);
-                            if (wordDecision) onSelectDecision(wordDecision);
+                            if (wordDecision && !isOriginalMode) onSelectDecision(wordDecision);
                           };
 
                           return (
@@ -532,13 +549,11 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                                     ? "bg-primary font-medium text-white shadow-xs"
                                     : isRemovedInEdited
                                       ? "line-through decoration-danger/70 text-danger/80 bg-danger/10 hover:bg-danger/15 border border-danger/30"
-                                      : isCut && mode === "original"
-                                        ? "text-text-primary hover:bg-surface-3 border-b border-dotted border-danger/50"
-                                        : selectedRange?.id === wordSelection.id
-                                          ? "bg-primary/20 text-text-primary"
-                                          : isSelectedDecision
-                                            ? "bg-surface-3 text-text-primary"
-                                            : "hover:bg-surface-3 hover:text-text-primary"
+                                      : selectedRange?.id === wordSelection.id
+                                        ? "bg-primary/20 text-text-primary"
+                                        : isSelectedDecision && !isOriginalMode
+                                          ? "bg-surface-3 text-text-primary"
+                                          : "hover:bg-surface-3 hover:text-text-primary"
                                 }`}
                                 aria-label={`${word.text}, ${formatModeTimecode(word.start_ms)}`}
                                 aria-pressed={selectedRange?.id === wordSelection.id}
@@ -558,7 +573,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                       : segment.text}
                   </p>
 
-                  {segmentDecisions.length > 0 && (
+                  {!isOriginalMode && segmentDecisions.length > 0 && (
                     <div
                       className="mt-2.5 space-y-1.5 border-l border-border-subtle pl-2"
                       aria-label="Edit annotations"

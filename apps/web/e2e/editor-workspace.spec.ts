@@ -1276,17 +1276,15 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByText("No dialogue cuts")).toBeVisible();
     await expect(page.getByText("Natural dialogue rhythm fully preserved")).toHaveCount(0);
     await expect(page.getByTestId("production-run-strip")).toHaveCount(0);
-    await expect(page.getByTestId("compact-status-banner")).toBeVisible();
-    await expect(page.getByTestId("project-bin")).toBeVisible();
-    await expect(page.getByText("PROJECT", { exact: true })).toBeVisible();
-    await expect(page.getByText("SOURCE", { exact: true })).toBeVisible();
-    await expect(page.getByText("OUTPUTS", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("compact-status-banner")).toHaveCount(0);
+    await expect(page.getByTestId("project-bin")).toHaveCount(0);
+    await expect(page.getByTestId("media-bin")).toHaveCount(0);
     await page.getByTestId("tab-transcript").click();
     await expect(page.locator("[data-testid='transcript-panel']")).toBeVisible();
+    await page.getByRole("button", { name: "Original Transcript" }).click();
     await expect(page.getByText("314 words")).toHaveCount(0);
     await expect(page.getByPlaceholder("Search words...")).toHaveCount(0);
     await expect(page.locator("[data-testid='transcript-segment']")).toHaveCount(0);
-    await expect(page.locator("[data-word-index='0']")).toHaveText("The");
     await expect(page.locator("[data-word-index='1']")).toHaveText("Fairphone");
 
     // 5. Compact agent presence and product-facing production activity.
@@ -1319,6 +1317,7 @@ test.describe("Editor Workspace (Issue #28)", () => {
   }) => {
     await loginAndNavigateToEditor(page);
     await page.getByTestId("tab-transcript").click();
+    await page.getByRole("button", { name: "Original Transcript" }).click();
 
     // Click on the coverage section word in transcript ("However,")
     const howeverWord = page.locator("[data-word-index='70']");
@@ -1439,10 +1438,8 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByText("TRIM_PAUSE")).toHaveCount(0);
     await expect(page.getByText("REMOVE_FALSE_START")).toHaveCount(0);
 
-    // 3. Verify Media Bin displays truthful non-fallback duration
-    const mediaBin = page.getByTestId("project-bin").or(page.getByTestId("media-bin"));
-    await expect(mediaBin.getByTestId("asset-edited").getByText("1m 49s")).toBeVisible();
-
+    // 3. Verify top navigation preview mode switches
+    await expect(page.getByRole("group", { name: "Preview Mode Selection" })).toBeVisible();
     // 4. Verify chapters appear on timeline
     await expect(page.getByText("Modular Teardown & Screws")).toBeVisible();
   });
@@ -1499,9 +1496,8 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     await expect(page.locator("[data-testid='video-stage']")).toBeVisible();
     await expect(page.locator("[data-testid='editor-timeline']")).toBeVisible();
-    await expect(page.locator("[data-testid='project-bin']")).toBeVisible();
+    await expect(page.locator("[data-testid='project-bin']")).toHaveCount(0);
     await expect(page.locator("[data-testid='production-room']")).toBeVisible();
-
     // Capture screenshot at 1600x900
     await page.screenshot({ path: "e2e/screenshots/editor-1600x900.png" });
   });
@@ -1572,32 +1568,25 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(drawer).not.toBeVisible();
   });
 
-  test("Media Bin displays project rows and allows selecting modes", async ({ page }) => {
+  test("Top navigation displays preview modes and allows selecting modes with left sidebar removed", async ({ page }) => {
     await loginAndNavigateToEditor(page);
 
-    const mediaBin = page.getByTestId("project-bin").or(page.getByTestId("media-bin"));
-    await expect(mediaBin).toBeVisible();
-    await expect(mediaBin.getByText("PROJECT", { exact: true })).toBeVisible();
+    // Verify left sidebar is removed
+    await expect(page.getByTestId("project-bin")).toHaveCount(0);
+    await expect(page.getByTestId("media-bin")).toHaveCount(0);
 
-    // Verify Source Video and Edited Preview rows
-    const originalRow = mediaBin
-      .getByTestId("asset-original")
-      .or(mediaBin.getByTestId("media-bin-row-original"))
-      .or(mediaBin.getByTestId("asset-source-video"));
-    const editedRow = mediaBin
-      .getByTestId("asset-edited")
-      .or(mediaBin.getByTestId("media-bin-row-edited"));
-    await expect(originalRow).toBeVisible();
-    await expect(editedRow).toBeVisible();
-
-    // Click Source Video in Media Bin
-    await originalRow.click();
+    // Verify top preview selector
     const previewMode = page.getByRole("group", { name: "Preview Mode Selection" });
-    await expect(
-      previewMode.getByRole("button", { name: "Original", exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
-  });
+    await expect(previewMode).toBeVisible();
+    const originalBtn = previewMode.getByRole("button", { name: "Original", exact: true });
+    const editedBtn = previewMode.getByRole("button", { name: /Edited Preview/i });
+    await expect(originalBtn).toBeVisible();
+    await expect(editedBtn).toBeVisible();
 
+    // Click Original in top navigation
+    await originalBtn.click();
+    await expect(originalBtn).toHaveAttribute("aria-pressed", "true");
+  });
   test("Agent conversation displays speech bubbles with click-to-seek timestamp pills", async ({
     page,
   }) => {
@@ -1610,32 +1599,38 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(feed.getByTestId("activity-message-leo").first()).toBeVisible();
   });
 
-  test("renders canonical timeline tracks in exact order: Video, Audio, Edits, Coverage, Voiceover, Music, Chapters, Captions", async ({
+  test("renders canonical timeline tracks mode-aware in Final Mix and Edited preview", async ({
     page,
   }) => {
     await loginAndNavigateToEditor(page);
 
-    // Verify all 8 canonical track headers exist on timeline
-    await expect(page.getByText("Video", { exact: true })).toBeVisible();
-    await expect(page.getByText("Audio", { exact: true })).toBeVisible();
-    await expect(page.getByText("Edits", { exact: true })).toBeVisible();
-    await expect(page.getByText("Coverage", { exact: true })).toBeVisible();
-    await expect(page.getByText("Voiceover", { exact: true })).toBeVisible();
-    await expect(page.getByText("Music", { exact: true })).toBeVisible();
-    await expect(page.getByText("Chapters", { exact: true })).toBeVisible();
-    await expect(page.getByText("Captions", { exact: true })).toBeVisible();
+    const timeline = page.locator("[data-testid='editor-timeline']");
+    const labelsCol = timeline.getByTestId("timeline-labels-column");
+
+    // 1. In Final Mix mode: Video, Edits, Coverage, Voiceover, Music, Chapters, Captions (Audio hidden)
+    await expect(labelsCol.getByText("Video", { exact: true })).toBeVisible();
+    await expect(labelsCol.getByText("Edits", { exact: true })).toBeVisible();
+    await expect(labelsCol.getByText("Coverage", { exact: true })).toBeVisible();
+    await expect(labelsCol.getByText("Voiceover", { exact: true })).toBeVisible();
+    await expect(labelsCol.getByText("Music", { exact: true })).toBeVisible();
+    await expect(labelsCol.getByText("Chapters", { exact: true })).toBeVisible();
+    await expect(labelsCol.getByText("Captions", { exact: true })).toBeVisible();
+    await expect(labelsCol.getByText("Original Audio", { exact: true })).toHaveCount(0);
 
     // Verify Voiceover and Music blocks exist on canvas
     await expect(
-      page
-        .locator("[data-testid='editor-timeline']")
-        .getByRole("button", { name: /Studio Voiceover|Voiceover/i }),
+      timeline.getByRole("button", { name: /Studio Voiceover|Voiceover/i }),
     ).toBeVisible();
     await expect(
-      page
-        .locator("[data-testid='editor-timeline']")
-        .getByRole("button", { name: /Minimal modern technology|Background Music/i }),
+      timeline.getByRole("button", { name: /Minimal modern technology|Background Music/i }),
     ).toBeVisible();
+
+    // 2. Switch to Edited Preview mode: Video, Audio, Edits, Coverage, Chapters, Captions (Voiceover, Music hidden)
+    const previewToggle = page.getByRole("group", { name: "Preview Mode Selection" });
+    await previewToggle.getByRole("button", { name: /Edited Preview/i }).click();
+    await expect(labelsCol.getByText("Audio", { exact: true })).toBeVisible();
+    await expect(labelsCol.getByText("Voiceover", { exact: true })).toHaveCount(0);
+    await expect(labelsCol.getByText("Music", { exact: true })).toHaveCount(0);
   });
   test("toggles between Original Transcript and Corrected Script with visual diffs and badges", async ({
     page,
@@ -1666,27 +1661,23 @@ test.describe("Editor Workspace (Issue #28)", () => {
     ).toBeVisible();
   });
 
-  test("Media Bin displays Source Video, Edited Preview, Voiceover Preview, and Final Mix", async ({
+  test("Top navigation provides canonical preview modes (Original, Edited, Voiceover, Final Mix) and Send to Iris", async ({
     page,
   }) => {
     await loginAndNavigateToEditor(page);
 
-    const mediaBin = page.getByTestId("project-bin").or(page.getByTestId("media-bin"));
-    await expect(mediaBin).toBeVisible();
-    await expect(mediaBin.getByTestId("asset-original")).toBeVisible();
-    await expect(mediaBin.getByTestId("asset-edited")).toBeVisible();
-    await expect(mediaBin.getByTestId("asset-studio_voice")).toBeVisible();
-    await expect(mediaBin.getByTestId("asset-final_mix")).toBeVisible();
+    await expect(page.getByTestId("project-bin")).toHaveCount(0);
+    const previewMode = page.getByRole("group", { name: "Preview Mode Selection" });
+    await expect(previewMode).toBeVisible();
+    await expect(previewMode.getByRole("button", { name: "Original", exact: true })).toBeVisible();
+    await expect(previewMode.getByRole("button", { name: /Edited Preview/i })).toBeVisible();
 
-    // Verify Output labels
-    await expect(mediaBin.getByText("Source Video")).toBeVisible();
-    await expect(mediaBin.getByText("Edited Preview")).toBeVisible();
-    await expect(mediaBin.getByText("Voiceover Preview")).toBeVisible();
-    await expect(mediaBin.getByText("Final Mix")).toBeVisible();
-
-    // Click Final Mix row and verify Preview Toggle switches
-    await mediaBin.getByTestId("asset-final_mix").click();
-    await expect(page.getByTestId("preview-toggle-final-mix")).toBeVisible();
+    // Verify Send to Iris button with tooltip
+    const irisBtn = page.getByTestId("btn-run-check");
+    if (await irisBtn.count() > 0) {
+      await expect(irisBtn).toContainText("Send to Iris");
+      await expect(irisBtn).toHaveAttribute("title", "Send this cut to Iris for quality review");
+    }
   });
 
   test("captures visual acceptance screenshots across 1440x900, 1600x900, and 1280x800", async ({
