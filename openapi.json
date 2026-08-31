@@ -7415,8 +7415,7 @@
           },
           "tempo_adjustment": {
             "type": "number",
-            "maximum": 5.0,
-            "minimum": 0.5,
+            "minimum": 0.01,
             "title": "Tempo Adjustment",
             "description": "Applied tempo multiplier / time-fit ratio",
             "default": 1.0
