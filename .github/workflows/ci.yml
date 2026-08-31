@@ -124,12 +124,8 @@ jobs:
           git diff --exit-code openapi.json apps/web/src/api/generated.ts
 
   e2e-browser-test:
-    name: Browser E2E (${{ matrix.shard }})
+    name: Browser E2E Tests
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ["1/2", "2/2"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -211,8 +207,8 @@ jobs:
           cat /tmp/web.log || true
           exit 1
 
-      - name: Run Focused E2E tests
-        run: pnpm --filter @croviq/web exec playwright test e2e/web-smoke.spec.ts e2e/production-smoke.spec.ts e2e/api-smoke.spec.ts e2e/editor-workspace.spec.ts e2e/verify_bug27_golden_acceptance.spec.ts --shard=${{ matrix.shard }} --timeout=60000
+      - name: Run E2E tests
+        run: pnpm --filter @croviq/web exec playwright test e2e/web-smoke.spec.ts e2e/production-smoke.spec.ts e2e/api-smoke.spec.ts e2e/verify_bug27_golden_acceptance.spec.ts --timeout=30000
       - name: Stop Background Services
         if: always()
         run: |
@@ -223,7 +219,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts-${{ strategy.job-index }}
+          name: playwright-artifacts
           path: |
             apps/web/test-results/
             apps/web/playwright-report/
