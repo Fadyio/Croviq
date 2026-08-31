@@ -450,8 +450,9 @@ def generate_channel_research_plan(
     recent_videos: list[Any] | None = None,
     lessons: list[ChannelLesson] | None = None,
     existing_findings: Sequence[ResearchFinding] | None = None,
+    preferred_sources: Sequence[str] | None = None,
 ) -> list[ResearchPlanIntent]:
-    """Dynamically formulate multi-ecosystem search intents based on channel topic profile, recent performance, and memory bank."""
+    """Dynamically formulate multi-ecosystem search intents based on channel topic profile, recent performance, memory bank, and preferred public sources."""
     intents: list[ResearchPlanIntent] = []
 
     # 1. Extract content pillars and primary topics
@@ -466,66 +467,133 @@ def generate_channel_research_plan(
         else ["AI Agents", "Multi-Agent Orchestration", "CI/CD Automation", "FastAPI & Microservices", "Cloud Infrastructure & Docker"]
     )
 
-    # 2. Dynamic Hacker News Intent (Developer & News Discussion)
-    hn_topic = "Model Context Protocol OR LangGraph OR LLM agent production architecture"
-    if any("infer" in p.lower() or "llm" in p.lower() for p in pillars):
-        hn_topic = "Model Context Protocol OR vLLM OR local LLM agent architecture"
-    intents.append(
-        ResearchPlanIntent(
-            query=f"site:news.ycombinator.com {hn_topic}",
-            ecosystem="HACKER_NEWS",
-            channel_reason="Identifies practitioner debates, architectural pitfalls, and production complaints surrounding agent protocol adoption and multi-agent system latency.",
-        )
-    )
+    clean_sources = [
+        s.strip().replace("https://", "").replace("http://", "").rstrip("/")
+        for s in (preferred_sources or [])
+        if s and s.strip()
+    ]
 
-    # 3. Dynamic Reddit Intent: select relevant subreddits based on channel profile
-    subreddits = ["r/LocalLLaMA", "r/MachineLearning"]
-    if any("infra" in p.lower() or "devops" in p.lower() for p in pillars):
-        subreddits.append("r/devops")
-    if any("experienced" in t.lower() or "backend" in t.lower() for t in topics):
-        subreddits.append("r/ExperiencedDevs")
-    if any("selfhost" in t.lower() or "local" in t.lower() for t in topics):
-        subreddits.append("r/selfhosted")
+    handled_domains: set[str] = set()
+    if clean_sources:
+        for src in clean_sources:
+            domain = src.split("/")[0].lower()
+            if domain in handled_domains:
+                continue
+            handled_domains.add(domain)
 
-    reddit_subs_str = " OR ".join(f"site:reddit.com/{sub}" for sub in subreddits[:3])
-    reddit_topic = "speculative decoding OR vLLM benchmarks OR structured outputs"
-    intents.append(
-        ResearchPlanIntent(
-            query=f"{reddit_subs_str} {reddit_topic}",
-            ecosystem="REDDIT",
-            channel_reason=f"Gathers practitioner sentiment and empirical benchmarks from relevant technical communities ({', '.join(subreddits[:3])}) to ground tutorial angles in real developer pain points.",
-        )
-    )
+            eco = classify_ecosystem(src)
+            if "ycombinator.com" in domain:
+                hn_topic = "Model Context Protocol OR LangGraph OR LLM agent production architecture"
+                if any("infer" in p.lower() or "llm" in p.lower() for p in pillars):
+                    hn_topic = "Model Context Protocol OR vLLM OR local LLM agent architecture"
+                intents.append(
+                    ResearchPlanIntent(
+                        query=f"site:{src} {hn_topic}",
+                        ecosystem="HACKER_NEWS",
+                        channel_reason="Configured public source: identifies practitioner debates, architectural pitfalls, and production complaints surrounding agent protocol adoption and multi-agent system latency.",
+                    )
+                )
+            elif "reddit.com" in domain:
+                reddit_topic = "speculative decoding OR vLLM benchmarks OR structured outputs"
+                intents.append(
+                    ResearchPlanIntent(
+                        query=f"site:{src} {reddit_topic}",
+                        ecosystem="REDDIT",
+                        channel_reason="Configured public source: gathers practitioner sentiment and empirical benchmarks from community discussions to ground tutorial angles in developer pain points.",
+                    )
+                )
+            elif "github.com" in domain:
+                github_tools = "google-genai OR langgraph OR modelcontextprotocol OR vllm"
+                intents.append(
+                    ResearchPlanIntent(
+                        query=f"site:{src} {github_tools} release",
+                        ecosystem="GITHUB",
+                        channel_reason="Configured public source: tracks open-source releases, framework updates, and executable codebases suited for deep-dive architectural build videos.",
+                    )
+                )
+            elif any(v in domain for v in ["google.dev", "google.com", "anthropic.com", "openai.com"]):
+                intents.append(
+                    ResearchPlanIntent(
+                        query=f"site:{src} Gemini structured outputs OR function calling OR Model Garden OR agent SDK",
+                        ecosystem="PRIMARY_VENDOR",
+                        channel_reason=f"Configured public source ({src}): verifies official model capabilities, API constraints, and authoritative documentation from primary foundation model vendors.",
+                    )
+                )
+            else:
+                topic_kw = " OR ".join(f'"{t}"' for t in topics[:2]) if topics else "AI engineering architecture"
+                intents.append(
+                    ResearchPlanIntent(
+                        query=f"site:{src} {topic_kw} OR documentation OR release",
+                        ecosystem=eco if eco != "GENERAL_WEB" else "ENGINEERING_DOCS",
+                        channel_reason=f"Configured public source ({src}): investigates developer documentation and architectural specifications directly aligned with channel content pillars.",
+                    )
+                )
 
-    # 4. Dynamic GitHub Intent: open-source tools and releases
-    github_tools = "google-genai OR langgraph OR modelcontextprotocol OR vllm"
-    intents.append(
-        ResearchPlanIntent(
-            query=f"site:github.com {github_tools} release",
-            ecosystem="GITHUB",
-            channel_reason="Tracks new open-source releases, framework updates, and executable codebases suited for deep-dive architectural build videos.",
+    # 2. Dynamic Hacker News Intent (if not already added)
+    if "news.ycombinator.com" not in handled_domains:
+        hn_topic = "Model Context Protocol OR LangGraph OR LLM agent production architecture"
+        if any("infer" in p.lower() or "llm" in p.lower() for p in pillars):
+            hn_topic = "Model Context Protocol OR vLLM OR local LLM agent architecture"
+        intents.append(
+            ResearchPlanIntent(
+                query=f"site:news.ycombinator.com {hn_topic}",
+                ecosystem="HACKER_NEWS",
+                channel_reason="Identifies practitioner debates, architectural pitfalls, and production complaints surrounding agent protocol adoption and multi-agent system latency.",
+            )
         )
-    )
 
-    # 5. Dynamic Primary Vendor Intent: authoritative vendor documentation
-    vendor_query = "site:ai.google.dev OR site:cloud.google.com/vertex-ai Gemini structured outputs OR function calling OR Model Garden"
-    intents.append(
-        ResearchPlanIntent(
-            query=vendor_query,
-            ecosystem="PRIMARY_VENDOR",
-            channel_reason="Verifies official model capabilities, API constraints, and authoritative documentation from primary foundation model vendors.",
-        )
-    )
+    # 3. Dynamic Reddit Intent (if not already added)
+    if "reddit.com" not in handled_domains:
+        subreddits = ["r/LocalLLaMA", "r/MachineLearning"]
+        if any("infra" in p.lower() or "devops" in p.lower() for p in pillars):
+            subreddits.append("r/devops")
+        if any("experienced" in t.lower() or "backend" in t.lower() for t in topics):
+            subreddits.append("r/ExperiencedDevs")
+        if any("selfhost" in t.lower() or "local" in t.lower() for t in topics):
+            subreddits.append("r/selfhosted")
 
-    # 6. Dynamic Engineering Docs Intent: standards and infrastructure
-    docs_query = "site:modelcontextprotocol.io OR site:opentelemetry.io specification OR gen-ai semantic conventions"
-    intents.append(
-        ResearchPlanIntent(
-            query=docs_query,
-            ecosystem="ENGINEERING_DOCS",
-            channel_reason="Investigates cross-ecosystem open standards and observability specifications to support senior engineering audience demand.",
+        reddit_subs_str = " OR ".join(f"site:reddit.com/{sub}" for sub in subreddits[:3])
+        reddit_topic = "speculative decoding OR vLLM benchmarks OR structured outputs"
+        intents.append(
+            ResearchPlanIntent(
+                query=f"{reddit_subs_str} {reddit_topic}",
+                ecosystem="REDDIT",
+                channel_reason=f"Gathers practitioner sentiment and empirical benchmarks from relevant technical communities ({', '.join(subreddits[:3])}) to ground tutorial angles in real developer pain points.",
+            )
         )
-    )
+
+    # 4. Dynamic GitHub Intent (if not already added)
+    if "github.com" not in handled_domains:
+        github_tools = "google-genai OR langgraph OR modelcontextprotocol OR vllm"
+        intents.append(
+            ResearchPlanIntent(
+                query=f"site:github.com {github_tools} release",
+                ecosystem="GITHUB",
+                channel_reason="Tracks new open-source releases, framework updates, and executable codebases suited for deep-dive architectural build videos.",
+            )
+        )
+
+    # 5. Dynamic Primary Vendor Intent (if not already added)
+    if not any("google.dev" in d or "google.com" in d for d in handled_domains):
+        vendor_query = "site:ai.google.dev OR site:cloud.google.com/vertex-ai Gemini structured outputs OR function calling OR Model Garden"
+        intents.append(
+            ResearchPlanIntent(
+                query=vendor_query,
+                ecosystem="PRIMARY_VENDOR",
+                channel_reason="Verifies official model capabilities, API constraints, and authoritative documentation from primary foundation model vendors.",
+            )
+        )
+
+    # 6. Dynamic Engineering Docs Intent (if not already added)
+    if not any("modelcontextprotocol.io" in d or "opentelemetry.io" in d for d in handled_domains):
+        docs_query = "site:modelcontextprotocol.io OR site:opentelemetry.io specification OR gen-ai semantic conventions"
+        intents.append(
+            ResearchPlanIntent(
+                query=docs_query,
+                ecosystem="ENGINEERING_DOCS",
+                channel_reason="Investigates cross-ecosystem open standards and observability specifications to support senior engineering audience demand.",
+            )
+        )
 
     return intents
 
@@ -948,6 +1016,7 @@ class AlexDataScientist:
             recent_videos=recent_videos,
             lessons=lessons,
             existing_findings=existing_findings,
+            preferred_sources=effective_sources,
         )
 
         log_event(
@@ -1047,14 +1116,20 @@ class AlexDataScientist:
             f"- [{i.ecosystem}] Query: {i.query}\n  Reason: {i.channel_reason}"
             for i in planned_intents
         )
+        sources_text = ""
+        if preferred_sources:
+            sources_list = "\n".join(f"- {s}" for s in preferred_sources)
+            sources_text = (
+                f"\n\nCONFIGURED PREFERRED PUBLIC SOURCES:\n{sources_list}\n"
+                "You MUST deliberately incorporate and prioritize investigating these creator-configured preferred public sources."
+            )
 
         user_content = (
-            f"{channel_context}\n\n"
+            f"{channel_context}{sources_text}\n\n"
             "AUTONOMOUS RESEARCH OBJECTIVE & MULTI-ECOSYSTEM DISCOVERY DIRECTIVES:\n"
             "You are Alex, Senior Channel Data Scientist for Croviq. Formulate a dynamic, high-conviction research plan to discover the strongest NEW video opportunities for this specific channel right now.\n\n"
             "PLANNED MULTI-ECOSYSTEM SEARCH INTENTS:\n"
             f"{intents_text}\n\n"
-            "DELIBERATE MULTI-ECOSYSTEM GROUNDED INVESTIGATION:\n"
             "You MUST formulate search intents and deliberately investigate across ALL of the following distinct discovery ecosystems using Google Search Grounding:\n\n"
             "1. HACKER_NEWS (Developer & News Discussion):\n"
             "   - Search site:news.ycombinator.com for recent practitioner debates, emerging architectural controversies, and engineering pain points aligned with the channel topics.\n"

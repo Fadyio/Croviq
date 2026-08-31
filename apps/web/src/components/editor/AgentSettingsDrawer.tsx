@@ -861,16 +861,17 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                     {/* Preferred Sources Policy */}
                     <div className="space-y-2 pt-1">
                       <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                        Preferred Public Ecosystems & Sources
+                        Preferred Public Sources
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {(research.prompts?.[0]?.preferred_sources || []).map((src) => (
                           <span
                             key={src}
                             className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-1 px-2.5 py-1 text-xs text-text-primary"
+                            data-testid={`source-chip-${src}`}
                           >
-                            <ExternalLink className="h-3 w-3 text-text-muted" />
-                            <span>{src}</span>
+                            <ExternalLink className="h-3 w-3 text-text-muted shrink-0" />
+                            <span className="truncate max-w-[200px]">{src}</span>
                             <button
                               type="button"
                               onClick={() => {
@@ -896,6 +897,8 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                                 );
                               }}
                               className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                              aria-label={`Remove source ${src}`}
+                              data-testid={`btn-remove-source-${src}`}
                             >
                               <X className="h-3 w-3" />
                             </button>
@@ -909,8 +912,40 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                           type="text"
                           value={newSourceDraft}
                           onChange={(e) => setNewSourceDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const draft = newSourceDraft.trim();
+                              if (!draft) return;
+                              const currentSources = research.prompts?.[0]?.preferred_sources || [];
+                              if (currentSources.includes(draft)) {
+                                setNewSourceDraft("");
+                                return;
+                              }
+                              const nextSources = [...currentSources, draft];
+                              const updatedPrompts = [
+                                {
+                                  prompt_id:
+                                    research.prompts?.[0]?.prompt_id ||
+                                    "autonomous_channel_research",
+                                  text:
+                                    research.prompts?.[0]?.text ||
+                                    "Autonomous channel grounded research",
+                                  enabled: research.enabled,
+                                  use_broad_web_search:
+                                    research.prompts?.[0]?.use_broad_web_search ?? true,
+                                  preferred_sources: nextSources,
+                                },
+                              ];
+                              setResearch((cur) =>
+                                cur ? { ...cur, prompts: updatedPrompts } : cur,
+                              );
+                              setNewSourceDraft("");
+                            }
+                          }}
                           placeholder="domain or full public URL (e.g. news.ycombinator.com)"
                           className="flex-1 rounded-lg border border-border-subtle bg-surface-1 px-3 py-1.5 text-xs text-text-primary outline-none focus:border-primary transition-colors"
+                          data-testid="input-new-source"
                         />
                         <button
                           type="button"
@@ -918,6 +953,10 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                             const draft = newSourceDraft.trim();
                             if (!draft) return;
                             const currentSources = research.prompts?.[0]?.preferred_sources || [];
+                            if (currentSources.includes(draft)) {
+                              setNewSourceDraft("");
+                              return;
+                            }
                             const nextSources = [...currentSources, draft];
                             const updatedPrompts = [
                               {
@@ -936,6 +975,8 @@ export const AgentSettingsDrawer: React.FC<AgentSettingsDrawerProps> = ({
                             setNewSourceDraft("");
                           }}
                           className="rounded-lg bg-surface-3 p-2 text-text-primary hover:bg-elevated transition-colors cursor-pointer"
+                          data-testid="btn-add-source"
+                          aria-label="Add source"
                         >
                           <Plus className="h-3.5 w-3.5" />
                         </button>

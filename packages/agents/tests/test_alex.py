@@ -472,6 +472,18 @@ def test_generate_channel_research_plan_creates_multi_ecosystem_intents() -> Non
         assert len(i.query) > 5
 
 
+def test_generate_channel_research_plan_consumes_configured_preferred_sources() -> None:
+    sources = ["news.ycombinator.com", "ai.google.dev", "cloud.google.com", "docs.vllm.ai"]
+    intents = generate_channel_research_plan(preferred_sources=sources)
+    queries = [i.query for i in intents]
+    assert any("site:news.ycombinator.com" in q for q in queries)
+    assert any("site:ai.google.dev" in q for q in queries)
+    assert any("site:cloud.google.com" in q for q in queries)
+    assert any("site:docs.vllm.ai" in q for q in queries)
+    hn_intent = next(i for i in intents if "news.ycombinator.com" in i.query)
+    assert hn_intent.ecosystem == "HACKER_NEWS"
+    assert "Configured public source" in hn_intent.channel_reason
+
 def test_classify_ecosystem_categories() -> None:
     assert classify_ecosystem("site:news.ycombinator.com MCP agents") == "HACKER_NEWS"
     assert classify_ecosystem("https://news.ycombinator.com/item?id=123") == "HACKER_NEWS"

@@ -130,21 +130,32 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </section>
       </div>
 
-      {/* Recent Video Performance Section */}
+      {/* Dominant Trend Chart (Channel Performance immediately follows KPI cards) */}
+      {dashboard.trend && dashboard.trend.length > 0 && (
+        <ChannelTrendChart
+          data={dashboard.trend}
+          kpis={dashboard.kpis}
+          periodDays={dashboard.period_days}
+          title="Channel Performance"
+          compact={true}
+        />
+      )}
+
+      {/* Recent Video Performance Section (Compact Latest 5 videos) */}
       {recentVideos.length > 0 && (
         <section
-          className="rounded-xl border border-border-subtle bg-surface-1 p-5 shadow-sm space-y-4"
+          className="rounded-xl border border-border-subtle bg-surface-1 p-4 shadow-sm space-y-3"
           aria-labelledby="recent-videos-title"
         >
           {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle pb-2.5">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-primary" />
               <h2 id="recent-videos-title" className="text-xs font-semibold text-text-primary">
                 Recent video performance
               </h2>
               <span className="text-[11px] text-text-muted">
-                (Top {recentVideos.length} uploads)
+                (Latest {recentVideos.length} videos)
               </span>
             </div>
             <span className="text-[11px] text-text-muted">
@@ -155,7 +166,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
 
           {/* Videos List */}
-          <div className="space-y-4 divide-y divide-border-subtle/40">
+          <div className="space-y-2.5 divide-y divide-border-subtle/40">
             {recentVideos.map((video, idx) => {
               const isLatest = video.is_latest ?? idx === 0;
               const viewsDelta = formatDeltaPercent(video.views_delta_percentage);
@@ -166,20 +177,20 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               return (
                 <article
                   key={video.video_id || idx}
-                  className={`space-y-3 ${idx > 0 ? "pt-4" : ""}`}
+                  className={`space-y-2 ${idx > 0 ? "pt-2.5" : ""}`}
                   data-testid={`recent-video-${video.video_id}`}
                 >
                   {/* Title & Metadata Row */}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0 max-w-[80%]">
                       {isLatest && (
-                        <span className="rounded bg-primary/10 border border-primary/25 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary shrink-0">
+                        <span className="rounded bg-primary/10 border border-primary/25 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-primary shrink-0">
                           Latest Upload
                         </span>
                       )}
                       <h3
                         className={`truncate font-medium text-text-primary ${
-                          isLatest ? "text-sm font-semibold" : "text-xs"
+                          isLatest ? "text-xs font-semibold text-text-primary" : "text-xs"
                         }`}
                         title={video.title}
                       >
@@ -196,18 +207,18 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                   </div>
 
                   {/* Metrics Row: Views, Retention, CTR, Subs/1K */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {/* Views */}
-                    <div className="rounded-lg bg-surface-2/60 border border-border-subtle/50 p-2.5 flex flex-col justify-between">
-                      <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
+                    <div className="rounded-md bg-surface-2/60 border border-border-subtle/50 px-2.5 py-1.5 flex flex-col justify-between">
+                      <span className="text-[9px] font-medium text-text-muted uppercase tracking-wider">
                         Views
                       </span>
-                      <div className="mt-1">
-                        <span className="font-mono text-sm font-bold text-text-primary tabular-nums">
+                      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
+                        <span className="font-mono text-xs font-bold text-text-primary tabular-nums">
                           {compactNumber.format(video.views)}
                         </span>
                         <p
-                          className={`mt-0.5 text-[10.5px] font-medium ${
+                          className={`text-[10px] font-medium ${
                             viewsDelta.isNeutral
                               ? "text-text-muted"
                               : viewsDelta.isPositive
@@ -221,16 +232,16 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     </div>
 
                     {/* Retention */}
-                    <div className="rounded-lg bg-surface-2/60 border border-border-subtle/50 p-2.5 flex flex-col justify-between">
-                      <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
+                    <div className="rounded-md bg-surface-2/60 border border-border-subtle/50 px-2.5 py-1.5 flex flex-col justify-between">
+                      <span className="text-[9px] font-medium text-text-muted uppercase tracking-wider">
                         Retention
                       </span>
-                      <div className="mt-1">
-                        <span className="font-mono text-sm font-bold text-text-primary tabular-nums">
+                      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
+                        <span className="font-mono text-xs font-bold text-text-primary tabular-nums">
                           {video.average_retention.toFixed(1)}%
                         </span>
                         <p
-                          className={`mt-0.5 text-[10.5px] font-medium ${
+                          className={`text-[10px] font-medium ${
                             retDelta.isNeutral
                               ? "text-text-muted"
                               : retDelta.isPositive
@@ -244,18 +255,18 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     </div>
 
                     {/* CTR */}
-                    <div className="rounded-lg bg-surface-2/60 border border-border-subtle/50 p-2.5 flex flex-col justify-between">
-                      <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
+                    <div className="rounded-md bg-surface-2/60 border border-border-subtle/50 px-2.5 py-1.5 flex flex-col justify-between">
+                      <span className="text-[9px] font-medium text-text-muted uppercase tracking-wider">
                         Thumbnail CTR
                       </span>
-                      <div className="mt-1">
-                        <span className="font-mono text-sm font-bold text-text-primary tabular-nums">
+                      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
+                        <span className="font-mono text-xs font-bold text-text-primary tabular-nums">
                           {video.ctr_percentage != null
                             ? `${video.ctr_percentage.toFixed(1)}%`
                             : "Unavailable"}
                         </span>
                         <p
-                          className={`mt-0.5 text-[10.5px] font-medium ${
+                          className={`text-[10px] font-medium ${
                             ctrDelta.isNeutral
                               ? "text-text-muted"
                               : ctrDelta.isPositive
@@ -269,22 +280,20 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     </div>
 
                     {/* Subs / 1K */}
-                    <div className="rounded-lg bg-surface-2/60 border border-border-subtle/50 p-2.5 flex flex-col justify-between">
-                      <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
+                    <div className="rounded-md bg-surface-2/60 border border-border-subtle/50 px-2.5 py-1.5 flex flex-col justify-between">
+                      <span className="text-[9px] font-medium text-text-muted uppercase tracking-wider">
                         Subs / 1K views
                       </span>
-                      <div className="mt-1">
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="font-mono text-sm font-bold text-text-primary tabular-nums">
-                            {video.subs_per_1k != null ? video.subs_per_1k.toFixed(1) : "—"}
-                          </span>
-                          <span className="text-[10px] font-mono text-text-muted">
-                            ({video.net_subscribers >= 0 ? "+" : ""}
-                            {video.net_subscribers} net)
-                          </span>
-                        </div>
+                      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
+                        <span className="font-mono text-xs font-bold text-text-primary tabular-nums">
+                          {video.subs_per_1k != null ? video.subs_per_1k.toFixed(1) : "—"}
+                        </span>
+                        <span className="text-[9.5px] font-mono text-text-muted">
+                          ({video.net_subscribers >= 0 ? "+" : ""}
+                          {video.net_subscribers} net)
+                        </span>
                         <p
-                          className={`mt-0.5 text-[10.5px] font-medium ${
+                          className={`text-[10px] font-medium ${
                             subsDelta.isNeutral
                               ? "text-text-muted"
                               : subsDelta.isPositive
@@ -300,17 +309,19 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
                   {/* Actionable Signal for Latest Video Only */}
                   {isLatest && video.alex_interpretation && (
-                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs space-y-1.5">
-                      <div className="flex items-start gap-2">
-                        <span className="font-bold text-primary shrink-0">Alex:</span>
-                        <p className="text-text-secondary leading-relaxed font-medium">
+                    <div className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2 text-xs space-y-1">
+                      <div className="flex items-start gap-1.5">
+                        <span className="font-bold text-primary shrink-0 text-[11px]">Alex:</span>
+                        <p className="text-text-secondary leading-snug font-medium text-[11.5px]">
                           "{video.alex_interpretation}"
                         </p>
                       </div>
                       {video.alex_next_action && (
-                        <div className="flex items-start gap-2 pt-1 border-t border-primary/10">
-                          <span className="font-bold text-emerald-400 shrink-0">Next:</span>
-                          <p className="text-text-primary font-medium leading-relaxed">
+                        <div className="flex items-start gap-1.5 pt-1 border-t border-primary/10">
+                          <span className="font-bold text-emerald-400 shrink-0 text-[11px]">
+                            Next:
+                          </span>
+                          <p className="text-text-primary font-medium leading-snug text-[11.5px]">
                             "{video.alex_next_action}"
                           </p>
                         </div>
@@ -322,17 +333,6 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             })}
           </div>
         </section>
-      )}
-
-      {/* Dominant Trend Chart */}
-      {dashboard.trend && dashboard.trend.length > 0 && (
-        <ChannelTrendChart
-          data={dashboard.trend}
-          kpis={dashboard.kpis}
-          periodDays={dashboard.period_days}
-          title="Channel Performance"
-          compact={true}
-        />
       )}
 
       {/* Alex Primary Insight */}

@@ -1,4 +1,12 @@
-import { ChevronDown, ChevronRight, ExternalLink, Sparkles, TrendingUp } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+  TrendingUp,
+} from "lucide-react";
 import React, { useMemo, useState } from "react";
 import type { components } from "../../api/generated";
 import { getResolvedProvenance } from "../../lib/provenance";
@@ -11,6 +19,10 @@ interface AlexRailProps {
   findings: ResearchFinding[];
   lastResearchedAt?: string | null;
   cadence?: string | null;
+  isResearching?: boolean;
+  researchNotice?: string | null;
+  researchError?: string | null;
+  onTriggerResearch?: () => void;
   onOpenChat: () => void;
   onOpenSettings: () => void;
   onOpenEvidence: (insight: ChannelInsight) => void;
@@ -41,6 +53,10 @@ export const AlexRail: React.FC<AlexRailProps> = ({
   findings,
   lastResearchedAt,
   cadence,
+  isResearching = false,
+  researchNotice = null,
+  researchError = null,
+  onTriggerResearch,
   onOpenChat,
   onOpenSettings,
   onOpenEvidence,
@@ -153,6 +169,63 @@ export const AlexRail: React.FC<AlexRailProps> = ({
               </span>
             ) : null}
           </div>
+
+          {/* Action Row: Manual Research Trigger */}
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onTriggerResearch}
+              disabled={isResearching}
+              className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 px-3 py-1.5 text-xs font-semibold text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="btn-find-new-ideas"
+              aria-label={isResearching ? "Researching…" : "Find new ideas"}
+            >
+              {isResearching ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                  <span>Researching…</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <span>Find new ideas</span>
+                </>
+              )}
+            </button>
+            {findings.length > 0 && lastResearchedAt && (
+              <span className="text-[11px] text-text-muted font-mono shrink-0">
+                {findings.length} opportunities
+              </span>
+            )}
+          </div>
+
+          {/* Research Notice (e.g. no new findings) */}
+          {researchNotice && (
+            <div
+              className="rounded-lg border border-border-subtle bg-surface-2/70 p-2.5 text-xs text-text-secondary leading-relaxed animate-in fade-in"
+              data-testid="research-notice"
+            >
+              {researchNotice}
+            </div>
+          )}
+
+          {/* Research Error State with Retry */}
+          {researchError && (
+            <div
+              className="rounded-lg border border-danger/30 bg-danger/10 p-2.5 text-xs text-danger space-y-1.5 animate-in fade-in"
+              data-testid="research-error"
+            >
+              <p className="font-medium">{researchError}</p>
+              <button
+                type="button"
+                onClick={onTriggerResearch}
+                className="inline-flex items-center gap-1 font-semibold underline cursor-pointer text-text-primary hover:text-danger"
+              >
+                <RefreshCw className="h-3 w-3" />
+                <span>Retry</span>
+              </button>
+            </div>
+          )}
           {findings.length > 0 ? (
             <div className="space-y-3">
               {visibleFindings.map((finding) => (
@@ -316,12 +389,13 @@ export const AlexRail: React.FC<AlexRailProps> = ({
           ) : (
             <div className="rounded-lg bg-surface-2/30 p-4 text-center border border-border-subtle/40 space-y-1">
               <p className="text-xs font-medium text-text-secondary">
-                {lastResearchedAt
-                  ? `Alex checked ${formatLastResearched(lastResearchedAt)}.`
-                  : "Alex checked recently."}
+                Alex searched the configured sources but did not find a stronger new channel-fit
+                opportunity.
               </p>
               <p className="text-[11px] text-text-muted">
-                No stronger channel-fit opportunities were found.
+                {lastResearchedAt
+                  ? `Last checked ${formatLastResearched(lastResearchedAt)}.`
+                  : "Click 'Find new ideas' to initiate research."}
               </p>
             </div>
           )}

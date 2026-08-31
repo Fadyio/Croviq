@@ -36,6 +36,9 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
   const [isConnectingYt, setIsConnectingYt] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [_refreshKey, setRefreshKey] = useState(0);
+  const [isResearching, setIsResearching] = useState(false);
+  const [researchNotice, setResearchNotice] = useState<string | null>(null);
+  const [researchError, setResearchError] = useState<string | null>(null);
   const [settingsAgentId, setSettingsAgentId] = useState<AgentId | null>(null);
   const [chatAgentId, setChatAgentId] = useState<AgentId | null>(null);
   const [channelSelectorOpen, setChannelSelectorOpen] = useState(false);
@@ -45,6 +48,52 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
   const selectorRef = useRef<HTMLDivElement>(null);
   const currentRequestSeqRef = useRef(0);
   const prefersReducedMotion = useReducedMotion();
+
+  const handleTriggerResearch = useCallback(async () => {
+    if (!firebaseUser || isResearching) return;
+    setIsResearching(true);
+    setResearchNotice(null);
+    setResearchError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/channels/research/run", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!res.ok) {
+        throw new Error(`Research run failed (${res.status})`);
+      }
+      const updatedFindings = (await res.json()) as ResearchFinding[];
+      const prevIds = new Set(findings.map((f) => f.finding_id));
+      const hasNew = updatedFindings.some((f) => !prevIds.has(f.finding_id));
+
+      setFindings(updatedFindings);
+
+      // Re-fetch config to update last_run_at and next_run_at
+      const configRes = await fetch("/api/channels/research/config", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (configRes.ok) {
+        setResearchConfig((await configRes.json()) as ResearchConfig);
+      }
+
+      if (!hasNew && updatedFindings.length > 0) {
+        setResearchNotice(
+          "Alex searched the configured sources but did not find a stronger new channel-fit opportunity.",
+        );
+        setTimeout(() => setResearchNotice(null), 8000);
+      }
+    } catch (err) {
+      setResearchError(
+        err instanceof Error ? err.message : "Alex research run encountered an error.",
+      );
+    } finally {
+      setIsResearching(false);
+    }
+  }, [firebaseUser, isResearching, findings]);
 
   const loadFindings = useCallback(async () => {
     if (!firebaseUser) return;
@@ -166,7 +215,6 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
         const dashResp = await fetch(endpoint, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
         if (cancelled || requestSeq !== currentRequestSeqRef.current) {
           return;
         }
@@ -536,6 +584,10 @@ export const AppPage: React.FC<AppPageProps> = ({ onNavigateRoute, onNavigateNew
               (findings.length > 0 ? findings[0].discovered_at : null)
             }
             cadence={researchConfig?.cadence}
+            isResearching={isResearching}
+            researchNotice={researchNotice}
+            researchError={researchError}
+            onTriggerResearch={handleTriggerResearch}
             onOpenChat={() => setChatAgentId("alex")}
             onOpenSettings={() => setSettingsAgentId("alex")}
             onOpenEvidence={(insight) => setEvidenceModalInsight(insight)}
