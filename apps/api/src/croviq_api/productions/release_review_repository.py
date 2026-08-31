@@ -11,6 +11,7 @@ from croviq_api.config import get_settings
 from croviq_domain.release_review import (
     ClaimSupportStatus,
     ClaimVerification,
+    QualityScoreBreakdown,
     ReleaseChecklist,
     ReleaseIssue,
     ReleaseIssueSeverity,
