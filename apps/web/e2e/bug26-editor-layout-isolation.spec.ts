@@ -74,6 +74,13 @@ const setupEditorMocks = async (page: Page) => {
     });
   });
 
+  await page.route("https://storage.googleapis.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "video/mp4",
+      body: Buffer.from(""),
+    });
+  });
   await page.route("**/api/workspace", async (route) => {
     await route.fulfill({
       status: 200,
