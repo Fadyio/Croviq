@@ -243,7 +243,7 @@ test.describe("BUG 25 — New Project Quick UX Cleanup", () => {
     // 2. Open project triggers navigation
     const openBtn = page.getByRole("button", { name: /Open/ }).first();
     await openBtn.click();
-    await expect(page).toHaveURL(/\/productions\/prod_demo_01\/editor$/);
+    await expect(page).toHaveURL(/\/productions\/prod_demo_01\/editor(?:\?.*)?$/);
   });
 
   test("verifies Back to Channel Intelligence top button returns to /app", async ({ page }) => {
