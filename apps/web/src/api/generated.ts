@@ -1208,6 +1208,10 @@ export interface components {
       /** Whether to bypass cached review and execute a fresh Iris QA pass */
       force_regenerate?: boolean;
     };
+    GenerateStudioVoiceRequest: {
+      /** Optional override Studio Voice catalog voice identifier */
+      voice_id?: string | null;
+    };
     HTTPValidationError: {
       detail?: components["schemas"]["ValidationError"][];
     };
@@ -1296,8 +1300,10 @@ export interface components {
       url?: string | null;
       /** Duration of this media output in milliseconds */
       duration_ms?: number;
-      /** Status: 'ready', 'generating', 'failed', or 'unavailable' */
+      /** Status: 'ready', 'generating', 'failed', 'stale', 'incomplete', or 'unavailable' */
       status?: string;
+      /** Rendered voice identifier for voiceover output, if applicable */
+      voice_id?: string | null;
     };
     MemoryCardResponse: {
       /** Full resource name */

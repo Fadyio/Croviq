@@ -493,7 +493,7 @@ class _RecordingStudioVoiceClient(FakeGenAIClient):
         super().__init__()
         self.fault = fault
         self.synthesized_texts: list[str] = []
-
+        self.synthesized_voices: list[str] = []
     async def correct_transcript_with_video_grounding(self, *args, **kwargs):
         raise AssertionError("Studio Voice generation must use the persisted corrected script")
 
@@ -505,6 +505,7 @@ class _RecordingStudioVoiceClient(FakeGenAIClient):
         request_id: str = "unknown",
     ):
         self.synthesized_texts.append(text)
+        self.synthesized_voices.append(voice_id)
         if self.fault == "failed" and "second canonical" in text.lower():
             return 20_000, b"\x01" * 960_000
         if self.fault == "missing" and "second canonical" in text.lower():
@@ -831,3 +832,96 @@ async def test_playback_rejects_completed_voiceover_with_incomplete_or_stale_lin
     assert payload["voiceover"]["available"] is False
     assert payload["voiceover"]["url"] is None
     assert payload["voiceover"]["status"] == expected_status
+
+
+@pytest.mark.asyncio
+async def test_voice_selection_regeneration_end_to_end_truth(api_test_context):
+    """Verify canonical state contract: selected_voice, rendered_voice, and regeneration."""
+    production_id = "prod_voice_selection_truth"
+    client = api_test_context["client"]
+    edl, corrected = await _seed_voiceover_lineage(
+        api_test_context,
+        production_id=production_id,
+    )
+    genai = _RecordingStudioVoiceClient()
+    app.dependency_overrides[get_genai_client] = lambda: genai
+
+    # 1. Initial generation with Charon (default from _seed_voiceover_lineage was Charon)
+    gen_resp1 = client.post(f"/api/productions/{production_id}/studio-voice")
+    assert gen_resp1.status_code == 200
+    gen_data1 = gen_resp1.json()
+    assert gen_data1["result"]["status"] == "completed"
+    assert gen_data1["result"]["voice_id"] == "Charon"
+    assert genai.synthesized_voices == ["Charon", "Charon"]
+
+    # Check playback: selected_voice == rendered_voice == "Charon" -> READY
+    pb1 = client.get(f"/api/productions/{production_id}/playback")
+    assert pb1.status_code == 200
+    pb1_data = pb1.json()
+    assert pb1_data["voiceover"]["available"] is True
+    assert pb1_data["voiceover"]["status"] == "ready"
+    assert pb1_data["voiceover"]["voice_id"] == "Charon"
+    assert pb1_data["voiceover"]["url"] is not None
+
+    # 2. Select Kore in settings
+    put_resp = client.put(
+        "/api/workspace/agent-settings/voice",
+        json={
+            "narration_mode": "studio_voice",
+            "selected_voice": "Kore",
+            "language": "en-US",
+        },
+    )
+    assert put_resp.status_code == 200
+    assert put_resp.json()["selected_voice"] == "Kore"
+
+    # Check playback immediately after selecting Kore:
+    # selected_voice = Kore, rendered_voice = Charon -> STALE (needs_regeneration)
+    pb2 = client.get(f"/api/productions/{production_id}/playback")
+    assert pb2.status_code == 200
+    pb2_data = pb2.json()
+    assert pb2_data["voiceover"]["available"] is False
+    assert pb2_data["voiceover"]["status"] == "needs_regeneration"
+    assert pb2_data["voiceover"]["voice_id"] == "Charon"  # Rendered voice is still Charon!
+    assert pb2_data["voiceover"]["url"] is None
+
+    # 3. Regenerate Voiceover with Kore (passing voice_id or relying on saved settings)
+    genai.synthesized_voices.clear()
+    gen_resp2 = client.post(
+        f"/api/productions/{production_id}/studio-voice",
+        json={"voice_id": "Kore"},
+    )
+    assert gen_resp2.status_code == 200
+    gen_data2 = gen_resp2.json()
+    assert gen_data2["result"]["status"] == "completed"
+    assert gen_data2["result"]["voice_id"] == "Kore"
+    assert genai.synthesized_voices == ["Kore", "Kore"]
+
+    # Check playback: selected_voice == rendered_voice == "Kore" -> READY
+    pb3 = client.get(f"/api/productions/{production_id}/playback")
+    assert pb3.status_code == 200
+    pb3_data = pb3.json()
+    assert pb3_data["voiceover"]["available"] is True
+    assert pb3_data["voiceover"]["status"] == "ready"
+    assert pb3_data["voiceover"]["voice_id"] == "Kore"
+    assert pb3_data["voiceover"]["url"] is not None
+
+    # 4. Regenerate with Puck
+    genai.synthesized_voices.clear()
+    gen_resp3 = client.post(
+        f"/api/productions/{production_id}/studio-voice",
+        json={"voice_id": "Puck"},
+    )
+    assert gen_resp3.status_code == 200
+    gen_data3 = gen_resp3.json()
+    assert gen_data3["result"]["status"] == "completed"
+    assert gen_data3["result"]["voice_id"] == "Puck"
+    assert genai.synthesized_voices == ["Puck", "Puck"]
+
+    # Check playback: rendered_voice == "Puck"
+    pb4 = client.get(f"/api/productions/{production_id}/playback")
+    assert pb4.status_code == 200
+    pb4_data = pb4.json()
+    assert pb4_data["voiceover"]["available"] is True
+    assert pb4_data["voiceover"]["status"] == "ready"
+    assert pb4_data["voiceover"]["voice_id"] == "Puck"

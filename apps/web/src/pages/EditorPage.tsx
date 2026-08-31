@@ -298,7 +298,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     const apiEdited = apiMediaOutputToState(playbackPayload?.edited);
     const apiVoiceover = apiMediaOutputToState(playbackPayload?.voiceover);
     const apiFinalMix = apiMediaOutputToState(playbackPayload?.final_mix);
-
+    if (apiVoiceover?.voiceId) {
+      setCurrentVoiceoverVoiceId(apiVoiceover.voiceId);
+    }
     const originalOutput: MediaOutputState = apiOriginal?.available
       ? apiOriginal
       : {
@@ -364,6 +366,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             url: apiVoiceover.url || null,
             durationMs: apiVoiceover.durationMs || 0,
             status: "ready",
+            voiceId: apiVoiceover.voiceId || null,
           };
         }
         return {
@@ -383,6 +386,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                       (apiVoiceover.status as string) === "needs_regeneration"
                     ? "stale"
                     : "unavailable",
+          voiceId: apiVoiceover.voiceId || null,
         };
       }
       if (playbackPayload?.studio_voice_preview_url) {
@@ -819,16 +823,35 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       const res = await fetch(`/api/productions/${productionId}/studio-voice`, {
         method: "POST",
         headers,
+        body: JSON.stringify({ voice_id: selectedVoice }),
       });
       if (!res.ok) {
+        setMediaOutputs((prev) => ({
+          ...prev,
+          voiceover: {
+            ...prev.voiceover,
+            status: "failed",
+          },
+        }));
         throw new Error(`Voiceover generation failed (${res.status})`);
       }
       const svData = await res.json();
-      setCurrentVoiceoverVoiceId(svData.result?.voice_id || selectedVoice);
+      if (svData.result?.voice_id) {
+        setCurrentVoiceoverVoiceId(svData.result.voice_id);
+      }
       await loadPersistedData();
       if (svData.result?.status === "completed" && svData.studio_voice_preview_url) {
         setPreviewMode("studio_voice");
       }
+    } catch (err) {
+      setMediaOutputs((prev) => ({
+        ...prev,
+        voiceover: {
+          ...prev.voiceover,
+          status: "failed",
+        },
+      }));
+      throw err;
     } finally {
       setIsGeneratingVoiceover(false);
     }

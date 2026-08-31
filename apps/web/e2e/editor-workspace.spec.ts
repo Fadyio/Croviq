@@ -178,6 +178,7 @@ interface MockEditorOptions {
   includeFinalMixRender?: boolean;
   studioVoicePostResponse?: unknown;
   voiceSettingsPutGate?: Promise<void>;
+  selectedVoice?: string;
 }
 const delay = (milliseconds: number): Promise<void> => {
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -308,8 +309,8 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
           is_custom: false,
         },
         voice_settings: {
-          narration_mode: "original",
-          selected_voice: "Puck",
+          narration_mode: "studio_voice",
+          selected_voice: options.selectedVoice || "Puck",
           language: "en-US",
           updated_at: "2026-08-27T00:00:00Z",
         },
@@ -966,7 +967,7 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
         contentType: "application/json",
         body: JSON.stringify({
           production_id: FAIRPHONE_PRODUCTION_ID,
-          voice_id: "Puck",
+          voice_id: options.apiVoiceover?.voice_id || options.selectedVoice || "Puck",
           total_segments: 2,
           accepted_segments: 2,
           status: "completed",
@@ -2023,5 +2024,335 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     // Test remove music
     await page.getByTestId("btn-remove-music").click();
+  });
+
+  test("BUG 20: Voice tab renders Selected badge, detects stale rendered voice, and regenerates with selected voice", async ({
+    page,
+  }) => {
+    let currentSavedVoice = "Charon";
+    let currentRenderedVoice = "Charon";
+    let lastPostVoiceId: string | null = null;
+
+    await loginAndNavigateToEditor(page, {
+      selectedVoice: "Charon",
+      apiVoiceover: {
+        available: true,
+        artifact_id: "art_vo_charon",
+        edl_id: "edl_6324ea33234a",
+        url: "https://storage.googleapis.com/fake-preview.mp4?voiceover=charon",
+        duration_ms: 109304,
+        status: "ready",
+        voice_id: "Charon",
+      },
+      includeVoiceoverRender: false,
+      includeFinalMixRender: false,
+    });
+
+    // Override voice settings route to track currentSavedVoice
+    await page.route("**/api/workspace/agent-settings/voice", async (route) => {
+      if (route.request().method() === "PUT") {
+        const body = route.request().postDataJSON() || {};
+        currentSavedVoice = body.selected_voice || "Charon";
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            narration_mode: "studio_voice",
+            selected_voice: currentSavedVoice,
+            language: "en-US",
+            updated_at: "2026-08-31T00:00:00Z",
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            narration_mode: "studio_voice",
+            selected_voice: currentSavedVoice,
+            language: "en-US",
+            updated_at: "2026-08-31T00:00:00Z",
+          }),
+        });
+      }
+    });
+
+    // Override agent-settings to return currentSavedVoice
+    await page.route("**/api/workspace/agent-settings", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          workspace_id: "ws_default",
+          leo_prompt: {
+            system_prompt: "",
+            user_guidance: "",
+            model: "gemini-2.5-pro",
+            agent_id: "leo",
+          },
+          alex_prompt: {
+            system_prompt: "",
+            user_guidance: "",
+            model: "gemini-2.5-flash",
+            agent_id: "alex",
+          },
+          iris_prompt: {
+            system_prompt: "",
+            user_guidance: "",
+            model: "gemini-2.5-flash",
+            agent_id: "iris",
+          },
+          voice_settings: {
+            narration_mode: "studio_voice",
+            selected_voice: currentSavedVoice,
+            language: "en-US",
+            updated_at: "2026-08-31T00:00:00Z",
+          },
+          voices: [
+            {
+              voice_id: "Puck",
+              display_name: "Puck",
+              gender: "male",
+              language_code: "en-US",
+              description: "Dynamic voice",
+            },
+            {
+              voice_id: "Charon",
+              display_name: "Charon",
+              gender: "male",
+              language_code: "en-US",
+              description: "Authoritative voice",
+            },
+            {
+              voice_id: "Kore",
+              display_name: "Kore",
+              gender: "female",
+              language_code: "en-US",
+              description: "Instructional voice",
+            },
+            {
+              voice_id: "Aoede",
+              display_name: "Aoede",
+              gender: "female",
+              language_code: "en-US",
+              description: "Warm voice",
+            },
+          ],
+        }),
+      });
+    });
+
+    // Override studio-voice POST to inspect payload and update currentRenderedVoice
+    await page.route(
+      `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/studio-voice`,
+      async (route) => {
+        if (route.request().method() === "POST") {
+          const postBody = route.request().postDataJSON() || {};
+          const postVoiceId: string = postBody.voice_id || currentSavedVoice || "Charon";
+          lastPostVoiceId = postVoiceId;
+          currentRenderedVoice = postVoiceId;
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              production_id: FAIRPHONE_PRODUCTION_ID,
+              result: {
+                production_id: FAIRPHONE_PRODUCTION_ID,
+                voice_id: postVoiceId,
+                narration_mode: "studio_voice",
+                edl_id: "edl_6324ea33234a",
+                total_segments: 2,
+                accepted_segments: 2,
+                all_within_budget: true,
+                status: "completed",
+                created_at: "2026-08-31T00:00:00Z",
+                updated_at: "2026-08-31T00:00:00Z",
+                segments: [
+                  {
+                    segment_id: "vo_01",
+                    source_start_ms: 0,
+                    source_end_ms: 5000,
+                    original_text: "A",
+                    rewritten_text: "A",
+                    voice_id: postVoiceId,
+                    generated_duration_ms: 4500,
+                    available_duration_ms: 5000,
+                    attempts: 1,
+                    meaning_preserved: true,
+                    production_id: FAIRPHONE_PRODUCTION_ID,
+                    status: "accepted",
+                  },
+                  {
+                    segment_id: "vo_02",
+                    source_start_ms: 5000,
+                    source_end_ms: 11200,
+                    original_text: "B",
+                    rewritten_text: "B",
+                    voice_id: postVoiceId,
+                    generated_duration_ms: 6000,
+                    available_duration_ms: 6200,
+                    attempts: 1,
+                    meaning_preserved: true,
+                    production_id: FAIRPHONE_PRODUCTION_ID,
+                    status: "accepted",
+                  },
+                ],
+              },
+              studio_voice_preview_url: `https://storage.googleapis.com/fake-preview.mp4?voiceover=${postVoiceId.toLowerCase()}`,
+            }),
+          });
+        } else {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              production_id: FAIRPHONE_PRODUCTION_ID,
+              voice_id: currentRenderedVoice,
+              total_segments: 2,
+              accepted_segments: 2,
+              all_within_budget: true,
+              status: "completed",
+              created_at: "2026-08-31T00:00:00Z",
+              updated_at: "2026-08-31T00:00:00Z",
+            }),
+          });
+        }
+      },
+    );
+
+    // Override playback to reflect dynamic state
+    await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/playback`, async (route) => {
+      const isStale = currentSavedVoice !== currentRenderedVoice;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          playback_url: "https://storage.googleapis.com/fake-source.mp4",
+          rendered_preview_url: "https://storage.googleapis.com/fake-preview.mp4",
+          studio_voice_preview_url: isStale
+            ? null
+            : `https://storage.googleapis.com/fake-preview.mp4?voiceover=${currentRenderedVoice.toLowerCase()}`,
+          master_url: null,
+          final_mix_url: null,
+          music_url: null,
+          original: {
+            available: true,
+            status: "ready",
+            url: "https://storage.googleapis.com/fake-source.mp4",
+            duration_ms: 113824,
+          },
+          edited: {
+            available: true,
+            status: "ready",
+            url: "https://storage.googleapis.com/fake-preview.mp4",
+            duration_ms: 109304,
+          },
+          voiceover: {
+            available: !isStale,
+            artifact_id: `art_vo_${currentRenderedVoice.toLowerCase()}`,
+            edl_id: "edl_6324ea33234a",
+            url: isStale
+              ? null
+              : `https://storage.googleapis.com/fake-preview.mp4?voiceover=${currentRenderedVoice.toLowerCase()}`,
+            duration_ms: 109304,
+            status: isStale ? "needs_regeneration" : "ready",
+            voice_id: currentRenderedVoice,
+          },
+          final_mix: { available: false, status: "unavailable" },
+        }),
+      });
+    });
+
+    await expect(page.getByTestId("editor-workspace")).toBeVisible();
+    await page.getByTestId("tab-voice").click();
+    await expect(page.getByTestId("voice-settings-tab")).toBeVisible();
+    // Selected voice card shows Charon with Selected badge (NOT ambiguous "Active")
+    const selectedCard = page.getByTestId("selected-voice-card");
+    await expect(selectedCard).toContainText("Charon");
+    await expect(selectedCard).toContainText("Selected");
+    await expect(selectedCard).not.toContainText("Active");
+    await expect(page.getByTestId("voice-ready-banner")).toBeVisible();
+    await expect(page.getByTestId("voice-stale-banner")).toHaveCount(0);
+    await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Ready");
+
+    // 2. Select Kore
+    await page.getByTestId("voice-option-kore").click();
+
+    // Immediately Selected voice becomes Kore
+    await expect(selectedCard).toContainText("Kore");
+    await expect(selectedCard).toContainText("Selected");
+
+    // Stale banner informs user: "Voiceover currently uses Charon. Regenerate to use Kore."
+    const staleBanner = page.getByTestId("voice-stale-banner");
+    await expect(staleBanner).toBeVisible();
+    await expect(staleBanner).toContainText("Voiceover currently uses Charon.");
+    await expect(staleBanner).toContainText("Regenerate to use Kore.");
+
+    // Available voices list has Selected badge on Kore, In Video on Charon
+    await expect(page.getByTestId("voice-option-kore")).toContainText("Selected");
+    await expect(page.getByTestId("voice-option-charon")).toContainText("In Video");
+    await expect(page.getByTestId("voice-option-charon")).not.toContainText("Active");
+
+    // Voiceover status shows Stale
+    await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Stale (Regenerate)");
+
+    // 3. Reload page - Kore selection persists across reload
+    await page.reload();
+    await page.waitForSelector("[data-testid='editor-workspace']");
+    await page.getByTestId("tab-voice").click();
+    await expect(selectedCard).toContainText("Kore");
+    await expect(page.getByTestId("voice-stale-banner")).toBeVisible();
+
+    // 4. Click Regenerate Voiceover
+    const generateBtn = page.getByTestId("btn-generate-voiceover");
+    await expect(generateBtn).toHaveText("Regenerate Voiceover");
+    await generateBtn.click();
+
+    // Confirm backend received voice_id = "Kore"
+    expect(lastPostVoiceId).toBe("Kore");
+
+    // After regeneration completes, status is Ready and rendered voice is Kore
+    await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Ready");
+    await expect(page.getByTestId("voice-ready-banner")).toBeVisible();
+    await expect(page.getByTestId("voice-ready-banner")).toContainText(
+      "Current voiceover uses Kore",
+    );
+    await expect(page.getByTestId("voice-stale-banner")).toHaveCount(0);
+  });
+
+  test("BUG 20: Auditioning voice sample does not change selected voice or rendered voice", async ({
+    page,
+  }) => {
+    await loginAndNavigateToEditor(page, {
+      apiVoiceover: {
+        available: true,
+        artifact_id: "art_vo_ready",
+        edl_id: "edl_6324ea33234a",
+        url: "https://storage.googleapis.com/fake-preview.mp4?voiceover=puck",
+        duration_ms: 113824,
+        status: "ready",
+        voice_id: "Puck",
+      },
+      includeVoiceoverRender: false,
+      includeFinalMixRender: false,
+    });
+
+    await page.getByTestId("tab-voice").click();
+    await expect(page.getByTestId("voice-settings-tab")).toBeVisible();
+
+    // Initial selected is Puck
+    await expect(page.getByTestId("selected-voice-card")).toContainText("Puck");
+    await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Ready");
+
+    // Audition sample on Charon (clicking the volume button, not the row)
+    const auditionCharonBtn = page.getByTestId("btn-preview-charon");
+    await expect(auditionCharonBtn).toBeVisible();
+    await auditionCharonBtn.click();
+
+    // Verify selected voice card is STILL Puck!
+    await expect(page.getByTestId("selected-voice-card")).toContainText("Puck");
+    await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Ready");
+    await expect(page.getByTestId("voice-stale-banner")).toHaveCount(0);
   });
 });

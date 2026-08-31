@@ -116,6 +116,15 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
   const effectiveVoices = voices && voices.length > 0 ? voices : FALLBACK_GEMINI_VOICES;
   const currentVoiceMeta =
     effectiveVoices.find((v) => v.voice_id === selectedVoice) || effectiveVoices[0];
+  const renderedVoiceMeta = currentVoiceoverVoiceId
+    ? effectiveVoices.find((v) => v.voice_id === currentVoiceoverVoiceId) || {
+        voice_id: currentVoiceoverVoiceId,
+        display_name: currentVoiceoverVoiceId,
+        gender: "neutral",
+        language_code: "en-US",
+        description: "Rendered studio voice",
+      }
+    : null;
 
   // Stop audio on unmount
   useEffect(() => {
@@ -131,7 +140,6 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
   const isVoiceStale =
     Boolean(currentVoiceoverVoiceId && currentVoiceoverVoiceId !== selectedVoice) ||
     voiceoverStatus === "stale";
-
   const handlePlayPreview = useCallback(
     async (voiceId: string) => {
       setPreviewError(null);
@@ -303,7 +311,7 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
                   {currentVoiceMeta.display_name}
                 </span>
                 <span className="text-[10px] px-1.5 py-0.2 bg-primary/20 text-primary rounded font-mono font-medium">
-                  Active
+                  Selected
                 </span>
               </div>
               <p className="text-[11px] text-text-secondary line-clamp-1">
@@ -322,7 +330,8 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
                 : "bg-surface-3 hover:bg-surface-2 text-text-primary border border-border-subtle"
             }`}
             data-testid="btn-play-selected-preview"
-            title="Audition selected voice sample"
+            title={`Audition sample with ${currentVoiceMeta.display_name}`}
+            aria-label={`Audition sample with ${currentVoiceMeta.display_name}`}
           >
             {loadingVoiceId === currentVoiceMeta.voice_id ? (
               <Loader2 className="w-3 h-3 animate-spin text-primary" />
@@ -358,14 +367,47 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
           </div>
         </div>
 
-        {/* Stale Voiceover Warning if voice changed */}
+        {/* Stale Voiceover Warning if voice changed or stale */}
         {isVoiceStale && (
           <div
-            className="flex items-center gap-2 p-2 rounded-lg bg-warning/10 border border-warning/30 text-warning text-[11px]"
+            className="flex items-start gap-2 p-2.5 rounded-lg bg-warning/10 border border-warning/30 text-warning text-[11px]"
             data-testid="voice-stale-banner"
           >
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-semibold">
+                Voiceover currently uses{" "}
+                {renderedVoiceMeta
+                  ? renderedVoiceMeta.display_name
+                  : currentVoiceoverVoiceId || "previous voice"}
+                .
+              </p>
+              <p className="text-[10px] text-warning/90">
+                Regenerate to use {currentVoiceMeta.display_name}.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Ready Voiceover info when voice is in sync */}
+        {!isVoiceStale && voiceoverStatus === "ready" && (
+          <div
+            className="flex items-center gap-2 p-2 rounded-lg bg-success/10 border border-success/30 text-success text-[11px]"
+            data-testid="voice-ready-banner"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            <span>Current voiceover uses {currentVoiceMeta.display_name}</span>
+          </div>
+        )}
+
+        {/* Failed Generation Warning */}
+        {voiceoverStatus === "failed" && (
+          <div
+            className="flex items-center gap-2 p-2 rounded-lg bg-danger/10 border border-danger/20 text-danger text-[11px]"
+            data-testid="voice-failed-banner"
+          >
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            <span className="font-medium">Voice changed — regenerate voiceover</span>
+            <span>Voiceover generation failed. Please retry.</span>
           </div>
         )}
       </div>
@@ -379,6 +421,7 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
         <div className="grid grid-cols-1 gap-2" data-testid="voice-options-list">
           {effectiveVoices.map((v) => {
             const isSelected = v.voice_id === selectedVoice;
+            const isRendered = v.voice_id === currentVoiceoverVoiceId;
             const isPlaying = playingVoiceId === v.voice_id;
             const isLoading = loadingVoiceId === v.voice_id;
 
@@ -403,7 +446,7 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
                   </div>
 
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span
                         className={`text-xs font-semibold truncate ${
                           isSelected ? "text-text-primary" : "text-text-secondary"
@@ -412,6 +455,16 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
                         {v.display_name}
                       </span>
                       <span className="text-[10px] text-text-muted capitalize">({v.gender})</span>
+                      {isSelected && (
+                        <span className="text-[9px] px-1.5 py-0.2 bg-primary/20 text-primary rounded font-mono font-medium">
+                          Selected
+                        </span>
+                      )}
+                      {isRendered && !isSelected && (
+                        <span className="text-[9px] px-1.5 py-0.2 bg-surface-3 text-text-muted rounded font-mono font-medium border border-border-subtle">
+                          In Video
+                        </span>
+                      )}
                     </div>
                     <p className="text-[10px] text-text-muted truncate max-w-[210px]">
                       {v.description}
@@ -483,7 +536,17 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
             }`}
             data-testid="voiceover-status-badge"
           >
-            {isVoiceStale ? "Stale (Regenerate)" : voiceoverStatus}
+            {voiceoverStatus === "generating"
+              ? "Generating…"
+              : voiceoverStatus === "failed"
+                ? "Failed"
+                : voiceoverStatus === "incomplete"
+                  ? "Incomplete"
+                  : isVoiceStale
+                    ? "Stale (Regenerate)"
+                    : voiceoverStatus === "ready"
+                      ? "Ready"
+                      : "Unavailable"}
           </span>
         </div>
 
@@ -505,6 +568,11 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
             <>
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               <span>{generationStage || "Generating Full Voiceover…"}</span>
+            </>
+          ) : voiceoverStatus === "failed" ? (
+            <>
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Voiceover Generation</span>
             </>
           ) : isVoiceStale || voiceoverStatus === "ready" ? (
             <>

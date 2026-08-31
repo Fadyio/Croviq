@@ -344,6 +344,7 @@ export interface MediaOutputState {
   url: string | null;
   durationMs: number;
   status: MediaOutputStatus;
+  voiceId?: string | null;
 }
 export interface ApiMediaOutputState {
   available?: boolean;
@@ -352,6 +353,7 @@ export interface ApiMediaOutputState {
   url?: string | null;
   duration_ms?: number;
   status?: MediaOutputStatus;
+  voice_id?: string | null;
 }
 
 export function apiMediaOutputToState(
@@ -365,6 +367,7 @@ export function apiMediaOutputToState(
     url: apiOutput.url || null,
     durationMs: apiOutput.duration_ms || 0,
     status: apiOutput.status || (apiOutput.available ? "ready" : "unavailable"),
+    voiceId: apiOutput.voice_id || null,
   };
 }
 

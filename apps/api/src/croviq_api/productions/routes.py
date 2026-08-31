@@ -74,6 +74,7 @@ from croviq_api.productions.schemas import (
     RenderArtifactResponse,
     RenderListResponse,
     StudioVoiceGenerationResponse,
+    GenerateStudioVoiceRequest,
     PackagingDetailResponse,
     UpdateBackgroundMusicRequest,
     UpdatePackagingOverridesRequest,
@@ -2081,6 +2082,7 @@ async def get_production_playback_urls(
         url=sv_url,
         duration_ms=latest_edl.estimated_target_duration_ms if latest_edl else 0,
         status=voiceover_status,
+        voice_id=sv_res.voice_id if sv_res else None,
     )
     final_mix_state = _build_state(fm_art, final_mix_url, has_prior=has_prior_fm)
     expires_at = (
@@ -2123,6 +2125,7 @@ async def generate_studio_voice(
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
     workspace_repo: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
     genai_client: Annotated[GenAIClient, Depends(get_genai_client)],
+    body: GenerateStudioVoiceRequest | None = None,
 ) -> StudioVoiceGenerationResponse:
     prod = await _get_owned_production(production_id, current_user, production_repo)
     transcript = await transcript_repo.get_transcript_by_production_id(prod.production_id)
@@ -2132,9 +2135,17 @@ async def generate_studio_voice(
             detail="Production must be transcribed before generating Studio Voice.",
         )
     workspace, _ = await workspace_repo.get_or_create_default_workspace(current_user)
-    voice_cfg = await agent_config_repo.get_voice_settings(workspace.workspace_id)
-    selected_voice = voice_cfg.selected_voice
-
+    ws_id = prod.workspace_id if prod.workspace_id else workspace.workspace_id
+    voice_cfg = await agent_config_repo.get_voice_settings(ws_id)
+    if body and body.voice_id and body.voice_id.strip():
+        selected_voice = body.voice_id.strip()
+        if voice_cfg.selected_voice != selected_voice:
+            voice_cfg = voice_cfg.model_copy(
+                update={"selected_voice": selected_voice, "updated_at": datetime.now(timezone.utc)}
+            )
+            await agent_config_repo.save_voice_settings(ws_id, voice_cfg)
+    else:
+        selected_voice = voice_cfg.selected_voice
     synthesizer = StudioVoiceSynthesizer()
 
     # Define TTS generator and Leo narration rewrite function for fit loop

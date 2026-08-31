@@ -432,8 +432,8 @@ class MediaOutputState(BaseModel):
     edl_id: str | None = Field(default=None, description="Parent EDL ID this artifact was rendered from")
     url: str | None = Field(default=None, description="Signed playback URL")
     duration_ms: int = Field(default=0, description="Duration of this media output in milliseconds")
-    status: str = Field(default="unavailable", description="Status: 'ready', 'generating', 'failed', or 'unavailable'")
-
+    status: str = Field(default="unavailable", description="Status: 'ready', 'generating', 'failed', 'stale', 'incomplete', or 'unavailable'")
+    voice_id: str | None = Field(default=None, description="Rendered voice identifier for voiceover output, if applicable")
 
 class ProductionPlaybackResponse(BaseModel):
     """Playback URLs and canonical media states for all available media outputs of a production."""
@@ -461,6 +461,14 @@ class StudioVoiceGenerationResponse(BaseModel):
     result: StudioVoiceResult = Field(..., description="Aggregated Studio Voice result and segment details")
     studio_voice_preview_url: str | None = Field(default=None, description="Signed playback URL for Studio Voice preview")
 
+
+
+class GenerateStudioVoiceRequest(BaseModel):
+    """Optional payload for requesting Studio Voice narration generation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    voice_id: str | None = Field(default=None, description="Optional override Studio Voice catalog voice identifier")
 
 class DeleteProductionResponse(BaseModel):
     """Response returned upon successful deletion of a production and all associated media storage objects."""
