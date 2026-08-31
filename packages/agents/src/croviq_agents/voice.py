@@ -143,74 +143,130 @@ class StudioVoiceSynthesizer:
         change_type: str | None = None,
         max_attempts: int = 3,
     ) -> tuple[NarrationSegment, bytes]:
-        """Execute bounded TTS fit loop adhering to immutable video budget:
-        ATTEMPT 1: Clean proposed narration
-        ATTEMPT 2: Minimally more concise phrasing preserving technical meaning
-        ATTEMPT 3: Tight concise phrasing preserving technical meaning
-        FALLBACK: If still exceeding budget, mark REJECTED and retain original audio.
-        """
+        """Execute the bounded TTS fit loop without allowing one segment to abort its peers."""
         current_text = original_text.strip()
         max_dur_s = available_duration_ms / 1000.0
         last_audio_bytes: bytes = b""
         last_measured_ms = 0
 
+        def failed_segment(
+            *,
+            attempts: int,
+            error_code: str | None = None,
+            error_message: str | None = None,
+        ) -> NarrationSegment:
+            return NarrationSegment(
+                segment_id=segment_id,
+                production_id=production_id,
+                source_start_ms=source_start_ms,
+                source_end_ms=source_end_ms,
+                edited_start_ms=edited_start_ms,
+                edited_end_ms=edited_end_ms,
+                change_type=change_type,
+                meaning_preserved=True,
+                available_duration_ms=available_duration_ms,
+                original_text=original_text,
+                rewritten_text=current_text,
+                voice_id=voice_id,
+                generated_duration_ms=last_measured_ms,
+                status=NarrationSegmentStatus.FAILED,
+                attempts=attempts,
+                tempo_adjustment=1.0,
+                error_code=error_code,
+                error_message=error_message,
+            )
+
+        if not any(character.isalnum() for character in current_text):
+            return (
+                failed_segment(
+                    attempts=0,
+                    error_code="EMPTY_NARRATION_TEXT",
+                    error_message="Narration text contains no speakable characters",
+                ),
+                b"",
+            )
+
         for attempt in range(1, max_attempts + 1):
             if attempt > 1:
-                # Generate minimally more concise wording preserving meaning
-                current_text = await rewrite_fn(original_text, max_dur_s, attempt)
+                try:
+                    current_text = (await rewrite_fn(original_text, max_dur_s, attempt)).strip()
+                except Exception as exc:
+                    logger.exception(
+                        "Narration rewrite failed segment=%s text=%r duration_ms=%d provider=%s model=%s attempt=%d",
+                        segment_id,
+                        original_text,
+                        available_duration_ms,
+                        getattr(rewrite_fn, "__qualname__", type(rewrite_fn).__name__),
+                        "narration-rewrite",
+                        attempt,
+                    )
+                    return (
+                        failed_segment(
+                            attempts=attempt - 1,
+                            error_code="NARRATION_REWRITE_ERROR",
+                            error_message=f"{type(exc).__name__}: {exc}",
+                        ),
+                        last_audio_bytes,
+                    )
 
-            measured_duration_ms, audio_bytes = await tts_fn(current_text, voice_id)
+            try:
+                measured_duration_ms, audio_bytes = await tts_fn(current_text, voice_id)
+            except Exception as exc:
+                logger.exception(
+                    "Narration TTS provider failed segment=%s text=%r duration_ms=%d provider=%s model=%s attempt=%d",
+                    segment_id,
+                    current_text,
+                    available_duration_ms,
+                    getattr(tts_fn, "__qualname__", type(tts_fn).__name__),
+                    GEMINI_TTS_MODEL,
+                    attempt,
+                )
+                return (
+                    failed_segment(
+                        attempts=attempt,
+                        error_code="TTS_PROVIDER_ERROR",
+                        error_message=f"{type(exc).__name__}: {exc}",
+                    ),
+                    last_audio_bytes,
+                )
+
             last_audio_bytes = audio_bytes
             last_measured_ms = measured_duration_ms
 
-            # Hard budget check: must fit strictly within available duration and contain valid audio bytes
-            if measured_duration_ms <= available_duration_ms and audio_bytes and len(audio_bytes) > 0 and measured_duration_ms > 0:
-                seg = NarrationSegment(
-                    segment_id=segment_id,
-                    production_id=production_id,
-                    source_start_ms=source_start_ms,
-                    source_end_ms=source_end_ms,
-                    edited_start_ms=edited_start_ms,
-                    edited_end_ms=edited_end_ms,
-                    change_type=change_type,
-                    meaning_preserved=True,
-                    available_duration_ms=available_duration_ms,
-                    original_text=original_text,
-                    rewritten_text=current_text,
-                    voice_id=voice_id,
-                    generated_duration_ms=measured_duration_ms,
-                    status=NarrationSegmentStatus.ACCEPTED,
-                    attempts=attempt,
-                    tempo_adjustment=1.0,
+            if measured_duration_ms <= available_duration_ms and audio_bytes and measured_duration_ms > 0:
+                return (
+                    NarrationSegment(
+                        segment_id=segment_id,
+                        production_id=production_id,
+                        source_start_ms=source_start_ms,
+                        source_end_ms=source_end_ms,
+                        edited_start_ms=edited_start_ms,
+                        edited_end_ms=edited_end_ms,
+                        change_type=change_type,
+                        meaning_preserved=True,
+                        available_duration_ms=available_duration_ms,
+                        original_text=original_text,
+                        rewritten_text=current_text,
+                        voice_id=voice_id,
+                        generated_duration_ms=measured_duration_ms,
+                        status=NarrationSegmentStatus.ACCEPTED,
+                        attempts=attempt,
+                        tempo_adjustment=1.0,
+                    ),
+                    audio_bytes,
                 )
-                return seg, audio_bytes
-        # Failed to fit immutable duration budget truthfully
+
         logger.warning(
-            "Narration segment %s exceeded duration budget of %dms (got %dms) after %d attempts",
+            "Narration fit exhausted segment=%s text=%r duration_ms=%d generated_duration_ms=%d provider=%s model=%s attempt=%d",
             segment_id,
+            current_text,
             available_duration_ms,
             last_measured_ms,
+            getattr(tts_fn, "__qualname__", type(tts_fn).__name__),
+            GEMINI_TTS_MODEL,
             max_attempts,
         )
-        seg = NarrationSegment(
-            segment_id=segment_id,
-            production_id=production_id,
-            source_start_ms=source_start_ms,
-            source_end_ms=source_end_ms,
-            edited_start_ms=edited_start_ms,
-            edited_end_ms=edited_end_ms,
-            change_type=change_type,
-            meaning_preserved=True,
-            available_duration_ms=available_duration_ms,
-            original_text=original_text,
-            rewritten_text=current_text,
-            voice_id=voice_id,
-                    generated_duration_ms=last_measured_ms,
-                    status=NarrationSegmentStatus.FAILED,
-                    attempts=max_attempts,
-            tempo_adjustment=1.0,
-        )
-        return seg, last_audio_bytes
+        return failed_segment(attempts=max_attempts), last_audio_bytes
     async def fit_narration_segment(
         self,
         segment_id: str,

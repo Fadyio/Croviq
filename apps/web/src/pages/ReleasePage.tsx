@@ -323,14 +323,21 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     const modeToRun = targetMode || reviewMode;
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`/api/productions/${productionId}/release-review`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          force_regenerate: forceRegenerate,
-          preview_mode: modeToRun,
-        }),
-      });
+      let res: Response;
+      try {
+        res = await fetch(`/api/productions/${productionId}/release-review`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            force_regenerate: forceRegenerate,
+            preview_mode: modeToRun,
+          }),
+        });
+      } catch {
+        throw new Error(
+          "Iris Quality Control was interrupted. Check your connection and retry the quality check.",
+        );
+      }
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.detail || "Iris Quality Control review failed");

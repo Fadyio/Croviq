@@ -726,7 +726,7 @@ async def test_studio_voice_generation_fails_closed_when_any_expected_audio_is_u
 
 
 @pytest.mark.asyncio
-async def test_studio_voice_generation_is_incomplete_when_canonical_script_omits_surviving_segment(
+async def test_studio_voice_generation_falls_back_to_surviving_source_segment_omitted_from_canonical_script(
     api_test_context,
 ):
     production_id = "prod_voiceover_missing_segment"
@@ -747,20 +747,205 @@ async def test_studio_voice_generation_is_incomplete_when_canonical_script_omits
 
     assert response.status_code == 200
     payload = response.json()
-    assert genai.synthesized_texts == ["First canonical corrected sentence."]
-    assert payload["result"]["status"] == "incomplete"
-    assert payload["result"]["total_segments"] == 2
-    assert payload["result"]["accepted_segments"] == 1
-    assert payload["result"]["preview_artifact_id"] is None
-    assert payload["studio_voice_preview_url"] is None
+    result = payload["result"]
+    assert genai.synthesized_texts == [
+        "First canonical corrected sentence.",
+        "Raw second transcript wording.",
+    ]
+    assert genai.synthesized_voices == ["Charon", "Charon"]
+    assert result["status"] == "completed"
+    assert result["edl_id"] == edl.edl_id
+    assert result["edl_version"] == edl.version
+    assert result["corrected_script_version"] == corrected.transcript_id
+    assert result["voice_id"] == "Charon"
+    assert result["total_segments"] == 2
+    assert result["accepted_segments"] == 2
+    assert result["all_within_budget"] is True
+    assert result["preview_artifact_id"] is not None
+    assert payload["studio_voice_preview_url"] is not None
+
+    active_edl = await api_test_context["edl_repo"].get_latest_edl(production_id)
+    assert active_edl is not None
+    assert active_edl.edl_id == edl.edl_id
+    assert active_edl.version == edl.version
+    assert [segment.segment_id for segment in active_edl.voiceover_segments] == [
+        "seg_first",
+        "seg_second",
+    ]
+    assert [segment.text for segment in active_edl.voiceover_segments] == [
+        "First canonical corrected sentence.",
+        "Raw second transcript wording.",
+    ]
+    assert {
+        segment.voice_id for segment in active_edl.voiceover_segments
+    } == {"Charon"}
+    assert {
+        segment.preview_artifact_id for segment in active_edl.voiceover_segments
+    } == {result["preview_artifact_id"]}
+
     artifacts = await api_test_context["render_repo"].list_render_artifacts(
         production_id
     )
-    assert not any(
-        artifact.artifact_type == ArtifactType.VOICEOVER_PREVIEW
-        and artifact.status == ArtifactStatus.completed
+    completed_voiceovers = [
+        artifact
         for artifact in artifacts
+        if artifact.artifact_type == ArtifactType.VOICEOVER_PREVIEW
+        and artifact.status == ArtifactStatus.completed
+    ]
+    assert len(completed_voiceovers) == 1
+    assert completed_voiceovers[0].artifact_id == result["preview_artifact_id"]
+    assert completed_voiceovers[0].edl_id == edl.edl_id
+    assert completed_voiceovers[0].voice_id == "Charon"
+
+    playback = api_test_context["client"].get(
+        f"/api/productions/{production_id}/playback"
     )
+    assert playback.status_code == 200
+    playback_payload = playback.json()
+    assert playback_payload["studio_voice_preview_url"] is not None
+    assert playback_payload["voiceover"]["available"] is True
+    assert playback_payload["voiceover"]["status"] == "ready"
+    assert playback_payload["voiceover"]["artifact_id"] == result["preview_artifact_id"]
+    assert playback_payload["voiceover"]["edl_id"] == edl.edl_id
+    assert playback_payload["voiceover"]["voice_id"] == "Charon"
+    assert playback_payload["voiceover"]["url"] is not None
+
+
+@pytest.mark.asyncio
+async def test_studio_voice_generation_counts_merged_short_sections_as_generated_narration(
+    api_test_context,
+):
+    production_id = "prod_voiceover_merged_sections"
+    edl, corrected = await _seed_voiceover_lineage(
+        api_test_context,
+        production_id=production_id,
+    )
+    transcript = await api_test_context[
+        "transcript_repo"
+    ].get_transcript_by_production_id(production_id)
+    assert transcript is not None
+    short_source_segments = [
+        transcript.segments[0].model_copy(
+            update={
+                "segment_id": "seg_short_intro",
+                "start_ms": 0,
+                "end_ms": 600,
+                "text": "Quick intro.",
+            }
+        ),
+        transcript.segments[1].model_copy(
+            update={
+                "segment_id": "seg_short_followup",
+                "start_ms": 600,
+                "end_ms": 1500,
+                "text": "Brief followup.",
+            }
+        ),
+    ]
+    await api_test_context["transcript_repo"].save_transcript(
+        transcript.model_copy(update={"segments": short_source_segments})
+    )
+    merged_script = corrected.model_copy(
+        update={
+            "segments": [
+                corrected.segments[0].model_copy(
+                    update={
+                        "segment_id": "seg_short_intro",
+                        "source_start_ms": 0,
+                        "source_end_ms": 600,
+                        "edited_start_ms": 0,
+                        "edited_end_ms": 600,
+                        "original_text": "Quick intro.",
+                        "corrected_text": "Quick canonical intro.",
+                        "target_duration_ms": 600,
+                    }
+                ),
+                corrected.segments[1].model_copy(
+                    update={
+                        "segment_id": "seg_short_followup",
+                        "source_start_ms": 600,
+                        "source_end_ms": 1500,
+                        "edited_start_ms": 600,
+                        "edited_end_ms": 1500,
+                        "original_text": "Brief followup.",
+                        "corrected_text": "Brief canonical followup.",
+                        "target_duration_ms": 900,
+                    }
+                ),
+            ]
+        }
+    )
+    await api_test_context["transcript_repo"].save_corrected_transcript(
+        merged_script,
+        edl_id=edl.edl_id,
+    )
+    genai = _RecordingStudioVoiceClient()
+    app.dependency_overrides[get_genai_client] = lambda: genai
+
+    response = api_test_context["client"].post(
+        f"/api/productions/{production_id}/studio-voice"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    result = payload["result"]
+    assert genai.synthesized_texts == [
+        "Quick canonical intro. Brief canonical followup."
+    ]
+    assert genai.synthesized_voices == ["Charon"]
+    assert result["status"] == "completed"
+    assert result["edl_id"] == edl.edl_id
+    assert result["edl_version"] == edl.version
+    assert result["corrected_script_version"] == merged_script.transcript_id
+    assert result["voice_id"] == "Charon"
+    assert result["total_segments"] == 1
+    assert result["accepted_segments"] == 1
+    assert result["all_within_budget"] is True
+    assert result["preview_artifact_id"] is not None
+    assert payload["studio_voice_preview_url"] is not None
+
+    active_edl = await api_test_context["edl_repo"].get_latest_edl(production_id)
+    assert active_edl is not None
+    assert active_edl.edl_id == edl.edl_id
+    assert active_edl.version == edl.version
+    assert len(active_edl.voiceover_segments) == 1
+    persisted_segment = active_edl.voiceover_segments[0]
+    assert persisted_segment.segment_id == "seg_short_intro_seg_short_followup"
+    assert persisted_segment.source_start_ms == 0
+    assert persisted_segment.source_end_ms == 1500
+    assert (
+        persisted_segment.text
+        == "Quick canonical intro. Brief canonical followup."
+    )
+    assert persisted_segment.voice_id == "Charon"
+    assert persisted_segment.preview_artifact_id == result["preview_artifact_id"]
+
+    artifacts = await api_test_context["render_repo"].list_render_artifacts(
+        production_id
+    )
+    completed_voiceovers = [
+        artifact
+        for artifact in artifacts
+        if artifact.artifact_type == ArtifactType.VOICEOVER_PREVIEW
+        and artifact.status == ArtifactStatus.completed
+    ]
+    assert len(completed_voiceovers) == 1
+    assert completed_voiceovers[0].artifact_id == result["preview_artifact_id"]
+    assert completed_voiceovers[0].edl_id == edl.edl_id
+    assert completed_voiceovers[0].voice_id == "Charon"
+
+    playback = api_test_context["client"].get(
+        f"/api/productions/{production_id}/playback"
+    )
+    assert playback.status_code == 200
+    playback_payload = playback.json()
+    assert playback_payload["studio_voice_preview_url"] is not None
+    assert playback_payload["voiceover"]["available"] is True
+    assert playback_payload["voiceover"]["status"] == "ready"
+    assert playback_payload["voiceover"]["artifact_id"] == result["preview_artifact_id"]
+    assert playback_payload["voiceover"]["edl_id"] == edl.edl_id
+    assert playback_payload["voiceover"]["voice_id"] == "Charon"
+    assert playback_payload["voiceover"]["url"] is not None
 
 
 @pytest.mark.parametrize(
@@ -925,3 +1110,124 @@ async def test_voice_selection_regeneration_end_to_end_truth(api_test_context):
     assert pb4_data["voiceover"]["available"] is True
     assert pb4_data["voiceover"]["status"] == "ready"
     assert pb4_data["voiceover"]["voice_id"] == "Puck"
+
+
+@pytest.mark.asyncio
+async def test_regenerated_voiceover_invalidates_completed_final_mix_until_rebuilt(
+    api_test_context,
+):
+    production_id = "prod_voice_regeneration_final_mix_lineage"
+    client = api_test_context["client"]
+    render_repo = api_test_context["render_repo"]
+    await _seed_voiceover_lineage(
+        api_test_context,
+        production_id=production_id,
+    )
+    genai = _RecordingStudioVoiceClient()
+    app.dependency_overrides[get_genai_client] = lambda: genai
+
+    initial_generation = client.post(
+        f"/api/productions/{production_id}/studio-voice"
+    )
+    assert initial_generation.status_code == 200
+    initial_result = initial_generation.json()["result"]
+    assert initial_result["status"] == "completed"
+    assert initial_result["voice_id"] == "Charon"
+    initial_voiceover_artifact_id = initial_result["preview_artifact_id"]
+
+    initial_final_mix = client.post(
+        f"/api/productions/{production_id}/renders/final-mix"
+    )
+    assert initial_final_mix.status_code == 200
+    initial_final_mix_data = initial_final_mix.json()
+    assert initial_final_mix_data["status"] == "completed"
+    initial_final_mix_artifact = await render_repo.get_render_artifact(
+        production_id,
+        initial_final_mix_data["artifact_id"],
+    )
+    assert initial_final_mix_artifact is not None
+    assert (
+        initial_final_mix_artifact.voiceover_artifact_id
+        == initial_voiceover_artifact_id
+    )
+
+    initial_playback = client.get(
+        f"/api/productions/{production_id}/playback"
+    )
+    assert initial_playback.status_code == 200
+    initial_playback_data = initial_playback.json()
+    assert initial_playback_data["final_mix"]["status"] == "ready"
+    assert initial_playback_data["final_mix"]["available"] is True
+    assert (
+        initial_playback_data["final_mix"]["artifact_id"]
+        == initial_final_mix_data["artifact_id"]
+    )
+
+    voice_response = client.put(
+        "/api/workspace/agent-settings/voice",
+        json={
+            "narration_mode": "studio_voice",
+            "selected_voice": "Kore",
+            "language": "en-US",
+        },
+    )
+    assert voice_response.status_code == 200
+
+    regenerated = client.post(
+        f"/api/productions/{production_id}/studio-voice"
+    )
+    assert regenerated.status_code == 200
+    regenerated_result = regenerated.json()["result"]
+    assert regenerated_result["status"] == "completed"
+    assert regenerated_result["voice_id"] == "Kore"
+    regenerated_voiceover_artifact_id = regenerated_result["preview_artifact_id"]
+    assert regenerated_voiceover_artifact_id != initial_voiceover_artifact_id
+
+    stale_playback = client.get(
+        f"/api/productions/{production_id}/playback"
+    )
+    assert stale_playback.status_code == 200
+    stale_playback_data = stale_playback.json()
+    assert stale_playback_data["final_mix"]["status"] == "needs_regeneration"
+    assert stale_playback_data["final_mix"]["available"] is False
+    assert stale_playback_data["final_mix"]["url"] is None
+    assert stale_playback_data["final_mix_url"] is None
+    assert stale_playback_data["voiceover"]["status"] == "ready"
+    assert stale_playback_data["voiceover"]["available"] is True
+    assert stale_playback_data["voiceover"]["voice_id"] == "Kore"
+    assert (
+        stale_playback_data["voiceover"]["artifact_id"]
+        == regenerated_voiceover_artifact_id
+    )
+    assert stale_playback_data["voiceover"]["url"] is not None
+
+    rebuilt_final_mix = client.post(
+        f"/api/productions/{production_id}/renders/final-mix"
+    )
+    assert rebuilt_final_mix.status_code == 200
+    rebuilt_final_mix_data = rebuilt_final_mix.json()
+    assert (
+        rebuilt_final_mix_data["artifact_id"]
+        != initial_final_mix_data["artifact_id"]
+    )
+    rebuilt_final_mix_artifact = await render_repo.get_render_artifact(
+        production_id,
+        rebuilt_final_mix_data["artifact_id"],
+    )
+    assert rebuilt_final_mix_artifact is not None
+    assert (
+        rebuilt_final_mix_artifact.voiceover_artifact_id
+        == regenerated_voiceover_artifact_id
+    )
+
+    rebuilt_playback = client.get(
+        f"/api/productions/{production_id}/playback"
+    )
+    assert rebuilt_playback.status_code == 200
+    rebuilt_playback_data = rebuilt_playback.json()
+    assert rebuilt_playback_data["final_mix"]["status"] == "ready"
+    assert rebuilt_playback_data["final_mix"]["available"] is True
+    assert (
+        rebuilt_playback_data["final_mix"]["artifact_id"]
+        == rebuilt_final_mix_data["artifact_id"]
+    )

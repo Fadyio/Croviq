@@ -1,13 +1,17 @@
 """GenAI SDK client abstractions for Gemini 3.7 Flash multimodal reasoning agents."""
 
 import asyncio
+import base64
+import binascii
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import io
 import json
 import logging
 import os
 import time
+import wave
 from typing import Any, Sequence
 
 from croviq_agents.prompts import (
@@ -61,6 +65,8 @@ from croviq_observability import log_ai_event
 from croviq_observability.events import EventType
 
 logger = logging.getLogger(__name__)
+IRIS_RELEASE_REVIEW_TIMEOUT_SECONDS = 30.0
+IRIS_RELEASE_REVIEW_RETRY_DELAY_SECONDS = 1.0
 
 
 class GenAIError(Exception):
@@ -70,6 +76,63 @@ class GenAIError(Exception):
         super().__init__(message)
         self.error_code = error_code
         self.cause = cause
+
+
+def _decode_google_tts_audio(audio_data: bytes | str) -> tuple[int, bytes]:
+    """Normalize Gemini inline audio to validated 24 kHz, mono, 16-bit PCM."""
+    if isinstance(audio_data, str):
+        try:
+            pcm_or_wav = base64.b64decode(audio_data, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise GenAIError("Gemini TTS returned malformed base64 audio", cause=exc) from exc
+    elif isinstance(audio_data, bytes):
+        pcm_or_wav = audio_data
+    else:
+        raise GenAIError(
+            f"Gemini TTS returned unsupported inline audio type: {type(audio_data).__name__}"
+        )
+
+    if not pcm_or_wav:
+        raise GenAIError("Gemini TTS returned empty audio")
+
+    if pcm_or_wav.startswith(b"RIFF"):
+        try:
+            with wave.open(io.BytesIO(pcm_or_wav), "rb") as wav_file:
+                channels = wav_file.getnchannels()
+                sample_width = wav_file.getsampwidth()
+                frame_rate = wav_file.getframerate()
+                frame_count = wav_file.getnframes()
+                compression = wav_file.getcomptype()
+                if (
+                    channels != 1
+                    or sample_width != 2
+                    or frame_rate != 24_000
+                    or compression != "NONE"
+                ):
+                    raise GenAIError(
+                        "Gemini TTS WAV must be uncompressed 24 kHz mono 16-bit audio"
+                    )
+                pcm_bytes = wav_file.readframes(frame_count)
+        except GenAIError:
+            raise
+        except (EOFError, wave.Error) as exc:
+            raise GenAIError("Gemini TTS returned malformed WAV audio", cause=exc) from exc
+
+        if frame_count == 0 or len(pcm_bytes) != frame_count * 2:
+            raise GenAIError("Gemini TTS returned empty or truncated WAV audio")
+    else:
+        pcm_bytes = pcm_or_wav
+        if len(pcm_bytes) % 2:
+            raise GenAIError("Gemini TTS PCM must contain complete 16-bit samples")
+        frame_count = len(pcm_bytes) // 2
+
+    if frame_count == 0:
+        raise GenAIError("Gemini TTS returned empty audio")
+
+    duration_ms = frame_count * 1000 // 24_000
+    if duration_ms == 0:
+        raise GenAIError("Gemini TTS audio duration is less than one millisecond")
+    return duration_ms, pcm_bytes
 
 
 @dataclass(frozen=True)
@@ -702,7 +765,7 @@ class GoogleGenAIClient(GenAIClient):
                     str(exc),
                 )
                 if attempt == 0:
-                    time.sleep(1.0)
+                    await asyncio.sleep(1.0)
 
         latency_ms = int((time.perf_counter() - start_time) * 1000)
         log_ai_event(
@@ -824,7 +887,7 @@ class GoogleGenAIClient(GenAIClient):
                     str(exc),
                 )
                 if attempt == 0:
-                    time.sleep(1.0)
+                    await asyncio.sleep(1.0)
 
         latency_ms = int((time.perf_counter() - start_time) * 1000)
         log_ai_event(
@@ -901,6 +964,15 @@ class GoogleGenAIClient(GenAIClient):
                 latency_ms=latency_ms,
                 error_code=type(exc).__name__,
             )
+            logger.exception(
+                "Narration rewrite provider failed segment=%s text=%r duration_ms=%d provider=%s model=%s attempt=%d",
+                request_id,
+                original_text,
+                int(available_duration_s * 1000),
+                "google-genai",
+                self._model_id,
+                attempt,
+            )
             return generate_fallback_narration_rewrite(original_text, available_duration_s, attempt)
 
 
@@ -965,13 +1037,18 @@ class GoogleGenAIClient(GenAIClient):
 
         start_time = time.perf_counter()
         last_error: Exception | None = None
+        input_tokens = 0
+        output_tokens = 0
 
         for attempt in range(2):
             try:
-                response = await client.aio.models.generate_content(
-                    model=self._model_id,
-                    contents=contents,
-                    config=config,
+                response = await asyncio.wait_for(
+                    client.aio.models.generate_content(
+                        model=self._model_id,
+                        contents=contents,
+                        config=config,
+                    ),
+                    timeout=IRIS_RELEASE_REVIEW_TIMEOUT_SECONDS,
                 )
 
                 latency_ms = int((time.perf_counter() - start_time) * 1000)
@@ -1025,7 +1102,7 @@ class GoogleGenAIClient(GenAIClient):
                 last_error = exc
                 logger.warning("Iris QA review attempt %d failed: %s", attempt + 1, str(exc))
                 if attempt == 0:
-                    time.sleep(1.0)
+                    await asyncio.sleep(IRIS_RELEASE_REVIEW_RETRY_DELAY_SECONDS)
 
         latency_ms = int((time.perf_counter() - start_time) * 1000)
         logger.warning("Upstream Gemini QA call failed with %s; falling back to deterministic verification", last_error)
@@ -1112,9 +1189,7 @@ class GoogleGenAIClient(GenAIClient):
                 if not part.inline_data or not part.inline_data.data:
                     raise GenAIError("Gemini TTS response part did not contain inline audio data")
 
-                raw_pcm = part.inline_data.data
-                # 24000 Hz, 16-bit mono -> 48 bytes per ms
-                duration_ms = int(len(raw_pcm) / 48)
+                duration_ms, raw_pcm = _decode_google_tts_audio(part.inline_data.data)
 
                 log_ai_event(
                     event_type=EventType.AI_CALL_COMPLETED,

@@ -1,11 +1,16 @@
+import asyncio
+
 from datetime import datetime, timezone
 import pytest
 
+import croviq_agents.client as client_module
 from croviq_agents.client import (
     FakeGenAIClient,
     GenAIError,
+    GoogleGenAIClient,
     reconcile_editor_proposal_with_transcript,
 )
+from unittest.mock import AsyncMock, MagicMock, patch
 from croviq_domain.editorial import EditorDecision, EditorDecisionType, EditorProposal
 from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
 
@@ -183,4 +188,69 @@ async def test_fake_genai_client_lyria_music_generation():
     assert dur_ms == 10000
     assert len(wav_bytes) > 0
     assert wav_bytes.startswith(b"RIFF")
+
+
+@pytest.mark.asyncio
+async def test_google_genai_client_iris_hanging_provider_falls_back_within_bounded_timeout_without_blocking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GoogleGenAIClient(project_id="test-proj", location="global")
+    raw_client = MagicMock()
+    provider_started = asyncio.Event()
+    provider_attempts = 0
+    cancelled_attempts = 0
+
+    async def hang_forever(**kwargs):
+        nonlocal provider_attempts, cancelled_attempts
+        provider_attempts += 1
+        provider_started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            cancelled_attempts += 1
+            raise
+
+    raw_client.aio.models.generate_content = AsyncMock(side_effect=hang_forever)
+    client._client = raw_client
+    monkeypatch.setattr(
+        client_module,
+        "IRIS_RELEASE_REVIEW_TIMEOUT_SECONDS",
+        0.01,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        client_module,
+        "IRIS_RELEASE_REVIEW_RETRY_DELAY_SECONDS",
+        0.0,
+        raising=False,
+    )
+
+    with (
+        patch("croviq_agents.client.time.sleep") as blocking_sleep,
+        patch("croviq_agents.client.log_ai_event"),
+    ):
+        review_task = asyncio.create_task(
+            client.generate_release_review(
+                master_video_uri="gs://bucket/master.mp4",
+                master_mime_type="video/mp4",
+                transcript=_sample_transcript(),
+                production_id="prod_123",
+                preview_mode="final_mix",
+                master_artifact_id="artifact_master_123",
+                master_duration_ms=1200,
+            )
+        )
+        await asyncio.wait_for(provider_started.wait(), timeout=0.1)
+        heartbeat = asyncio.create_task(asyncio.sleep(0))
+        await asyncio.wait_for(heartbeat, timeout=0.1)
+        review, usage = await asyncio.wait_for(review_task, timeout=0.5)
+
+    blocking_sleep.assert_not_called()
+    assert provider_attempts == 2
+    assert cancelled_attempts == 2
+    assert review.verdict.value == "PASS"
+    assert review.approved_for_release is True
+    assert review.reviewed_artifact_id == "artifact_master_123"
+    assert usage.input_tokens == 0
+    assert usage.output_tokens == 0
 

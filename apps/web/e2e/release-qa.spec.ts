@@ -517,6 +517,73 @@ test.describe("Iris QA Agent & Release Gate Workflow", () => {
     await expect(page.getByTestId("tab-voice")).not.toBeVisible();
   });
 
+  test("BUG 28: interrupted Quality Control hides browser errors and supports retry", async ({
+    page,
+  }) => {
+    const state = {
+      proposal: CORRECTED_FAIRPHONE_PROPOSAL,
+      review: INITIAL_QA_REVIEW,
+      releaseReady: false,
+      releaseStatus: "Fix required",
+    };
+    const irisInterruptionMessage =
+      "Iris Quality Control was interrupted. Check your connection and retry the quality check.";
+    let qualityCheckAttempts = 0;
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await loginAndNavigateToRelease(page, state);
+    await page.route(
+      `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/release-review*`,
+      async (route) => {
+        if (route.request().method() !== "POST") {
+          await route.fallback();
+          return;
+        }
+        qualityCheckAttempts += 1;
+        if (qualityCheckAttempts > 1) {
+          await route.fallback();
+          return;
+        }
+        await route.abort("failed");
+      },
+    );
+
+    const failedRequest = page.waitForEvent("requestfailed", {
+      predicate: (request) =>
+        request.method() === "POST" &&
+        request.url().includes(`/api/productions/${FAIRPHONE_PRODUCTION_ID}/release-review`),
+    });
+    const retryButton = page.getByTestId("btn-run-qa");
+    await retryButton.click();
+    const interruptedRequest = await failedRequest;
+
+    expect(interruptedRequest.failure()).not.toBeNull();
+    await expect(page.getByText(irisInterruptionMessage, { exact: true })).toBeVisible();
+    await expect(page.getByText(/NetworkError/i)).toHaveCount(0);
+    await expect(retryButton).toBeEnabled();
+    await expect(retryButton).toHaveText(/Run Quality Check/i);
+
+    const successfulResponse = page.waitForResponse(
+      (response) =>
+        response.status() === 200 &&
+        response.request().method() === "POST" &&
+        response.url().includes(`/api/productions/${FAIRPHONE_PRODUCTION_ID}/release-review`),
+    );
+    await retryButton.click();
+    const retryResponse = await successfulResponse;
+
+    await expect(page.getByTestId("release-status-badge")).toContainText(/Ready to publish/i);
+    await expect(retryResponse.json()).resolves.toMatchObject({
+      review: {
+        review_id: PASSED_QA_REVIEW.review_id,
+        verdict: "PASS",
+        approved_for_release: true,
+      },
+      release_ready: true,
+    });
+    expect(qualityCheckAttempts).toBe(2);
+  });
+
   test("captures release QA visual screenshots across standard viewports", async ({ page }) => {
     const state = {
       proposal: CORRECTED_FAIRPHONE_PROPOSAL,

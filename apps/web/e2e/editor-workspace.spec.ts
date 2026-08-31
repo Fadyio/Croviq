@@ -2294,6 +2294,231 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await expect(page.getByTestId("voice-ready-banner")).toBeVisible();
   });
 
+  test("BUG 28: selecting a voice persists, regenerates a completed artifact, and survives hard refresh", async ({
+    page,
+  }) => {
+    const initialVoiceoverUrl =
+      "https://storage.googleapis.com/fake-preview.mp4?voiceover=puck-bug-28";
+    const regeneratedVoiceoverUrl =
+      "https://storage.googleapis.com/fake-preview.mp4?voiceover=kore-bug-28";
+    const regeneratedArtifactId = "art_vo_kore_bug_28";
+    let savedVoice = "Puck";
+    let renderedVoice = "Puck";
+    let artifactId = "art_vo_puck_bug_28";
+    let voiceoverUrl = initialVoiceoverUrl;
+    let voiceoverSegments = [
+      {
+        segment_id: "vo_puck_01",
+        source_start_ms: 0,
+        source_end_ms: 12540,
+        text: "The Fairphone 6 Plus is an upgraded version with more memory.",
+        original_text: "The Fairphone 6 Plus is an even snazzier version.",
+        voice_mode: "PREBUILT_STUDIO_VOICE",
+      },
+    ];
+
+    await loginAndNavigateToEditor(page, {
+      apiVoiceover: {
+        available: true,
+        artifact_id: artifactId,
+        edl_id: "edl_6324ea33234a",
+        url: voiceoverUrl,
+        duration_ms: 113824,
+        status: "ready",
+        voice_id: renderedVoice,
+      },
+      includeVoiceoverRender: false,
+      includeFinalMixRender: false,
+    });
+
+    await page.route("**/api/workspace/agent-settings/voice", async (route) => {
+      const body = route.request().postDataJSON() || {};
+      savedVoice = body.selected_voice || savedVoice;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          narration_mode: "studio_voice",
+          selected_voice: savedVoice,
+          language: "en-US",
+          updated_at: "2026-08-31T00:00:00Z",
+        }),
+      });
+    });
+    await page.route("**/api/workspace/agent-settings", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          voice_settings: {
+            narration_mode: "studio_voice",
+            selected_voice: savedVoice,
+            language: "en-US",
+            updated_at: "2026-08-31T00:00:00Z",
+          },
+          voices: [
+            { voice_id: "Puck", display_name: "Puck", gender: "male", language_code: "en-US" },
+            { voice_id: "Kore", display_name: "Kore", gender: "female", language_code: "en-US" },
+          ],
+        }),
+      });
+    });
+    await page.route(
+      `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/studio-voice`,
+      async (route) => {
+        if (route.request().method() === "POST") {
+          renderedVoice = route.request().postDataJSON()?.voice_id;
+          artifactId = regeneratedArtifactId;
+          voiceoverUrl = regeneratedVoiceoverUrl;
+          voiceoverSegments = [
+            {
+              segment_id: "vo_kore_01",
+              source_start_ms: 0,
+              source_end_ms: 12540,
+              text: "Kore narrates the Fairphone introduction.",
+              original_text: "The Fairphone 6 Plus is an even snazzier version.",
+              voice_mode: "PREBUILT_STUDIO_VOICE",
+            },
+            {
+              segment_id: "vo_kore_02",
+              source_start_ms: 26160,
+              source_end_ms: 42340,
+              text: "Kore narrates the repairability demonstration.",
+              original_text: "However, you will have to undo a couple of teeny screws.",
+              voice_mode: "PREBUILT_STUDIO_VOICE",
+            },
+          ];
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              production_id: FAIRPHONE_PRODUCTION_ID,
+              result: {
+                production_id: FAIRPHONE_PRODUCTION_ID,
+                edl_id: "edl_6324ea33234a",
+                voice_id: renderedVoice,
+                total_segments: 2,
+                accepted_segments: 2,
+                all_within_budget: true,
+                status: "completed",
+                segments: voiceoverSegments,
+              },
+              studio_voice_preview_url: voiceoverUrl,
+            }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            production_id: FAIRPHONE_PRODUCTION_ID,
+            voice_id: renderedVoice,
+            total_segments: voiceoverSegments.length,
+            accepted_segments: voiceoverSegments.length,
+            status: "completed",
+          }),
+        });
+      },
+    );
+    await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/playback`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          playback_url:
+            "https://storage.googleapis.com/croviq-media-raw/mock-signed-video.mp4?token=mock_v4_signature",
+          rendered_preview_url: "https://storage.googleapis.com/fake-preview.mp4",
+          studio_voice_preview_url: voiceoverUrl,
+          voiceover: {
+            available: true,
+            artifact_id: artifactId,
+            edl_id: "edl_6324ea33234a",
+            url: voiceoverUrl,
+            duration_ms: 113824,
+            status: "ready",
+            voice_id: renderedVoice,
+          },
+          final_mix: { available: false, status: "unavailable" },
+        }),
+      });
+    });
+    await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/edl`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          edl: {
+            edl_id: "edl_6324ea33234a",
+            production_id: FAIRPHONE_PRODUCTION_ID,
+            version: 2,
+            source_duration_ms: 113824,
+            cuts: [],
+            coverage_markers: [],
+            voiceover_segments: voiceoverSegments,
+            background_music: null,
+            created_at: "2026-08-31T00:00:00Z",
+          },
+          keep_segments: [[0, 113824]],
+        }),
+      });
+    });
+
+    await page.getByTestId("tab-voice").click();
+    const persistedVoice = page.waitForRequest(
+      (request) =>
+        request.method() === "PUT" && request.url().includes("/api/workspace/agent-settings/voice"),
+    );
+    const generation = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes(`/api/productions/${FAIRPHONE_PRODUCTION_ID}/studio-voice`),
+    );
+    const refreshedPlayback = page.waitForResponse(
+      (response) =>
+        response.request().method() === "GET" &&
+        response.url().includes(`/api/productions/${FAIRPHONE_PRODUCTION_ID}/playback`),
+    );
+    const refreshedEdl = page.waitForResponse(
+      (response) =>
+        response.request().method() === "GET" &&
+        response.url().includes(`/api/productions/${FAIRPHONE_PRODUCTION_ID}/edl`),
+    );
+
+    await page.getByTestId("voice-option-kore").click();
+    const persistedRequest = await persistedVoice;
+    const generationResponse = await generation;
+    await Promise.all([refreshedPlayback, refreshedEdl]);
+
+    expect(persistedRequest.postDataJSON()).toMatchObject({ selected_voice: "Kore" });
+    expect(generationResponse.request().postDataJSON()).toEqual({ voice_id: "Kore" });
+    expect((await generationResponse.json()).result.status).toBe("completed");
+    expect(savedVoice).toBe("Kore");
+    expect(renderedVoice).toBe("Kore");
+    expect(artifactId).toBe(regeneratedArtifactId);
+    await expect(page.getByTestId("preview-toggle-studio-voice")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByTestId("video-element")).toHaveAttribute("src", regeneratedVoiceoverUrl);
+    await expect(page.getByTestId("selected-voice-card")).toContainText("Kore");
+    await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Ready");
+
+    await page.reload();
+    await page.waitForSelector("[data-testid='editor-workspace']");
+    await expect(page.getByTestId("preview-toggle-studio-voice")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByTestId("video-element")).toHaveAttribute("src", regeneratedVoiceoverUrl);
+    const timeline = page.getByTestId("editor-timeline");
+    await expect(timeline.locator('button[title^="Voiceover:"]')).toHaveCount(2);
+    await page.getByTestId("tab-voice").click();
+    await expect(page.getByTestId("selected-voice-card")).toContainText("Kore");
+    await expect(page.getByTestId("voiceover-status-badge")).toHaveText("Ready");
+  });
+
   test("BUG 20: Auditioning voice sample does not change selected voice or rendered voice", async ({
     page,
   }) => {

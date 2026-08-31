@@ -1335,6 +1335,27 @@ async def _execute_render_for_production(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Production '{production_id}' has no assembled EDL. Assemble an EDL before rendering.",
         )
+    active_studio_voice = (
+        await studio_voice_repo.get_by_production_id(prod.production_id)
+        if artifact_type == ArtifactType.FINAL_MIX and studio_voice_repo
+        else None
+    )
+    studio_voice_blocks_final_mix = bool(
+        active_studio_voice
+        and (
+            active_studio_voice.status != "completed"
+            or active_studio_voice.edl_id != edl.edl_id
+            or (
+                active_studio_voice.edl_version is not None
+                and active_studio_voice.edl_version != edl.version
+            )
+            or (
+                active_studio_voice.accepted_segments
+                < active_studio_voice.total_segments
+            )
+            or not active_studio_voice.all_within_budget
+        )
+    )
 
     # 1. Idempotency check: return cached completed artifact if object exists in storage
     existing_artifact = await render_repo.get_render_artifact_by_type(
@@ -1351,7 +1372,28 @@ async def _execute_render_for_production(
             expected_vol = edl.background_music.volume_db if edl.background_music else None
             expected_duck = edl.background_music.ducking_db if edl.background_music else None
             expected_mute = edl.background_music.is_muted if edl.background_music else None
-            if existing_artifact.music_gcs_object != expected_music_obj:
+            expected_voiceover_artifact_id = (
+                active_studio_voice.preview_artifact_id
+                if active_studio_voice
+                else None
+            )
+            expected_voice_id = (
+                active_studio_voice.voice_id if active_studio_voice else None
+            )
+            if studio_voice_blocks_final_mix:
+                is_cache_valid = False
+            elif (
+                active_studio_voice
+                and existing_artifact.voiceover_artifact_id
+                != expected_voiceover_artifact_id
+            ):
+                is_cache_valid = False
+            elif (
+                active_studio_voice
+                and existing_artifact.voice_id != expected_voice_id
+            ):
+                is_cache_valid = False
+            elif existing_artifact.music_gcs_object != expected_music_obj:
                 is_cache_valid = False
             elif existing_artifact.music_volume_db is not None and existing_artifact.music_volume_db != expected_vol:
                 is_cache_valid = False
@@ -1510,11 +1552,16 @@ async def _execute_render_for_production(
                 target_dur_ms = edl.estimated_target_duration_ms
                 local_narr = tmp_path / "voiceover.wav"
                 speech_intervals = []
-                sv_res = await studio_voice_repo.get_by_production_id(prod.production_id) if studio_voice_repo else None
+                sv_res = active_studio_voice
+                if studio_voice_blocks_final_mix:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Voiceover must be generated before Final Mix.",
+                    )
 
-                if sv_res and sv_res.status == "completed" and sv_res.gcs_object and (sv_res.edl_id is None or sv_res.edl_id == edl.edl_id):
+                if sv_res and sv_res.gcs_object:
                     await media_storage.download_object_to_path(
-                        bucket=gcs_bucket,
+                        bucket=sv_res.gcs_bucket or gcs_bucket,
                         object_name=sv_res.gcs_object,
                         target_path=local_narr,
                     )
@@ -1531,12 +1578,13 @@ async def _execute_render_for_production(
                                 segment_id=s.segment_id,
                                 source_start_ms=s.source_start_ms,
                                 source_end_ms=s.source_end_ms,
-                                text=s.text,
+                                text=s.rewritten_text or s.original_text,
                                 original_text=s.original_text,
                                 voice_id=s.voice_id or (sv_res.voice_id if sv_res else "Puck"),
-                                generated_duration_ms=s.target_duration_ms,
+                                generated_duration_ms=s.generated_duration_ms,
                             )
                             for s in sv_res.segments
+                            if s.status == NarrationSegmentStatus.ACCEPTED
                         ]
 
                     if voiceover_segs and genai_client:
@@ -2182,9 +2230,12 @@ async def get_production_playback_urls(
                 is_stale = True
             elif voiceover_status == "unavailable" and not (latest_edl and latest_edl.voiceover_segments):
                 is_stale = True
-            elif sv_res and sv_res.preview_artifact_id and fm_art.voiceover_artifact_id and fm_art.voiceover_artifact_id != sv_res.preview_artifact_id:
+            elif (
+                sv_res
+                and fm_art.voiceover_artifact_id != sv_res.preview_artifact_id
+            ):
                 is_stale = True
-            elif voice_cfg and fm_art.voice_id and fm_art.voice_id != voice_cfg.selected_voice:
+            elif sv_res and fm_art.voice_id != sv_res.voice_id:
                 is_stale = True
             elif latest_edl and latest_edl.background_music:
                 if fm_art.music_gcs_object != latest_edl.background_music.music_gcs_object:
@@ -2329,71 +2380,179 @@ async def generate_studio_voice(
             corrected_script, edl_id=edl.edl_id
         )
 
-    # 2. Identify surviving dialogue segments under active EDL
-    raw_surviving_segments = []
+    # 2. Project every raw transcript section that survives the active EDL.
+    # Corrected-script output is advisory text for that projection: a correction
+    # may replace a raw section's words, but it may not remove the section.
+    raw_sections: list[dict[str, Any]] = []
     for raw_seg in transcript.segments:
         ed_start = map_source_time_to_edited(raw_seg.start_ms, edl)
         ed_end = map_source_time_to_edited(raw_seg.end_ms, edl)
-        if ed_end > ed_start:
-            raw_surviving_segments.append(raw_seg)
-
-    prepared_segments = []
-    for seg in corrected_script.segments:
-        ed_start = seg.edited_start_ms if seg.edited_start_ms is not None else map_source_time_to_edited(seg.source_start_ms, edl)
-        ed_end = seg.edited_end_ms if seg.edited_end_ms is not None else map_source_time_to_edited(seg.source_end_ms, edl)
-        avail_ms = ed_end - ed_start
-        if avail_ms <= 0:
+        if ed_end <= ed_start:
             continue
-        text_to_synthesize = seg.corrected_text or seg.original_text
-        prepared_segments.append({
-            "segment_id": seg.segment_id,
-            "source_start_ms": seg.source_start_ms,
-            "source_end_ms": seg.source_end_ms,
-            "edited_start_ms": ed_start,
-            "edited_end_ms": ed_end,
-            "available_duration_ms": avail_ms,
-            "text": text_to_synthesize,
-            "original_text": seg.original_text,
-            "change_type": seg.change_type.value if hasattr(seg.change_type, "value") else str(seg.change_type),
-        })
+        raw_sections.append(
+            {
+                "segment_id": raw_seg.segment_id,
+                "source_start_ms": raw_seg.start_ms,
+                "source_end_ms": raw_seg.end_ms,
+                "edited_start_ms": ed_start,
+                "edited_end_ms": ed_end,
+                "available_duration_ms": ed_end - ed_start,
+                "raw_text": raw_seg.text,
+            }
+        )
 
-    def _needs_merge(s_dict: dict) -> bool:
-        avail = s_dict["available_duration_ms"]
-        word_count = len(s_dict["text"].split())
-        return avail < 1000 or (avail < 2000 and word_count * 310 > avail)
+    # Reserve exact segment-id matches first, then use each remaining corrected
+    # segment at most once for the raw section with the strongest source overlap.
+    corrected_matches: list[Any | None] = [None] * len(raw_sections)
+    used_corrected_indices: set[int] = set()
+    corrected_indices_by_id: dict[str, list[int]] = {}
+    for corrected_index, corrected_segment in enumerate(corrected_script.segments):
+        corrected_indices_by_id.setdefault(corrected_segment.segment_id, []).append(
+            corrected_index
+        )
 
-    # Merge tight segments with adjacent segments so natural TTS cadence fits comfortably
-    merged_segments = []
-    i = 0
-    while i < len(prepared_segments):
-        curr = dict(prepared_segments[i])
-        if _needs_merge(curr) and i + 1 < len(prepared_segments):
-            nxt = prepared_segments[i + 1]
-            curr["segment_id"] = f"{curr['segment_id']}_{nxt['segment_id']}"
-            curr["source_end_ms"] = nxt["source_end_ms"]
-            curr["edited_end_ms"] = nxt["edited_end_ms"]
-            curr["available_duration_ms"] = curr["edited_end_ms"] - curr["edited_start_ms"]
-            curr["text"] = f"{curr['text']} {nxt['text']}".strip()
-            curr["original_text"] = f"{curr['original_text']} {nxt['original_text']}".strip()
-            merged_segments.append(curr)
-            i += 2
-        elif _needs_merge(curr) and merged_segments:
-            prev = merged_segments[-1]
-            prev["segment_id"] = f"{prev['segment_id']}_{curr['segment_id']}"
-            prev["source_end_ms"] = curr["source_end_ms"]
-            prev["edited_end_ms"] = curr["edited_end_ms"]
-            prev["available_duration_ms"] = prev["edited_end_ms"] - prev["edited_start_ms"]
-            prev["text"] = f"{prev['text']} {curr['text']}".strip()
-            prev["original_text"] = f"{prev['original_text']} {curr['original_text']}".strip()
-            i += 1
-        else:
-            merged_segments.append(curr)
-            i += 1
+    for raw_index, raw_section in enumerate(raw_sections):
+        for corrected_index in corrected_indices_by_id.get(
+            raw_section["segment_id"], []
+        ):
+            if corrected_index not in used_corrected_indices:
+                corrected_matches[raw_index] = corrected_script.segments[
+                    corrected_index
+                ]
+                used_corrected_indices.add(corrected_index)
+                break
 
-    tasks = []
-    for item in merged_segments:
-        tasks.append(
-            synthesizer.fit_narration_segment_with_audio(
+    overlap_candidates: list[tuple[int, int, int]] = []
+    for raw_index, raw_section in enumerate(raw_sections):
+        if corrected_matches[raw_index] is not None:
+            continue
+        for corrected_index, corrected_segment in enumerate(
+            corrected_script.segments
+        ):
+            if corrected_index in used_corrected_indices:
+                continue
+            overlap_ms = max(
+                0,
+                min(
+                    raw_section["source_end_ms"],
+                    corrected_segment.source_end_ms,
+                )
+                - max(
+                    raw_section["source_start_ms"],
+                    corrected_segment.source_start_ms,
+                ),
+            )
+            if overlap_ms > 0:
+                overlap_candidates.append(
+                    (overlap_ms, raw_index, corrected_index)
+                )
+
+    # Assign the strongest overlaps first so an earlier raw section cannot
+    # consume a correction that primarily belongs to a later section.
+    for _, raw_index, corrected_index in sorted(
+        overlap_candidates,
+        key=lambda candidate: (-candidate[0], candidate[1], candidate[2]),
+    ):
+        if (
+            corrected_matches[raw_index] is not None
+            or corrected_index in used_corrected_indices
+        ):
+            continue
+        corrected_matches[raw_index] = corrected_script.segments[corrected_index]
+        used_corrected_indices.add(corrected_index)
+
+    prepared_segments: list[dict[str, Any]] = []
+    for raw_section, corrected_segment in zip(
+        raw_sections, corrected_matches, strict=True
+    ):
+        corrected_text = (
+            (corrected_segment.corrected_text or "").strip()
+            if corrected_segment is not None
+            else ""
+        )
+        text_to_synthesize = (
+            corrected_text
+            if any(character.isalnum() for character in corrected_text)
+            else raw_section["raw_text"]
+        )
+        change_type = (
+            corrected_segment.change_type.value
+            if corrected_segment is not None
+            and hasattr(corrected_segment.change_type, "value")
+            else (
+                str(corrected_segment.change_type)
+                if corrected_segment is not None
+                else ScriptCorrectionChangeType.KEEP.value
+            )
+        )
+        prepared_segments.append(
+            {
+                **raw_section,
+                "text": text_to_synthesize,
+                "original_text": raw_section["raw_text"],
+                "change_type": change_type,
+            }
+        )
+
+    def _needs_merge(section: dict[str, Any]) -> bool:
+        available_ms = section["available_duration_ms"]
+        word_count = len(section["text"].split())
+        return available_ms < 1000 or (
+            available_ms < 2000 and word_count * 310 > available_ms
+        )
+
+    def _are_edited_time_adjacent(
+        left: dict[str, Any], right: dict[str, Any]
+    ) -> bool:
+        return left["edited_end_ms"] == right["edited_start_ms"]
+
+    def _merge_sections(
+        left: dict[str, Any], right: dict[str, Any]
+    ) -> dict[str, Any]:
+        merged = dict(left)
+        merged["segment_id"] = f"{left['segment_id']}_{right['segment_id']}"
+        merged["source_end_ms"] = right["source_end_ms"]
+        merged["edited_end_ms"] = right["edited_end_ms"]
+        merged["available_duration_ms"] = (
+            merged["edited_end_ms"] - merged["edited_start_ms"]
+        )
+        merged["text"] = f"{left['text']} {right['text']}".strip()
+        merged["original_text"] = (
+            f"{left['original_text']} {right['original_text']}".strip()
+        )
+        return merged
+
+    # Merge only contiguous edited-time sections and only while a section still
+    # needs more room for a natural TTS cadence.
+    merged_segments: list[dict[str, Any]] = []
+    index = 0
+    while index < len(prepared_segments):
+        current = dict(prepared_segments[index])
+        index += 1
+        while _needs_merge(current):
+            if (
+                index < len(prepared_segments)
+                and _are_edited_time_adjacent(
+                    current, prepared_segments[index]
+                )
+            ):
+                current = _merge_sections(current, prepared_segments[index])
+                index += 1
+                continue
+            if merged_segments and _are_edited_time_adjacent(
+                merged_segments[-1], current
+            ):
+                current = _merge_sections(merged_segments.pop(), current)
+            break
+        merged_segments.append(current)
+
+    tts_semaphore = asyncio.Semaphore(4)
+
+    async def _synthesize_section(
+        item: dict[str, Any],
+    ) -> tuple[NarrationSegment, bytes]:
+        async with tts_semaphore:
+            return await synthesizer.fit_narration_segment_with_audio(
                 segment_id=item["segment_id"],
                 production_id=prod.production_id,
                 source_start_ms=item["source_start_ms"],
@@ -2407,23 +2566,67 @@ async def generate_studio_voice(
                 edited_end_ms=item["edited_end_ms"],
                 change_type=item["change_type"],
             )
+
+    results: list[tuple[NarrationSegment, bytes]] = list(
+        await asyncio.gather(
+            *(_synthesize_section(item) for item in merged_segments)
         )
-    results: list[tuple[NarrationSegment, bytes]] = list(await asyncio.gather(*tasks)) if tasks else []
-    segments: list[NarrationSegment] = [r[0] for r in results]
+    )
+    segments: list[NarrationSegment] = [result[0] for result in results]
     now = datetime.now(timezone.utc)
-    expected_count = max(len(merged_segments), len(raw_surviving_segments))
+    expected_count = len(merged_segments)
+
+    def _is_accepted_with_audio(
+        segment: NarrationSegment, pcm_bytes: bytes
+    ) -> bool:
+        return (
+            segment.status == NarrationSegmentStatus.ACCEPTED
+            and bool(pcm_bytes)
+            and segment.generated_duration_ms > 0
+            and segment.generated_duration_ms <= segment.available_duration_ms
+        )
+
     accepted_segments = [
-        (seg, pcm_bytes)
-        for seg, pcm_bytes in results
-        if seg.status == NarrationSegmentStatus.ACCEPTED and pcm_bytes and len(pcm_bytes) > 0 and seg.generated_duration_ms <= seg.available_duration_ms
+        (segment, pcm_bytes)
+        for segment, pcm_bytes in results
+        if _is_accepted_with_audio(segment, pcm_bytes)
     ]
     all_within = (
-        len(accepted_segments) == expected_count
-        and expected_count > 0
-        and len(prepared_segments) == len(raw_surviving_segments)
+        expected_count > 0
+        and len(results) == expected_count
+        and len(accepted_segments) == expected_count
+    )
+    source_media_ready = (
+        prod.source_media is not None
+        and prod.source_media.status == SourceMediaStatus.UPLOADED
     )
 
-    if not all_within or not prod.source_media or prod.source_media.status != SourceMediaStatus.UPLOADED:
+    if not all_within or not source_media_ready:
+        failure_details = [
+            {
+                **segment.model_dump(mode="json"),
+                "audio_bytes": len(pcm_bytes),
+            }
+            for segment, pcm_bytes in results
+            if not _is_accepted_with_audio(segment, pcm_bytes)
+        ]
+        logger.warning(
+            "Studio Voice generation incomplete",
+            extra={
+                "event_type": "studio_voice_generation_incomplete",
+                "production_id": prod.production_id,
+                "edl_id": edl.edl_id,
+                "edl_version": edl.version,
+                "script_id": corrected_script.transcript_id,
+                "voice": selected_voice,
+                "expected_count": expected_count,
+                "attempted_count": len(results),
+                "success_count": len(accepted_segments),
+                "failed_count": expected_count - len(accepted_segments),
+                "source_media_ready": source_media_ready,
+                "failures": failure_details,
+            },
+        )
         sv_result = StudioVoiceResult(
             production_id=prod.production_id,
             voice_id=selected_voice,
@@ -2524,7 +2727,7 @@ async def generate_studio_voice(
             artifact_id=art_id,
             production_id=prod.production_id,
             edl_id=edl.edl_id,
-            edl_version=edl.version + 1,
+            edl_version=edl.version,
             voice_id=selected_voice,
             artifact_type=ArtifactType.VOICEOVER_PREVIEW,
             status=ArtifactStatus.completed,

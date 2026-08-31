@@ -1,5 +1,10 @@
 """Tests for Studio Voice TTS fit loop, hard duration budgets, and retry logic."""
 
+import asyncio
+import base64
+import io
+import wave
+
 from datetime import datetime, timezone
 import pytest
 
@@ -125,6 +130,90 @@ async def test_tts_fit_loop_fails_gracefully_after_max_attempts():
     assert segment.attempts == 3
     # Hard timing rule: Never lengthen video!
     assert segment.available_duration_ms == 4000
+
+
+@pytest.mark.asyncio
+async def test_tts_fit_loop_converts_provider_exception_to_failed_segment_without_escaping_gather():
+    synthesizer = StudioVoiceSynthesizer()
+
+    async def mock_tts(text: str, voice_id: str) -> tuple[int, bytes]:
+        if text == "This provider call fails.":
+            raise RuntimeError("provider unavailable")
+        return 500, b"\x01\x00" * 12_000
+
+    rewrite_fn = AsyncMock()
+    failed_result, accepted_result = await asyncio.gather(
+        synthesizer.fit_narration_segment_with_audio(
+            segment_id="seg_provider_failure",
+            production_id="prod_test",
+            source_start_ms=0,
+            source_end_ms=1000,
+            available_duration_ms=1000,
+            original_text="This provider call fails.",
+            voice_id="Puck",
+            tts_fn=mock_tts,
+            rewrite_fn=rewrite_fn,
+        ),
+        synthesizer.fit_narration_segment_with_audio(
+            segment_id="seg_provider_success",
+            production_id="prod_test",
+            source_start_ms=1000,
+            source_end_ms=2000,
+            available_duration_ms=1000,
+            original_text="This provider call succeeds.",
+            voice_id="Puck",
+            tts_fn=mock_tts,
+            rewrite_fn=rewrite_fn,
+        ),
+    )
+
+    failed_segment, failed_audio = failed_result
+    accepted_segment, accepted_audio = accepted_result
+    assert failed_segment.status == NarrationSegmentStatus.FAILED
+    assert failed_segment.attempts == 1
+    assert failed_segment.generated_duration_ms == 0
+    assert failed_segment.model_dump(include={"error_code", "error_message"}) == {
+        "error_code": "TTS_PROVIDER_ERROR",
+        "error_message": "RuntimeError: provider unavailable",
+    }
+    assert failed_audio == b""
+    assert accepted_segment.status == NarrationSegmentStatus.ACCEPTED
+    assert accepted_audio == b"\x01\x00" * 12_000
+    rewrite_fn.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("narration_text", ["", " \t\n", "...?! —"])
+async def test_tts_fit_loop_rejects_empty_or_punctuation_only_narration_without_provider_call(
+    narration_text: str,
+):
+    synthesizer = StudioVoiceSynthesizer()
+    tts_fn = AsyncMock(return_value=(500, b"\x01\x00" * 12_000))
+    rewrite_fn = AsyncMock()
+
+    segment, audio = await synthesizer.fit_narration_segment_with_audio(
+        segment_id="seg_empty_narration",
+        production_id="prod_test",
+        source_start_ms=0,
+        source_end_ms=1000,
+        available_duration_ms=1000,
+        original_text=narration_text,
+        voice_id="Puck",
+        tts_fn=tts_fn,
+        rewrite_fn=rewrite_fn,
+    )
+
+    assert segment.status == NarrationSegmentStatus.FAILED
+    assert segment.attempts == 0
+    assert segment.generated_duration_ms == 0
+    assert segment.model_dump(include={"error_code", "error_message"}) == {
+        "error_code": "EMPTY_NARRATION_TEXT",
+        "error_message": "Narration text contains no speakable characters",
+    }
+    assert audio == b""
+    tts_fn.assert_not_awaited()
+    rewrite_fn.assert_not_awaited()
+
 @pytest.mark.asyncio
 async def test_tts_fit_loop_with_audio_returns_pcm_bytes():
     synthesizer = StudioVoiceSynthesizer()
@@ -211,6 +300,67 @@ async def test_google_genai_client_synthesize_studio_voice_targets_gemini_31_tts
         assert completed_call["model"] == "gemini-3.1-flash-tts-preview"
         assert completed_call["status"] == "success"
         assert completed_call["audio_duration_ms"] == 2000
+
+
+def _google_tts_response(audio_data: bytes | str) -> MagicMock:
+    part = MagicMock()
+    part.inline_data.data = audio_data
+    candidate = MagicMock()
+    candidate.content.parts = [part]
+    response = MagicMock()
+    response.candidates = [candidate]
+    return response
+
+
+@pytest.mark.asyncio
+async def test_google_genai_client_synthesize_studio_voice_decodes_base64_inline_data():
+    google_client = GoogleGenAIClient(project_id="test-proj", location="global")
+    expected_pcm = b"\x01\x00" * 24_000
+    mock_raw_client = MagicMock()
+    mock_raw_client.aio.models.generate_content = AsyncMock(
+        return_value=_google_tts_response(base64.b64encode(expected_pcm).decode("ascii"))
+    )
+    google_client._client = mock_raw_client
+
+    with patch("croviq_agents.client.log_ai_event"):
+        duration_ms, pcm_bytes = await google_client.synthesize_studio_voice(
+            text="Base64 narration",
+            voice_id="Aoede",
+            production_id="prod_base64",
+        )
+
+    assert pcm_bytes == expected_pcm
+    assert duration_ms == 1000
+
+
+@pytest.mark.asyncio
+async def test_google_genai_client_synthesize_studio_voice_strips_riff_wav_container_to_pcm():
+    google_client = GoogleGenAIClient(project_id="test-proj", location="global")
+    expected_pcm = b"\x01\x00" * 24_000
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(24_000)
+        wav_file.writeframes(expected_pcm)
+
+    mock_raw_client = MagicMock()
+    mock_raw_client.aio.models.generate_content = AsyncMock(
+        return_value=_google_tts_response(wav_buffer.getvalue())
+    )
+    google_client._client = mock_raw_client
+
+    with patch("croviq_agents.client.log_ai_event"):
+        duration_ms, pcm_bytes = await google_client.synthesize_studio_voice(
+            text="WAV narration",
+            voice_id="Aoede",
+            production_id="prod_wav",
+        )
+
+    assert pcm_bytes == expected_pcm
+    assert not pcm_bytes.startswith(b"RIFF")
+    assert len(pcm_bytes) == 24_000 * 2
+    assert duration_ms == 1000
 def test_voice_replication_capability_blocked_when_not_allowlisted():
     service = VoiceReplicationService(allowlist_enabled=False)
     config = service.check_replication_capability()
