@@ -2398,6 +2398,24 @@
               "type": "string",
               "title": "Production Id"
             }
+          },
+          {
+            "name": "preview_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional preview mode to filter review details (original, edited, voiceover, final_mix)",
+              "title": "Preview Mode"
+            },
+            "description": "Optional preview mode to filter review details (original, edited, voiceover, final_mix)"
           }
         ],
         "responses": {
@@ -2407,6 +2425,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReleaseReviewDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/productions/{production_id}/packaging/regenerate-reese": {
+      "post": {
+        "tags": ["Productions & Uploads"],
+        "summary": "Regenerate Title and Description with Reese",
+        "description": "Generate creator-grade YouTube title and description using Reese's deep video comprehension without overriding manual creator edits unless explicitly confirmed.",
+        "operationId": "regenerate_reese_metadata_route_api_productions__production_id__packaging_regenerate_reese_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "production_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Production Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackagingDetailResponse"
                 }
               }
             }
@@ -4743,6 +4807,70 @@
         "type": "object",
         "title": "CodeExecutionRequest"
       },
+      "ConfidenceScoreBreakdown": {
+        "properties": {
+          "confidence_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence Score",
+            "description": "Weighted confidence score (0.0 to 1.0)",
+            "default": 0.95
+          },
+          "transcript_coverage": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Transcript Coverage",
+            "description": "Transcript coverage factor (30% weight)",
+            "default": 1.0
+          },
+          "visual_coverage": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Visual Coverage",
+            "description": "Visual analysis coverage factor (25% weight)",
+            "default": 1.0
+          },
+          "audio_coverage": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Audio Coverage",
+            "description": "Audio inspection coverage factor (25% weight)",
+            "default": 1.0
+          },
+          "checks_completed": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Checks Completed",
+            "description": "Deterministic QC completion factor (20% weight)",
+            "default": 1.0
+          },
+          "missing_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Evidence",
+            "description": "Missing or incomplete evidence flags"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence",
+            "description": "Contributing evidence sources"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConfidenceScoreBreakdown",
+        "description": "Reliable evidence coverage across modalities and check completion."
+      },
       "CoordinateSpace": {
         "type": "string",
         "enum": ["SOURCE", "EDITED"],
@@ -6515,6 +6643,72 @@
         "title": "GenerateStudioVoiceRequest",
         "description": "Optional payload for requesting Studio Voice narration generation."
       },
+      "GrammarScoreBreakdown": {
+        "properties": {
+          "grammar_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Grammar Score",
+            "description": "Normalized grammar score percentage",
+            "default": 100.0
+          },
+          "analyzed_source": {
+            "type": "string",
+            "title": "Analyzed Source",
+            "description": "Transcript source projection inspected",
+            "default": "raw transcript"
+          },
+          "word_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Word Count",
+            "description": "Total words in evaluated transcript",
+            "default": 0
+          },
+          "major_errors_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Major Errors Count",
+            "description": "Count of major grammar/broken sentence errors (-12 pts base)",
+            "default": 0
+          },
+          "moderate_errors_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Moderate Errors Count",
+            "description": "Count of moderate grammar/repetition errors (-6 pts base)",
+            "default": 0
+          },
+          "minor_errors_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Minor Errors Count",
+            "description": "Count of minor filler/hesitation errors (-2 pts base)",
+            "default": 0
+          },
+          "deductions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deductions",
+            "description": "Itemized grammar deductions"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence",
+            "description": "Evidence references in transcript"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GrammarScoreBreakdown",
+        "description": "Structured grammar findings, error counts, source basis, and normalized score."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -8264,6 +8458,78 @@
         "title": "PublishRequest",
         "description": "Creator-confirmed request payload to trigger YouTube publication."
       },
+      "QualityScoreBreakdown": {
+        "properties": {
+          "narrative_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Narrative Score",
+            "description": "Narrative & editing continuity score (25% weight)",
+            "default": 100.0
+          },
+          "audio_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Audio Score",
+            "description": "Audio levels, clarity, and sync score (20% weight)",
+            "default": 100.0
+          },
+          "caption_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Caption Score",
+            "description": "Caption & transcript alignment score (20% weight)",
+            "default": 100.0
+          },
+          "visual_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Visual Score",
+            "description": "Visual & media continuity score (15% weight)",
+            "default": 100.0
+          },
+          "factual_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Factual Score",
+            "description": "Technical & factual consistency score (20% weight)",
+            "default": 100.0
+          },
+          "quality_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Quality Score",
+            "description": "Weighted composite quality percentage",
+            "default": 100.0
+          },
+          "deductions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deductions",
+            "description": "Itemized rationale for point deductions"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence",
+            "description": "Observed media and transcript evidence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "QualityScoreBreakdown",
+        "description": "Component scores, rubric weights, deductions, and evidence explaining the Quality Score."
+      },
       "RecentVideoPerformance": {
         "properties": {
           "video_id": {
@@ -8406,6 +8672,43 @@
           "net_subscribers"
         ],
         "title": "RecentVideoPerformance"
+      },
+      "ReeseMetadataRecommendation": {
+        "properties": {
+          "recommended_title": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 5,
+            "title": "Recommended Title",
+            "description": "Creator-grade YouTube video title"
+          },
+          "recommended_description": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 20,
+            "title": "Recommended Description",
+            "description": "Creator-grade YouTube video description with summary and chapters"
+          },
+          "reasoning": {
+            "type": "string",
+            "title": "Reasoning",
+            "description": "Reese's strategic reasoning for title and description",
+            "default": ""
+          },
+          "technical_topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Technical Topics",
+            "description": "Identified core technical topics"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["recommended_title", "recommended_description"],
+        "title": "ReeseMetadataRecommendation",
+        "description": "Reese-generated YouTube title and description based on deep video content understanding."
       },
       "ReleaseChecklist": {
         "properties": {
@@ -8582,7 +8885,13 @@
           "THUMBNAIL_MISMATCH",
           "PACKAGING_INCONSISTENCY",
           "MISSING_CONTENT",
-          "CONTEXT_LOSS"
+          "CONTEXT_LOSS",
+          "NARRATIVE_PACING",
+          "GRAMMAR_ERROR",
+          "VOICEOVER_LEAKAGE",
+          "PRONUNCIATION",
+          "MUSIC_BALANCE",
+          "DUCKING_ISSUE"
         ],
         "title": "ReleaseIssueType",
         "description": "Categorized quality and factual issues evaluated by Iris."
@@ -8647,6 +8956,66 @@
             "title": "Confidence",
             "description": "Iris assessment confidence score",
             "default": 0.95
+          },
+          "quality_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Quality Score",
+            "description": "Overall quality score percentage (0-100)",
+            "default": 82.0
+          },
+          "grammar_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Grammar Score",
+            "description": "Overall grammar score percentage (0-100)",
+            "default": 91.0
+          },
+          "quality_breakdown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QualityScoreBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explainable Quality score derivation"
+          },
+          "grammar_breakdown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GrammarScoreBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explainable Grammar score derivation"
+          },
+          "confidence_breakdown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfidenceScoreBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explainable Confidence score derivation"
+          },
+          "reese_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReeseMetadataRecommendation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Reese-generated YouTube title and description"
           },
           "created_at": {
             "type": "string",
@@ -8889,6 +9258,48 @@
             ],
             "title": "Release Fingerprint",
             "description": "SHA-256 cryptographic release fingerprint locking immutable pipeline inputs"
+          },
+          "is_stale": {
+            "type": "boolean",
+            "title": "Is Stale",
+            "description": "Whether the underlying media artifact or edits changed since this review was generated",
+            "default": false
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Score",
+            "description": "Composite Quality score (0-100%)"
+          },
+          "grammar_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grammar Score",
+            "description": "Composite Grammar score (0-100%)"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score",
+            "description": "Composite Confidence score (0-100%)"
           }
         },
         "additionalProperties": false,

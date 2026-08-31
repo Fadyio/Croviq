@@ -390,6 +390,14 @@ export interface paths {
       };
     };
   };
+  "/api/productions/{production_id}/packaging/regenerate-reese": {
+    post: {
+      responses: {
+        200: components["schemas"]["PackagingDetailResponse"];
+        422: components["schemas"]["HTTPValidationError"];
+      };
+    };
+  };
   "/api/productions/{production_id}/publish/prep": {
     get: {
       responses: {
@@ -837,6 +845,22 @@ export interface components {
     CodeExecutionRequest: {
       analysis_goal?: string;
     };
+    ConfidenceScoreBreakdown: {
+      /** Weighted confidence score (0.0 to 1.0) */
+      confidence_score?: number;
+      /** Transcript coverage factor (30% weight) */
+      transcript_coverage?: number;
+      /** Visual analysis coverage factor (25% weight) */
+      visual_coverage?: number;
+      /** Audio inspection coverage factor (25% weight) */
+      audio_coverage?: number;
+      /** Deterministic QC completion factor (20% weight) */
+      checks_completed?: number;
+      /** Missing or incomplete evidence flags */
+      missing_evidence?: string[];
+      /** Contributing evidence sources */
+      evidence?: string[];
+    };
     CoordinateSpace: "SOURCE" | "EDITED";
     CorrectedScriptResponse: {
       /** Unique production identifier */
@@ -1247,6 +1271,24 @@ export interface components {
       /** Optional override Studio Voice catalog voice identifier */
       voice_id?: string | null;
     };
+    GrammarScoreBreakdown: {
+      /** Normalized grammar score percentage */
+      grammar_score?: number;
+      /** Transcript source projection inspected */
+      analyzed_source?: string;
+      /** Total words in evaluated transcript */
+      word_count?: number;
+      /** Count of major grammar/broken sentence errors (-12 pts base) */
+      major_errors_count?: number;
+      /** Count of moderate grammar/repetition errors (-6 pts base) */
+      moderate_errors_count?: number;
+      /** Count of minor filler/hesitation errors (-2 pts base) */
+      minor_errors_count?: number;
+      /** Itemized grammar deductions */
+      deductions?: string[];
+      /** Evidence references in transcript */
+      evidence?: string[];
+    };
     HTTPValidationError: {
       detail?: components["schemas"]["ValidationError"][];
     };
@@ -1627,6 +1669,24 @@ export interface components {
       /** Selected timeline millisecond offset for extracting thumbnail still image */
       thumbnail_frame_ms?: number | null;
     };
+    QualityScoreBreakdown: {
+      /** Narrative & editing continuity score (25% weight) */
+      narrative_score?: number;
+      /** Audio levels, clarity, and sync score (20% weight) */
+      audio_score?: number;
+      /** Caption & transcript alignment score (20% weight) */
+      caption_score?: number;
+      /** Visual & media continuity score (15% weight) */
+      visual_score?: number;
+      /** Technical & factual consistency score (20% weight) */
+      factual_score?: number;
+      /** Weighted composite quality percentage */
+      quality_score?: number;
+      /** Itemized rationale for point deductions */
+      deductions?: string[];
+      /** Observed media and transcript evidence */
+      evidence?: string[];
+    };
     RecentVideoPerformance: {
       video_id: string;
       title: string;
@@ -1645,6 +1705,16 @@ export interface components {
       is_latest?: boolean;
       alex_interpretation?: string | null;
       alex_next_action?: string | null;
+    };
+    ReeseMetadataRecommendation: {
+      /** Creator-grade YouTube video title */
+      recommended_title: string;
+      /** Creator-grade YouTube video description with summary and chapters */
+      recommended_description: string;
+      /** Reese's strategic reasoning for title and description */
+      reasoning?: string;
+      /** Identified core technical topics */
+      technical_topics?: string[];
     };
     ReleaseChecklist: {
       /** Master video continuity and encoding status */
@@ -1704,7 +1774,13 @@ export interface components {
       | "THUMBNAIL_MISMATCH"
       | "PACKAGING_INCONSISTENCY"
       | "MISSING_CONTENT"
-      | "CONTEXT_LOSS";
+      | "CONTEXT_LOSS"
+      | "NARRATIVE_PACING"
+      | "GRAMMAR_ERROR"
+      | "VOICEOVER_LEAKAGE"
+      | "PRONUNCIATION"
+      | "MUSIC_BALANCE"
+      | "DUCKING_ISSUE";
     ReleaseReview: {
       /** Unique review identifier */
       review_id: string;
@@ -1724,6 +1800,18 @@ export interface components {
       approved_for_release?: boolean;
       /** Iris assessment confidence score */
       confidence?: number;
+      /** Overall quality score percentage (0-100) */
+      quality_score?: number;
+      /** Overall grammar score percentage (0-100) */
+      grammar_score?: number;
+      /** Explainable Quality score derivation */
+      quality_breakdown?: components["schemas"]["QualityScoreBreakdown"] | null;
+      /** Explainable Grammar score derivation */
+      grammar_breakdown?: components["schemas"]["GrammarScoreBreakdown"] | null;
+      /** Explainable Confidence score derivation */
+      confidence_breakdown?: components["schemas"]["ConfidenceScoreBreakdown"] | null;
+      /** Reese-generated YouTube title and description */
+      reese_metadata?: components["schemas"]["ReeseMetadataRecommendation"] | null;
       /** UTC timestamp of evaluation generation */
       created_at?: string;
       /** Reviewed preview mode: original | edited | voiceover | final_mix */
@@ -1752,18 +1840,6 @@ export interface components {
       claim_verifications?: components["schemas"]["ClaimVerification"][];
       /** Evaluations of thumbnail concepts */
       thumbnail_evaluations?: components["schemas"]["ThumbnailEvaluation"][];
-      /** Overall quality score percentage (0-100) */
-      quality_score?: number;
-      /** Overall grammar score percentage (0-100) */
-      grammar_score?: number;
-      /** Explainable Quality score derivation */
-      quality_breakdown?: components["schemas"]["QualityScoreBreakdown"] | null;
-      /** Explainable Grammar score derivation */
-      grammar_breakdown?: components["schemas"]["GrammarScoreBreakdown"] | null;
-      /** Explainable Confidence score derivation */
-      confidence_breakdown?: components["schemas"]["ConfidenceScoreBreakdown"] | null;
-      /** Reese-generated YouTube title and description */
-      reese_metadata?: components["schemas"]["ReeseMetadataRecommendation"] | null;
     };
     ReleaseReviewDetailResponse: {
       /** Unique production identifier */
@@ -1796,41 +1872,6 @@ export interface components {
       grammar_score?: number | null;
       /** Composite Confidence score (0-100%) */
       confidence_score?: number | null;
-    };
-    QualityScoreBreakdown: {
-      narrative_score: number;
-      audio_score: number;
-      caption_score: number;
-      visual_score: number;
-      factual_score: number;
-      quality_score: number;
-      deductions?: string[];
-      evidence?: string[];
-    };
-    GrammarScoreBreakdown: {
-      grammar_score: number;
-      analyzed_source: string;
-      word_count: number;
-      major_errors_count: number;
-      moderate_errors_count: number;
-      minor_errors_count: number;
-      deductions?: string[];
-      evidence?: string[];
-    };
-    ConfidenceScoreBreakdown: {
-      confidence_score: number;
-      transcript_coverage: number;
-      visual_coverage: number;
-      audio_coverage: number;
-      checks_completed: number;
-      missing_evidence?: string[];
-      evidence?: string[];
-    };
-    ReeseMetadataRecommendation: {
-      recommended_title: string;
-      recommended_description: string;
-      reasoning?: string;
-      technical_topics?: string[];
     };
     ReleaseVerdict: "PASS" | "FIX_REQUIRED" | "MANUAL_REVIEW";
     RenderArtifactResponse: {

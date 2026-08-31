@@ -333,68 +333,76 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
           <span>{errorMessage}</span>
         </div>
       )}
-      {effectiveVoices.find((v) => v.voice_id.toLowerCase() === selectedVoice.toLowerCase()) && (() => {
-        const selectedVoiceObj = effectiveVoices.find((v) => v.voice_id.toLowerCase() === selectedVoice.toLowerCase())!;
-        return (
-          <div
-            className="p-3 rounded-xl bg-surface-2 border border-border-subtle space-y-2.5"
-            data-testid="selected-voice-card"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-text-primary">
-                  {selectedVoiceObj.display_name}
-                </span>
-                <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-surface-3 text-text-muted font-mono">
-                  {selectedVoiceObj.gender}
-                </span>
-                <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-primary/10 text-primary font-mono font-semibold">
-                  Selected
-                </span>
-                <span data-testid="voiceover-status-badge" className="text-[10px] font-medium text-emerald-400">
-                  {voiceoverStatus === "ready" ? "Ready" : voiceoverStatus}
-                </span>
+      {effectiveVoices.find((v) => v.voice_id.toLowerCase() === selectedVoice.toLowerCase()) &&
+        (() => {
+          const selectedVoiceObj = effectiveVoices.find(
+            (v) => v.voice_id.toLowerCase() === selectedVoice.toLowerCase(),
+          )!;
+          return (
+            <div
+              className="p-3 rounded-xl bg-surface-2 border border-border-subtle space-y-2.5"
+              data-testid="selected-voice-card"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-text-primary">
+                    {selectedVoiceObj.display_name}
+                  </span>
+                  <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-surface-3 text-text-muted font-mono">
+                    {selectedVoiceObj.gender}
+                  </span>
+                  <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-primary/10 text-primary font-mono font-semibold">
+                    Selected
+                  </span>
+                  <span
+                    data-testid="voiceover-status-badge"
+                    className="text-[10px] font-medium text-emerald-400"
+                  >
+                    {voiceoverStatus === "ready" ? "Ready" : voiceoverStatus}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => handleAudition(e, selectedVoiceObj.voice_id)}
+                  disabled={loadingAuditionVoiceId === selectedVoiceObj.voice_id}
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-surface-3 hover:bg-surface-1 text-text-secondary hover:text-text-primary text-[11px] font-medium border border-border-subtle transition-colors cursor-pointer"
+                  data-testid="btn-play-selected-preview"
+                  title="Audition sample phrase"
+                >
+                  {playingVoiceId === selectedVoiceObj.voice_id ? (
+                    <Square className="w-3 h-3 fill-current" />
+                  ) : (
+                    <Volume2 className="w-3 h-3" />
+                  )}
+                  <span>
+                    {playingVoiceId === selectedVoiceObj.voice_id ? "Playing…" : "Audition"}
+                  </span>
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={(e) => handleAudition(e, selectedVoiceObj.voice_id)}
-                disabled={loadingAuditionVoiceId === selectedVoiceObj.voice_id}
-                className="flex items-center gap-1 px-2 py-1 rounded bg-surface-3 hover:bg-surface-1 text-text-secondary hover:text-text-primary text-[11px] font-medium border border-border-subtle transition-colors cursor-pointer"
-                data-testid="btn-play-selected-preview"
-                title="Audition sample phrase"
-              >
-                {playingVoiceId === selectedVoiceObj.voice_id ? (
-                  <Square className="w-3 h-3 fill-current" />
-                ) : (
-                  <Volume2 className="w-3 h-3" />
-                )}
-                <span>{playingVoiceId === selectedVoiceObj.voice_id ? "Playing…" : "Audition"}</span>
-              </button>
+
+              <p className="text-[11px] text-text-secondary leading-relaxed italic bg-surface-1/60 p-2 rounded border border-border-subtle/50">
+                "{FIXED_VOICE_SAMPLE_TEXT}"
+              </p>
+
+              {onGenerateVoiceover && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectAndRegenerate(selectedVoice)}
+                  disabled={isGeneratingVoiceover}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                  data-testid="btn-generate-voiceover"
+                >
+                  {isGeneratingVoiceover ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Mic className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isGeneratingVoiceover ? "Generating…" : "Regenerate Voiceover"}</span>
+                </button>
+              )}
             </div>
-
-            <p className="text-[11px] text-text-secondary leading-relaxed italic bg-surface-1/60 p-2 rounded border border-border-subtle/50">
-              "{FIXED_VOICE_SAMPLE_TEXT}"
-            </p>
-
-            {onGenerateVoiceover && (
-              <button
-                type="button"
-                onClick={() => handleSelectAndRegenerate(selectedVoice)}
-                disabled={isGeneratingVoiceover}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                data-testid="btn-generate-voiceover"
-              >
-                {isGeneratingVoiceover ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Mic className="w-3.5 h-3.5" />
-                )}
-                <span>{isGeneratingVoiceover ? "Generating…" : "Regenerate Voiceover"}</span>
-              </button>
-            )}
-          </div>
-        );
-      })()}
+          );
+        })()}
 
       {effectiveRenderedVoice &&
         selectedVoice &&

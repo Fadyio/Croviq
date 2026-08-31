@@ -710,7 +710,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [loadPersistedData, productionId, beginProductionRun, setPreviewMode]);
+  }, [loadPersistedData, productionId, beginProductionRun]);
 
   const getAuthToken = useCallback(async (): Promise<string> => {
     if (firebaseUser) {

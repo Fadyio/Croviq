@@ -205,7 +205,10 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       if (res.ok) {
         const data: PackagingDetailResponse = await res.json();
         setPackagingData(data);
-        setTitleInput(data.effective_title || "Deploy to Google Cloud with GitHub Actions & Workload Identity Federation");
+        setTitleInput(
+          data.effective_title ||
+            "Deploy to Google Cloud with GitHub Actions & Workload Identity Federation",
+        );
         setDescriptionInput(data.effective_description || "");
       }
     } catch (err: unknown) {
@@ -281,7 +284,12 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
-      await Promise.all([loadQA(reviewMode), loadPackaging(), loadMediaContext(), loadPublishStatus()]);
+      await Promise.all([
+        loadQA(reviewMode),
+        loadPackaging(),
+        loadMediaContext(),
+        loadPublishStatus(),
+      ]);
       setIsLoading(false);
     };
     init();
@@ -379,16 +387,19 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     setErrorMessage(null);
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(
-        `/api/productions/${productionId}/packaging/regenerate-reese`,
-        { method: "POST", headers },
-      );
+      const res = await fetch(`/api/productions/${productionId}/packaging/regenerate-reese`, {
+        method: "POST",
+        headers,
+      });
       if (!res.ok) {
         throw new Error("Failed to regenerate metadata with Iris");
       }
       const updated: PackagingDetailResponse = await res.json();
       setPackagingData(updated);
-      setTitleInput(updated.effective_title || "Deploy to Google Cloud with GitHub Actions & Workload Identity Federation");
+      setTitleInput(
+        updated.effective_title ||
+          "Deploy to Google Cloud with GitHub Actions & Workload Identity Federation",
+      );
       setDescriptionInput(updated.effective_description || "");
       setSaveMessage("Iris generated new title and description from video content.");
       setTimeout(() => setSaveMessage(null), 4000);
@@ -563,8 +574,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
     // final_mix
     const fmArt = renders.find(
       (r) =>
-        ((r.artifact_type as string) === "FINAL_MIX" ||
-          (r.artifact_type as string) === "MASTER") &&
+        ((r.artifact_type as string) === "FINAL_MIX" || (r.artifact_type as string) === "MASTER") &&
         r.status === "completed",
     );
     return fmArt?.playback_url || qaData?.master_url || null;
@@ -642,9 +652,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
           i.message.toLowerCase().includes("silence") ||
           i.message.toLowerCase().includes("pacing"),
       );
-      const topHigh = narrIssues.find(
-        (i) => i.severity === "BLOCKING" || i.severity === "HIGH",
-      );
+      const topHigh = narrIssues.find((i) => i.severity === "BLOCKING" || i.severity === "HIGH");
       const hasMedium = narrIssues.some((i) => i.severity === "MEDIUM");
       if (topHigh) {
         const durSec =
@@ -729,8 +737,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
       const hasBlockingOrHigh =
         factIssues.some((i) => i.severity === "BLOCKING" || i.severity === "HIGH") ||
         hasContradicted;
-      const hasMedium =
-        factIssues.some((i) => i.severity === "MEDIUM") || hasUncertain;
+      const hasMedium = factIssues.some((i) => i.severity === "MEDIUM") || hasUncertain;
 
       if (hasBlockingOrHigh) return { state: "Failed", detail: "Factual Error" };
       if (hasMedium) return { state: "Warning", detail: "Unable to verify" };
@@ -745,9 +752,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
           i.message.toLowerCase().includes("dead air") ||
           i.message.toLowerCase().includes("silence"),
       );
-      const topHigh = paceIssues.find(
-        (i) => i.severity === "BLOCKING" || i.severity === "HIGH",
-      );
+      const topHigh = paceIssues.find((i) => i.severity === "BLOCKING" || i.severity === "HIGH");
       const hasMedium = paceIssues.some((i) => i.severity === "MEDIUM");
       if (topHigh) {
         const durSec =
@@ -775,8 +780,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
         (i) => i.severity === "BLOCKING" || i.severity === "HIGH",
       );
       const hasMedium = voIssues.some((i) => i.severity === "MEDIUM");
-      if (hasBlockingOrHigh)
-        return { state: "Failed", detail: "Creator audio leak" };
+      if (hasBlockingOrHigh) return { state: "Failed", detail: "Creator audio leak" };
       if (hasMedium) return { state: "Warning", detail: "Pronunciation" };
       const voiceName = review.reviewed_voice_id || "Studio";
       return { state: "Passed", detail: `${voiceName} Voice Verified` };
@@ -885,9 +889,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
 
           <span className="text-border-strong select-none font-light">/</span>
 
-          <span className="text-xs font-bold text-text-primary truncate">
-            Quality Control
-          </span>
+          <span className="text-xs font-bold text-text-primary truncate">Quality Control</span>
         </div>
 
         {/* Header Right Actions */}
@@ -1329,9 +1331,7 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                     />
                   </button>
                   <div>
-                    <h3 className="text-sm font-bold text-text-primary">
-                      Iris — Quality Control
-                    </h3>
+                    <h3 className="text-sm font-bold text-text-primary">Iris — Quality Control</h3>
                     <div className="flex items-center gap-2 mt-0.5 text-[11px] text-text-secondary">
                       <span data-testid="iris-review-mode-label">
                         Reviewing:{" "}
@@ -1345,7 +1345,11 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                                 : "Final Mix"}
                         </span>
                       </span>
-                      <span data-testid="iris-reviewed-artifact-id" className="hidden" aria-hidden="true">
+                      <span
+                        data-testid="iris-reviewed-artifact-id"
+                        className="hidden"
+                        aria-hidden="true"
+                      >
                         {reviewedArtifactId}
                       </span>
                     </div>
@@ -1541,7 +1545,10 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                 </div>
 
                 {issuesList.length > 0 ? (
-                  <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1" data-testid="qa-issues-list">
+                  <div
+                    className="space-y-3 max-h-[380px] overflow-y-auto pr-1"
+                    data-testid="qa-issues-list"
+                  >
                     {issuesList.map((issue, idx) => {
                       const memoryKey = `iss_${issue.issue_id || idx}`;
                       const isMemorySaved = savedMemoryIds.has(memoryKey);
@@ -1573,17 +1580,18 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                             </div>
 
                             {/* Clickable timecode seek tag */}
-                            {issue.source_start_ms !== null && issue.source_start_ms !== undefined && (
-                              <button
-                                type="button"
-                                onClick={() => handleSeekToIssue(issue)}
-                                className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 hover:bg-primary/20 hover:text-primary transition-colors cursor-pointer text-text-secondary"
-                                title="Jump video to issue timestamp"
-                              >
-                                <Play className="size-2.5" />
-                                <span>{formatMs(issue.source_start_ms)}</span>
-                              </button>
-                            )}
+                            {issue.source_start_ms !== null &&
+                              issue.source_start_ms !== undefined && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSeekToIssue(issue)}
+                                  className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-surface-3 hover:bg-primary/20 hover:text-primary transition-colors cursor-pointer text-text-secondary"
+                                  title="Jump video to issue timestamp"
+                                >
+                                  <Play className="size-2.5" />
+                                  <span>{formatMs(issue.source_start_ms)}</span>
+                                </button>
+                              )}
                           </div>
 
                           <p className="text-xs text-text-primary leading-relaxed">
@@ -1878,7 +1886,8 @@ export const ReleasePage: React.FC<ReleasePageProps> = ({
                   <div className="flex justify-between py-1 border-b border-border-subtle/50">
                     <span>Transcript Coverage (30% weight)</span>
                     <span className="font-mono font-bold text-text-primary">
-                      {Math.round((review?.confidence_breakdown?.transcript_coverage ?? 1.0) * 100)}%
+                      {Math.round((review?.confidence_breakdown?.transcript_coverage ?? 1.0) * 100)}
+                      %
                     </span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-border-subtle/50">
