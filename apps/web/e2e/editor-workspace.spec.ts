@@ -165,6 +165,19 @@ interface MockEditorOptions {
   completeEditorialAfterGets?: number;
   analyzeDelayMs?: number;
   requests?: string[];
+  apiVoiceover?: {
+    available: boolean;
+    artifact_id: string;
+    edl_id: string;
+    url: string;
+    duration_ms: number;
+    status: "ready" | "generating" | "incomplete" | "stale" | "failed" | "unavailable";
+    voice_id?: string;
+  };
+  includeVoiceoverRender?: boolean;
+  includeFinalMixRender?: boolean;
+  studioVoicePostResponse?: unknown;
+  voiceSettingsPutGate?: Promise<void>;
 }
 const delay = (milliseconds: number): Promise<void> => {
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -263,6 +276,7 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
     }
     if (url.includes("/voice") && method === "PUT") {
       const body = route.request().postDataJSON() || {};
+      await options.voiceSettingsPutGate;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -388,6 +402,7 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
         playback_url:
           "https://storage.googleapis.com/croviq-media-raw/mock-signed-video.mp4?token=mock_v4_signature",
         expires_at: "2026-08-26T01:00:00Z",
+        ...(options.apiVoiceover ? { voiceover: options.apiVoiceover } : {}),
       }),
     });
   });
@@ -765,42 +780,50 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
             created_at: "2026-08-26T00:02:45Z",
             completed_at: "2026-08-26T00:02:50Z",
           },
-          {
-            artifact_id: "art_vo_001",
-            production_id: FAIRPHONE_PRODUCTION_ID,
-            edl_id: activeEdlAny.edl_id || defaultFairphoneEdl.edl_id,
-            artifact_type: "VOICEOVER_PREVIEW",
-            status: "completed",
-            duration_ms: computedPreviewDur,
-            size_bytes: 1542000,
-            width: 1280,
-            height: 720,
-            frame_rate: 30.0,
-            video_codec: "h264",
-            audio_codec: "aac",
-            playback_url: "https://storage.googleapis.com/fake-vo.mp4",
-            playback_expires_at: "2026-08-27T00:00:00Z",
-            created_at: "2026-08-26T00:02:45Z",
-            completed_at: "2026-08-26T00:02:50Z",
-          },
-          {
-            artifact_id: "art_mix_001",
-            production_id: FAIRPHONE_PRODUCTION_ID,
-            edl_id: activeEdlAny.edl_id || defaultFairphoneEdl.edl_id,
-            artifact_type: "FINAL_MIX",
-            status: "completed",
-            duration_ms: computedPreviewDur,
-            size_bytes: 1542000,
-            width: 1280,
-            height: 720,
-            frame_rate: 30.0,
-            video_codec: "h264",
-            audio_codec: "aac",
-            playback_url: "https://storage.googleapis.com/fake-mix.mp4",
-            playback_expires_at: "2026-08-27T00:00:00Z",
-            created_at: "2026-08-26T00:02:45Z",
-            completed_at: "2026-08-26T00:02:50Z",
-          },
+          ...(options.includeVoiceoverRender === false
+            ? []
+            : [
+                {
+                  artifact_id: "art_vo_001",
+                  production_id: FAIRPHONE_PRODUCTION_ID,
+                  edl_id: activeEdlAny.edl_id || defaultFairphoneEdl.edl_id,
+                  artifact_type: "VOICEOVER_PREVIEW",
+                  status: "completed",
+                  duration_ms: computedPreviewDur,
+                  size_bytes: 1542000,
+                  width: 1280,
+                  height: 720,
+                  frame_rate: 30.0,
+                  video_codec: "h264",
+                  audio_codec: "aac",
+                  playback_url: "https://storage.googleapis.com/fake-vo.mp4",
+                  playback_expires_at: "2026-08-27T00:00:00Z",
+                  created_at: "2026-08-26T00:02:45Z",
+                  completed_at: "2026-08-26T00:02:50Z",
+                },
+              ]),
+          ...(options.includeFinalMixRender === false
+            ? []
+            : [
+                {
+                  artifact_id: "art_mix_001",
+                  production_id: FAIRPHONE_PRODUCTION_ID,
+                  edl_id: activeEdlAny.edl_id || defaultFairphoneEdl.edl_id,
+                  artifact_type: "FINAL_MIX",
+                  status: "completed",
+                  duration_ms: computedPreviewDur,
+                  size_bytes: 1542000,
+                  width: 1280,
+                  height: 720,
+                  frame_rate: 30.0,
+                  video_codec: "h264",
+                  audio_codec: "aac",
+                  playback_url: "https://storage.googleapis.com/fake-mix.mp4",
+                  playback_expires_at: "2026-08-27T00:00:00Z",
+                  created_at: "2026-08-26T00:02:45Z",
+                  completed_at: "2026-08-26T00:02:50Z",
+                },
+              ]),
         ],
       }),
     });
@@ -908,32 +931,34 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          production_id: FAIRPHONE_PRODUCTION_ID,
-          result: {
+        body: JSON.stringify(
+          options.studioVoicePostResponse ?? {
             production_id: FAIRPHONE_PRODUCTION_ID,
-            voice_id: "Charon",
-            total_segments: 2,
-            accepted_segments: 2,
-            all_within_budget: true,
-            status: "completed",
-            segments: [
-              {
-                segment_id: "vo_01",
-                source_start_ms: 0,
-                source_end_ms: 12540,
-                original_text: "The Fairphone 6 Plus is an even snazzier version...",
-                rewritten_text: "The Fairphone 6 Plus is an upgraded version with more memory.",
-                voice_id: "Charon",
-                generated_duration_ms: 11200,
-                status: "accepted",
-              },
-            ],
-            created_at: "2026-08-26T00:02:40Z",
-            updated_at: "2026-08-26T00:02:45Z",
+            result: {
+              production_id: FAIRPHONE_PRODUCTION_ID,
+              voice_id: "Charon",
+              total_segments: 2,
+              accepted_segments: 2,
+              all_within_budget: true,
+              status: "completed",
+              segments: [
+                {
+                  segment_id: "vo_01",
+                  source_start_ms: 0,
+                  source_end_ms: 12540,
+                  original_text: "The Fairphone 6 Plus is an even snazzier version...",
+                  rewritten_text: "The Fairphone 6 Plus is an upgraded version with more memory.",
+                  voice_id: "Charon",
+                  generated_duration_ms: 11200,
+                  status: "accepted",
+                },
+              ],
+              created_at: "2026-08-26T00:02:40Z",
+              updated_at: "2026-08-26T00:02:45Z",
+            },
+            studio_voice_preview_url: "https://storage.googleapis.com/fake-voice-preview.mp4",
           },
-          studio_voice_preview_url: "https://storage.googleapis.com/fake-voice-preview.mp4",
-        }),
+        ),
       });
     } else {
       await route.fulfill({
@@ -952,28 +977,31 @@ const mockEditorApis = async (page: Page, options: MockEditorOptions = {}) => {
     }
   });
 
-  await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/music/generate`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        edl: {
-          ...defaultFairphoneEdl,
-          background_music: {
-            style: "Minimal modern technology documentary underscore",
-            model_id: "lyria-3-pro-preview",
-            prompt: "Minimal modern technology documentary underscore, calm, focused, no vocals.",
-            volume_db: -24.0,
-            ducking_db: -14.0,
-            target_lufs: -32.0,
-            music_gcs_object: "workspaces/ws_demo/music/lyria_score.wav",
-            is_muted: false,
+  await page.route(
+    `**/api/productions/${FAIRPHONE_PRODUCTION_ID}/music/generate`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          edl: {
+            ...defaultFairphoneEdl,
+            background_music: {
+              style: "Minimal modern technology documentary underscore",
+              model_id: "lyria-3-pro-preview",
+              prompt: "Minimal modern technology documentary underscore, calm, focused, no vocals.",
+              volume_db: -24.0,
+              ducking_db: -14.0,
+              target_lufs: -32.0,
+              music_gcs_object: "workspaces/ws_demo/music/lyria_score.wav",
+              is_muted: false,
+            },
           },
-        },
-        keep_segments: [[0, 113824]],
-      }),
-    });
-  });
+          keep_segments: [[0, 113824]],
+        }),
+      });
+    },
+  );
 
   await page.route(`**/api/productions/${FAIRPHONE_PRODUCTION_ID}/music`, async (route) => {
     if (route.request().method() === "DELETE") {
@@ -1778,6 +1806,190 @@ test.describe("Editor Workspace (Issue #28)", () => {
     await page.getByTestId("btn-generate-voiceover").click();
   });
 
+  test("BUG 19: selects a URL-bearing API voiceover only when it is ready for the active EDL", async ({
+    page,
+  }) => {
+    const voiceoverUrl = "https://storage.googleapis.com/fake-preview.mp4?voiceover=contract";
+    await loginAndNavigateToEditor(page, {
+      apiVoiceover: {
+        available: true,
+        artifact_id: "art_api_vo_ready",
+        edl_id: "edl_6324ea33234a",
+        url: voiceoverUrl,
+        duration_ms: 113824,
+        status: "ready",
+        voice_id: "Puck",
+      },
+      includeVoiceoverRender: false,
+      includeFinalMixRender: false,
+    });
+
+    await expect(page.getByTestId("preview-toggle-studio-voice")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByTestId("video-element")).toHaveAttribute("src", voiceoverUrl);
+  });
+
+  for (const unavailableVoiceover of [
+    {
+      name: "ready artifact from a stale EDL",
+      status: "ready",
+      edlId: "edl_superseded",
+    },
+    {
+      name: "stale artifact from the active EDL",
+      status: "stale",
+      edlId: "edl_6324ea33234a",
+    },
+    {
+      name: "incomplete artifact from the active EDL",
+      status: "incomplete",
+      edlId: "edl_6324ea33234a",
+    },
+  ] as const) {
+    test(`BUG 19: keeps ${unavailableVoiceover.name} unavailable across refresh`, async ({
+      page,
+    }) => {
+      const voiceoverUrl = `https://storage.googleapis.com/fake-preview.mp4?voiceover=${unavailableVoiceover.status}`;
+      await loginAndNavigateToEditor(page, {
+        apiVoiceover: {
+          available: true,
+          artifact_id: `art_api_vo_${unavailableVoiceover.status}`,
+          edl_id: unavailableVoiceover.edlId,
+          url: voiceoverUrl,
+          duration_ms: 113824,
+          status: unavailableVoiceover.status,
+          voice_id: "Puck",
+        },
+        includeVoiceoverRender: false,
+        includeFinalMixRender: false,
+      });
+
+      const expectVoiceoverUnavailable = async () => {
+        await expect(page.getByTestId("preview-toggle-studio-voice")).toHaveCount(0);
+        await expect(page.getByTestId("preview-toggle-edited")).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expect(page.getByTestId("video-element")).toHaveAttribute(
+          "src",
+          "https://storage.googleapis.com/fake-preview.mp4",
+        );
+        await expect(page.getByTestId("video-element")).not.toHaveAttribute("src", voiceoverUrl);
+      };
+
+      await expectVoiceoverUnavailable();
+      await page.reload();
+      await page.waitForSelector("[data-testid='editor-workspace']");
+      await expectVoiceoverUnavailable();
+    });
+  }
+
+  test("BUG 19: changing the selected voice immediately invalidates the current preview", async ({
+    page,
+  }) => {
+    const voiceoverUrl = "https://storage.googleapis.com/fake-preview.mp4?voiceover=puck";
+    const voiceSaveGate = Promise.withResolvers<void>();
+    await loginAndNavigateToEditor(page, {
+      apiVoiceover: {
+        available: true,
+        artifact_id: "art_api_vo_puck",
+        edl_id: "edl_6324ea33234a",
+        url: voiceoverUrl,
+        duration_ms: 113824,
+        status: "ready",
+        voice_id: "Puck",
+      },
+      includeVoiceoverRender: false,
+      includeFinalMixRender: false,
+      voiceSettingsPutGate: voiceSaveGate.promise,
+    });
+    await expect(page.getByTestId("video-element")).toHaveAttribute("src", voiceoverUrl);
+    await page.getByTestId("tab-voice").click();
+
+    const saveRequest = page.waitForRequest(
+      (request) =>
+        request.method() === "PUT" && request.url().includes("/api/workspace/agent-settings/voice"),
+    );
+    const saveResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT" &&
+        response.url().includes("/api/workspace/agent-settings/voice"),
+    );
+    await page.getByTestId("voice-option-charon").click();
+    await saveRequest;
+
+    try {
+      await expect(page.getByTestId("selected-voice-card")).toContainText("Charon");
+      await expect(page.getByTestId("voice-stale-banner")).toBeVisible({ timeout: 1000 });
+      await expect(page.getByTestId("preview-toggle-edited")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+        { timeout: 1000 },
+      );
+      await expect(page.getByTestId("video-element")).toHaveAttribute(
+        "src",
+        "https://storage.googleapis.com/fake-preview.mp4",
+        { timeout: 1000 },
+      );
+    } finally {
+      voiceSaveGate.resolve();
+      await saveResponse;
+    }
+  });
+
+  test("BUG 19: incomplete generation does not switch into Voiceover Preview", async ({ page }) => {
+    await loginAndNavigateToEditor(page, {
+      includeVoiceoverRender: false,
+      includeFinalMixRender: false,
+      studioVoicePostResponse: {
+        production_id: FAIRPHONE_PRODUCTION_ID,
+        result: {
+          production_id: FAIRPHONE_PRODUCTION_ID,
+          voice_id: "Puck",
+          total_segments: 2,
+          accepted_segments: 1,
+          all_within_budget: false,
+          status: "incomplete",
+          segments: [
+            {
+              segment_id: "vo_01",
+              source_start_ms: 0,
+              source_end_ms: 12540,
+              rewritten_text: "The Fairphone 6 Plus is an upgraded version with more memory.",
+              voice_id: "Puck",
+              generated_duration_ms: 11200,
+              status: "accepted",
+            },
+          ],
+        },
+        studio_voice_preview_url:
+          "https://storage.googleapis.com/fake-preview.mp4?voiceover=incomplete-generation",
+      },
+    });
+    await expect(page.getByTestId("preview-toggle-edited")).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("tab-voice").click();
+
+    const generationResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes(`/api/productions/${FAIRPHONE_PRODUCTION_ID}/studio-voice`),
+    );
+    const generateButton = page.getByTestId("btn-generate-voiceover");
+    await generateButton.click();
+    await generationResponse;
+    await expect(generateButton).toBeEnabled();
+    await expect(generateButton).not.toContainText("Generating");
+
+    await expect(page.getByTestId("preview-toggle-studio-voice")).toHaveCount(0);
+    await expect(page.getByTestId("preview-toggle-edited")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("video-element")).toHaveAttribute(
+      "src",
+      "https://storage.googleapis.com/fake-preview.mp4",
+    );
+  });
+
   test("BUG 18: Phase 4: Music tab allows prompt input, generation, preview, volume slider, mute, and remove", async ({
     page,
   }) => {
@@ -1795,7 +2007,9 @@ test.describe("Editor Workspace (Issue #28)", () => {
 
     // Verify Mode Policy Callout
     await expect(page.getByText("Preview Mode Policy")).toBeVisible();
-    await expect(page.getByText(/Background music is only rendered in the Final Mix/i)).toBeVisible();
+    await expect(
+      page.getByText(/Background music is only rendered in the Final Mix/i),
+    ).toBeVisible();
 
     // Verify Active Music Card controls
     await expect(page.getByTestId("active-music-card")).toBeVisible();

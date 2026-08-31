@@ -74,6 +74,7 @@ class StudioVoiceResult(BaseModel):
     all_within_budget: bool = Field(default=True)
     gcs_bucket: str | None = Field(default=None)
     gcs_object: str | None = Field(default=None)
+    preview_artifact_id: str | None = Field(default=None, description="RenderArtifact ID of the completed voiceover preview video")
     status: str = Field(default="completed")
     created_at: datetime = Field(...)
     updated_at: datetime = Field(...)

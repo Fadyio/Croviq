@@ -170,7 +170,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     if (firebaseUser) {
       token = await firebaseUser.getIdToken();
     } else if (import.meta.env.DEV || window.location.hostname === "localhost") {
-      token = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
+      token =
+        "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIyN2lFQlVNY3U2VG9EWXdwMk9kRUlIQnV3SUEzIiwidXNlcl9pZCI6IjI3aUVCVU1jdTZUb0RZd3AyT2RFSUhCdXdJQTMiLCJlbWFpbCI6ImRlbW9AY3JvdmlxLmFwcCJ9.signature";
     } else {
       throw new Error("Authentication required");
     }
@@ -347,33 +348,82 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                       : "unavailable",
             };
 
-    const voiceoverOutput: MediaOutputState =
-      apiVoiceover?.available && apiVoiceover.url
-        ? apiVoiceover
-        : svPreview && svPreview.status === "completed" && svPreview.playback_url
-          ? {
-              available: true,
-              artifactId: svPreview.artifact_id,
-              edlId: svPreview.edl_id,
-              url: svPreview.playback_url || null,
-              durationMs: svPreview.duration_ms || 0,
-              status: "ready",
-            }
-          : {
-              available: false,
-              artifactId: svPreview?.artifact_id || apiVoiceover?.artifactId || null,
-              edlId: svPreview?.edl_id || apiVoiceover?.edlId || activeEdlId,
-              url: null,
-              durationMs: 0,
-              status:
-                svPreview?.status === "rendering" ||
-                svPreview?.status === "pending" ||
-                apiVoiceover?.status === "generating"
-                  ? "generating"
-                  : svPreview?.status === "failed" || apiVoiceover?.status === "failed"
-                    ? "failed"
+    const hasExplicitApiVoiceover = playbackPayload?.voiceover !== undefined;
+    const voiceoverOutput: MediaOutputState = (() => {
+      if (hasExplicitApiVoiceover && apiVoiceover) {
+        const isReady =
+          apiVoiceover.status === "ready" &&
+          Boolean(apiVoiceover.available) &&
+          Boolean(apiVoiceover.url) &&
+          (!actualEdl?.edl_id || apiVoiceover.edlId === actualEdl.edl_id);
+        if (isReady) {
+          return {
+            available: true,
+            artifactId: apiVoiceover.artifactId || null,
+            edlId: apiVoiceover.edlId || activeEdlId,
+            url: apiVoiceover.url || null,
+            durationMs: apiVoiceover.durationMs || 0,
+            status: "ready",
+          };
+        }
+        return {
+          available: false,
+          artifactId: apiVoiceover.artifactId || null,
+          edlId: apiVoiceover.edlId || activeEdlId,
+          url: null,
+          durationMs: 0,
+          status:
+            apiVoiceover.status === "generating"
+              ? "generating"
+              : apiVoiceover.status === "failed"
+                ? "failed"
+                : apiVoiceover.status === "incomplete"
+                  ? "incomplete"
+                  : apiVoiceover.status === "stale" ||
+                      (apiVoiceover.status as string) === "needs_regeneration"
+                    ? "stale"
                     : "unavailable",
-            };
+        };
+      }
+      if (playbackPayload?.studio_voice_preview_url) {
+        return {
+          available: true,
+          artifactId: svPreview?.artifact_id || null,
+          edlId: svPreview?.edl_id || activeEdlId,
+          url: playbackPayload.studio_voice_preview_url,
+          durationMs: svPreview?.duration_ms || 0,
+          status: "ready",
+        };
+      }
+      if (
+        svPreview &&
+        svPreview.status === "completed" &&
+        svPreview.playback_url &&
+        (!actualEdl?.edl_id || svPreview.edl_id === actualEdl.edl_id)
+      ) {
+        return {
+          available: true,
+          artifactId: svPreview.artifact_id,
+          edlId: svPreview.edl_id,
+          url: svPreview.playback_url,
+          durationMs: svPreview.duration_ms || 0,
+          status: "ready",
+        };
+      }
+      return {
+        available: false,
+        artifactId: svPreview?.artifact_id || null,
+        edlId: svPreview?.edl_id || activeEdlId,
+        url: null,
+        durationMs: 0,
+        status:
+          svPreview?.status === "rendering" || svPreview?.status === "pending"
+            ? "generating"
+            : svPreview?.status === "failed"
+              ? "failed"
+              : "unavailable",
+      };
+    })();
 
     const finalMixOutput: MediaOutputState =
       apiFinalMix?.available && apiFinalMix.url
@@ -723,6 +773,16 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const handleSelectVoice = useCallback(
     async (voiceId: string) => {
       setSelectedVoice(voiceId);
+      setMediaOutputs((prev) => ({
+        ...prev,
+        voiceover: {
+          ...prev.voiceover,
+          available: false,
+          url: null,
+          status: "stale",
+        },
+      }));
+      setPreviewMode((currentMode) => (currentMode === "studio_voice" ? "edited" : currentMode));
       const token = await getAuthToken();
       const headers = {
         "Content-Type": "application/json",
@@ -737,17 +797,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           language: "en-US",
         }),
       });
-      if (currentVoiceoverVoiceId && currentVoiceoverVoiceId !== voiceId) {
-        setMediaOutputs((prev) => ({
-          ...prev,
-          voiceover: {
-            ...prev.voiceover,
-            status: "stale",
-          },
-        }));
-      }
     },
-    [currentVoiceoverVoiceId, getAuthToken],
+    [getAuthToken],
   );
 
   const handleGenerateVoiceover = useCallback(async () => {
@@ -775,7 +826,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       const svData = await res.json();
       setCurrentVoiceoverVoiceId(svData.result?.voice_id || selectedVoice);
       await loadPersistedData();
-      setPreviewMode("studio_voice");
+      if (svData.result?.status === "completed" && svData.studio_voice_preview_url) {
+        setPreviewMode("studio_voice");
+      }
     } finally {
       setIsGeneratingVoiceover(false);
     }

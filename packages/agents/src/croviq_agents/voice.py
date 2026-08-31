@@ -163,8 +163,8 @@ class StudioVoiceSynthesizer:
             last_audio_bytes = audio_bytes
             last_measured_ms = measured_duration_ms
 
-            # Hard budget check: must fit strictly within available duration
-            if measured_duration_ms <= available_duration_ms:
+            # Hard budget check: must fit strictly within available duration and contain valid audio bytes
+            if measured_duration_ms <= available_duration_ms and audio_bytes and len(audio_bytes) > 0 and measured_duration_ms > 0:
                 seg = NarrationSegment(
                     segment_id=segment_id,
                     production_id=production_id,
@@ -184,7 +184,6 @@ class StudioVoiceSynthesizer:
                     tempo_adjustment=1.0,
                 )
                 return seg, audio_bytes
-
         # Failed to fit immutable duration budget truthfully
         logger.warning(
             "Narration segment %s exceeded duration budget of %dms (got %dms) after %d attempts",

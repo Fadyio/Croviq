@@ -1,6 +1,5 @@
 import {
   AlertCircle,
-  CheckCircle2,
   Info,
   Loader2,
   Music,
@@ -103,12 +102,15 @@ export const MusicTab: React.FC<MusicTabProps> = ({
       };
     }
 
-    audioElementRef.current.play().then(() => {
-      setIsPlayingPreview(true);
-    }).catch(() => {
-      setIsPlayingPreview(false);
-      setErrorMessage("Could not start background music playback.");
-    });
+    audioElementRef.current
+      .play()
+      .then(() => {
+        setIsPlayingPreview(true);
+      })
+      .catch(() => {
+        setIsPlayingPreview(false);
+        setErrorMessage("Could not start background music playback.");
+      });
   }, [isPlayingPreview, musicPlaybackUrl]);
 
   const handleGenerate = async (e?: React.FormEvent) => {
@@ -216,8 +218,8 @@ export const MusicTab: React.FC<MusicTabProps> = ({
         <div className="space-y-0.5">
           <p className="font-semibold text-text-primary">Preview Mode Policy</p>
           <p className="text-[10px] text-text-muted leading-relaxed">
-            Background music is only rendered in the <strong>Final Mix</strong> preview. It is
-            never audible in Original, Edited, or Voiceover previews.
+            Background music is only rendered in the <strong>Final Mix</strong> preview. It is never
+            audible in Original, Edited, or Voiceover previews.
           </p>
         </div>
       </div>
@@ -244,7 +246,9 @@ export const MusicTab: React.FC<MusicTabProps> = ({
 
         {/* Model Selection */}
         <div className="flex items-center justify-between text-xs">
-          <label htmlFor="music-model-select" className="text-[11px] text-text-muted">Model:</label>
+          <label htmlFor="music-model-select" className="text-[11px] text-text-muted">
+            Model:
+          </label>
           <select
             id="music-model-select"
             value={modelId}

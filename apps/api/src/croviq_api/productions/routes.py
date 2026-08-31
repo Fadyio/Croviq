@@ -1312,6 +1312,7 @@ async def _execute_render_for_production(
     render_repo: RenderRepository,
     render_service: RenderService,
     media_storage: MediaStorage,
+    studio_voice_repo: StudioVoiceRepository | None = None,
     genai_client: Any | None = None,
 ) -> RenderArtifactResponse:
     request_id = getattr(request.state, "request_id", "unknown")
@@ -1398,13 +1399,18 @@ async def _execute_render_for_production(
             elif artifact_type in (ArtifactType.VOICEOVER_PREVIEW, ArtifactType.STUDIO_VOICE_PREVIEW):
                 local_narr = tmp_path / "voiceover.wav"
                 target_dur_ms = edl.estimated_target_duration_ms
-                total_samples = int(24_000 * target_dur_ms / 1000)
-                track = bytearray(total_samples * 2)
                 speech_intervals: list[tuple[int, int]] = []
-                voiceover_segs = edl.voiceover_segments or []
-                if not voiceover_segs:
-                    sv_res = await studio_voice_repo.get_by_production_id(prod.production_id)
-                    if sv_res and (sv_res.edl_id is None or sv_res.edl_id == edl.edl_id) and sv_res.accepted_segments > 0:
+                sv_res = await studio_voice_repo.get_by_production_id(prod.production_id) if studio_voice_repo else None
+
+                if sv_res and sv_res.status == "completed" and sv_res.gcs_object and (sv_res.edl_id is None or sv_res.edl_id == edl.edl_id):
+                    await media_storage.download_object_to_path(
+                        bucket=sv_res.gcs_bucket or prod.source_media.gcs_bucket,
+                        object_name=sv_res.gcs_object,
+                        target_path=local_narr,
+                    )
+                else:
+                    voiceover_segs = edl.voiceover_segments or []
+                    if not voiceover_segs and sv_res and (sv_res.edl_id is None or sv_res.edl_id == edl.edl_id) and sv_res.accepted_segments > 0:
                         voiceover_segs = [
                             VoiceoverSegment(
                                 segment_id=s.segment_id,
@@ -1418,30 +1424,39 @@ async def _execute_render_for_production(
                             for s in sv_res.segments
                             if s.status == NarrationSegmentStatus.ACCEPTED
                         ]
-                if voiceover_segs:
-                    for seg in voiceover_segs:
-                        ed_start = map_source_time_to_edited(seg.source_start_ms, edl)
-                        ed_end = map_source_time_to_edited(seg.source_end_ms, edl)
-                        avail_dur = ed_end - ed_start
-                        if avail_dur <= 0:
-                            continue
-                        dur_ms, pcm = await genai_client.synthesize_studio_voice(
-                            text=seg.text,
-                            voice_id=seg.voice_id or "Puck",
-                            production_id=prod.production_id,
-                        )
-                        speech_intervals.append((ed_start, min(target_dur_ms, ed_start + dur_ms)))
-                        start_sample = int(24_000 * ed_start / 1000)
-                        start_byte = start_sample * 2
-                        copy_len = min(len(pcm), avail_dur * 48, len(track) - start_byte)
-                        if copy_len > 0 and start_byte < len(track):
-                            track[start_byte : start_byte + copy_len] = pcm[:copy_len]
+                    if voiceover_segs and genai_client:
+                        total_samples = int(24_000 * target_dur_ms / 1000)
+                        track = bytearray(total_samples * 2)
+                        for seg in voiceover_segs:
+                            ed_start = map_source_time_to_edited(seg.source_start_ms, edl)
+                            ed_end = map_source_time_to_edited(seg.source_end_ms, edl)
+                            avail_dur = ed_end - ed_start
+                            if avail_dur <= 0:
+                                continue
+                            dur_ms, pcm = await genai_client.synthesize_studio_voice(
+                                text=seg.text,
+                                voice_id=seg.voice_id or "Puck",
+                                production_id=prod.production_id,
+                            )
+                            speech_intervals.append((ed_start, min(target_dur_ms, ed_start + dur_ms)))
+                            start_sample = int(24_000 * ed_start / 1000)
+                            start_byte = start_sample * 2
+                            copy_len = min(len(pcm), avail_dur * 48, len(track) - start_byte)
+                            if copy_len > 0 and start_byte < len(track):
+                                track[start_byte : start_byte + copy_len] = pcm[:copy_len]
 
-                with wave.open(str(local_narr), "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)
-                    wf.setframerate(24_000)
-                    wf.writeframes(track)
+                        with wave.open(str(local_narr), "wb") as wf:
+                            wf.setnchannels(1)
+                            wf.setsampwidth(2)
+                            wf.setframerate(24_000)
+                            wf.writeframes(track)
+
+                if not local_narr.exists() or local_narr.stat().st_size == 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Voiceover narration audio has not been generated for the active EDL",
+                    )
+
                 render_res = await asyncio.to_thread(
                     render_service.render_voiceover_preview,
                     source_path=local_src,
@@ -1655,6 +1670,7 @@ async def render_voiceover_preview_video(
     production_repo: Annotated[ProductionRepository, Depends(get_production_repository)],
     edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
+    studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
     render_service: Annotated[RenderService, Depends(get_render_service)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
     genai_client: Annotated[Any, Depends(get_genai_client)],
@@ -1669,6 +1685,7 @@ async def render_voiceover_preview_video(
         render_repo=render_repo,
         render_service=render_service,
         media_storage=media_storage,
+        studio_voice_repo=studio_voice_repo,
         genai_client=genai_client,
     )
 
@@ -1915,6 +1932,8 @@ async def get_production_playback_urls(
     render_repo: Annotated[RenderRepository, Depends(get_render_repository)],
     edl_repo: Annotated[EDLRepository, Depends(get_edl_repository)],
     transcript_repo: Annotated[TranscriptRepository, Depends(get_transcript_repository)],
+    studio_voice_repo: Annotated[StudioVoiceRepository, Depends(get_studio_voice_repository)],
+    agent_config_repo: Annotated[AgentConfigRepository, Depends(get_agent_config_repository)],
     media_storage: Annotated[MediaStorage, Depends(get_media_storage)],
 ) -> ProductionPlaybackResponse:
     settings = get_settings()
@@ -1929,7 +1948,6 @@ async def get_production_playback_urls(
     # Find target artifacts for active lineage
     preview_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.PREVIEW.value), None)
     master_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.MASTER.value), None)
-    sv_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) in (ArtifactType.STUDIO_VOICE_PREVIEW.value, ArtifactType.VOICEOVER_PREVIEW.value)), None)
     fm_art = next((r for r in active_renders if (r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.FINAL_MIX.value), None)
 
     async def _sign_target(bucket: str, obj: str, check_exists: bool = False) -> str | None:
@@ -1960,9 +1978,6 @@ async def get_production_playback_urls(
     master_eligible = master_art and (master_art.status.value if hasattr(master_art.status, "value") else str(master_art.status)).lower() == "completed"
     tasks.append(_sign_target(master_art.gcs_bucket, master_art.gcs_object, check_exists=True) if master_eligible else asyncio.sleep(0, result=None))
 
-    sv_eligible = sv_art and (sv_art.status.value if hasattr(sv_art.status, "value") else str(sv_art.status)).lower() == "completed"
-    tasks.append(_sign_target(sv_art.gcs_bucket, sv_art.gcs_object, check_exists=True) if sv_eligible else asyncio.sleep(0, result=None))
-
     fm_eligible = fm_art and (fm_art.status.value if hasattr(fm_art.status, "value") else str(fm_art.status)).lower() == "completed"
     tasks.append(_sign_target(fm_art.gcs_bucket, fm_art.gcs_object, check_exists=True) if fm_eligible else asyncio.sleep(0, result=None))
 
@@ -1975,9 +1990,48 @@ async def get_production_playback_urls(
     source_url = signed_results[0]
     preview_url = signed_results[1]
     master_url = signed_results[2]
-    sv_url = signed_results[3]
-    final_mix_url = signed_results[4]
-    music_url = signed_results[5]
+    final_mix_url = signed_results[3]
+    music_url = signed_results[4]
+
+    # Voiceover Preview strict lineage and completeness verification
+    sv_res = await studio_voice_repo.get_by_production_id(prod.production_id)
+    voice_cfg = await agent_config_repo.get_voice_settings(prod.workspace_id) if prod.workspace_id else None
+    corrected_tr = await transcript_repo.get_corrected_transcript_by_production_id(prod.production_id, edl_id=active_edl_id) if active_edl_id else None
+
+    sv_url: str | None = None
+    voiceover_status = "unavailable"
+    voiceover_available = False
+    sv_artifact_id: str | None = None
+
+    if sv_res:
+        if sv_res.status == "incomplete" or sv_res.accepted_segments < sv_res.total_segments or not sv_res.all_within_budget:
+            voiceover_status = "incomplete"
+        elif (
+            not latest_edl
+            or sv_res.edl_id != latest_edl.edl_id
+            or (sv_res.edl_version is not None and sv_res.edl_version != latest_edl.version)
+            or (voice_cfg and sv_res.voice_id != voice_cfg.selected_voice)
+            or (corrected_tr and sv_res.corrected_script_version and sv_res.corrected_script_version != corrected_tr.transcript_id)
+        ):
+            voiceover_status = "needs_regeneration"
+        elif sv_res.status == "completed" and sv_res.preview_artifact_id:
+            sv_art = await render_repo.get_render_artifact(prod.production_id, sv_res.preview_artifact_id)
+            if not sv_art:
+                sv_art = next((r for r in active_renders if r.artifact_id == sv_res.preview_artifact_id), None)
+            if sv_art and sv_art.status == ArtifactStatus.completed:
+                sv_signed = await _sign_target(sv_art.gcs_bucket, sv_art.gcs_object, check_exists=True)
+                if sv_signed:
+                    sv_url = sv_signed
+                    voiceover_status = "ready"
+                    voiceover_available = True
+                    sv_artifact_id = sv_art.artifact_id
+                else:
+                    voiceover_status = "unavailable"
+            else:
+                voiceover_status = "unavailable"
+        else:
+            voiceover_status = "unavailable"
+
     source_dur = transcript.duration_ms if transcript else (latest_edl.source_duration_ms if latest_edl else 0)
     original_state = MediaOutputState(
         available=bool(source_url),
@@ -2017,11 +2071,17 @@ async def get_production_playback_urls(
             )
         return MediaOutputState(available=False, artifact_id=art.artifact_id, edl_id=art.edl_id, status="unavailable")
 
-    has_prior_sv = any((r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) in (ArtifactType.STUDIO_VOICE_PREVIEW.value, ArtifactType.VOICEOVER_PREVIEW.value) for r in renders)
     has_prior_fm = any((r.artifact_type.value if hasattr(r.artifact_type, "value") else str(r.artifact_type)) == ArtifactType.FINAL_MIX.value for r in renders)
 
     edited_state = _build_state(preview_art, preview_url)
-    voiceover_state = _build_state(sv_art, sv_url, has_prior=has_prior_sv)
+    voiceover_state = MediaOutputState(
+        available=voiceover_available,
+        artifact_id=sv_artifact_id,
+        edl_id=active_edl_id,
+        url=sv_url,
+        duration_ms=latest_edl.estimated_target_duration_ms if latest_edl else 0,
+        status=voiceover_status,
+    )
     final_mix_state = _build_state(fm_art, final_mix_url, has_prior=has_prior_fm)
     expires_at = (
         datetime.now(timezone.utc) + timedelta(seconds=settings.signed_url_expiry_seconds)
@@ -2100,238 +2160,298 @@ async def generate_studio_voice(
             detail="Active EDL is required before generating Studio Voice.",
         )
 
-    # Derive source-grounded corrected script for active EDL
-    video_uri = (
-        f"gs://{prod.source_media.gcs_bucket}/{prod.source_media.gcs_object}"
-        if prod.source_media
-        else "gs://mock/video.mp4"
+    # 1. Fetch or generate canonical corrected script for active EDL
+    cached_script = await transcript_repo.get_corrected_transcript_by_production_id(
+        prod.production_id, edl_id=edl.edl_id
     )
-    corrected_script, _ = await genai_client.correct_transcript_with_video_grounding(
-        video_uri=video_uri,
-        mime_type="video/mp4",
-        transcript=transcript,
-        edl=edl,
-        production_id=prod.production_id,
-    )
+    if cached_script and cached_script.segments:
+        corrected_script = cached_script
+    else:
+        video_uri = (
+            f"gs://{prod.source_media.gcs_bucket}/{prod.source_media.gcs_object}"
+            if prod.source_media
+            else "gs://mock/video.mp4"
+        )
+        corrected_script, _ = await genai_client.correct_transcript_with_video_grounding(
+            video_uri=video_uri,
+            mime_type="video/mp4",
+            transcript=transcript,
+            edl=edl,
+            production_id=prod.production_id,
+        )
+        await transcript_repo.save_corrected_transcript(
+            corrected_script, edl_id=edl.edl_id
+        )
 
-    tasks = []
+    # 2. Identify surviving dialogue segments under active EDL
+    raw_surviving_segments = []
+    for raw_seg in transcript.segments:
+        ed_start = map_source_time_to_edited(raw_seg.start_ms, edl)
+        ed_end = map_source_time_to_edited(raw_seg.end_ms, edl)
+        if ed_end > ed_start:
+            raw_surviving_segments.append(raw_seg)
+
+    prepared_segments = []
     for seg in corrected_script.segments:
         ed_start = seg.edited_start_ms if seg.edited_start_ms is not None else map_source_time_to_edited(seg.source_start_ms, edl)
         ed_end = seg.edited_end_ms if seg.edited_end_ms is not None else map_source_time_to_edited(seg.source_end_ms, edl)
         avail_ms = ed_end - ed_start
         if avail_ms <= 0:
             continue
-        text_to_synthesize = seg.corrected_text if seg.change_type != ScriptCorrectionChangeType.KEEP else seg.original_text
+        text_to_synthesize = seg.corrected_text or seg.original_text
+        prepared_segments.append({
+            "segment_id": seg.segment_id,
+            "source_start_ms": seg.source_start_ms,
+            "source_end_ms": seg.source_end_ms,
+            "edited_start_ms": ed_start,
+            "edited_end_ms": ed_end,
+            "available_duration_ms": avail_ms,
+            "text": text_to_synthesize,
+            "original_text": seg.original_text,
+            "change_type": seg.change_type.value if hasattr(seg.change_type, "value") else str(seg.change_type),
+        })
+
+    def _needs_merge(s_dict: dict) -> bool:
+        avail = s_dict["available_duration_ms"]
+        word_count = len(s_dict["text"].split())
+        return avail < 1000 or (avail < 2000 and word_count * 310 > avail)
+
+    # Merge tight segments with adjacent segments so natural TTS cadence fits comfortably
+    merged_segments = []
+    i = 0
+    while i < len(prepared_segments):
+        curr = dict(prepared_segments[i])
+        if _needs_merge(curr) and i + 1 < len(prepared_segments):
+            nxt = prepared_segments[i + 1]
+            curr["segment_id"] = f"{curr['segment_id']}_{nxt['segment_id']}"
+            curr["source_end_ms"] = nxt["source_end_ms"]
+            curr["edited_end_ms"] = nxt["edited_end_ms"]
+            curr["available_duration_ms"] = curr["edited_end_ms"] - curr["edited_start_ms"]
+            curr["text"] = f"{curr['text']} {nxt['text']}".strip()
+            curr["original_text"] = f"{curr['original_text']} {nxt['original_text']}".strip()
+            merged_segments.append(curr)
+            i += 2
+        elif _needs_merge(curr) and merged_segments:
+            prev = merged_segments[-1]
+            prev["segment_id"] = f"{prev['segment_id']}_{curr['segment_id']}"
+            prev["source_end_ms"] = curr["source_end_ms"]
+            prev["edited_end_ms"] = curr["edited_end_ms"]
+            prev["available_duration_ms"] = prev["edited_end_ms"] - prev["edited_start_ms"]
+            prev["text"] = f"{prev['text']} {curr['text']}".strip()
+            prev["original_text"] = f"{prev['original_text']} {curr['original_text']}".strip()
+            i += 1
+        else:
+            merged_segments.append(curr)
+            i += 1
+
+    tasks = []
+    for item in merged_segments:
         tasks.append(
             synthesizer.fit_narration_segment_with_audio(
-                segment_id=seg.segment_id,
+                segment_id=item["segment_id"],
                 production_id=prod.production_id,
-                source_start_ms=seg.source_start_ms,
-                source_end_ms=seg.source_end_ms,
-                available_duration_ms=avail_ms,
-                original_text=text_to_synthesize,
+                source_start_ms=item["source_start_ms"],
+                source_end_ms=item["source_end_ms"],
+                available_duration_ms=item["available_duration_ms"],
+                original_text=item["text"],
                 voice_id=selected_voice,
                 tts_fn=tts_fn,
                 rewrite_fn=leo_rewrite_fn,
-                edited_start_ms=ed_start,
-                edited_end_ms=ed_end,
-                change_type=seg.change_type.value if hasattr(seg.change_type, "value") else str(seg.change_type),
+                edited_start_ms=item["edited_start_ms"],
+                edited_end_ms=item["edited_end_ms"],
+                change_type=item["change_type"],
             )
         )
-
     results: list[tuple[NarrationSegment, bytes]] = list(await asyncio.gather(*tasks)) if tasks else []
     segments: list[NarrationSegment] = [r[0] for r in results]
     now = datetime.now(timezone.utc)
-    all_within = all(
-        s.generated_duration_ms <= s.available_duration_ms
-        for s in segments
-        if s.status == NarrationSegmentStatus.ACCEPTED
+    expected_count = max(len(merged_segments), len(raw_surviving_segments))
+    accepted_segments = [
+        (seg, pcm_bytes)
+        for seg, pcm_bytes in results
+        if seg.status == NarrationSegmentStatus.ACCEPTED and pcm_bytes and len(pcm_bytes) > 0 and seg.generated_duration_ms <= seg.available_duration_ms
+    ]
+    all_within = (
+        len(accepted_segments) == expected_count
+        and expected_count > 0
+        and len(prepared_segments) == len(raw_surviving_segments)
     )
 
-    # Render distinct Voiceover / Studio Voice Preview artifact
+    if not all_within or not prod.source_media or prod.source_media.status != SourceMediaStatus.UPLOADED:
+        sv_result = StudioVoiceResult(
+            production_id=prod.production_id,
+            voice_id=selected_voice,
+            narration_mode="studio_voice",
+            edl_id=edl.edl_id,
+            edl_version=edl.version,
+            corrected_script_version=corrected_script.transcript_id,
+            segments=segments,
+            total_segments=expected_count,
+            accepted_segments=len(accepted_segments),
+            all_within_budget=all_within,
+            preview_artifact_id=None,
+            status="incomplete",
+            created_at=now,
+            updated_at=now,
+        )
+        await studio_voice_repo.save(sv_result)
+        return StudioVoiceGenerationResponse(
+            production_id=prod.production_id,
+            result=sv_result,
+            studio_voice_preview_url=None,
+        )
+
+    # Render distinct Voiceover Preview artifact
     sv_playback_url = None
     narration_gcs_obj: str | None = None
 
-    if prod.source_media and prod.source_media.status == SourceMediaStatus.UPLOADED:
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tmp_path = Path(tmpdir)
-                local_src = tmp_path / "source.mp4"
-                local_narr = tmp_path / "narration.wav"
-                local_out = tmp_path / "studio_voice_preview.mp4"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        local_src = tmp_path / "source.mp4"
+        local_narr = tmp_path / "narration.wav"
+        local_out = tmp_path / "voiceover_preview.mp4"
 
-                await media_storage.download_object_to_path(
-                    bucket=prod.source_media.gcs_bucket,
-                    object_name=prod.source_media.gcs_object,
-                    target_path=local_src,
-                )
+        await media_storage.download_object_to_path(
+            bucket=prod.source_media.gcs_bucket,
+            object_name=prod.source_media.gcs_object,
+            target_path=local_src,
+        )
 
-                sample_rate = 24000
-                total_dur_ms = edl.estimated_target_duration_ms or (transcript.duration_ms if transcript else 10000)
-                num_samples = int(sample_rate * total_dur_ms / 1000)
-                audio_buffer = bytearray(num_samples * 2)
+        sample_rate = 24000
+        total_dur_ms = edl.estimated_target_duration_ms or (transcript.duration_ms if transcript else 10000)
+        num_samples = int(sample_rate * total_dur_ms / 1000)
+        audio_buffer = bytearray(num_samples * 2)
 
-                speech_intervals: list[tuple[int, int]] = []
-                for seg, pcm_bytes in results:
-                    if seg.status == NarrationSegmentStatus.ACCEPTED and pcm_bytes:
-                        ed_start = seg.edited_start_ms if seg.edited_start_ms is not None else map_source_time_to_edited(seg.source_start_ms, edl)
-                        ed_end = seg.edited_end_ms if seg.edited_end_ms is not None else map_source_time_to_edited(seg.source_end_ms, edl)
-                        avail_ms = ed_end - ed_start
-                        if avail_ms <= 0:
-                            continue
-                        speech_intervals.append((ed_start, max(ed_end, min(total_dur_ms, ed_start + seg.generated_duration_ms))))
-                        start_sample = int(sample_rate * ed_start / 1000)
-                        start_byte = start_sample * 2
-                        copy_len = min(len(pcm_bytes), avail_ms * 48, len(audio_buffer) - start_byte)
-                        if copy_len > 0 and start_byte < len(audio_buffer):
-                            audio_buffer[start_byte : start_byte + copy_len] = pcm_bytes[:copy_len]
+        speech_intervals: list[tuple[int, int]] = []
+        for seg, pcm_bytes in accepted_segments:
+            ed_start = seg.edited_start_ms if seg.edited_start_ms is not None else map_source_time_to_edited(seg.source_start_ms, edl)
+            ed_end = seg.edited_end_ms if seg.edited_end_ms is not None else map_source_time_to_edited(seg.source_end_ms, edl)
+            avail_ms = ed_end - ed_start
+            if avail_ms <= 0:
+                continue
+            speech_intervals.append((ed_start, min(total_dur_ms, ed_start + seg.generated_duration_ms)))
+            start_sample = int(sample_rate * ed_start / 1000)
+            start_byte = start_sample * 2
+            copy_len = min(len(pcm_bytes), avail_ms * 48, len(audio_buffer) - start_byte)
+            if copy_len > 0 and start_byte < len(audio_buffer):
+                audio_buffer[start_byte : start_byte + copy_len] = pcm_bytes[:copy_len]
 
-                with wave.open(str(local_narr), "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)
-                    wf.setframerate(sample_rate)
-                    wf.writeframes(bytes(audio_buffer))
+        with wave.open(str(local_narr), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(bytes(audio_buffer))
 
-                narration_gcs_obj = f"workspaces/{workspace.workspace_id}/productions/{prod.production_id}/narration/studio_voice_narration.wav"
-                await media_storage.upload_object_from_path(
-                    bucket=prod.source_media.gcs_bucket,
-                    object_name=narration_gcs_obj,
-                    source_path=local_narr,
-                    content_type="audio/wav",
-                )
+        narration_gcs_obj = f"workspaces/{workspace.workspace_id}/productions/{prod.production_id}/narration/studio_voice_narration.wav"
+        await media_storage.upload_object_from_path(
+            bucket=prod.source_media.gcs_bucket,
+            object_name=narration_gcs_obj,
+            source_path=local_narr,
+            content_type="audio/wav",
+        )
 
-                render_res = await asyncio.to_thread(
-                    render_service.render_voiceover_preview,
-                    source_path=local_src,
-                    edl=edl,
-                    narration_audio_path=local_narr,
-                    speech_intervals_ms=speech_intervals,
-                    output_path=local_out,
-                )
+        render_res = await asyncio.to_thread(
+            render_service.render_voiceover_preview,
+            source_path=local_src,
+            edl=edl,
+            narration_audio_path=local_narr,
+            speech_intervals_ms=speech_intervals,
+            output_path=local_out,
+        )
 
-                gcs_obj = build_render_artifact_gcs_object_path(
-                    workspace_id=workspace.workspace_id,
-                    production_id=prod.production_id,
-                    edl_id=edl.edl_id,
-                    artifact_type=ArtifactType.VOICEOVER_PREVIEW,
-                )
+        gcs_obj = build_render_artifact_gcs_object_path(
+            workspace_id=workspace.workspace_id,
+            production_id=prod.production_id,
+            edl_id=edl.edl_id,
+            artifact_type=ArtifactType.VOICEOVER_PREVIEW,
+        )
 
-                await media_storage.upload_object_from_path(
-                    bucket=prod.source_media.gcs_bucket,
-                    object_name=gcs_obj,
-                    source_path=local_out,
-                    content_type="video/mp4",
-                )
+        await media_storage.upload_object_from_path(
+            bucket=prod.source_media.gcs_bucket,
+            object_name=gcs_obj,
+            source_path=local_out,
+            content_type="video/mp4",
+        )
 
-                art = RenderArtifact(
-                    artifact_id=f"art_vo_{uuid.uuid4().hex[:8]}",
-                    production_id=prod.production_id,
-                    edl_id=edl.edl_id,
-                    artifact_type=ArtifactType.VOICEOVER_PREVIEW,
-                    status=ArtifactStatus.completed,
-                    gcs_bucket=prod.source_media.gcs_bucket,
-                    gcs_object=gcs_obj,
-                    content_type="video/mp4",
-                    size_bytes=render_res.size_bytes,
-                    duration_ms=render_res.duration_ms,
-                    width=render_res.width,
-                    height=render_res.height,
-                    frame_rate=render_res.frame_rate,
-                    video_codec=render_res.video_codec,
-                    audio_codec=render_res.audio_codec,
-                    created_at=now,
-                    completed_at=now,
-                )
-                await render_repo.save_render_artifact(art)
+        art_id = f"art_vo_{uuid.uuid4().hex[:8]}"
+        art = RenderArtifact(
+            artifact_id=art_id,
+            production_id=prod.production_id,
+            edl_id=edl.edl_id,
+            artifact_type=ArtifactType.VOICEOVER_PREVIEW,
+            status=ArtifactStatus.completed,
+            gcs_bucket=prod.source_media.gcs_bucket,
+            gcs_object=gcs_obj,
+            content_type="video/mp4",
+            size_bytes=render_res.size_bytes,
+            duration_ms=render_res.duration_ms,
+            width=render_res.width,
+            height=render_res.height,
+            frame_rate=render_res.frame_rate,
+            video_codec=render_res.video_codec,
+            audio_codec=render_res.audio_codec,
+            created_at=now,
+            completed_at=now,
+        )
+        await render_repo.save_render_artifact(art)
 
-                gcs_obj_sv = build_render_artifact_gcs_object_path(
-                    workspace_id=workspace.workspace_id,
-                    production_id=prod.production_id,
-                    edl_id=edl.edl_id,
-                    artifact_type=ArtifactType.STUDIO_VOICE_PREVIEW,
-                )
-                art_sv = RenderArtifact(
-                    artifact_id=f"art_sv_{uuid.uuid4().hex[:8]}",
-                    production_id=prod.production_id,
-                    edl_id=edl.edl_id,
-                    artifact_type=ArtifactType.STUDIO_VOICE_PREVIEW,
-                    status=ArtifactStatus.completed,
-                    gcs_bucket=prod.source_media.gcs_bucket,
-                    gcs_object=gcs_obj_sv,
-                    content_type="video/mp4",
-                    size_bytes=render_res.size_bytes,
-                    duration_ms=render_res.duration_ms,
-                    width=render_res.width,
-                    height=render_res.height,
-                    frame_rate=render_res.frame_rate,
-                    video_codec=render_res.video_codec,
-                    audio_codec=render_res.audio_codec,
-                    created_at=now,
-                    completed_at=now,
-                )
-                await render_repo.save_render_artifact(art_sv)
+        settings = get_settings()
+        target = await media_storage.generate_signed_read_target(
+            bucket=prod.source_media.gcs_bucket,
+            object_name=gcs_obj,
+            expiry_seconds=settings.signed_url_expiry_seconds,
+        )
+        sv_playback_url = target.read_url
 
-                settings = get_settings()
-                target = await media_storage.generate_signed_read_target(
-                    bucket=prod.source_media.gcs_bucket,
-                    object_name=gcs_obj,
-                    expiry_seconds=settings.signed_url_expiry_seconds,
-                )
-                sv_playback_url = target.read_url
+        vo_segments = [
+            VoiceoverSegment(
+                segment_id=s.segment_id,
+                source_start_ms=s.source_start_ms,
+                source_end_ms=s.source_end_ms,
+                text=s.rewritten_text or s.original_text,
+                original_text=s.original_text,
+                voice_mode="PREBUILT_STUDIO_VOICE",
+                voice_id=selected_voice,
+                generated_duration_ms=s.generated_duration_ms,
+                preview_artifact_id=art.artifact_id,
+            )
+            for s, _ in accepted_segments
+        ]
+        edl = edl.model_copy(update={
+            "voiceover_segments": vo_segments,
+            "created_at": datetime.now(timezone.utc),
+        })
+        await edl_repo.save_edl(edl)
 
-                vo_segments = [
-                    VoiceoverSegment(
-                        segment_id=s.segment_id,
-                        source_start_ms=s.source_start_ms,
-                        source_end_ms=s.source_end_ms,
-                        text=s.rewritten_text or s.original_text,
-                        original_text=s.original_text,
-                        voice_mode="STUDIO_VOICE",
-                        voice_id=selected_voice,
-                        generated_duration_ms=s.generated_duration_ms,
-                    )
-                    for s in segments
-                    if s.status == NarrationSegmentStatus.ACCEPTED
-                ]
-                edl = edl.model_copy(update={
-                    "voiceover_segments": vo_segments,
-                    "created_at": datetime.now(timezone.utc),
-                })
-                await edl_repo.save_edl(edl)
-        except Exception as exc:
-            logger.warning("Voiceover render preview failed: %s", exc)
-    accepted_count = sum(1 for s in segments if s.status == NarrationSegmentStatus.ACCEPTED)
-    if narration_gcs_obj:
         for s in segments:
             if s.status == NarrationSegmentStatus.ACCEPTED:
                 s.audio_artifact_reference = narration_gcs_obj
 
-    sv_status = "completed" if (accepted_count > 0 and sv_playback_url is not None) else "failed"
-    sv_result = StudioVoiceResult(
-        production_id=prod.production_id,
-        voice_id=selected_voice,
-        narration_mode="studio_voice",
-        edl_id=edl.edl_id,
-        edl_version=edl.version,
-        corrected_script_version=corrected_script.transcript_id,
-        segments=segments,
-        total_segments=len(segments),
-        accepted_segments=accepted_count,
-        all_within_budget=all_within,
-        gcs_bucket=prod.source_media.gcs_bucket if (accepted_count > 0 and narration_gcs_obj) else None,
-        gcs_object=narration_gcs_obj if accepted_count > 0 else None,
-        status=sv_status,
-        created_at=now,
-        updated_at=now,
-    )
-    await studio_voice_repo.save(sv_result)
+        sv_result = StudioVoiceResult(
+            production_id=prod.production_id,
+            voice_id=selected_voice,
+            narration_mode="studio_voice",
+            edl_id=edl.edl_id,
+            edl_version=edl.version,
+            corrected_script_version=corrected_script.transcript_id,
+            segments=segments,
+            total_segments=expected_count,
+            accepted_segments=len(accepted_segments),
+            all_within_budget=True,
+            gcs_bucket=prod.source_media.gcs_bucket,
+            gcs_object=narration_gcs_obj,
+            preview_artifact_id=art.artifact_id,
+            status="completed",
+            created_at=now,
+            updated_at=now,
+        )
+        await studio_voice_repo.save(sv_result)
 
-    return StudioVoiceGenerationResponse(
-        production_id=prod.production_id,
-        result=sv_result,
-        studio_voice_preview_url=sv_playback_url,
-    )
-
+        return StudioVoiceGenerationResponse(
+            production_id=prod.production_id,
+            result=sv_result,
+            studio_voice_preview_url=sv_playback_url,
+        )
 @router.get(
     "/productions/{production_id}/studio-voice",
     response_model=StudioVoiceResult,

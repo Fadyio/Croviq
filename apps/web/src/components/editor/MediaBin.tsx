@@ -72,7 +72,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({
   editedDurationMs,
   studioVoiceDurationMs,
   finalMixDurationMs,
-  activeCutCount,
+  activeCutCount: _activeCutCount,
   hasRenderedPreview,
   hasStudioVoice,
   hasFinalMix = false,

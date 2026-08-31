@@ -311,6 +311,8 @@ class FFmpegRenderService(RenderService):
         output_path: Path | str | None = None,
     ) -> RenderExecutionResult:
         """Render fast Voiceover preview MP4 combining EDL video cuts and replacement voiceover track."""
+        if narration_audio_path is None or not Path(narration_audio_path).exists() or not Path(narration_audio_path).is_file():
+            raise RenderError(f"Narration audio file not found for Voiceover Preview: {narration_audio_path}")
         encoding_args = [
             "-c:v", "libx264",
             "-preset", "veryfast",
@@ -453,11 +455,41 @@ class FFmpegRenderService(RenderService):
         music_input_idx: int = 1,
         music_volume_db: float = -24.0,
         music_ducking_db: float = -14.0,
+        is_voiceover_replacement: bool = False,
     ) -> tuple[str | None, list[str]]:
         """Build the cut, narration, and speech-ducked music graph."""
         num_segs = len(keep_segments)
         if num_segs == 0:
             raise RenderError("Cannot render EDL with zero keep segments")
+
+        total_target_dur_s = sum(max(0.001, (e - s) / 1000.0) for s, e in keep_segments)
+
+        # 1. Voiceover Preview pure replacement mode (ZERO source audio stream in graph)
+        if is_voiceover_replacement:
+            if not has_narration:
+                raise RenderError("Voiceover preview requires a valid narration audio input")
+            video_filters: list[str] = []
+            video_inputs: list[str] = []
+            for i, (start_ms, end_ms) in enumerate(keep_segments):
+                start_s = start_ms / 1000.0
+                end_s = end_ms / 1000.0
+                video_filters.append(
+                    f"[0:v]trim=start={start_s:.4f}:end={end_s:.4f},setpts=PTS-STARTPTS[v{i}]"
+                )
+                video_inputs.append(f"[v{i}]")
+
+            audio_chain = (
+                f"[1:a]atrim=start=0:end={total_target_dur_s:.4f},asetpts=PTS-STARTPTS,"
+                f"apad=whole_dur={total_target_dur_s:.4f},"
+                "loudnorm=I=-16:TP=-1.5:LRA=10,alimiter=limit=0.85:level=false[aout]"
+            )
+
+            if num_segs == 1 and keep_segments[0][0] == 0 and keep_segments[0][1] >= source_duration_ms:
+                return audio_chain, ["-map", "0:v", "-map", "[aout]"]
+
+            vconcat = f"{''.join(video_inputs)}concat=n={num_segs}:v=1:a=0[vout]"
+            full_filter = ";".join(video_filters + [vconcat] + [audio_chain])
+            return full_filter, ["-map", "[vout]", "-map", "[aout]"]
 
         ducking_cond = "1.0"
         if speech_intervals_ms:
@@ -469,9 +501,9 @@ class FFmpegRenderService(RenderService):
             music_gain = 10 ** (music_ducking_db / 20.0)
             music_ducking_cond = f"if({'+'.join(conds)},{music_gain:.6f},1.0)"
         # Multiple keep segments with 20ms audio micro-transitions
-        video_filters: list[str] = []
+        video_filters = []
         audio_filters: list[str] = []
-        video_inputs: list[str] = []
+        video_inputs = []
         audio_inputs: list[str] = []
 
         transition_sec = self.transition_ms / 1000.0
@@ -598,6 +630,7 @@ class FFmpegRenderService(RenderService):
         has_narration = narration_path is not None and Path(narration_path).exists()
         has_music = music_path is not None and Path(music_path).exists()
         music_input_idx = 1 + int(has_narration)
+        is_voiceover_replacement = (artifact_type == ArtifactType.VOICEOVER_PREVIEW)
 
         filter_graph, map_args = self._build_filtergraph(
             keep_segments,
@@ -608,8 +641,8 @@ class FFmpegRenderService(RenderService):
             music_input_idx=music_input_idx,
             music_volume_db=music_volume_db,
             music_ducking_db=music_ducking_db,
+            is_voiceover_replacement=is_voiceover_replacement,
         )
-
         cmd = [
             ffmpeg_bin,
             "-y",

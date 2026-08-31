@@ -209,9 +209,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   const showCaptionsTrack = !isOriginalMode && captionBlocks.length > 0;
 
   // Mode-specific Video Keep Segments:
-  const visibleKeepSegments = isOriginalMode
-    ? [[0, durationMs]]
-    : twickData.keepSegments;
+  const visibleKeepSegments = isOriginalMode ? [[0, durationMs]] : twickData.keepSegments;
 
   // Mode-specific Audio Regions:
   const visibleAudioRegions = isOriginalMode
@@ -239,7 +237,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           ) : (
             <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-text-muted">
               <span>&middot;</span>
-              <span className="font-medium text-text-secondary">{twickData.activeCutCount} cuts</span>
+              <span className="font-medium text-text-secondary">
+                {twickData.activeCutCount} cuts
+              </span>
               <span>&middot;</span>
               <span>{twickData.coverageMarkerCount} coverage</span>
               <span>&middot;</span>

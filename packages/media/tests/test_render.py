@@ -1,8 +1,11 @@
 """Unit and synthetic media tests for RenderService and FFmpegRenderService."""
 
+from array import array
 from datetime import datetime, timezone
+import math
 from pathlib import Path
 import subprocess
+
 import pytest
 
 from croviq_domain.editorial import EditorDecisionType
@@ -38,6 +41,100 @@ def _create_synthetic_video(target_path: Path, duration_sec: int = 5, size: str 
     if res.returncode != 0:
         pytest.skip(f"ffmpeg not available for synthetic video creation: {res.stderr}")
     return target_path
+
+
+def _create_sine_audio(
+    target_path: Path,
+    *,
+    frequency_hz: int,
+    duration_sec: float,
+) -> Path:
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency={frequency_hz}:duration={duration_sec}",
+            "-ar",
+            "48000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            str(target_path),
+        ],
+        check=True,
+    )
+    return target_path
+
+
+def _decode_mono_audio(media_path: Path, sample_rate: int = 48000) -> array:
+    result = subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-i",
+            str(media_path),
+            "-vn",
+            "-f",
+            "s16le",
+            "-ac",
+            "1",
+            "-ar",
+            str(sample_rate),
+            "pipe:1",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    samples = array("h")
+    samples.frombytes(result.stdout)
+    return samples
+
+
+def _tone_amplitude(
+    samples: array,
+    frequency_hz: int,
+    sample_rate: int = 48000,
+) -> float:
+    """Measure a steady tone in 100ms windows without depending on AAC phase."""
+    window_size = sample_rate // 10
+    coefficient = 2.0 * math.cos(2.0 * math.pi * frequency_hz / sample_rate)
+    amplitudes: list[float] = []
+
+    for start in range(0, len(samples) - window_size + 1, window_size):
+        previous = 0.0
+        previous_previous = 0.0
+        for index in range(start, start + window_size):
+            current = samples[index] + coefficient * previous - previous_previous
+            previous_previous = previous
+            previous = current
+        power = max(
+            0.0,
+            previous_previous**2 + previous**2 - coefficient * previous * previous_previous,
+        )
+        amplitudes.append(2.0 * math.sqrt(power) / window_size / 32768.0)
+
+    assert amplitudes, "decoded audio is too short to analyze"
+    return sum(amplitudes) / len(amplitudes)
+
+
+def _rms_amplitude(
+    samples: array,
+    start_sec: float,
+    end_sec: float,
+    sample_rate: int = 48000,
+) -> float:
+    start = int(start_sec * sample_rate)
+    end = min(int(end_sec * sample_rate), len(samples))
+    assert end > start, "requested audio interval is unavailable"
+    mean_square = sum(samples[index] ** 2 for index in range(start, end)) / (end - start)
+    return math.sqrt(mean_square) / 32768.0
 
 
 @pytest.fixture
@@ -276,6 +373,162 @@ def test_fake_render_service(synthetic_5s_video: Path, tmp_path: Path):
     assert res.duration_ms == 5000
     assert res.video_codec == "h264"
     assert res.audio_codec == "aac"
+
+
+def test_voiceover_preview_zero_cut_replaces_source_audio(
+    synthetic_5s_video: Path,
+    tmp_path: Path,
+):
+    renderer = FFmpegRenderService()
+    edl = EditDecisionList(
+        edl_id="edl_voiceover_zero_cut",
+        production_id="prod_voiceover_zero_cut",
+        source_duration_ms=5000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=datetime.now(timezone.utc),
+    )
+    narration_path = _create_sine_audio(
+        tmp_path / "zero_cut_narration.wav",
+        frequency_hz=880,
+        duration_sec=5,
+    )
+
+    result = renderer.render_voiceover_preview(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        narration_audio_path=narration_path,
+        output_path=tmp_path / "voiceover_zero_cut.mp4",
+    )
+
+    samples = _decode_mono_audio(result.output_path)
+    assert result.artifact_type == ArtifactType.VOICEOVER_PREVIEW
+    assert _tone_amplitude(samples, 880) > 0.05
+    assert _tone_amplitude(samples, 440) < 0.005
+
+
+def test_voiceover_preview_multi_cut_replaces_source_audio_through_concat(
+    synthetic_5s_video: Path,
+    tmp_path: Path,
+):
+    renderer = FFmpegRenderService()
+    cuts = [
+        CutInstruction(
+            cut_id="cut_voiceover_1",
+            decision_id="decision_voiceover_1",
+            decision_type=EditorDecisionType.REMOVE_FILLER,
+            transcript_start_word=2,
+            transcript_end_word=4,
+            requested_start_ms=1000,
+            requested_end_ms=2000,
+            safe_start_ms=1000,
+            safe_end_ms=2000,
+            left_anchor="before-one",
+            right_anchor="after-one",
+            transition_ms=20,
+            safety_status=CutSafetyStatus.SAFE,
+            safety_reason="synthetic test boundary",
+            confidence=1.0,
+        ),
+        CutInstruction(
+            cut_id="cut_voiceover_2",
+            decision_id="decision_voiceover_2",
+            decision_type=EditorDecisionType.TRIM_PAUSE,
+            transcript_start_word=8,
+            transcript_end_word=10,
+            requested_start_ms=3000,
+            requested_end_ms=4000,
+            safe_start_ms=3000,
+            safe_end_ms=4000,
+            left_anchor="before-two",
+            right_anchor="after-two",
+            transition_ms=20,
+            safety_status=CutSafetyStatus.SAFE,
+            safety_reason="synthetic test boundary",
+            confidence=1.0,
+        ),
+    ]
+    edl = EditDecisionList(
+        edl_id="edl_voiceover_multi_cut",
+        production_id="prod_voiceover_multi_cut",
+        source_duration_ms=5000,
+        cuts=cuts,
+        coverage_markers=[],
+        created_at=datetime.now(timezone.utc),
+    )
+    narration_path = _create_sine_audio(
+        tmp_path / "multi_cut_narration.wav",
+        frequency_hz=880,
+        duration_sec=3,
+    )
+
+    result = renderer.render_voiceover_preview(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        narration_audio_path=narration_path,
+        output_path=tmp_path / "voiceover_multi_cut.mp4",
+    )
+
+    samples = _decode_mono_audio(result.output_path)
+    assert abs(result.duration_ms - 3000) <= 250
+    assert _tone_amplitude(samples, 880) > 0.05
+    assert _tone_amplitude(samples, 440) < 0.005
+
+
+def test_voiceover_preview_missing_narration_raises_instead_of_using_source_audio(
+    synthetic_5s_video: Path,
+    tmp_path: Path,
+):
+    renderer = FFmpegRenderService()
+    edl = EditDecisionList(
+        edl_id="edl_voiceover_missing_narration",
+        production_id="prod_voiceover_missing_narration",
+        source_duration_ms=5000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=datetime.now(timezone.utc),
+    )
+
+    with pytest.raises(RenderError):
+        renderer.render_voiceover_preview(
+            source_path=synthetic_5s_video,
+            edl=edl,
+            narration_audio_path=tmp_path / "missing-narration.wav",
+            output_path=tmp_path / "must-not-fall-back.mp4",
+        )
+
+
+def test_voiceover_preview_pads_short_narration_with_silence_to_edl_duration(
+    synthetic_5s_video: Path,
+    tmp_path: Path,
+):
+    renderer = FFmpegRenderService()
+    edl = EditDecisionList(
+        edl_id="edl_voiceover_short_narration",
+        production_id="prod_voiceover_short_narration",
+        source_duration_ms=5000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=datetime.now(timezone.utc),
+    )
+    narration_path = _create_sine_audio(
+        tmp_path / "short_narration.wav",
+        frequency_hz=880,
+        duration_sec=1,
+    )
+
+    result = renderer.render_voiceover_preview(
+        source_path=synthetic_5s_video,
+        edl=edl,
+        narration_audio_path=narration_path,
+        output_path=tmp_path / "voiceover_short_narration.mp4",
+    )
+
+    samples = _decode_mono_audio(result.output_path)
+    assert abs(result.duration_ms - 5000) <= 250
+    assert len(samples) >= int(4.8 * 48000)
+    assert _rms_amplitude(samples, 0.25, 0.75) > 0.03
+    assert _rms_amplitude(samples, 4.0, 4.5) < 0.005
 
 
 def test_render_studio_voice_preview(synthetic_5s_video: Path, tmp_path: Path):

@@ -82,83 +82,145 @@ async def main():
     print(f"Active cut count: {len(active_edl.active_cuts)}")
     print(f"Target edited duration: {active_edl.estimated_target_duration_ms} ms")
 
-    # Voice selection
-    selected_voice = "Aoede"
+    # Voice selection from config
+    voice_cfg = await agent_cfg_repo.get_voice_settings(prod.workspace_id) if prod.workspace_id else None
+    selected_voice = voice_cfg.selected_voice if voice_cfg else "Aoede"
     voice_item = VoiceCatalog.get_voice(selected_voice)
     print(f"Studio Voice: {selected_voice} ({voice_item.description if voice_item else 'Prebuilt Voice'})")
 
-    # Step 1: Derive source-grounded corrected script under active EDL
-    keep_segments = derive_keep_segments(active_edl)
-    print(f"\nKeep segments count: {len(keep_segments)}")
-
-    video_uri = f"gs://{prod.source_media.gcs_bucket}/{prod.source_media.gcs_object}"
-    corrected_script, usage = await genai_client.correct_transcript_with_video_grounding(
-        video_uri=video_uri,
-        mime_type="video/mp4",
-        transcript=transcript,
-        edl=active_edl,
-        production_id=PRODUCTION_ID,
+    # Step 1: Fetch or derive source-grounded corrected script under active EDL
+    cached_script = await tr_repo.get_corrected_transcript_by_production_id(
+        PRODUCTION_ID, edl_id=active_edl.edl_id
     )
+    if cached_script and cached_script.segments:
+        corrected_script = cached_script
+        print(f"\nLoaded persisted canonical corrected script {corrected_script.transcript_id} ({len(corrected_script.segments)} segments)")
+    else:
+        video_uri = f"gs://{prod.source_media.gcs_bucket}/{prod.source_media.gcs_object}"
+        corrected_script, usage = await genai_client.correct_transcript_with_video_grounding(
+            video_uri=video_uri,
+            mime_type="video/mp4",
+            transcript=transcript,
+            edl=active_edl,
+            production_id=PRODUCTION_ID,
+        )
+        await tr_repo.save_corrected_transcript(corrected_script, edl_id=active_edl.edl_id)
+        print(f"\nGenerated and persisted new canonical corrected script {corrected_script.transcript_id}")
 
-    print(f"\nCorrected Script Generated: {len(corrected_script.segments)} active segments (excluded {len(transcript.segments) - len(corrected_script.segments)} cut segments)")
+    print(f"Total canonical segments: {len(corrected_script.segments)}")
     print(f"Corrections count: {corrected_script.corrections_count}")
     print(f"Meaning preserved: {corrected_script.meaning_preserved}")
 
-    synthesizer = StudioVoiceSynthesizer()
-
-    async def tts_fn(text: str, voice_id: str) -> tuple[int, bytes]:
-        # Real Google Gemini TTS synthesis
-        try:
-            return await genai_client.synthesize_studio_voice(
-                text=text,
-                voice_id=voice_id,
-                production_id=PRODUCTION_ID,
-            )
-        except Exception as exc:
-            # High-fidelity fallback audio if API quota limit hit
-            words = len(text.split())
-            dur_ms = max(500, int(words * 360 + 100))
-            return dur_ms, b"\x00" * (dur_ms * 48)
-
-    async def leo_rewrite_fn(orig_text: str, max_dur_s: float, attempt: int) -> str:
-        return generate_fallback_narration_rewrite(orig_text, max_dur_s, attempt)
-
-    fit_tasks = []
+    # Prepare segments with positive edited duration
+    prepared_segments = []
     for seg in corrected_script.segments:
         ed_start = seg.edited_start_ms if seg.edited_start_ms is not None else map_source_time_to_edited(seg.source_start_ms, active_edl)
         ed_end = seg.edited_end_ms if seg.edited_end_ms is not None else map_source_time_to_edited(seg.source_end_ms, active_edl)
         avail_ms = ed_end - ed_start
         if avail_ms <= 0:
             continue
-        text_to_synthesize = seg.corrected_text if seg.change_type != ScriptCorrectionChangeType.KEEP else seg.original_text
+        text_to_synthesize = seg.corrected_text or seg.original_text
+        prepared_segments.append({
+            "segment_id": seg.segment_id,
+            "source_start_ms": seg.source_start_ms,
+            "source_end_ms": seg.source_end_ms,
+            "edited_start_ms": ed_start,
+            "edited_end_ms": ed_end,
+            "available_duration_ms": avail_ms,
+            "text": text_to_synthesize,
+            "original_text": seg.original_text,
+            "change_type": seg.change_type.value if hasattr(seg.change_type, "value") else str(seg.change_type),
+        })
+
+    def _needs_merge(s_dict: dict) -> bool:
+        avail = s_dict["available_duration_ms"]
+        word_count = len(s_dict["text"].split())
+        return avail < 1000 or (avail < 2000 and word_count * 310 > avail)
+
+    # Merge tight segments with adjacent segments so natural TTS cadence fits comfortably
+    merged_segments = []
+    i = 0
+    while i < len(prepared_segments):
+        curr = dict(prepared_segments[i])
+        if _needs_merge(curr) and i + 1 < len(prepared_segments):
+            nxt = prepared_segments[i + 1]
+            curr["segment_id"] = f"{curr['segment_id']}_{nxt['segment_id']}"
+            curr["source_end_ms"] = nxt["source_end_ms"]
+            curr["edited_end_ms"] = nxt["edited_end_ms"]
+            curr["available_duration_ms"] = curr["edited_end_ms"] - curr["edited_start_ms"]
+            curr["text"] = f"{curr['text']} {nxt['text']}".strip()
+            curr["original_text"] = f"{curr['original_text']} {nxt['original_text']}".strip()
+            merged_segments.append(curr)
+            i += 2
+        elif _needs_merge(curr) and merged_segments:
+            prev = merged_segments[-1]
+            prev["segment_id"] = f"{prev['segment_id']}_{curr['segment_id']}"
+            prev["source_end_ms"] = curr["source_end_ms"]
+            prev["edited_end_ms"] = curr["edited_end_ms"]
+            prev["available_duration_ms"] = prev["edited_end_ms"] - prev["edited_start_ms"]
+            prev["text"] = f"{prev['text']} {curr['text']}".strip()
+            prev["original_text"] = f"{prev['original_text']} {curr['original_text']}".strip()
+            i += 1
+        else:
+            merged_segments.append(curr)
+            i += 1
+
+    synthesizer = StudioVoiceSynthesizer()
+
+    async def tts_fn(text: str, voice_id: str) -> tuple[int, bytes]:
+        # Real Google Gemini TTS synthesis
+        return await genai_client.synthesize_studio_voice(
+            text=text,
+            voice_id=voice_id,
+            production_id=PRODUCTION_ID,
+        )
+
+    async def leo_rewrite_fn(orig_text: str, max_dur_s: float, attempt: int) -> str:
+        return await genai_client.generate_narration_rewrite(
+            original_text=orig_text,
+            available_duration_s=max_dur_s,
+            attempt=attempt,
+            production_id=PRODUCTION_ID,
+        )
+
+    fit_tasks = []
+    for item in merged_segments:
         fit_tasks.append(
             synthesizer.fit_narration_segment_with_audio(
-                segment_id=seg.segment_id,
+                segment_id=item["segment_id"],
                 production_id=PRODUCTION_ID,
-                source_start_ms=seg.source_start_ms,
-                source_end_ms=seg.source_end_ms,
-                available_duration_ms=avail_ms,
-                original_text=text_to_synthesize,
+                source_start_ms=item["source_start_ms"],
+                source_end_ms=item["source_end_ms"],
+                available_duration_ms=item["available_duration_ms"],
+                original_text=item["text"],
                 voice_id=selected_voice,
                 tts_fn=tts_fn,
                 rewrite_fn=leo_rewrite_fn,
-                edited_start_ms=ed_start,
-                edited_end_ms=ed_end,
-                change_type=seg.change_type.value if hasattr(seg.change_type, "value") else str(seg.change_type),
+                edited_start_ms=item["edited_start_ms"],
+                edited_end_ms=item["edited_end_ms"],
+                change_type=item["change_type"],
             )
         )
 
     results = list(await asyncio.gather(*fit_tasks))
     narration_segments = [r[0] for r in results]
+    accepted_segments = [
+        (seg, pcm_bytes)
+        for seg, pcm_bytes in results
+        if seg.status == NarrationSegmentStatus.ACCEPTED and pcm_bytes and len(pcm_bytes) > 0 and seg.generated_duration_ms <= seg.available_duration_ms
+    ]
 
     print("\n" + "=" * 110)
-    print(f"{'SEG ID':<10} | {'SOURCE TIME':<16} | {'EDITED TIME':<16} | {'BUDGET':<8} | {'TTS DUR':<8} | {'STATUS':<9} | {'TEXT'}")
+    print(f"{'SEG ID':<16} | {'EDITED TIME':<16} | {'BUDGET':<8} | {'TTS DUR':<8} | {'STATUS':<9} | {'TEXT'}")
     print("-" * 110)
     for s in narration_segments:
-        src_t = f"{s.source_start_ms/1000:.2f}s-{s.source_end_ms/1000:.2f}s"
         ed_t = f"{(s.edited_start_ms or 0)/1000:.2f}s-{(s.edited_end_ms or 0)/1000:.2f}s"
-        print(f"{s.segment_id:<10} | {src_t:<16} | {ed_t:<16} | {s.available_duration_ms:<8} | {s.generated_duration_ms:<8} | {s.status.value:<9} | {s.rewritten_text}")
+        print(f"{s.segment_id:<16} | {ed_t:<16} | {s.available_duration_ms:<8} | {s.generated_duration_ms:<8} | {s.status.value:<9} | {s.rewritten_text}")
     print("=" * 110)
+
+    if len(accepted_segments) != len(merged_segments):
+        print(f"ERROR: Not all segments fit! ({len(accepted_segments)}/{len(merged_segments)})")
+        sys.exit(1)
 
     # Render Voiceover Preview video
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -178,27 +240,34 @@ async def main():
         total_dur_ms = active_edl.estimated_target_duration_ms
         num_samples = int(sample_rate * total_dur_ms / 1000)
         audio_buffer = bytearray(num_samples * 2)
-        speech_intervals: list[tuple[int, int]] = []
+        speech_intervals = []
 
-        for seg, pcm_bytes in results:
-            if seg.status == NarrationSegmentStatus.ACCEPTED and pcm_bytes and seg.edited_start_ms is not None and seg.edited_end_ms is not None:
-                ed_start = seg.edited_start_ms
-                ed_end = seg.edited_end_ms
-                avail_ms = ed_end - ed_start
-                if avail_ms <= 0:
-                    continue
-                speech_intervals.append((ed_start, min(total_dur_ms, ed_start + seg.generated_duration_ms)))
-                start_sample = int(sample_rate * ed_start / 1000)
-                start_byte = start_sample * 2
-                copy_len = min(len(pcm_bytes), avail_ms * 48, len(audio_buffer) - start_byte)
-                if copy_len > 0 and start_byte < len(audio_buffer):
-                    audio_buffer[start_byte : start_byte + copy_len] = pcm_bytes[:copy_len]
+        for seg, pcm_bytes in accepted_segments:
+            ed_start = seg.edited_start_ms
+            ed_end = seg.edited_end_ms
+            avail_ms = ed_end - ed_start
+            if avail_ms <= 0:
+                continue
+            speech_intervals.append((ed_start, min(total_dur_ms, ed_start + seg.generated_duration_ms)))
+            start_sample = int(sample_rate * ed_start / 1000)
+            start_byte = start_sample * 2
+            copy_len = min(len(pcm_bytes), avail_ms * 48, len(audio_buffer) - start_byte)
+            if copy_len > 0 and start_byte < len(audio_buffer):
+                audio_buffer[start_byte : start_byte + copy_len] = pcm_bytes[:copy_len]
 
         with wave.open(str(local_narr), "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(sample_rate)
             wf.writeframes(bytes(audio_buffer))
+
+        narration_gcs_obj = f"workspaces/{prod.workspace_id}/productions/{prod.production_id}/narration/studio_voice_narration.wav"
+        await storage.upload_object_from_path(
+            bucket=prod.source_media.gcs_bucket,
+            object_name=narration_gcs_obj,
+            source_path=local_narr,
+            content_type="audio/wav",
+        )
 
         print(f"Rendering Voiceover Preview with FFmpeg ({len(speech_intervals)} replacement intervals)...")
         render_res = render_service.render_voiceover_preview(
@@ -240,8 +309,9 @@ async def main():
             content_type="video/mp4",
         )
 
+        art_id = f"art_vo_{active_edl.edl_id[:8]}"
         art = RenderArtifact(
-            artifact_id=f"art_vo_{active_edl.edl_id[:8]}",
+            artifact_id=art_id,
             production_id=prod.production_id,
             edl_id=active_edl.edl_id,
             artifact_type=ArtifactType.VOICEOVER_PREVIEW,
@@ -261,42 +331,7 @@ async def main():
         )
         await render_repo.save_render_artifact(art)
 
-        # Save Studio Voice preview alias too
-        gcs_obj_sv = build_render_artifact_gcs_object_path(
-            workspace_id=prod.workspace_id,
-            production_id=prod.production_id,
-            edl_id=active_edl.edl_id,
-            artifact_type=ArtifactType.STUDIO_VOICE_PREVIEW,
-        )
-        await storage.upload_object_from_path(
-            bucket=prod.source_media.gcs_bucket,
-            object_name=gcs_obj_sv,
-            source_path=local_out,
-            content_type="video/mp4",
-        )
-        art_sv = RenderArtifact(
-            artifact_id=f"art_sv_{active_edl.edl_id[:8]}",
-            production_id=prod.production_id,
-            edl_id=active_edl.edl_id,
-            artifact_type=ArtifactType.STUDIO_VOICE_PREVIEW,
-            status=ArtifactStatus.completed,
-            gcs_bucket=prod.source_media.gcs_bucket,
-            gcs_object=gcs_obj_sv,
-            content_type="video/mp4",
-            size_bytes=render_res.size_bytes,
-            duration_ms=render_res.duration_ms,
-            width=render_res.width,
-            height=render_res.height,
-            frame_rate=render_res.frame_rate,
-            video_codec=render_res.video_codec,
-            audio_codec=render_res.audio_codec,
-            created_at=now,
-            completed_at=now,
-        )
-        await render_repo.save_render_artifact(art_sv)
-
         # Save StudioVoiceResult in repository
-        accepted_segments = [s for s in narration_segments if s.status == NarrationSegmentStatus.ACCEPTED]
         sv_result = StudioVoiceResult(
             production_id=prod.production_id,
             voice_id=selected_voice,
@@ -305,11 +340,12 @@ async def main():
             edl_version=active_edl.version,
             corrected_script_version=corrected_script.transcript_id,
             segments=narration_segments,
-            total_segments=len(narration_segments),
+            total_segments=len(merged_segments),
             accepted_segments=len(accepted_segments),
             all_within_budget=True,
             gcs_bucket=prod.source_media.gcs_bucket,
-            gcs_object=gcs_obj,
+            gcs_object=narration_gcs_obj,
+            preview_artifact_id=art.artifact_id,
             status="completed",
             created_at=now,
             updated_at=now,
@@ -322,19 +358,20 @@ async def main():
                 segment_id=s.segment_id,
                 source_start_ms=s.source_start_ms,
                 source_end_ms=s.source_end_ms,
-                text=s.rewritten_text,
+                text=s.rewritten_text or s.original_text,
                 original_text=s.original_text,
+                voice_mode="PREBUILT_STUDIO_VOICE",
                 voice_id=selected_voice,
                 generated_duration_ms=s.generated_duration_ms,
                 preview_artifact_id=art.artifact_id,
             )
-            for s in accepted_segments
+            for s, _ in accepted_segments
         ]
         await edl_repo.save_edl(active_edl)
 
         print("\nSUCCESS: Voiceover Preview generated and saved to Firestore + GCS!")
+        print(f"Artifact ID: {art.artifact_id}")
         print(f"Artifact URI: gs://{art.gcs_bucket}/{art.gcs_object}")
-
-
+        print(f"Studio Voice Result: {sv_result.status} ({sv_result.accepted_segments}/{sv_result.total_segments} segments, voice={sv_result.voice_id})")
 if __name__ == "__main__":
     asyncio.run(main())

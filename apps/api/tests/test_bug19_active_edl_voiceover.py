@@ -497,3 +497,30 @@ async def test_p_failure_produces_no_fake_ready_artifact():
     is_available = failed_artifact.status == ArtifactStatus.completed
     assert is_available is False
     assert failed_artifact.status == ArtifactStatus.failed
+
+
+# Q. Missing audio bytes are a failed generation, never an accepted segment
+@pytest.mark.asyncio
+async def test_q_missing_tts_audio_is_not_accepted_as_generated():
+    synthesizer = StudioVoiceSynthesizer()
+
+    async def missing_audio_tts(text: str, voice_id: str):
+        return 400, b""
+
+    async def preserve_canonical_text(text: str, duration_s: float, attempt: int):
+        return text
+
+    segment, audio = await synthesizer.fit_narration_segment_with_audio(
+        segment_id="seg_missing_audio",
+        production_id="prod_missing_audio",
+        source_start_ms=1000,
+        source_end_ms=3000,
+        available_duration_ms=2000,
+        original_text="Persisted canonical corrected text.",
+        voice_id="Charon",
+        tts_fn=missing_audio_tts,
+        rewrite_fn=preserve_canonical_text,
+    )
+
+    assert audio == b""
+    assert segment.status == NarrationSegmentStatus.FAILED

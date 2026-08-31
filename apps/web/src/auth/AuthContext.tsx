@@ -58,7 +58,10 @@ const recordClientAuthEvent = async (event: ClientAuthEvent): Promise<void> => {
 };
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
-    if (typeof window !== "undefined" && (import.meta.env.DEV || window.location.hostname === "localhost")) {
+    if (
+      typeof window !== "undefined" &&
+      (import.meta.env.DEV || window.location.hostname === "localhost")
+    ) {
       const stored = localStorage.getItem("croviq_dev_auth_user");
       if (stored) {
         try {
@@ -214,18 +217,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await signInWithEmailAndPassword(auth, email, password);
       } catch (err: unknown) {
-        const errCode = (err && typeof err === "object" && "code" in err && typeof (err as { code: unknown }).code === "string")
-          ? (err as { code: string }).code
-          : "";
-        const errMsg = (err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string")
-          ? (err as { message: string }).message
-          : "";
+        const errCode =
+          err &&
+          typeof err === "object" &&
+          "code" in err &&
+          typeof (err as { code: unknown }).code === "string"
+            ? (err as { code: string }).code
+            : "";
+        const errMsg =
+          err &&
+          typeof err === "object" &&
+          "message" in err &&
+          typeof (err as { message: unknown }).message === "string"
+            ? (err as { message: string }).message
+            : "";
         const isExplicitAuthError =
           errCode.startsWith("auth/") ||
           errMsg.includes("INVALID_LOGIN_CREDENTIALS") ||
           errMsg.includes("invalid-credential");
 
-        if (!isExplicitAuthError && (import.meta.env.DEV) && window.location.hostname === "localhost" && !localStorage.getItem("croviq_mock_auth_token")) {
+        if (
+          !isExplicitAuthError &&
+          import.meta.env.DEV &&
+          window.location.hostname === "localhost" &&
+          !localStorage.getItem("croviq_mock_auth_token")
+        ) {
           const devUser: User = {
             user_id: "27iEBUMcu6ToDYwp2OdEIHBuwIA3",
             email: email || "demo@croviq.app",

@@ -114,7 +114,8 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   const effectiveVoices = voices && voices.length > 0 ? voices : FALLBACK_GEMINI_VOICES;
-  const currentVoiceMeta = effectiveVoices.find((v) => v.voice_id === selectedVoice) || effectiveVoices[0];
+  const currentVoiceMeta =
+    effectiveVoices.find((v) => v.voice_id === selectedVoice) || effectiveVoices[0];
 
   // Stop audio on unmount
   useEffect(() => {
@@ -410,9 +411,7 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
                       >
                         {v.display_name}
                       </span>
-                      <span className="text-[10px] text-text-muted capitalize">
-                        ({v.gender})
-                      </span>
+                      <span className="text-[10px] text-text-muted capitalize">({v.gender})</span>
                     </div>
                     <p className="text-[10px] text-text-muted truncate max-w-[210px]">
                       {v.description}
@@ -455,9 +454,7 @@ export const VoiceSettingsTab: React.FC<VoiceSettingsTabProps> = ({
         <span className="text-[10px] font-mono text-text-muted uppercase tracking-wide">
           Fixed Audition Phrase:
         </span>
-        <p className="text-[11px] text-text-secondary italic">
-          "{FIXED_VOICE_SAMPLE_TEXT}"
-        </p>
+        <p className="text-[11px] text-text-secondary italic">"{FIXED_VOICE_SAMPLE_TEXT}"</p>
       </div>
 
       {/* Preview Error Message */}

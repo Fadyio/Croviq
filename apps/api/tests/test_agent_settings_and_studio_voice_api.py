@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from croviq_api.main import app
 from croviq_api.auth.dependencies import get_current_user
-from croviq_api.media.dependencies import get_media_storage, get_transcription_service
+from croviq_api.media.dependencies import get_media_storage
 from croviq_api.media.fake import FakeMediaStorage
 from croviq_api.productions.dependencies import get_render_service
 from croviq_api.productions.edl_repository import (
@@ -29,6 +29,7 @@ from croviq_api.productions.transcript_repository import (
     InMemoryTranscriptRepository,
     get_transcript_repository,
 )
+from croviq_api.productions.dependencies import get_genai_client
 from croviq_api.workspaces.agent_config_repository import (
     InMemoryAgentConfigRepository,
     get_agent_config_repository,
@@ -39,12 +40,20 @@ from croviq_api.workspaces.repository import (
 )
 from croviq_domain.agent_config import AgentId, NarrationMode
 from croviq_domain.edl import EditDecisionList
-from croviq_domain.narration import NarrationSegmentStatus
 from croviq_domain.production import Production, ProductionStatus, SourceMedia, SourceMediaStatus
-from croviq_domain.transcript import Transcript, TranscriptSegment, TranscriptWord
+from croviq_domain.transcript import (
+    CorrectedTranscript,
+    CorrectedTranscriptSegment,
+    EntailmentVerdict,
+    ScriptCorrectionChangeType,
+    Transcript,
+    TranscriptSegment,
+    TranscriptWord,
+)
 from croviq_domain.user import User
 from croviq_media.render import FakeRenderService
-from croviq_domain.render import ArtifactType
+from croviq_domain.render import ArtifactStatus, ArtifactType
+from croviq_agents.client import FakeGenAIClient
 
 
 @pytest.fixture
@@ -89,8 +98,11 @@ def api_test_context():
         "edl_repo": edl_repo,
         "sv_repo": sv_repo,
         "render_repo": render_repo,
+        "storage": fake_storage,
+        "render_service": fake_render,
+        "agent_config_repo": agent_config_repo,
+        "workspace_repo": ws_repo,
     }
-
     app.dependency_overrides.clear()
 
 
@@ -296,6 +308,38 @@ async def test_studio_voice_generation_endpoint(api_test_context):
         created_at=now,
     )
     await edl_repo.save_edl(edl)
+    await transcript_repo.save_corrected_transcript(
+        CorrectedTranscript(
+            transcript_id="corrected_sv_demo_revision_1",
+            production_id=prod_id,
+            segments=[
+                CorrectedTranscriptSegment(
+                    segment_id="seg_01",
+                    source_start_ms=0,
+                    source_end_ms=2000,
+                    edited_start_ms=0,
+                    edited_end_ms=2000,
+                    original_text="Hello world",
+                    corrected_text="Hello, world.",
+                    change_type=ScriptCorrectionChangeType.PUNCTUATION,
+                    target_duration_ms=2000,
+                ),
+                CorrectedTranscriptSegment(
+                    segment_id="seg_02",
+                    source_start_ms=3000,
+                    source_end_ms=8000,
+                    edited_start_ms=3000,
+                    edited_end_ms=8000,
+                    original_text="Here we go install everything.",
+                    corrected_text="Here we go. Install everything.",
+                    change_type=ScriptCorrectionChangeType.PUNCTUATION,
+                    target_duration_ms=5000,
+                ),
+            ],
+            created_at=now,
+        ),
+        edl_id=edl.edl_id,
+    )
 
     # Trigger Studio Voice generation
     gen_resp = client.post(f"/api/productions/{prod_id}/studio-voice")
@@ -310,12 +354,16 @@ async def test_studio_voice_generation_endpoint(api_test_context):
 
     assert gen_data["studio_voice_preview_url"] is not None
 
-    # Verify distinct RenderArtifact persistence
+    # Verify the completed Voiceover Preview artifact is the recorded lineage target.
     render_repo = api_test_context["render_repo"]
     artifacts = await render_repo.list_render_artifacts(prod_id)
-    sv_artifacts = [a for a in artifacts if a.artifact_type == ArtifactType.STUDIO_VOICE_PREVIEW]
-    assert len(sv_artifacts) == 1
-    assert "studio_voice_preview.mp4" in sv_artifacts[0].gcs_object
+    voiceover_artifacts = [
+        artifact
+        for artifact in artifacts
+        if artifact.artifact_type == ArtifactType.VOICEOVER_PREVIEW
+    ]
+    assert len(voiceover_artifacts) == 1
+    assert result["preview_artifact_id"] == voiceover_artifacts[0].artifact_id
 
     # Retrieve Studio Voice result
     get_resp = client.get(f"/api/productions/{prod_id}/studio-voice")
@@ -331,7 +379,7 @@ async def test_studio_voice_generation_endpoint(api_test_context):
     assert playback_data["studio_voice_preview_url"] is not None
 
 @pytest.mark.asyncio
-async def test_studio_voice_generation_marks_failed_when_no_audio_synthesized(api_test_context):
+async def test_studio_voice_generation_marks_incomplete_when_no_audio_synthesized(api_test_context):
     client = api_test_context["client"]
     prod_repo = api_test_context["prod_repo"]
     transcript_repo = api_test_context["transcript_repo"]
@@ -392,9 +440,29 @@ async def test_studio_voice_generation_marks_failed_when_no_audio_synthesized(ap
         created_at=now,
     )
     await edl_repo.save_edl(edl)
+    await transcript_repo.save_corrected_transcript(
+        CorrectedTranscript(
+            transcript_id="corrected_sv_fail_revision_1",
+            production_id=prod_id,
+            segments=[
+                CorrectedTranscriptSegment(
+                    segment_id="seg_fail_01",
+                    source_start_ms=0,
+                    source_end_ms=500,
+                    edited_start_ms=0,
+                    edited_end_ms=500,
+                    original_text="This is an exceedingly long sentence that cannot possibly fit into a 500ms window.",
+                    corrected_text="This is an exceedingly long sentence that cannot possibly fit into a 500ms window.",
+                    change_type=ScriptCorrectionChangeType.KEEP,
+                    target_duration_ms=500,
+                ),
+            ],
+            created_at=now,
+        ),
+        edl_id=edl.edl_id,
+    )
 
     # Create fake genai client where TTS returns 10,000ms audio (exceeds 500ms budget)
-    from croviq_agents.client import FakeGenAIClient
     class AlwaysOverbudgetClient(FakeGenAIClient):
         async def synthesize_studio_voice(self, text: str, voice_id: str = "Puck", production_id: str = "unknown", request_id: str = "unknown"):
             return 10000, b"\x00" * 480000
@@ -402,11 +470,364 @@ async def test_studio_voice_generation_marks_failed_when_no_audio_synthesized(ap
         async def generate_narration_rewrite(self, original_text: str, available_duration_s: float, attempt: int = 1, production_id: str = "unknown", request_id: str = "unknown"):
             return original_text
 
-    from croviq_api.productions.dependencies import get_genai_client
     app.dependency_overrides[get_genai_client] = lambda: AlwaysOverbudgetClient()
 
     gen_resp = client.post(f"/api/productions/{prod_id}/studio-voice")
     assert gen_resp.status_code == 200
     gen_data = gen_resp.json()
     assert gen_data["result"]["accepted_segments"] == 0
-    assert gen_data["result"]["status"] == "failed"
+    assert gen_data["result"]["status"] == "incomplete"
+    assert gen_data["studio_voice_preview_url"] is None
+    artifacts = await api_test_context["render_repo"].list_render_artifacts(prod_id)
+    assert not any(
+        artifact.artifact_type == ArtifactType.VOICEOVER_PREVIEW
+        and artifact.status == ArtifactStatus.completed
+        for artifact in artifacts
+    )
+
+
+class _RecordingStudioVoiceClient(FakeGenAIClient):
+    """TTS fake that records route inputs and can return failed or missing audio."""
+
+    def __init__(self, fault: str | None = None) -> None:
+        super().__init__()
+        self.fault = fault
+        self.synthesized_texts: list[str] = []
+
+    async def correct_transcript_with_video_grounding(self, *args, **kwargs):
+        raise AssertionError("Studio Voice generation must use the persisted corrected script")
+
+    async def synthesize_studio_voice(
+        self,
+        text: str,
+        voice_id: str = "Puck",
+        production_id: str = "unknown",
+        request_id: str = "unknown",
+    ):
+        self.synthesized_texts.append(text)
+        if self.fault == "failed" and "second canonical" in text.lower():
+            return 20_000, b"\x01" * 960_000
+        if self.fault == "missing" and "second canonical" in text.lower():
+            return 500, b""
+        return 500, b"\x01" * 24_000
+
+    async def generate_narration_rewrite(
+        self,
+        original_text: str,
+        available_duration_s: float,
+        attempt: int = 1,
+        production_id: str = "unknown",
+        request_id: str = "unknown",
+    ):
+        return original_text
+
+
+async def _seed_voiceover_lineage(
+    api_test_context,
+    *,
+    production_id: str,
+) -> tuple[EditDecisionList, CorrectedTranscript]:
+    now = datetime.now(timezone.utc)
+    source = SourceMedia(
+        upload_id=f"up_{production_id}",
+        original_filename="lineage.mp4",
+        content_type="video/mp4",
+        size_bytes=1000,
+        gcs_bucket="test-bucket",
+        gcs_object=f"productions/{production_id}/source.mp4",
+        status=SourceMediaStatus.UPLOADED,
+        uploaded_at=now,
+        created_at=now,
+    )
+    await api_test_context["prod_repo"].create_production(
+        Production(
+            production_id=production_id,
+            owner_user_id=api_test_context["user"].user_id,
+            workspace_id="ws_user_sv_test",
+            channel_id="croviq_syn_ai_eng_01",
+            status=ProductionStatus.UPLOADED,
+            source_media=source,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    transcript = Transcript(
+        transcript_id=f"tr_{production_id}",
+        production_id=production_id,
+        language_code="en",
+        duration_ms=8000,
+        words=[
+            TranscriptWord(index=0, text="raw", start_ms=0, end_ms=1000),
+            TranscriptWord(index=1, text="words", start_ms=1001, end_ms=2000),
+            TranscriptWord(index=2, text="more", start_ms=4000, end_ms=5000),
+            TranscriptWord(index=3, text="raw", start_ms=5001, end_ms=6000),
+        ],
+        segments=[
+            TranscriptSegment(
+                segment_id="seg_first",
+                start_ms=0,
+                end_ms=3000,
+                text="Raw first transcript wording.",
+                word_start_index=0,
+                word_end_index=1,
+            ),
+            TranscriptSegment(
+                segment_id="seg_second",
+                start_ms=4000,
+                end_ms=8000,
+                text="Raw second transcript wording.",
+                word_start_index=2,
+                word_end_index=3,
+            ),
+        ],
+        created_at=now,
+    )
+    await api_test_context["transcript_repo"].save_transcript(transcript)
+    edl = EditDecisionList(
+        edl_id=f"edl_{production_id}",
+        production_id=production_id,
+        version=7,
+        source_duration_ms=8000,
+        cuts=[],
+        coverage_markers=[],
+        created_at=now,
+    )
+    await api_test_context["edl_repo"].save_edl(edl)
+    corrected = CorrectedTranscript(
+        transcript_id=f"corrected_{production_id}_revision_4",
+        production_id=production_id,
+        segments=[
+            CorrectedTranscriptSegment(
+                segment_id="seg_first",
+                source_start_ms=0,
+                source_end_ms=3000,
+                edited_start_ms=0,
+                edited_end_ms=3000,
+                original_text="Raw first transcript wording.",
+                corrected_text="First canonical corrected sentence.",
+                change_type=ScriptCorrectionChangeType.KEEP,
+                target_duration_ms=3000,
+                entailment_verdict=EntailmentVerdict.SUPPORTED,
+            ),
+            CorrectedTranscriptSegment(
+                segment_id="seg_second",
+                source_start_ms=4000,
+                source_end_ms=8000,
+                edited_start_ms=4000,
+                edited_end_ms=8000,
+                original_text="Raw second transcript wording.",
+                corrected_text="Second canonical corrected sentence.",
+                change_type=ScriptCorrectionChangeType.GRAMMAR,
+                target_duration_ms=4000,
+                entailment_verdict=EntailmentVerdict.SUPPORTED,
+            ),
+        ],
+        created_at=now,
+    )
+    await api_test_context["transcript_repo"].save_corrected_transcript(
+        corrected,
+        edl_id=edl.edl_id,
+    )
+    api_test_context["storage"].simulate_uploaded_object(
+        bucket=source.gcs_bucket,
+        object_name=source.gcs_object,
+        size_bytes=source.size_bytes,
+        content_type=source.content_type,
+        content=b"source video",
+    )
+    voice_response = api_test_context["client"].put(
+        "/api/workspace/agent-settings/voice",
+        json={
+            "narration_mode": "studio_voice",
+            "selected_voice": "Charon",
+            "language": "en-US",
+        },
+    )
+    assert voice_response.status_code == 200
+    return edl, corrected
+
+
+@pytest.mark.asyncio
+async def test_studio_voice_generation_uses_persisted_canonical_text_and_records_complete_lineage(
+    api_test_context,
+):
+    production_id = "prod_voiceover_lineage"
+    edl, corrected = await _seed_voiceover_lineage(
+        api_test_context,
+        production_id=production_id,
+    )
+    genai = _RecordingStudioVoiceClient()
+    app.dependency_overrides[get_genai_client] = lambda: genai
+
+    response = api_test_context["client"].post(
+        f"/api/productions/{production_id}/studio-voice"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    result = payload["result"]
+    assert genai.synthesized_texts == [
+        "First canonical corrected sentence.",
+        "Second canonical corrected sentence.",
+    ]
+    assert result["status"] == "completed"
+    assert result["edl_id"] == edl.edl_id
+    assert result["edl_version"] == edl.version
+    assert result["voice_id"] == "Charon"
+    assert result["corrected_script_version"] == corrected.transcript_id
+    assert result["total_segments"] == 2
+    assert result["accepted_segments"] == 2
+    assert payload["studio_voice_preview_url"] is not None
+
+    artifacts = await api_test_context["render_repo"].list_render_artifacts(
+        production_id
+    )
+    completed_voiceovers = [
+        artifact
+        for artifact in artifacts
+        if artifact.artifact_type == ArtifactType.VOICEOVER_PREVIEW
+        and artifact.status == ArtifactStatus.completed
+    ]
+    assert len(completed_voiceovers) == 1
+    assert result["preview_artifact_id"] == completed_voiceovers[0].artifact_id
+
+
+@pytest.mark.parametrize("fault", ["failed", "missing"])
+@pytest.mark.asyncio
+async def test_studio_voice_generation_fails_closed_when_any_expected_audio_is_unusable(
+    api_test_context,
+    fault,
+):
+    production_id = f"prod_voiceover_{fault}"
+    await _seed_voiceover_lineage(api_test_context, production_id=production_id)
+    genai = _RecordingStudioVoiceClient(fault=fault)
+    app.dependency_overrides[get_genai_client] = lambda: genai
+
+    response = api_test_context["client"].post(
+        f"/api/productions/{production_id}/studio-voice"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"]["status"] == "incomplete"
+    assert payload["result"]["total_segments"] == 2
+    assert payload["result"]["accepted_segments"] == 1
+    assert payload["result"]["preview_artifact_id"] is None
+    assert payload["studio_voice_preview_url"] is None
+    artifacts = await api_test_context["render_repo"].list_render_artifacts(
+        production_id
+    )
+    assert not any(
+        artifact.artifact_type == ArtifactType.VOICEOVER_PREVIEW
+        and artifact.status == ArtifactStatus.completed
+        for artifact in artifacts
+    )
+
+
+@pytest.mark.asyncio
+async def test_studio_voice_generation_is_incomplete_when_canonical_script_omits_surviving_segment(
+    api_test_context,
+):
+    production_id = "prod_voiceover_missing_segment"
+    edl, corrected = await _seed_voiceover_lineage(
+        api_test_context,
+        production_id=production_id,
+    )
+    await api_test_context["transcript_repo"].save_corrected_transcript(
+        corrected.model_copy(update={"segments": corrected.segments[:1]}),
+        edl_id=edl.edl_id,
+    )
+    genai = _RecordingStudioVoiceClient()
+    app.dependency_overrides[get_genai_client] = lambda: genai
+
+    response = api_test_context["client"].post(
+        f"/api/productions/{production_id}/studio-voice"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert genai.synthesized_texts == ["First canonical corrected sentence."]
+    assert payload["result"]["status"] == "incomplete"
+    assert payload["result"]["total_segments"] == 2
+    assert payload["result"]["accepted_segments"] == 1
+    assert payload["result"]["preview_artifact_id"] is None
+    assert payload["studio_voice_preview_url"] is None
+    artifacts = await api_test_context["render_repo"].list_render_artifacts(
+        production_id
+    )
+    assert not any(
+        artifact.artifact_type == ArtifactType.VOICEOVER_PREVIEW
+        and artifact.status == ArtifactStatus.completed
+        for artifact in artifacts
+    )
+
+
+@pytest.mark.parametrize(
+    ("stale_reason", "expected_status"),
+    [
+        ("incomplete", "incomplete"),
+        ("edl_version", "needs_regeneration"),
+        ("selected_voice", "needs_regeneration"),
+        ("corrected_script", "needs_regeneration"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_playback_rejects_completed_voiceover_with_incomplete_or_stale_lineage(
+    api_test_context,
+    stale_reason,
+    expected_status,
+):
+    production_id = f"prod_playback_{stale_reason}"
+    edl, corrected = await _seed_voiceover_lineage(
+        api_test_context,
+        production_id=production_id,
+    )
+    genai = _RecordingStudioVoiceClient()
+    app.dependency_overrides[get_genai_client] = lambda: genai
+    generation = api_test_context["client"].post(
+        f"/api/productions/{production_id}/studio-voice"
+    )
+    assert generation.status_code == 200
+    assert generation.json()["result"]["status"] == "completed"
+
+    result = await api_test_context["sv_repo"].get_by_production_id(production_id)
+    assert result is not None
+    if stale_reason == "incomplete":
+        await api_test_context["sv_repo"].save(
+            result.model_copy(update={"status": "incomplete"})
+        )
+    elif stale_reason == "edl_version":
+        await api_test_context["edl_repo"].save_edl(
+            edl.model_copy(update={"version": edl.version + 1})
+        )
+    elif stale_reason == "selected_voice":
+        voice_response = api_test_context["client"].put(
+            "/api/workspace/agent-settings/voice",
+            json={
+                "narration_mode": "studio_voice",
+                "selected_voice": "Aoede",
+                "language": "en-US",
+            },
+        )
+        assert voice_response.status_code == 200
+    else:
+        await api_test_context["transcript_repo"].save_corrected_transcript(
+            corrected.model_copy(
+                update={
+                    "transcript_id": f"{corrected.transcript_id}_new",
+                    "created_at": datetime.now(timezone.utc),
+                }
+            ),
+            edl_id=edl.edl_id,
+        )
+
+    playback = api_test_context["client"].get(
+        f"/api/productions/{production_id}/playback"
+    )
+
+    assert playback.status_code == 200
+    payload = playback.json()
+    assert payload["studio_voice_preview_url"] is None
+    assert payload["voiceover"]["available"] is False
+    assert payload["voiceover"]["url"] is None
+    assert payload["voiceover"]["status"] == expected_status

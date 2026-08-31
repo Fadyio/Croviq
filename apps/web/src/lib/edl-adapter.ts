@@ -335,12 +335,7 @@ export function buildTranscriptSegmentSelection({
 }
 
 export type MediaOutputStatus =
-  | "ready"
-  | "generating"
-  | "incomplete"
-  | "stale"
-  | "failed"
-  | "unavailable";
+  "ready" | "generating" | "incomplete" | "stale" | "failed" | "unavailable";
 
 export interface MediaOutputState {
   available: boolean;
