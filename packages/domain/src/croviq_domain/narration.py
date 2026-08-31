@@ -41,7 +41,7 @@ class NarrationSegment(BaseModel):
     status: NarrationSegmentStatus = Field(default=NarrationSegmentStatus.PENDING)
     audio_artifact_reference: str | None = Field(default=None, description="GCS object or storage key")
     attempts: int = Field(default=1, ge=0, le=5, description="Number of TTS synthesis/rewrite attempts")
-    tempo_adjustment: float = Field(default=1.0, ge=0.5, le=5.0, description="Applied tempo multiplier / time-fit ratio")
+    tempo_adjustment: float = Field(default=1.0, ge=0.01, description="Applied tempo multiplier / time-fit ratio")
     error_code: str | None = Field(default=None, description="Stable machine-readable synthesis failure code")
     error_message: str | None = Field(default=None, description="Human-readable synthesis failure detail")
 

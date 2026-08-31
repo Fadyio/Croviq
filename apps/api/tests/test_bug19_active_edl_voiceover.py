@@ -325,14 +325,14 @@ async def test_i_video_duration_never_extended(test_edl_with_cuts):
     synthesizer = StudioVoiceSynthesizer()
 
     async def mock_tts(text: str, voice_id: str) -> tuple[int, bytes]:
-        return 60000, b"huge_audio_bytes"  # Way longer than window
+        return 60000, b"\x01\x00" * (24000 * 60)  # Over-budget valid audio
 
     async def mock_rewrite(orig_text: str, max_dur_s: float, attempt: int) -> str:
         return orig_text
 
-    # When audio fails to fit, status is marked FAILED and duration budget is not blown
+    # Over-budget audio is deterministically time-fitted to available window without extending video timeline
     seg = await synthesizer.fit_narration_segment(
-        segment_id="seg_fail",
+        segment_id="seg_fit",
         production_id="prod_test",
         source_start_ms=1000,
         source_end_ms=4000,
@@ -342,7 +342,10 @@ async def test_i_video_duration_never_extended(test_edl_with_cuts):
         tts_fn=mock_tts,
         rewrite_fn=mock_rewrite,
     )
-    assert seg.status == NarrationSegmentStatus.FAILED
+    assert seg.status == NarrationSegmentStatus.ACCEPTED
+    assert seg.generated_duration_ms == 3000
+    assert seg.available_duration_ms == 3000
+    assert seg.tempo_adjustment == 20.0
     # Video timeline remains strictly preserved
     assert test_edl_with_cuts.estimated_target_duration_ms == 45000
 
@@ -352,8 +355,8 @@ async def test_i_video_duration_never_extended(test_edl_with_cuts):
 async def test_j_failed_duration_fit_leaves_truthful_fallback():
     synthesizer = StudioVoiceSynthesizer()
 
-    async def mock_tts_too_long(text: str, voice_id: str) -> tuple[int, bytes]:
-        return 99999, b"overlength"
+    async def mock_tts_missing(text: str, voice_id: str) -> tuple[int, bytes]:
+        return 0, b""  # Empty audio failure
 
     async def mock_rewrite(orig_text: str, max_dur_s: float, attempt: int) -> str:
         return orig_text
@@ -366,7 +369,7 @@ async def test_j_failed_duration_fit_leaves_truthful_fallback():
         available_duration_ms=2000,
         original_text="Original speaker audio.",
         voice_id="Aoede",
-        tts_fn=mock_tts_too_long,
+        tts_fn=mock_tts_missing,
         rewrite_fn=mock_rewrite,
     )
     assert seg.status == NarrationSegmentStatus.FAILED
